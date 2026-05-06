@@ -16,3 +16,6 @@ node_modules
 # Other files.
 *.bak
 
+# Claude Code local (machine-specific) settings.
+.claude/settings.local.json
+
