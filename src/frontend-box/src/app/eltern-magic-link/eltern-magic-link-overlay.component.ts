@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { ElternMagicLinkService } from '../eltern-magic-link.service'
 
-// Phase 15b — full-screen overlay shown after the Cloud+Batterie-Tap
-// sequence triggers a magic-link request. Renders a backend-generated
-// QR-SVG plus the URL as a text fallback. Auto-closes after 60s.
+// Full-screen overlay shown when a parent opens the Eltern-WebApp entry in
+// the Settings page. Renders the magic-link QR (client-generated data URL)
+// plus the URL as a text fallback. Auto-closes after 60s.
 @Component({
   selector: 'mupi-eltern-magic-link-overlay',
   templateUrl: './eltern-magic-link-overlay.component.html',

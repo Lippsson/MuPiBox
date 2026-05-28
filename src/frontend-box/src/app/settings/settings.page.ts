@@ -15,6 +15,7 @@ import { addIcons } from 'ionicons'
 import { arrowBackOutline } from 'ionicons/icons'
 import QRCode from 'qrcode'
 import { from, of, switchMap } from 'rxjs'
+import { ElternMagicLinkService } from '../eltern-magic-link.service'
 import { MediaService } from '../media.service'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
@@ -40,6 +41,7 @@ import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
 })
 export class SettingsPage extends SwiperIonicEventsHelper {
   private mediaService = inject(MediaService)
+  private elternMagicLink = inject(ElternMagicLinkService)
   protected network = toSignal(this.mediaService.network$, { initialValue: null })
 
   protected swiperData = computed(() => {
@@ -58,6 +60,11 @@ export class SettingsPage extends SwiperIonicEventsHelper {
         name: 'Reboot / Shutdown',
         imgSrc: of('../../assets/power.svg'),
         data: 'shutdown',
+      },
+      {
+        name: 'Eltern-WebApp',
+        imgSrc: of('../../assets/eltern.svg'),
+        data: 'eltern-webapp',
       },
     ]
     if (this.qrCodeSrc() !== null) {
@@ -102,6 +109,8 @@ export class SettingsPage extends SwiperIonicEventsHelper {
       this.shutdownMessage()
     } else if (entryData.data === 'more-settings') {
       this.moreSettingsMessage()
+    } else if (entryData.data === 'eltern-webapp') {
+      void this.elternMagicLink.generateAndShow(this.network()?.ip)
     }
   }
 
