@@ -16,6 +16,11 @@ import type { SpotifyValidationRequest, SpotifyValidationResponse } from './mode
 import { CoverCacheService } from './services/cover-cache.service'
 import { SpotifyApiService } from './services/spotify-api.service'
 import { SpotifyMediaInfo } from './services/spotify-media-info.service'
+import { createSpotifySyncRouter } from './spotify-sync/routes'
+import { startScheduler } from './spotify-sync/scheduler'
+import type { RunSyncDeps } from './spotify-sync/state-machine'
+import { buildElternLandingHandler, createElternApiRouter } from './eltern/routes'
+import { startBucketCleanup } from './eltern/middleware'
 
 // Force IPv4 for DNS lookups to avoid EAI_AGAIN errors on Raspberry Pi
 // This fixes issues where IPv6 is misconfigured or not supported
@@ -110,6 +115,51 @@ const LOCK_STALE_MS = 30_000
     }
   }
 })
+
+// Phase 14a — Smart-Sync data-layer migration.
+// Pre-14 library entries have no `source` field. Smart-Sync needs to
+// distinguish manual entries (untouchable) from sync-managed ones, so a
+// missing field is ambiguous. One-shot migration on startup: read
+// data.json, add `source: 'manual'` to every entry that doesn't carry it
+// yet, then atomically write back. Idempotent: subsequent boots no-op
+// when every entry already has the field. Safe to run pre-14 (before
+// any sync runs) because the only possible legacy value IS 'manual'.
+;(() => {
+  try {
+    if (!fs.existsSync(dataFile)) return
+    const raw = fs.readFileSync(dataFile, 'utf8')
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      console.warn(
+        `${new Date().toLocaleString()}: [MuPiBox-Server] startup: data.json parse failed, skipping source-field migration`,
+      )
+      return
+    }
+    if (!Array.isArray(parsed)) return
+    let migrated = 0
+    for (const item of parsed as Array<Record<string, unknown>>) {
+      if (item && typeof item === 'object' && item.source === undefined) {
+        item.source = 'manual'
+        migrated++
+      }
+    }
+    if (migrated === 0) return
+    // Atomic write — same tmp+rename pattern as acquireLock/save flows.
+    const tmpPath = `${dataFile}.tmp.${process.pid}`
+    fs.writeFileSync(tmpPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8')
+    fs.renameSync(tmpPath, dataFile)
+    console.log(
+      `${new Date().toLocaleString()}: [MuPiBox-Server] startup: source-field migration touched ${migrated} entries in data.json`,
+    )
+  } catch (err) {
+    console.error(
+      `${new Date().toLocaleString()}: [MuPiBox-Server] startup: source-field migration failed (non-fatal, will retry next boot):`,
+      err,
+    )
+  }
+})()
 
 let mupiboxConfigCache: MupiboxConfig | undefined
 let mupiboxConfigLoadPromise: Promise<MupiboxConfig | undefined> | null = null
@@ -654,7 +704,15 @@ app.post('/api/add', (req, res) => {
       res.status(200).send('error')
       return
     }
-    data.push(req.body)
+    // Phase 14a: stamp every Add-Page / Telegram / Admin entry with
+    // source='manual'. Smart-Sync uses this discriminator to leave manual
+    // entries untouched. The Spotify-sync service (Phase 14b) sets
+    // source='spotify-sync' on its own writes and bypasses /api/add.
+    const newEntry = { source: 'manual', ...req.body }
+    if (newEntry.source !== 'manual' && newEntry.source !== 'spotify-sync') {
+      newEntry.source = 'manual'
+    }
+    data.push(newEntry)
     jsonfile.writeFile(dataFile, data, { spaces: 4 }, (writeError) => {
       releaseLock(dataLock, '/api/add')
       if (writeError) {
@@ -1649,6 +1707,40 @@ const getMupiboxConfig = async (): Promise<MupiboxConfig | undefined> => {
   return await mupiboxConfigLoadPromise
 }
 
+// Phase 14b — Spotify Smart-Sync wiring.
+// Dependency-bundle gives the sync module access to box-level helpers
+// (data-lock, config update, config getter) without making it import
+// server.ts internals directly. mupiboxConfigCache reads synchronously
+// — the 60-s scheduler lead-in (see scheduler.ts) gives the async
+// config load time to populate the cache; if it's still undefined at
+// the first sync tick, loadSpotifySyncConfig falls back to defaults
+// and the sync simply runs against the default prefix.
+const spotifySyncDeps: RunSyncDeps = {
+  dataFile,
+  getMupiboxConfig: () => mupiboxConfigCache,
+  updateMupiboxConfig,
+  acquireDataLock: () => acquireLock(dataLock, '/api/spotify-sync'),
+  releaseDataLock: () => releaseLock(dataLock, '/api/spotify-sync'),
+}
+app.use('/api/spotify-sync', createSpotifySyncRouter(spotifySyncDeps))
+
+// Phase 14c — Eltern-WebApp routes.
+// JSON API under /api/eltern/* + a magic-link landing handler at /eltern
+// that redeems ?token=... into a session cookie and redirects to /eltern
+// (without the query) so the WebApp shell loads cleanly.
+app.use(
+  '/api/eltern',
+  createElternApiRouter({
+    getMupiboxConfig: () => mupiboxConfigCache,
+    updateMupiboxConfig,
+  }),
+)
+app.get('/eltern', buildElternLandingHandler())
+// Static WebApp assets (HTML/CSS/JS). The landing handler above runs
+// first and either redeems a token (-> redirect) or calls next() so the
+// static middleware below serves the shell.
+app.use('/eltern', express.static(path.join(__dirname, 'eltern-webapp')))
+
 // Catch-all handler: send back Angular's index.html file for any non-API routes
 // This must be placed after all API routes but before starting the server
 if (productionServe) {
@@ -1660,4 +1752,10 @@ if (productionServe) {
 if (!testServe) {
   app.listen(8200)
   console.log(`${new Date().toLocaleString()}: [mupibox-backend-api] Server started at http://localhost:8200`)
+  // Spotify-sync scheduler — only in production / dev, not under tests.
+  // Boot-after-60s lead-in inside startScheduler so initial config load
+  // has time to finish before the first sync attempt.
+  startScheduler(spotifySyncDeps)
+  // Eltern-WebApp rate-limit map cleanup tick.
+  startBucketCleanup()
 }

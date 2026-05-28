@@ -1,0 +1,593 @@
+/* Phase 14c — Eltern-WebApp mobile-first stylesheet.
+   No CSS framework — keeps the bundle below 5 KB so the box can serve
+   it instantly even over a flaky LAN. Dark theme is the default; the
+   box display itself is also dark-themed (matches user expectation). */
+
+:root {
+  --bg: #0f1115;
+  --card: #1a1c20;
+  --card-elevated: #232529;
+  --text: #e4e4e7;
+  --text-dim: #9ca3af;
+  --primary: #1db954;       /* Spotify-green for the connect-btn */
+  --primary-hover: #1ed760;
+  --danger: #ef4444;
+  --warn: #f59e0b;
+  --border: rgba(255, 255, 255, 0.08);
+  --radius: 12px;
+  --gap: 16px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--primary-hover); }
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: 600;
+  flex: 1;
+}
+
+/* Phase 15a — Back-button in the top-bar. Reuses the .ghost button
+   but with no border/padding and a larger arrow glyph. */
+.back-btn {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  padding: 4px 12px;
+  min-height: auto;
+  color: var(--text);
+}
+.back-btn:hover { background: rgba(255, 255, 255, 0.06); }
+
+/* Phase 15a — Hub grid: 2 columns on phone, 3 on tablet. Each card
+   is a square-ish link with icon + title + sub-line. */
+.hub-greeting h2 { font-size: 24px; margin-bottom: 4px; }
+
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.hub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+  min-height: 110px;
+  transition: background 120ms, transform 80ms, border-color 150ms;
+}
+.hub-card:hover { background: var(--card-elevated); border-color: rgba(255, 255, 255, 0.15); }
+.hub-card:active { transform: scale(0.98); }
+
+.hub-card-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.hub-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.hub-card-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
+
+@media (min-width: 540px) {
+  .hub-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (min-width: 800px) {
+  .hub-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 18px;
+  padding-bottom: 64px;
+}
+
+.screen { display: flex; flex-direction: column; gap: var(--gap); }
+.screen[hidden] { display: none; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+.card h2 { margin: 0 0 6px; font-size: 22px; }
+.card h3 { margin: 0 0 12px; font-size: 18px; }
+.card p { margin: 8px 0; }
+.card p:first-of-type { margin-top: 0; }
+.card ul, .card ol { margin: 8px 0; padding-left: 22px; }
+.card li { margin: 4px 0; }
+
+.dim { color: var(--text-dim); font-size: 14px; }
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.status-row:last-child { border-bottom: none; }
+.status-row .value { font-weight: 600; }
+
+.playlists {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.playlist-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--card-elevated);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.actions {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+button {
+  font: inherit;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 18px;
+  cursor: pointer;
+  min-height: 44px; /* Apple HIG hit target */
+  transition: background 120ms, transform 80ms;
+}
+button:active { transform: scale(0.97); }
+button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+button.primary {
+  background: var(--primary);
+  color: #062a13;
+  font-weight: 600;
+}
+button.primary:hover { background: var(--primary-hover); }
+button.primary:disabled { background: #2a2c30; color: var(--text-dim); cursor: not-allowed; }
+
+button.ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+button.ghost:hover { background: rgba(255, 255, 255, 0.06); }
+
+button.danger {
+  background: var(--danger);
+  color: white;
+}
+
+.feedback {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.feedback.success { background: rgba(29, 185, 84, 0.16); color: #4ade80; }
+.feedback.error   { background: rgba(239, 68, 68, 0.16); color: #fca5a5; }
+.feedback.info    { background: rgba(245, 158, 11, 0.14); color: #fbbf24; }
+
+.kv {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+}
+.kv > label {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.copyable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card-elevated);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.copyable code {
+  flex: 1;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--text);
+  word-break: break-all;
+}
+.copy-btn { padding: 6px 10px; min-height: 36px; font-size: 14px; }
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.form-row label {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.form-row input {
+  font: inherit;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-elevated);
+  color: var(--text);
+  min-height: 44px;
+}
+.form-row input:focus { outline: 2px solid var(--primary); outline-offset: 0; }
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 0;
+}
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#conflicts-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+#conflicts-list li {
+  padding: 8px 12px;
+  margin: 6px 0;
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+/* Settings-screen toggle switch (Phase 14e polish).
+   Native checkbox styled as iOS-ish pill. 44px hit-target. */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 52px;
+  height: 30px;
+  cursor: pointer;
+}
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.toggle-thumb {
+  position: absolute;
+  inset: 0;
+  background: var(--card-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transition: background 150ms;
+}
+.toggle-thumb::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--text);
+  top: 3px;
+  left: 3px;
+  transition: transform 180ms, background 150ms;
+}
+.toggle input:checked + .toggle-thumb {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.toggle input:checked + .toggle-thumb::after {
+  transform: translateX(22px);
+  background: #062a13;
+}
+.toggle input:focus-visible + .toggle-thumb {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Phase 15i — battery hero display in the power section. Big % +
+   one-line state. */
+.battery-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.battery-percent {
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}
+.battery-percent.low { color: var(--warn); }
+.battery-percent.critical { color: var(--danger); }
+.battery-state {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+/* Phase 15h — Caps editor: per-weekday grid for playtime limits, plus
+   quiet-hours schedule editor with add/remove rows. */
+.day-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+@media (min-width: 540px) { .day-grid { grid-template-columns: repeat(4, 1fr); } }
+.day-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--card-elevated);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.day-cell label { font-size: 12px; color: var(--text-dim); }
+.day-cell input {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+  width: 100%;
+}
+.day-cell input:focus { outline: 2px solid var(--primary); outline-offset: 0; }
+
+.quiet-day {
+  margin-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.quiet-day:last-child { border-bottom: none; }
+.quiet-day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.quiet-day-label { font-weight: 600; font-size: 14px; }
+.quiet-window {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+}
+.quiet-window input {
+  background: var(--card-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+  width: 100px;
+}
+.quiet-window .arrow { color: var(--text-dim); }
+.quiet-window button.remove {
+  background: transparent;
+  color: var(--danger);
+  border: none;
+  padding: 4px 10px;
+  min-height: auto;
+  font-size: 18px;
+}
+.quiet-add-btn {
+  background: transparent;
+  color: var(--primary);
+  border: 1px dashed rgba(29, 185, 84, 0.4);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  min-height: auto;
+}
+
+/* Phase 15e — library browser */
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.pill {
+  background: var(--card-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  min-height: 32px;
+  cursor: pointer;
+}
+.pill.active {
+  background: var(--primary);
+  color: #062a13;
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+.library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.library-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.library-item:hover { background: var(--card-elevated); }
+.library-item:active { transform: scale(0.99); }
+.library-item-cover {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--card-elevated);
+  flex-shrink: 0;
+}
+.library-item-meta {
+  flex: 1;
+  min-width: 0;
+}
+.library-item-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.library-item-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.library-item-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.library-item-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--card-elevated);
+  color: var(--text-dim);
+}
+.library-item-badge.sync { background: rgba(29, 185, 84, 0.15); color: #4ade80; }
+.library-item-badge.audiobook { background: rgba(245, 158, 11, 0.14); color: #fbbf24; }
+
+/* Overlay sheet (edit + add) */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fade-in 150ms;
+}
+.sheet-backdrop[hidden] { display: none; }
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+
+.sheet {
+  background: var(--card);
+  border-radius: var(--radius) var(--radius) 0 0;
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slide-up 200ms;
+}
+@keyframes slide-up { from { transform: translateY(100%) } to { transform: translateY(0) } }
+@media (min-width: 640px) {
+  .sheet-backdrop { align-items: center; }
+  .sheet { border-radius: var(--radius); max-height: 80vh; }
+}
+.sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.sheet-header h3 { margin: 0; font-size: 17px; }
+.sheet-body {
+  padding: 16px 18px;
+}
+
+select {
+  font: inherit;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-elevated);
+  color: var(--text);
+  min-height: 44px;
+  width: 100%;
+}
+select:focus { outline: 2px solid var(--primary); outline-offset: 0; }
+
+textarea {
+  font: inherit;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-elevated);
+  color: var(--text);
+  min-height: 80px;
+  width: 100%;
+  resize: vertical;
+}
+textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
+
+/* Tablet+ — slightly larger spacing, but still single column */
+@media (min-width: 640px) {
+  main { padding: 24px; }
+  .card { padding: 22px; }
+}

@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1a1c20">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="/eltern/manifest.json">
+  <link rel="stylesheet" href="/eltern/styles.css">
+  <title>MuPiBox · Eltern-Hub</title>
+</head>
+<body>
+  <header class="top-bar">
+    <!-- Phase 15a: title swaps between brand (on the hub overview)
+         and section-title with a back button (on every sub-screen). -->
+    <button id="header-back-btn" class="ghost back-btn" hidden aria-label="Zurück">←</button>
+    <div class="brand" id="header-title">🎵 MuPiBox</div>
+    <button id="logout-btn" class="ghost" hidden>Abmelden</button>
+  </header>
+
+  <main id="app-root">
+    <!-- Loading-State während Session-Check -->
+    <section id="screen-loading" class="screen">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Lade…</p>
+      </div>
+    </section>
+
+    <!-- Wird gezeigt wenn /api/eltern/session 401 zurückgibt -->
+    <section id="screen-no-session" class="screen" hidden>
+      <div class="card">
+        <h2>Anmeldung erforderlich</h2>
+        <p>Diese Seite ist nur über einen gültigen Magic-Link erreichbar.</p>
+        <ul>
+          <li>Über den Telegram-Bot: <code>/eltern-login</code></li>
+          <li>Direkt am Box-Display: Mehrfach-Tap auf Cloud+Batterie-Icons (kommt in Phase 15)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Hub-Übersicht (Phase 15a). Default-Screen nach Login.
+         Cards führen zu den jeweiligen Sub-Sektionen via Hash-Routing.
+         Sektionen, die noch nicht implementiert sind, zeigen einen
+         „Bald"-Hinweis statt eines Klicks ins Leere. -->
+    <section id="screen-hub" class="screen" hidden>
+      <div class="card hub-greeting">
+        <h2 id="hub-greeting">Hallo!</h2>
+        <p class="dim">Was möchtest du tun?</p>
+      </div>
+
+      <div class="hub-grid">
+        <a href="#sync" class="hub-card" data-section="sync">
+          <span class="hub-card-icon">🎵</span>
+          <span class="hub-card-title">Spotify Smart-Sync</span>
+          <span class="hub-card-sub" id="hub-card-sync-sub">—</span>
+        </a>
+        <a href="#library" class="hub-card" data-section="library">
+          <span class="hub-card-icon">📚</span>
+          <span class="hub-card-title">Library</span>
+          <span class="hub-card-sub">Inhalte verwalten</span>
+        </a>
+        <a href="#caps" class="hub-card" data-section="caps">
+          <span class="hub-card-icon">⏱️</span>
+          <span class="hub-card-title">Spielzeit &amp; Ruhe</span>
+          <span class="hub-card-sub">Limits + Quiet-Hours</span>
+        </a>
+        <a href="#power" class="hub-card" data-section="power">
+          <span class="hub-card-icon">🔋</span>
+          <span class="hub-card-title">Akku</span>
+          <span class="hub-card-sub" id="hub-card-power-sub">—</span>
+        </a>
+        <a href="#wlan" class="hub-card" data-section="wlan">
+          <span class="hub-card-icon">📶</span>
+          <span class="hub-card-title">WLAN</span>
+          <span class="hub-card-sub">Box-Verbindung</span>
+        </a>
+        <a href="#bluetooth" class="hub-card" data-section="bluetooth">
+          <span class="hub-card-icon">🎧</span>
+          <span class="hub-card-title">Bluetooth</span>
+          <span class="hub-card-sub">Kopfhörer &amp; Lautsprecher</span>
+        </a>
+        <a href="#telegram" class="hub-card" data-section="telegram">
+          <span class="hub-card-icon">📞</span>
+          <span class="hub-card-title">Telegram</span>
+          <span class="hub-card-sub">Eltern-Bot</span>
+        </a>
+        <a href="#system" class="hub-card" data-section="system">
+          <span class="hub-card-icon">⚙️</span>
+          <span class="hub-card-title">System</span>
+          <span class="hub-card-sub">Backup, Updates, Logs</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Smart-Sync (war vorher 'screen-dashboard') -->
+    <section id="screen-sync" class="screen" hidden>
+      <div class="card">
+        <h2 id="box-title">LeniBox</h2>
+        <p class="dim" id="box-subtitle">Spotify Smart-Sync</p>
+      </div>
+
+      <div class="card" id="spotify-card">
+        <h3>Spotify-Verbindung</h3>
+        <div id="spotify-status" class="status-row">
+          <span class="dim">Lade…</span>
+        </div>
+        <div class="actions" id="spotify-actions"></div>
+      </div>
+
+      <div class="card" id="sync-card">
+        <h3>Smart-Sync</h3>
+        <div class="status-row">
+          <span class="dim">Letzter Sync:</span>
+          <span id="sync-last" class="value">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Status:</span>
+          <span id="sync-state" class="value">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Nächster Sync:</span>
+          <span id="sync-next" class="value">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Box-Playlist-Prefix:</span>
+          <span id="sync-prefix" class="value">—</span>
+        </div>
+        <div id="sync-counts" class="status-row" hidden>
+          <span class="dim">Zuletzt:</span>
+          <span id="sync-summary" class="value">—</span>
+        </div>
+        <div id="sync-playlists" class="playlists"></div>
+        <div class="actions">
+          <button id="sync-trigger-btn" class="primary">🔄 Jetzt synchronisieren</button>
+          <button id="sync-config-btn" class="ghost">Einstellungen</button>
+        </div>
+        <div id="sync-feedback" class="feedback" hidden></div>
+      </div>
+
+      <div class="card" id="conflicts-card" hidden>
+        <h3>⚠️ Konflikte</h3>
+        <p class="dim">Diese Inhalte sind sowohl manuell als auch in einer LeniBox-Playlist. Manuelle Einträge bleiben unangetastet.</p>
+        <ul id="conflicts-list"></ul>
+      </div>
+
+      <div class="card" id="error-banner" hidden>
+        <h3>Fehler</h3>
+        <p id="error-text"></p>
+      </div>
+    </section>
+
+    <!-- Stub-Screens für die noch nicht implementierten Sektionen.
+         Phase 15a legt nur das Routing-Skelett; Inhalte kommen pro
+         Section in 15b/c/d/e/f/g/h/i. Jede Stub-Card zeigt klar, dass
+         der Bereich „in Entwicklung" ist + ggf. einen Workaround. -->
+    <section id="screen-library" class="screen" hidden>
+      <div class="card">
+        <div class="actions" style="margin-top: 0;">
+          <button class="primary" id="library-add-btn">+ Inhalt hinzufügen</button>
+        </div>
+        <div class="form-row">
+          <label for="library-search">Suche</label>
+          <input type="search" id="library-search" placeholder="Artist oder Titel …" autocomplete="off">
+        </div>
+        <div class="filter-pills" id="library-category-filter">
+          <button class="pill active" data-cat="all">Alle</button>
+          <button class="pill" data-cat="audiobook">Hörbuch/-spiel</button>
+          <button class="pill" data-cat="music">Musik</button>
+          <button class="pill" data-cat="other">Sonstiges</button>
+        </div>
+        <div class="filter-pills" id="library-source-filter">
+          <button class="pill active" data-src="all">Alle Quellen</button>
+          <button class="pill" data-src="manual">Manuell</button>
+          <button class="pill" data-src="spotify-sync">Sync</button>
+        </div>
+        <p class="dim" id="library-count">—</p>
+      </div>
+
+      <div class="library-list" id="library-list">
+        <div class="dim" style="padding: 24px; text-align: center;">Lade…</div>
+      </div>
+
+      <!-- Item-Detail-Sheet (overlay) -->
+      <div class="sheet-backdrop" id="library-edit-backdrop" hidden>
+        <div class="sheet" role="dialog" aria-modal="true">
+          <div class="sheet-header">
+            <h3 id="library-edit-title">Bearbeiten</h3>
+            <button class="ghost back-btn" id="library-edit-close" aria-label="Schließen">×</button>
+          </div>
+          <div class="sheet-body" id="library-edit-body">
+            <!-- Inhalt von openEditSheet() -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Add-Modal (overlay) -->
+      <div class="sheet-backdrop" id="library-add-backdrop" hidden>
+        <div class="sheet" role="dialog" aria-modal="true">
+          <div class="sheet-header">
+            <h3>Inhalt hinzufügen</h3>
+            <button class="ghost back-btn" id="library-add-close" aria-label="Schließen">×</button>
+          </div>
+          <div class="sheet-body">
+            <p class="dim">Klebe einen Spotify-Link ein oder gib direkt Stream-/RSS-URL ein. Box-Library lädt das beim nächsten Wechsel automatisch.</p>
+            <div class="form-row">
+              <label for="library-add-type">Typ</label>
+              <select id="library-add-type">
+                <option value="spotifyURL">Spotify-Link (Album/Künstler/Playlist/Hörbuch)</option>
+                <option value="streamURL">Radio-Stream-URL</option>
+                <option value="rssURL">Podcast-RSS-URL</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="library-add-url">URL</label>
+              <input type="url" id="library-add-url" placeholder="https://open.spotify.com/...">
+            </div>
+            <div class="form-row" id="library-add-label-row">
+              <label for="library-add-label">Künstler/Show-Name (optional)</label>
+              <input type="text" id="library-add-label" placeholder="bleibt leer = aus Spotify übernehmen">
+            </div>
+            <div class="form-row" id="library-add-title-row" hidden>
+              <label for="library-add-title">Titel (für Radio-Streams)</label>
+              <input type="text" id="library-add-title" placeholder="z.B. SWR3">
+            </div>
+            <div class="form-row">
+              <label for="library-add-category">Kategorie</label>
+              <select id="library-add-category">
+                <option value="audiobook">Hörbuch/Hörspiel</option>
+                <option value="music">Musik</option>
+                <option value="other">Sonstiges (Radio/Podcast)</option>
+              </select>
+            </div>
+            <div class="actions">
+              <button class="ghost" id="library-add-cancel">Abbrechen</button>
+              <button class="primary" id="library-add-submit">Hinzufügen</button>
+            </div>
+            <div id="library-add-feedback" class="feedback" hidden></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-caps" class="screen" hidden>
+      <!-- Live-Status -->
+      <div class="card">
+        <h3>Heute</h3>
+        <div class="status-row">
+          <span class="dim">Spielzeit-Limit aktiv</span>
+          <span class="value" id="caps-playtime-enabled">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Heute verbraucht</span>
+          <span class="value" id="caps-today-used">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Heute übrig</span>
+          <span class="value" id="caps-today-remaining">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Cap-Status</span>
+          <span class="value" id="caps-state">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Ruhe-Status</span>
+          <span class="value" id="caps-quiet-state">—</span>
+        </div>
+      </div>
+
+      <!-- Override-Buttons -->
+      <div class="card">
+        <h3>Sofort-Aktionen</h3>
+        <div class="form-row">
+          <label for="caps-override-minutes">Minuten (1–1440)</label>
+          <input type="number" id="caps-override-minutes" min="1" max="1440" step="5" value="30">
+        </div>
+        <div class="actions">
+          <button class="primary" id="caps-extend-btn">+ Bonus-Zeit</button>
+          <button class="ghost" id="caps-release-btn">🔓 Blocks aufheben</button>
+          <button class="ghost" id="caps-quietnow-btn">⛔ Ruhe sofort</button>
+        </div>
+        <p class="dim">Bonus = +N Min zum heutigen Cap. Blocks aufheben = N Min freie Wiedergabe. Ruhe sofort = N Min Force-Stop.</p>
+        <div id="caps-action-feedback" class="feedback" hidden></div>
+      </div>
+
+      <!-- Per-Day Playtime Limits -->
+      <div class="card">
+        <h3>Tageslimits (Spielzeit)</h3>
+        <p class="dim">Pro Wochentag, in Minuten. 0 = kein Limit an diesem Tag.</p>
+        <div class="status-row">
+          <span>Aktiv</span>
+          <label class="toggle">
+            <input type="checkbox" id="caps-playtime-toggle">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <div class="day-grid" id="caps-day-grid">
+          <!-- gefüllt von loadCaps() -->
+        </div>
+        <p class="dim">Bonus-Toleranz (Übertretung in Min): <span id="caps-overrun-info">—</span></p>
+      </div>
+
+      <!-- Quiet-Hours Schedule (read + simple add/remove) -->
+      <div class="card">
+        <h3>Ruhe-Zeiten</h3>
+        <div class="status-row">
+          <span>Aktiv</span>
+          <label class="toggle">
+            <input type="checkbox" id="caps-quiet-toggle">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <p class="dim">Zeitfenster pro Wochentag, mehrere möglich (z.B. Hausaufgabenzeit + Schlafenszeit). Über Mitternacht via zweitem Fenster.</p>
+        <div class="quiet-schedule" id="caps-quiet-schedule">
+          <!-- gefüllt von loadCaps() -->
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="actions">
+          <button class="ghost" id="caps-back-btn">← Zurück</button>
+          <button class="primary" id="caps-save-btn">Konfiguration speichern</button>
+        </div>
+        <div id="caps-config-feedback" class="feedback" hidden></div>
+      </div>
+    </section>
+
+    <section id="screen-power" class="screen" hidden>
+      <div class="card">
+        <h3>Akku-Stand</h3>
+        <div class="battery-display">
+          <div class="battery-percent" id="power-percent">—</div>
+          <div class="battery-state" id="power-state">Lade…</div>
+        </div>
+        <div class="status-row">
+          <span class="dim">Akku-Spannung</span>
+          <span class="value" id="power-vbat">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">USB-Spannung</span>
+          <span class="value" id="power-vbus">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Akku-Strom</span>
+          <span class="value" id="power-ibat">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Temperatur</span>
+          <span class="value" id="power-temp">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Charger-Status</span>
+          <span class="value" id="power-chargerstatus">—</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Aktives Akku-Profil</h3>
+        <div class="status-row">
+          <span class="dim">Profil</span>
+          <span class="value" id="power-profile-name">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Voll-Spannung (v_100)</span>
+          <span class="value" id="power-profile-v100">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Warnung (th_warning)</span>
+          <span class="value" id="power-profile-warn">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Shutdown (th_shutdown)</span>
+          <span class="value" id="power-profile-shut">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Lade-Schluss (VREG)</span>
+          <span class="value" id="power-profile-vreg">—</span>
+        </div>
+        <p class="dim">Profil-Auswahl + Custom-Werte über Admin-Interface (MuPiHAT-Page).</p>
+      </div>
+
+      <div class="card">
+        <h3>Auto-Shutdown</h3>
+        <p class="dim">Box schaltet sich selbst aus, wenn niemand hört. 0 = nie ausschalten.</p>
+        <div class="form-row">
+          <label for="power-idle-shutdown">Idle-Shutdown nach Minuten (0–1440)</label>
+          <input type="number" id="power-idle-shutdown" min="0" max="1440" step="1">
+        </div>
+        <div class="form-row">
+          <label for="power-idle-display">Display-Off nach Minuten (0–1440)</label>
+          <input type="number" id="power-idle-display" min="0" max="1440" step="1">
+        </div>
+        <div class="actions">
+          <button class="primary" id="power-save-btn">Speichern</button>
+        </div>
+        <div id="power-feedback" class="feedback" hidden></div>
+      </div>
+    </section>
+
+    <section id="screen-wlan" class="screen" hidden>
+      <div class="card">
+        <h2>WLAN</h2>
+        <p>Box-WLAN-Verbindung verwalten, neue Netze hinzufügen, Signal-Stärke prüfen.</p>
+        <p class="dim">Phase 15c — braucht Box-Zugriff zur Implementierung.</p>
+      </div>
+    </section>
+
+    <section id="screen-bluetooth" class="screen" hidden>
+      <div class="card">
+        <h2>Bluetooth</h2>
+        <p>Kopfhörer und Lautsprecher koppeln, paired Devices verwalten.</p>
+        <p class="dim">Phase 15d — braucht BT-Hardware zur Implementierung.</p>
+      </div>
+    </section>
+
+    <section id="screen-telegram" class="screen" hidden>
+      <div class="card">
+        <h2>Telegram</h2>
+        <p>Bot-Token, erlaubte Chat-IDs, Push-Notification-Optionen.</p>
+        <p class="dim">Phase 15f — in Arbeit.</p>
+        <p class="dim">Bis dahin: Admin-Interface unter <code>smart.php</code>.</p>
+      </div>
+    </section>
+
+    <section id="screen-system" class="screen" hidden>
+      <div class="card">
+        <h2>System</h2>
+        <p>Backup, System-Update, Logs-Übersicht, Box-Neustart.</p>
+        <p class="dim">Phase 15g — braucht Box-Zugriff zur Implementierung.</p>
+      </div>
+    </section>
+
+    <!-- Settings — dedicated short form for the everyday case (Box-Name,
+         Polling-Intervall, enable toggle). Distinct from the full setup
+         wizard, which is only for the first-time Spotify-App registration. -->
+    <section id="screen-settings" class="screen" hidden>
+      <div class="card">
+        <h2>Smart-Sync-Einstellungen</h2>
+        <p class="dim">Box-Name + Sync-Intervall. Spotify-Verbindung änderst du im Dashboard.</p>
+      </div>
+
+      <div class="card">
+        <h3>Box-Playlist-Name</h3>
+        <p class="dim">Spotify-Playlists, deren Name mit diesem Präfix anfängt, werden von der Box synchronisiert.</p>
+        <div class="form-row">
+          <label for="settings-prefix">Box-Name (= Playlist-Präfix)</label>
+          <input type="text" id="settings-prefix" placeholder="z.B. LeniBox" maxlength="30" autocomplete="off">
+        </div>
+        <p class="dim">Beispiele: <code id="settings-prefix-example-1">LeniBox-Hörspiele</code>, <code id="settings-prefix-example-2">LeniBox-Musik</code></p>
+      </div>
+
+      <div class="card">
+        <h3>Sync-Intervall</h3>
+        <p class="dim">Wie oft die Box automatisch nachschaut, ob in deinen Playlists etwas dazugekommen oder weg ist.</p>
+        <div class="form-row">
+          <label for="settings-interval">Minuten zwischen automatischen Syncs (5–60)</label>
+          <input type="number" id="settings-interval" min="5" max="60" step="1">
+        </div>
+        <p class="dim">Manueller Sync (Button „Jetzt synchronisieren" oder Telegram <code>/resync</code>) ist davon unabhängig.</p>
+      </div>
+
+      <div class="card">
+        <h3>Smart-Sync aktiv</h3>
+        <div class="status-row">
+          <span>Automatischer Sync</span>
+          <label class="toggle">
+            <input type="checkbox" id="settings-enabled">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <p class="dim">Aus → kein automatischer Sync; manuelle Trigger über Telegram/WebApp bleiben aktiv.</p>
+      </div>
+
+      <div class="card">
+        <h3>Erweitert</h3>
+        <p class="dim">Falls du Spotify komplett neu einrichten oder die Developer-App wechseln willst:</p>
+        <div class="actions">
+          <button class="ghost" id="settings-rerun-wizard-btn">🔧 Setup-Wizard erneut durchlaufen</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="actions">
+          <button class="ghost" id="settings-back-btn">← Zurück zum Dashboard</button>
+          <button class="primary" id="settings-save-btn">Speichern</button>
+        </div>
+        <div id="settings-feedback" class="feedback" hidden></div>
+      </div>
+    </section>
+
+    <!-- Setup-Wizard -->
+    <section id="screen-wizard" class="screen" hidden>
+      <div class="card">
+        <h2>Spotify-Setup</h2>
+        <p class="dim" id="wizard-step-label">Schritt 1 von 5</p>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-1">
+        <h3>Schritt 1 — Spotify-App anlegen</h3>
+        <p>Bevor MuPiBox mit Spotify reden kann, brauchen wir eine kleine „App" in deinem Spotify-Konto. Keine Sorge — das dauert keine 5 Minuten und kostet nichts.</p>
+        <ol>
+          <li>Öffne in einem neuen Tab: <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify-Developer-Dashboard</a></li>
+          <li>Logge dich mit deinem normalen Spotify-Konto ein.</li>
+          <li>Klicke oben rechts auf <strong>Create app</strong>.</li>
+        </ol>
+        <div class="actions">
+          <button class="primary" data-go-step="2">Weiter →</button>
+        </div>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-2" hidden>
+        <h3>Schritt 2 — Felder ausfüllen</h3>
+        <p>Trage in das Spotify-Formular ein:</p>
+        <div class="kv">
+          <label>App name</label>
+          <div class="copyable">
+            <code id="wizard-app-name">LeniBox</code>
+            <button class="ghost copy-btn" data-copy="wizard-app-name">📋</button>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Description</label>
+          <div class="copyable">
+            <code>MuPiBox Smart-Sync</code>
+            <button class="ghost copy-btn" data-copy-text="MuPiBox Smart-Sync">📋</button>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Redirect URI</label>
+          <div class="copyable">
+            <code id="wizard-redirect-uri"></code>
+            <button class="ghost copy-btn" data-copy="wizard-redirect-uri">📋</button>
+          </div>
+        </div>
+        <p class="dim">APIs/SDKs: ☑ Web API. Häkchen bei „I understand and agree" → Save.</p>
+        <div class="actions">
+          <button class="ghost" data-go-step="1">← Zurück</button>
+          <button class="primary" data-go-step="3">Weiter →</button>
+        </div>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-3" hidden>
+        <h3>Schritt 3 — Client ID kopieren</h3>
+        <p>Klicke in deiner neuen App oben links auf <strong>Settings</strong>.</p>
+        <p>Kopiere den Wert hinter „Client ID":</p>
+        <div class="form-row">
+          <label for="wizard-client-id">Client ID</label>
+          <input type="text" id="wizard-client-id" placeholder="32-Zeichen-Hex …" autocomplete="off">
+        </div>
+        <p class="dim">Client Secret brauchst du nicht — bleibt geheim in deinem Spotify-Konto.</p>
+        <div class="actions">
+          <button class="ghost" data-go-step="2">← Zurück</button>
+          <button class="primary" id="wizard-save-client-id">Speichern + Weiter →</button>
+        </div>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-4" hidden>
+        <h3>Schritt 4 — Verbindung testen</h3>
+        <p>Wir öffnen jetzt die Spotify-Anmeldeseite. Du autorisierst die App, danach kommst du automatisch zurück.</p>
+        <div class="actions">
+          <button class="ghost" data-go-step="3">← Zurück</button>
+          <button class="primary" id="wizard-connect-btn">Mit Spotify verbinden</button>
+        </div>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-5" hidden>
+        <h3>Schritt 5 — Box-Name + Playlists</h3>
+        <p>So soll deine Box-Playlist heißen (= Prefix für „<strong>NAME-Hörspiele</strong>", „<strong>NAME-Musik</strong>" etc.):</p>
+        <div class="form-row">
+          <label for="wizard-box-name">Box-Name</label>
+          <input type="text" id="wizard-box-name" placeholder="z.B. LeniBox" maxlength="30" autocomplete="off">
+        </div>
+        <p class="dim">Erstelle in Spotify Playlists mit diesem Präfix. Beispiele:</p>
+        <ul class="dim">
+          <li><code id="wizard-example-1">LeniBox-Hörspiele</code></li>
+          <li><code id="wizard-example-2">LeniBox-Musik</code></li>
+          <li><code id="wizard-example-3">LeniBox-Schlafenszeit</code></li>
+        </ul>
+        <div class="actions">
+          <button class="primary" id="wizard-finish-btn">Fertig → Zum Dashboard</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/eltern/app.js"></script>
+</body>
+</html>
