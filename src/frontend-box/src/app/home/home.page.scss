@@ -13,6 +13,17 @@ ion-toolbar {
     --padding-start: 0px !important;
     --padding-end: 0px !important;
 
+    // Phase 15b wraps each icon in a .hub-tap-target span for separate tap
+    // handling. Without this rule the span is an inline box with no height,
+    // so the cloud ion-icon's `height: 60%` resolved against zero and the
+    // icon vanished. display:contents removes the span from the box tree so
+    // the icons size/lay-out exactly as before (60% of the 70px button) and
+    // the (click) handlers still fire — events bubble up the DOM tree, which
+    // display:contents preserves.
+    .hub-tap-target {
+        display: contents;
+    }
+
     ion-icon {
         height: 60% !important;
         max-height: 60% !important;
