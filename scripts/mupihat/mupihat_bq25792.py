@@ -5475,10 +5475,19 @@ class bq25792:
     def write_register_word(self, reg):
         """
         Writes a two-byte register value safely.
+
+        BQ25792 word registers are big-endian: the lower I2C address holds the
+        most-significant byte. Verified against the live chip — for the 8400 mV
+        VREG POR default (840 = 0x0348) REG01h reads 0x03 and REG02h reads 0x48.
+        read_all_register() decodes the same way ((reg[addr] << 8) | reg[addr+1]),
+        so the write must place the HIGH byte at addr and the LOW byte at addr+1.
+        The previous little-endian order silently corrupted every word write
+        (VREG never reached 8300 mV; IINDPM was masked to 0 and only worked
+        because the hardware ILIM_HIZ resistor caps input current at 2.2 A).
         """
         reg.get()
-        self.safe_execute(self.bq.write_byte_data, self.i2c_addr, reg._addr, reg._value & 0xFF)
-        self.safe_execute(self.bq.write_byte_data, self.i2c_addr, reg._addr + 1, (reg._value >> 8) & 0xFF)
+        self.safe_execute(self.bq.write_byte_data, self.i2c_addr, reg._addr, (reg._value >> 8) & 0xFF)
+        self.safe_execute(self.bq.write_byte_data, self.i2c_addr, reg._addr + 1, reg._value & 0xFF)
 
     def read_all_register(self):
         """
