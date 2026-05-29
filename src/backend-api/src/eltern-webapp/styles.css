@@ -591,3 +591,15 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
   main { padding: 24px; }
   .card { padding: 22px; }
 }
+
+/* Telegram chat-id rows (Phase 15f) — id + label + remove in one line */
+.tg-chat-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.tg-chat-row input { min-width: 0; }
+.tg-chat-row input:first-of-type { flex: 0 0 38%; }
+.tg-chat-row input:nth-of-type(2) { flex: 1 1 auto; }
+.tg-chat-row button { flex: 0 0 auto; padding: 8px 12px; }

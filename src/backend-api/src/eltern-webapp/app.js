@@ -40,7 +40,7 @@ const SECTIONS = {
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => loadWlan() },
   bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => {} },
-  telegram:  { title: 'Telegram',            parent: 'hub', loader: () => {} },
+  telegram:  { title: 'Telegram',            parent: 'hub', loader: () => loadTelegram() },
   system:    { title: 'System',              parent: 'hub', loader: () => loadSystem() },
 }
 
@@ -702,6 +702,80 @@ async function capsQuietNow() {
   }
 }
 
+/* ---------- screen: telegram (Phase 15f) ---------- */
+
+const telegramState = { chatIds: [] }
+
+async function loadTelegram() {
+  const res = await api(`${API}/telegram-config`)
+  if (!res.ok) return
+  const t = res.body ?? {}
+  const active = $('#tg-active')
+  if (active) active.checked = t.active === true
+  setText('#tg-token-status', t.token_configured ? '✓ konfiguriert' : '✗ nicht gesetzt')
+  const tok = $('#tg-token')
+  if (tok) tok.value = ''
+  telegramState.chatIds = Array.isArray(t.chatIds) ? t.chatIds.map((c) => ({ id: String(c.id ?? ''), label: String(c.label ?? '') })) : []
+  renderTelegramChats()
+}
+
+/** Build chat rows with DOM methods (not innerHTML) so user-supplied
+ *  ids/labels can't inject markup. */
+function renderTelegramChats() {
+  const wrap = $('#tg-chat-list')
+  if (!wrap) return
+  wrap.innerHTML = ''
+  telegramState.chatIds.forEach((c, idx) => {
+    const row = document.createElement('div')
+    row.className = 'tg-chat-row'
+    const idInp = document.createElement('input')
+    idInp.type = 'text'
+    idInp.inputMode = 'numeric'
+    idInp.placeholder = 'Chat-ID'
+    idInp.value = c.id
+    idInp.addEventListener('input', () => { telegramState.chatIds[idx].id = idInp.value.trim() })
+    const labelInp = document.createElement('input')
+    labelInp.type = 'text'
+    labelInp.placeholder = 'Bezeichnung'
+    labelInp.value = c.label
+    labelInp.addEventListener('input', () => { telegramState.chatIds[idx].label = labelInp.value })
+    const rm = document.createElement('button')
+    rm.className = 'ghost'
+    rm.textContent = '×'
+    rm.setAttribute('aria-label', 'Entfernen')
+    rm.addEventListener('click', () => { telegramState.chatIds.splice(idx, 1); renderTelegramChats() })
+    row.append(idInp, labelInp, rm)
+    wrap.appendChild(row)
+  })
+}
+
+function addTelegramChat() {
+  telegramState.chatIds.push({ id: '', label: '' })
+  renderTelegramChats()
+}
+
+async function saveTelegram() {
+  for (const c of telegramState.chatIds) {
+    if (!/^-?\d{1,20}$/.test(c.id)) {
+      feedback('#tg-feedback', 'error', `Ungültige Chat-ID: "${c.id}" (nur Zahlen, Gruppen mit -)`)
+      return
+    }
+  }
+  const body = { active: $('#tg-active').checked, chatIds: telegramState.chatIds }
+  const tok = $('#tg-token').value.trim()
+  if (tok) body.token = tok
+  const res = await api(`${API}/telegram-config`, { method: 'POST', body })
+  if (res.ok) {
+    feedback('#tg-feedback', 'success', 'Gespeichert. Telegram-Dienst wird neu gestartet.')
+    if (tok) {
+      $('#tg-token').value = ''
+      setText('#tg-token-status', '✓ konfiguriert')
+    }
+  } else {
+    feedback('#tg-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+  }
+}
+
 /* ---------- screen: system (Phase 15g) ---------- */
 
 function formatUptime(sec) {
@@ -1284,6 +1358,11 @@ function wire() {
   $('#sys-refresh-btn')?.addEventListener('click', loadSystem)
   $('#sys-reboot-btn')?.addEventListener('click', systemReboot)
   $('#sys-shutdown-btn')?.addEventListener('click', systemShutdown)
+
+  // Telegram (Phase 15f) — config editor.
+  $('#tg-back-btn')?.addEventListener('click', () => navigate('hub'))
+  $('#tg-save-btn')?.addEventListener('click', saveTelegram)
+  $('#tg-add-chat-btn')?.addEventListener('click', addTelegramChat)
 
   // Phase 15h — Caps-screen actions.
   $('#caps-back-btn')?.addEventListener('click', () => navigate('hub'))

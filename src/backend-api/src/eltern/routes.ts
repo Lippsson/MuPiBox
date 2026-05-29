@@ -11,6 +11,7 @@
 // session (that's how you get one in the first place) but rate-limited
 // per-IP.
 
+import { execFile } from 'node:child_process'
 import { promises as fsp, readFileSync } from 'node:fs'
 import * as os from 'node:os'
 import { Router } from 'express'
@@ -427,6 +428,82 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       cfg.spotify = spotify
     })
     res.json({ ok: true, mode: clientSecret ? 'classic' : 'pkce' })
+  })
+
+  /**
+   * GET /api/eltern/telegram-config  (Phase 15f)
+   * Returns the Telegram bot config for editing — but NOT the raw token
+   * (write-only secret); only whether one is configured. chatId list is
+   * normalised to {id,label} objects.
+   */
+  router.get('/telegram-config', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    const tg = (cfg?.telegram as Record<string, unknown> | undefined) ?? {}
+    const rawChats = Array.isArray(tg.chatId) ? (tg.chatId as unknown[]) : []
+    const chatIds = rawChats
+      .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
+      .map((c) => ({ id: String(c.id ?? ''), label: String(c.label ?? '') }))
+      .filter((c) => c.id)
+    res.json({
+      active: tg.active === true,
+      token_configured: typeof tg.token === 'string' && tg.token.length > 0,
+      chatIds,
+    })
+  })
+
+  /**
+   * POST /api/eltern/telegram-config  (Phase 15f)
+   * Update active flag, chatId whitelist, and optionally the bot token
+   * (only when a non-empty value is sent — blank keeps the existing one).
+   * telegram_receiver.py reads the config only at startup, so the service
+   * is restarted afterwards to apply changes immediately.
+   */
+  router.post('/telegram-config', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as { active?: unknown; token?: unknown; chatIds?: unknown }
+    let validatedChats: Array<{ id: string; label: string }> | undefined
+    if (body.chatIds !== undefined) {
+      if (!Array.isArray(body.chatIds)) {
+        res.status(400).json({ error: 'chatIds must be an array' })
+        return
+      }
+      validatedChats = []
+      for (const c of body.chatIds) {
+        if (!c || typeof c !== 'object') {
+          res.status(400).json({ error: 'each chatId must be an object {id,label}' })
+          return
+        }
+        const id = String((c as Record<string, unknown>).id ?? '').trim()
+        const label = String((c as Record<string, unknown>).label ?? '').trim()
+        // Telegram chat IDs are integers; groups/channels are negative (-100…).
+        if (!/^-?\d{1,20}$/.test(id)) {
+          res.status(400).json({ error: `invalid chat id: ${id}` })
+          return
+        }
+        validatedChats.push({ id, label: label.slice(0, 60) })
+      }
+    }
+    let newToken: string | undefined
+    if (typeof body.token === 'string' && body.token.trim().length > 0) {
+      const t = body.token.trim()
+      if (!/^\d{6,12}:[A-Za-z0-9_-]{30,50}$/.test(t)) {
+        res.status(400).json({ error: 'Bot-Token-Format sieht ungültig aus' })
+        return
+      }
+      newToken = t
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const tg = ((cfg.telegram as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      if (typeof body.active === 'boolean') tg.active = body.active
+      if (validatedChats !== undefined) tg.chatId = validatedChats
+      if (newToken !== undefined) tg.token = newToken
+      cfg.telegram = tg
+    })
+    // Apply immediately — fire-and-forget; the HTTP response shouldn't block
+    // on systemd. NOPASSWD sudo is configured for the box user.
+    execFile('sudo', ['systemctl', 'restart', 'mupi_telegram'], { timeout: 15000 }, (err) => {
+      if (err) console.warn(`${new Date().toLocaleString()}: [eltern] mupi_telegram restart failed: ${err.message}`)
+    })
+    res.json({ ok: true })
   })
 
   /**
