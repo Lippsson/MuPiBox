@@ -11,6 +11,8 @@
 // session (that's how you get one in the first place) but rate-limited
 // per-IP.
 
+import { promises as fsp, readFileSync } from 'node:fs'
+import * as os from 'node:os'
 import { Router } from 'express'
 import QRCode from 'qrcode'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
@@ -425,6 +427,40 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       cfg.spotify = spotify
     })
     res.json({ ok: true, mode: clientSecret ? 'classic' : 'pkce' })
+  })
+
+  /**
+   * GET /api/eltern/system
+   * Read-only box system overview (Phase 15g): hostname, uptime, CPU load +
+   * count + temperature, RAM, root-disk usage. Uses Node built-ins only
+   * (os + fs.statfs + the thermal sysfs node) — no shell-out. Reboot/Shutdown
+   * actions reuse the existing /api/reboot|/api/shutdown endpoints.
+   */
+  router.get('/system', requireSession, async (_req, res) => {
+    let cpuTempC: number | null = null
+    try {
+      const milli = Number.parseInt(readFileSync('/sys/class/thermal/thermal_zone0/temp', 'utf8').trim(), 10)
+      if (Number.isFinite(milli)) cpuTempC = Math.round(milli / 100) / 10
+    } catch {
+      /* no thermal node — leave null */
+    }
+    let disk: { total: number; free: number } | null = null
+    try {
+      const st = await fsp.statfs('/')
+      disk = { total: st.blocks * st.bsize, free: st.bavail * st.bsize }
+    } catch {
+      /* statfs unavailable — leave null */
+    }
+    res.json({
+      hostname: os.hostname(),
+      uptime_seconds: Math.floor(os.uptime()),
+      load_1: Math.round(os.loadavg()[0] * 100) / 100,
+      cpu_count: os.cpus().length,
+      mem_total: os.totalmem(),
+      mem_free: os.freemem(),
+      cpu_temp_c: cpuTempC,
+      disk,
+    })
   })
 
   return router

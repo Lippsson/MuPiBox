@@ -462,9 +462,48 @@
 
     <section id="screen-system" class="screen" hidden>
       <div class="card">
-        <h2>System</h2>
-        <p>Backup, System-Update, Logs-Übersicht, Box-Neustart.</p>
-        <p class="dim">Phase 15g — braucht Box-Zugriff zur Implementierung.</p>
+        <h3>Box-Status</h3>
+        <div class="status-row">
+          <span class="dim">Name</span>
+          <span class="value" id="sys-hostname">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Laufzeit</span>
+          <span class="value" id="sys-uptime">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">CPU-Last (1 min)</span>
+          <span class="value" id="sys-load">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">CPU-Temperatur</span>
+          <span class="value" id="sys-temp">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Arbeitsspeicher</span>
+          <span class="value" id="sys-mem">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Speicherplatz (/)</span>
+          <span class="value" id="sys-disk">—</span>
+        </div>
+        <div class="actions">
+          <button class="ghost" id="sys-refresh-btn">🔄 Aktualisieren</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Box-Steuerung</h3>
+        <p class="dim">Neustart dauert ~1 Minute. Ausschalten: Box geht aus und muss am Gerät wieder eingeschaltet werden.</p>
+        <div class="actions">
+          <button class="ghost" id="sys-reboot-btn">🔄 Neustart</button>
+          <button class="ghost" id="sys-shutdown-btn">⏻ Ausschalten</button>
+        </div>
+        <div id="sys-feedback" class="feedback" hidden></div>
+      </div>
+
+      <div class="card">
+        <p class="dim">Backup, System-Update und Logs gibt es vorerst im Admin-Interface — kommen später hierher.</p>
       </div>
     </section>
 

@@ -41,7 +41,7 @@ const SECTIONS = {
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => loadWlan() },
   bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => {} },
   telegram:  { title: 'Telegram',            parent: 'hub', loader: () => {} },
-  system:    { title: 'System',              parent: 'hub', loader: () => {} },
+  system:    { title: 'System',              parent: 'hub', loader: () => loadSystem() },
 }
 
 /** Switch to a screen — hides all .screen sections, shows the requested
@@ -702,6 +702,53 @@ async function capsQuietNow() {
   }
 }
 
+/* ---------- screen: system (Phase 15g) ---------- */
+
+function formatUptime(sec) {
+  if (!Number.isFinite(sec) || sec < 0) return '—'
+  const d = Math.floor(sec / 86400)
+  const h = Math.floor((sec % 86400) / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  if (d > 0) return `${d}d ${h}h ${m}m`
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
+
+function formatBytes(n) {
+  if (!Number.isFinite(n)) return '—'
+  const gb = n / 1024 ** 3
+  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`
+}
+
+async function loadSystem() {
+  const res = await api(`${API}/system`)
+  if (!res.ok) return
+  const s = res.body ?? {}
+  setText('#sys-hostname', s.hostname || '—')
+  setText('#sys-uptime', formatUptime(s.uptime_seconds))
+  setText('#sys-load', Number.isFinite(s.load_1) ? `${s.load_1}${s.cpu_count ? ` · ${s.cpu_count} Kerne` : ''}` : '—')
+  setText('#sys-temp', Number.isFinite(s.cpu_temp_c) ? `${s.cpu_temp_c} °C` : '—')
+  const memUsed = s.mem_total != null && s.mem_free != null ? s.mem_total - s.mem_free : null
+  setText('#sys-mem', memUsed != null ? `${formatBytes(memUsed)} / ${formatBytes(s.mem_total)}` : '—')
+  if (s.disk) {
+    setText('#sys-disk', `${formatBytes(s.disk.total - s.disk.free)} / ${formatBytes(s.disk.total)} belegt`)
+  } else {
+    setText('#sys-disk', '—')
+  }
+}
+
+async function systemReboot() {
+  if (!confirm('Box wirklich neu starten? Dauert ~1 Minute, die WebApp verliert kurz die Verbindung.')) return
+  feedback('#sys-feedback', 'success', 'Neustart wird ausgelöst …')
+  await fetch('/api/reboot', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
+}
+
+async function systemShutdown() {
+  if (!confirm('Box wirklich ausschalten? Sie muss danach am Gerät wieder eingeschaltet werden.')) return
+  feedback('#sys-feedback', 'success', 'Ausschalten wird ausgelöst …')
+  await fetch('/api/shutdown', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
+}
+
 /* ---------- screen: wlan (Phase 15c) ---------- */
 
 /** Read-only WLAN/network status from /api/network (same endpoint the box
@@ -1232,6 +1279,11 @@ function wire() {
 
   // WLAN (Phase 15c) — read-only status + manual refresh.
   $('#wlan-refresh-btn')?.addEventListener('click', loadWlan)
+
+  // System (Phase 15g) — status refresh + reboot/shutdown.
+  $('#sys-refresh-btn')?.addEventListener('click', loadSystem)
+  $('#sys-reboot-btn')?.addEventListener('click', systemReboot)
+  $('#sys-shutdown-btn')?.addEventListener('click', systemShutdown)
 
   // Phase 15h — Caps-screen actions.
   $('#caps-back-btn')?.addEventListener('click', () => navigate('hub'))
