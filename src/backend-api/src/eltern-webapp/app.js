@@ -36,6 +36,7 @@ const SECTIONS = {
   settings:  { title: 'Smart-Sync · Optionen', parent: 'sync', loader: () => loadSettings() },
   wizard:    { title: 'Spotify-Setup',       parent: 'sync', loader: () => loadWizard() },
   library:   { title: 'Library',             parent: 'hub', loader: () => loadLibrary() },
+  search:    { title: 'Spotify-Suche',       parent: 'library', loader: () => {} },
   caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => loadWlan() },
@@ -700,6 +701,92 @@ async function capsQuietNow() {
   } else {
     feedback('#caps-action-feedback', 'error', `Fehler ${res.status}`)
   }
+}
+
+/* ---------- screen: search (Phase 17a) ---------- */
+
+const searchState = { type: 'all' }
+
+function pickSearchImg(images) {
+  if (!Array.isArray(images) || !images.length) return ''
+  return images[1]?.url || images[0]?.url || ''
+}
+
+function searchResultRow(thumb, title, subtitle) {
+  const row = document.createElement('div')
+  row.className = 'search-result-row'
+  const img = document.createElement('img')
+  img.className = 'search-thumb'
+  img.loading = 'lazy'
+  img.alt = ''
+  if (thumb) img.src = thumb
+  const info = document.createElement('div')
+  info.className = 'search-result-info'
+  const t = document.createElement('span')
+  t.className = 'value'
+  t.textContent = title
+  const s = document.createElement('span')
+  s.className = 'dim'
+  s.textContent = subtitle
+  info.append(t, s)
+  row.append(img, info)
+  return row
+}
+
+function renderSearchResults(data) {
+  const wrap = $('#search-results')
+  if (!wrap) return
+  wrap.innerHTML = ''
+  const artistNames = (arr) => (arr || []).map((x) => x?.name).filter(Boolean).join(', ')
+  const groups = [
+    ['Künstler', (data.artists || []).map((a) => searchResultRow(pickSearchImg(a.images), a.name, 'Künstler'))],
+    ['Alben', (data.albums || []).map((a) => searchResultRow(pickSearchImg(a.images), a.name, artistNames(a.artists)))],
+    [
+      'Titel',
+      (data.tracks || []).map((t) =>
+        searchResultRow(pickSearchImg(t.album?.images), t.name, `${artistNames(t.artists)} · ${t.album?.name ?? ''}`),
+      ),
+    ],
+  ]
+  let any = false
+  for (const [label, rows] of groups) {
+    if (!rows.length) continue
+    any = true
+    const card = document.createElement('div')
+    card.className = 'card'
+    const h = document.createElement('h3')
+    h.textContent = label
+    card.appendChild(h)
+    for (const r of rows) card.appendChild(r)
+    wrap.appendChild(card)
+  }
+  if (!any) {
+    const c = document.createElement('div')
+    c.className = 'card'
+    const p = document.createElement('p')
+    p.className = 'dim'
+    p.textContent = 'Keine Treffer.'
+    c.appendChild(p)
+    wrap.appendChild(c)
+  }
+}
+
+async function doSearch() {
+  const q = ($('#search-query')?.value ?? '').trim()
+  if (q.length < 2) {
+    feedback('#search-feedback', 'error', 'Mindestens 2 Zeichen eingeben.')
+    return
+  }
+  const types = searchState.type === 'all' ? 'artist,album,track' : searchState.type
+  feedback('#search-feedback', 'success', 'Suche …')
+  const res = await api(`/api/spotify/search?q=${encodeURIComponent(q)}&types=${types}&limit=8`)
+  if (!res.ok) {
+    feedback('#search-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  const fb = $('#search-feedback')
+  if (fb) fb.hidden = true
+  renderSearchResults(res.body ?? {})
 }
 
 /* ---------- screen: bluetooth (Phase 15d) ---------- */
@@ -1500,6 +1587,20 @@ function wire() {
   $('#bt-power')?.addEventListener('change', btSetPower)
   $('#bt-autoconnect')?.addEventListener('change', btSetAutoconnect)
   $('#bt-scan-btn')?.addEventListener('click', btScan)
+
+  // Spotify-Suche (Phase 17a)
+  $('#library-search-spotify-btn')?.addEventListener('click', () => navigate('search'))
+  $('#search-go-btn')?.addEventListener('click', doSearch)
+  $('#search-query')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doSearch()
+  })
+  $('#search-type-filter')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-stype]')
+    if (!btn) return
+    searchState.type = btn.dataset.stype
+    for (const p of $('#search-type-filter').querySelectorAll('.pill')) p.classList.toggle('active', p === btn)
+    if (($('#search-query')?.value ?? '').trim().length >= 2) doSearch()
+  })
 
   // Phase 15h — Caps-screen actions.
   $('#caps-back-btn')?.addEventListener('click', () => navigate('hub'))

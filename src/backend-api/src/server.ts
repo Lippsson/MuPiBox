@@ -1200,6 +1200,35 @@ app.get('/api/spotify/search/albums', async (req, res) => {
   }
 })
 
+// Phase 17a — combined artist/album/track catalog search for the Eltern-WebApp
+// "Bibliothek erweitern" browse screen. Read-only; reuses the box Spotify token.
+app.get('/api/spotify/search', async (req, res) => {
+  if (!spotifyApiService) {
+    res.status(503).json({ error: 'Spotify API service not available' })
+    return
+  }
+  const query = typeof req.query.q === 'string' ? req.query.q : (req.query.query as string)
+  if (!query || query.trim().length < 2) {
+    res.status(400).json({ error: 'query (q) of at least 2 characters required' })
+    return
+  }
+  const allowed = ['artist', 'album', 'track']
+  const rawTypes = typeof req.query.types === 'string' ? req.query.types : 'artist,album,track'
+  const types = rawTypes
+    .split(',')
+    .map((t) => t.trim())
+    .filter((t) => allowed.includes(t))
+  const limit = Number.parseInt(req.query.limit as string, 10) || 8
+  try {
+    // biome-ignore lint/suspicious/noExplicitAny: types narrowed to the allow-list above
+    const results = await spotifyApiService.searchAll(query.trim(), (types.length ? types : allowed) as any, limit)
+    res.status(200).json(results)
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error searching Spotify:`, error)
+    res.status(500).json({ error: 'Failed to search', message: error instanceof Error ? error.message : 'Unknown error' })
+  }
+})
+
 // Get artist albums
 app.get('/api/spotify/artist/:artistId/albums', async (req, res) => {
   if (!spotifyApiService) {

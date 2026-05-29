@@ -614,3 +614,24 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
 }
 .bt-device-info { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-device-row button { flex: 0 0 auto; }
+
+/* Spotify search results (Phase 17a) */
+.search-result-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.search-result-row:first-of-type { border-top: 0; }
+.search-thumb {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+.search-result-info { min-width: 0; display: flex; flex-direction: column; }
+.search-result-info .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-info .dim { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

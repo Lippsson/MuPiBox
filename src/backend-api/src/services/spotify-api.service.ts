@@ -536,6 +536,54 @@ export class SpotifyApiService {
     })
   }
 
+  /**
+   * Phase 17a — combined catalog search across artists/albums/tracks for the
+   * Eltern-WebApp browse screen. One Spotify /search call covers all requested
+   * types; results are normalised to the small shapes the WebApp renders.
+   */
+  async searchAll(
+    query: string,
+    types: Array<'artist' | 'album' | 'track'> = ['artist', 'album', 'track'],
+    limit = 8,
+  ): Promise<{
+    artists: Array<{ id: string; name: string; images: unknown[] }>
+    albums: Array<{
+      id: string
+      name: string
+      artists: unknown[]
+      images: unknown[]
+      release_date?: string
+      album_type?: string
+      total_tracks?: number
+    }>
+    tracks: Array<{ id: string; name: string; artists: unknown[]; album: unknown }>
+  }> {
+    const l = Math.min(Math.max(limit, 1), 10)
+    const cacheKey = `search_all_${query}_${types.join(',')}_${l}`
+    return this.executeWithCache(cacheKey, async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (await this.spotifyApi.search(query, types as any, 'DE', l as any, 0)) as any
+      return {
+        artists: (result.artists?.items ?? []).map((a: any) => ({ id: a.id, name: a.name, images: a.images ?? [] })),
+        albums: (result.albums?.items ?? []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          artists: a.artists ?? [],
+          images: a.images ?? [],
+          release_date: a.release_date,
+          album_type: a.album_type,
+          total_tracks: a.total_tracks,
+        })),
+        tracks: (result.tracks?.items ?? []).map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          artists: t.artists ?? [],
+          album: t.album ?? null,
+        })),
+      }
+    })
+  }
+
   async getArtistAlbums(
     artistId: string,
     albumTypes = 'album,single,compilation',
