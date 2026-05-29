@@ -504,7 +504,7 @@ const DAYS = [
 let capsConfig = null
 
 async function loadCaps() {
-  await Promise.all([loadCapsStatus(), loadCapsConfig()])
+  await Promise.all([loadCapsStatus(), loadCapsConfig(), loadSleepTimer()])
 }
 
 async function loadCapsStatus() {
@@ -1526,6 +1526,85 @@ async function savePowerConfig() {
   }
 }
 
+/* ---------- Schlaftimer (Phase 17i) ---------- */
+
+let sleepTimerTickHandle = null
+
+/** Fetch + render the current SleepTimer state. Self-schedules the next
+ *  poll: ~5s while a timer is active so the countdown is live; ~30s when
+ *  idle so we still pick up a timer started elsewhere (mupi.php, Telegram).
+ *  Polling auto-stops when the user leaves the Akku screen. */
+async function loadSleepTimer() {
+  if (sleepTimerTickHandle) {
+    clearTimeout(sleepTimerTickHandle)
+    sleepTimerTickHandle = null
+  }
+  const statusEl = $('#sleeptimer-status')
+  const stopBtn = $('#sleeptimer-stop-btn')
+  let intervalMs = 30000
+  try {
+    const res = await api(`${API}/sleeptimer`)
+    if (res.ok) {
+      const b = res.body ?? {}
+      if (b.active) {
+        const rem = Number(b.remaining_seconds) || 0
+        const mins = Math.floor(rem / 60)
+        const secs = rem % 60
+        const until = b.until_iso ? new Date(b.until_iso) : null
+        const untilText = until
+          ? ` (um ${until.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr)`
+          : ''
+        if (statusEl) {
+          statusEl.textContent = `Aktiv — Box schaltet in ${mins}:${String(secs).padStart(2, '0')} aus${untilText}`
+        }
+        if (stopBtn) stopBtn.hidden = false
+        intervalMs = 5000
+      } else {
+        if (statusEl) statusEl.textContent = 'Aus'
+        if (stopBtn) stopBtn.hidden = true
+      }
+    } else if (statusEl) {
+      statusEl.textContent = 'Status nicht verfügbar'
+    }
+  } catch {
+    if (statusEl) statusEl.textContent = 'Status nicht verfügbar'
+  }
+  // Only keep polling while the Spielzeit & Ruhe screen is the active one.
+  if (state.currentSection === 'caps') {
+    sleepTimerTickHandle = setTimeout(loadSleepTimer, intervalMs)
+  }
+}
+
+async function startSleepTimer() {
+  const slider = $('#sleeptimer-minutes')
+  const minutes = Number(slider?.value)
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) {
+    feedback('#sleeptimer-feedback', 'error', 'Ungültige Dauer.')
+    return
+  }
+  const btn = $('#sleeptimer-start-btn')
+  if (btn) btn.disabled = true
+  const res = await api(`${API}/sleeptimer/start`, { method: 'POST', body: { minutes } })
+  if (btn) btn.disabled = false
+  if (!res.ok) {
+    feedback('#sleeptimer-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  feedback('#sleeptimer-feedback', 'success', `Schlaftimer gestartet (${minutes} min).`)
+  loadSleepTimer()
+}
+
+async function stopSleepTimer() {
+  if (!confirm('Schlaftimer wirklich stoppen?')) return
+  const res = await api(`${API}/sleeptimer/stop`, { method: 'POST' })
+  if (!res.ok) {
+    feedback('#sleeptimer-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  feedback('#sleeptimer-feedback', 'success', 'Schlaftimer gestoppt.')
+  loadSleepTimer()
+}
+
 /* ---------- screen: hub overview (Phase 15a) ---------- */
 
 /** Hub-overview card subs — live stats so parents see at a glance what
@@ -2047,6 +2126,12 @@ function wire() {
 
   // Phase 15i — Power-screen save.
   $('#power-save-btn')?.addEventListener('click', savePowerConfig)
+  $('#sleeptimer-start-btn')?.addEventListener('click', startSleepTimer)
+  $('#sleeptimer-stop-btn')?.addEventListener('click', stopSleepTimer)
+  $('#sleeptimer-minutes')?.addEventListener('input', (e) => {
+    const out = $('#sleeptimer-minutes-out')
+    if (out) out.textContent = String(e.target.value)
+  })
 
   // WLAN (Phase 15c) — read-only status + manual refresh.
   $('#wlan-refresh-btn')?.addEventListener('click', loadWlan)

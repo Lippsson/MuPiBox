@@ -11,7 +11,7 @@
 // session (that's how you get one in the first place) but rate-limited
 // per-IP.
 
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promises as fsp, readFileSync } from 'node:fs'
 import * as os from 'node:os'
 import { Router } from 'express'
@@ -463,6 +463,71 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       cfg.timeout = timeout
     })
     res.json({ ok: true, applied: mutations })
+  })
+
+  /**
+   * GET /api/eltern/sleeptimer  (Phase 17i)
+   * Read the runtime state of the poweroff-countdown timer. The countdown
+   * itself is the existing `sleep_timer.sh` background process (started by
+   * AdminInterface/mupi.php today) which writes the remaining seconds to
+   * `/tmp/.time2sleep` once per second and runs `poweroff` when it hits zero.
+   * The file only exists while a timer is active.
+   */
+  router.get('/sleeptimer', requireSession, (_req, res) => {
+    try {
+      const raw = readFileSync('/tmp/.time2sleep', 'utf8').trim()
+      const remaining = Number.parseInt(raw, 10)
+      if (Number.isFinite(remaining) && remaining > 0) {
+        const until = new Date(Date.now() + remaining * 1000)
+        res.json({ active: true, remaining_seconds: remaining, until_iso: until.toISOString() })
+        return
+      }
+    } catch {
+      // file missing — no timer running, fall through
+    }
+    res.json({ active: false })
+  })
+
+  /**
+   * POST /api/eltern/sleeptimer/start  {minutes}  (Phase 17i)
+   * Mirrors the mupi.php behaviour: spawn `sleep_timer.sh <seconds>` detached
+   * via sudo. Accepts 1..1440 minutes (same cap the admin UI uses). The shell
+   * script writes the remaining time to /tmp/.time2sleep and runs `poweroff`
+   * when it hits zero; everything else is just observation.
+   */
+  router.post('/sleeptimer/start', requireSession, requireCsrf, (req, res) => {
+    const body = (req.body as { minutes?: unknown } | undefined) ?? {}
+    const minutes = Math.floor(Number(body.minutes))
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) {
+      res.status(400).json({ error: 'minutes must be an integer between 1 and 1440' })
+      return
+    }
+    const seconds = minutes * 60
+    try {
+      const child = spawn('sudo', ['/usr/local/bin/mupibox/sleep_timer.sh', String(seconds)], {
+        detached: true,
+        stdio: 'ignore',
+      })
+      child.unref()
+    } catch (err) {
+      res.status(500).json({ error: `spawn failed: ${(err as Error).message}` })
+      return
+    }
+    res.json({ ok: true, minutes, seconds })
+  })
+
+  /**
+   * POST /api/eltern/sleeptimer/stop  (Phase 17i)
+   * Mirrors mupi.php's "Stop running timer" button: `pkill -f sleep_timer.sh`
+   * then remove `/tmp/.time2sleep`. Both are idempotent — calling stop when
+   * no timer runs returns ok without erroring.
+   */
+  router.post('/sleeptimer/stop', requireSession, requireCsrf, (_req, res) => {
+    execFile('sudo', ['pkill', '-f', 'sleep_timer.sh'], { timeout: 5000 }, () => {
+      execFile('sudo', ['rm', '-f', '/tmp/.time2sleep'], { timeout: 5000 }, () => {
+        res.json({ ok: true })
+      })
+    })
   })
 
   /**

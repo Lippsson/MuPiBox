@@ -318,6 +318,25 @@
         </div>
       </div>
 
+      <!-- Schlaftimer (Phase 17i) — Einschlafhilfe: zählt herunter und schaltet die Box am Ende komplett aus. -->
+      <div class="card">
+        <h3>Schlaftimer</h3>
+        <p class="dim">Box schaltet sich nach Ablauf des Countdowns komplett aus — egal ob gerade gespielt wird. Praktisch für die Einschlafzeit.</p>
+        <div class="status-row">
+          <span class="dim">Status</span>
+          <span class="value" id="sleeptimer-status">—</span>
+        </div>
+        <div class="form-row">
+          <label for="sleeptimer-minutes">Minuten (15–360, Schritte à 15) <span id="sleeptimer-minutes-out" class="dim">60</span></label>
+          <input type="range" id="sleeptimer-minutes" min="15" max="360" step="15" value="60">
+        </div>
+        <div class="actions">
+          <button class="primary" id="sleeptimer-start-btn">Start</button>
+          <button class="ghost" id="sleeptimer-stop-btn" hidden>Stoppen</button>
+        </div>
+        <div id="sleeptimer-feedback" class="feedback" hidden></div>
+      </div>
+
       <!-- Override-Buttons -->
       <div class="card">
         <h3>Sofort-Aktionen</h3>
