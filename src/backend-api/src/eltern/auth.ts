@@ -8,8 +8,11 @@
 // strings. Single-use enforcement on magic links blocks replay attacks;
 // session lifetime is enforced on every check via timestamp comparison.
 
-import { randomBytes } from 'node:crypto'
+import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
 import * as fs from 'node:fs'
+import { promisify } from 'node:util'
+
+const scryptAsync = promisify(scryptCb)
 
 const MAGIC_LINKS_PATH = '/tmp/.eltern_magic_links.json'
 const SESSIONS_PATH = '/tmp/.eltern_sessions.json'
@@ -125,19 +128,10 @@ export function generateMagicLink(source: string): { token: string; expiresIn: n
 }
 
 /**
- * Redeem a magic-link token. On success: marks it as used (single-use),
- * issues a session, returns the session id + csrf token. On failure:
- * returns null. Defensive against missing entries, expired entries,
- * and already-used entries.
+ * Issue a fresh session + csrf token. Used by every authentication path
+ * (magic-link, password login, …) — keeps session creation in one place.
  */
-export function redeemMagicLink(token: string, ip: string): { sessionId: string; csrf: string } | null {
-  purgeExpiredMagicLinks()
-  const links = loadMagicLinks()
-  const entry = links[token]
-  if (!entry || entry.used) return null
-  entry.used = true
-  saveMagicLinks()
-
+export function issueSession(ip: string): { sessionId: string; csrf: string } {
   const sessions = loadSessions()
   const sessionId = randomBytes(TOKEN_BYTES).toString('hex')
   const csrf = randomBytes(TOKEN_BYTES).toString('hex')
@@ -151,6 +145,22 @@ export function redeemMagicLink(token: string, ip: string): { sessionId: string;
   sessionsCache = sessions
   saveSessions()
   return { sessionId, csrf }
+}
+
+/**
+ * Redeem a magic-link token. On success: marks it as used (single-use),
+ * issues a session, returns the session id + csrf token. On failure:
+ * returns null. Defensive against missing entries, expired entries,
+ * and already-used entries.
+ */
+export function redeemMagicLink(token: string, ip: string): { sessionId: string; csrf: string } | null {
+  purgeExpiredMagicLinks()
+  const links = loadMagicLinks()
+  const entry = links[token]
+  if (!entry || entry.used) return null
+  entry.used = true
+  saveMagicLinks()
+  return issueSession(ip)
 }
 
 /** Validate a session cookie, touch lastSeen. Returns the session or null. */
@@ -187,3 +197,72 @@ export const CSRF_HEADER = 'x-mupibox-csrf'
 /** Constant for the magic-link URL path; centralised for the bot/frontend
  *  callers that need to construct the link. */
 export const MAGIC_LINK_PATH = '/eltern'
+
+// --- Phase 17h — optional parent password ----------------------------------
+// Stored at mupiboxconfig.json:eltern.password = {salt, hash} (hex-encoded
+// scrypt). The magic-link flow stays the passwordless path; this just lets
+// parents log back in after a session timeout without re-issuing a token.
+
+const SCRYPT_KEY_LEN = 32
+const SCRYPT_SALT_BYTES = 16
+const MIN_PASSWORD_LENGTH = 4
+
+interface ElternPasswordEntry {
+  salt: string
+  hash: string
+}
+
+function readPasswordEntry(mupibox: unknown): ElternPasswordEntry | undefined {
+  const e = (mupibox as { eltern?: { password?: unknown } } | undefined)?.eltern?.password as
+    | Partial<ElternPasswordEntry>
+    | undefined
+  if (!e || typeof e.salt !== 'string' || typeof e.hash !== 'string' || !e.salt || !e.hash) return undefined
+  return { salt: e.salt, hash: e.hash }
+}
+
+/** Is a parent password currently configured? */
+export function hasElternPassword(mupibox: unknown): boolean {
+  return readPasswordEntry(mupibox) !== undefined
+}
+
+/** Constant-time password check. False if no password is set. */
+export async function verifyElternPassword(plain: string, mupibox: unknown): Promise<boolean> {
+  const entry = readPasswordEntry(mupibox)
+  if (!entry) return false
+  try {
+    const salt = Buffer.from(entry.salt, 'hex')
+    const expected = Buffer.from(entry.hash, 'hex')
+    if (expected.length === 0 || salt.length === 0) return false
+    const candidate = (await scryptAsync(plain, salt, expected.length)) as Buffer
+    return candidate.length === expected.length && timingSafeEqual(candidate, expected)
+  } catch {
+    return false
+  }
+}
+
+/** Set or clear the parent password. Empty/whitespace `plain` clears it.
+ *  Caller must already have validated the minimum length where relevant. */
+export async function setElternPassword(
+  plain: string,
+  updateMupiboxConfig: (mutate: (cfg: Record<string, unknown>) => void) => Promise<void>,
+): Promise<void> {
+  const trimmed = plain.trim()
+  if (!trimmed) {
+    await updateMupiboxConfig((cfg) => {
+      const e = ((cfg.eltern as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      delete e.password
+      cfg.eltern = e
+    })
+    return
+  }
+  const salt = randomBytes(SCRYPT_SALT_BYTES)
+  const hash = (await scryptAsync(trimmed, salt, SCRYPT_KEY_LEN)) as Buffer
+  const entry: ElternPasswordEntry = { salt: salt.toString('hex'), hash: hash.toString('hex') }
+  await updateMupiboxConfig((cfg) => {
+    const e = ((cfg.eltern as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+    e.password = entry
+    cfg.eltern = e
+  })
+}
+
+export const ELTERN_PASSWORD_MIN_LENGTH = MIN_PASSWORD_LENGTH

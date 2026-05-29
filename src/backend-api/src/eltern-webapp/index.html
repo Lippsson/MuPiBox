@@ -29,12 +29,24 @@
 
     <!-- Wird gezeigt wenn /api/eltern/session 401 zurückgibt -->
     <section id="screen-no-session" class="screen" hidden>
+      <div class="card" id="no-session-password" hidden>
+        <h2>Eltern-Anmeldung</h2>
+        <p class="dim">Sitzung ist abgelaufen. Mit dem Eltern-Passwort hier einsteigen, oder einen neuen Magic-Link anfordern.</p>
+        <div class="form-row">
+          <label for="login-password">Passwort</label>
+          <input type="password" id="login-password" autocomplete="current-password">
+        </div>
+        <div class="actions">
+          <button class="primary" id="login-submit-btn">Anmelden</button>
+        </div>
+        <div id="login-feedback" class="feedback" hidden></div>
+      </div>
       <div class="card">
         <h2>Anmeldung erforderlich</h2>
-        <p>Diese Seite ist nur über einen gültigen Magic-Link erreichbar.</p>
+        <p>Magic-Link anfordern:</p>
         <ul>
           <li>Über den Telegram-Bot: <code>/eltern-login</code></li>
-          <li>Direkt am Box-Display: Mehrfach-Tap auf Cloud+Batterie-Icons (kommt in Phase 15)</li>
+          <li>Direkt an der Box: Einstellungen → „Eltern-WebApp" (QR-Code)</li>
         </ul>
       </div>
     </section>
@@ -588,6 +600,24 @@
         <div class="actions">
           <button class="ghost" id="sys-refresh-btn">🔄 Aktualisieren</button>
         </div>
+      </div>
+
+      <div class="card">
+        <h3>Eltern-Passwort</h3>
+        <p class="dim">Optional. Mit gesetztem Passwort kannst du dich nach Sitzungsablauf direkt anmelden — ohne neuen Magic-Link. Magic-Link funktioniert weiterhin ohne Passwort.</p>
+        <div class="status-row">
+          <span class="dim">Status</span>
+          <span class="value" id="pw-status">—</span>
+        </div>
+        <div class="form-row">
+          <label for="pw-new">Neues Passwort (mindestens 4 Zeichen)</label>
+          <input type="password" id="pw-new" autocomplete="new-password" placeholder="leer = keine Änderung">
+        </div>
+        <div class="actions">
+          <button class="primary" id="pw-set-btn">Speichern</button>
+          <button class="ghost" id="pw-clear-btn" hidden>Passwort entfernen</button>
+        </div>
+        <div id="pw-feedback" class="feedback" hidden></div>
       </div>
 
       <div class="card">

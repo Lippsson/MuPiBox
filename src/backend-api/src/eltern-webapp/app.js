@@ -18,6 +18,7 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel))
 
 const state = {
   csrf: null,
+  passwordConfigured: false,
   wizardStep: Number(sessionStorage.getItem('wizard.step') ?? 1),
   spotifyError: new URLSearchParams(location.search).get('spotify_error'),
   spotifyConnected: new URLSearchParams(location.search).get('spotify_connected') === '1',
@@ -1327,19 +1328,91 @@ function formatBytes(n) {
 
 async function loadSystem() {
   const res = await api(`${API}/system`)
-  if (!res.ok) return
-  const s = res.body ?? {}
-  setText('#sys-hostname', s.hostname || '—')
-  setText('#sys-uptime', formatUptime(s.uptime_seconds))
-  setText('#sys-load', Number.isFinite(s.load_1) ? `${s.load_1}${s.cpu_count ? ` · ${s.cpu_count} Kerne` : ''}` : '—')
-  setText('#sys-temp', Number.isFinite(s.cpu_temp_c) ? `${s.cpu_temp_c} °C` : '—')
-  const memUsed = s.mem_total != null && s.mem_free != null ? s.mem_total - s.mem_free : null
-  setText('#sys-mem', memUsed != null ? `${formatBytes(memUsed)} / ${formatBytes(s.mem_total)}` : '—')
-  if (s.disk) {
-    setText('#sys-disk', `${formatBytes(s.disk.total - s.disk.free)} / ${formatBytes(s.disk.total)} belegt`)
-  } else {
-    setText('#sys-disk', '—')
+  if (res.ok) {
+    const s = res.body ?? {}
+    setText('#sys-hostname', s.hostname || '—')
+    setText('#sys-uptime', formatUptime(s.uptime_seconds))
+    setText('#sys-load', Number.isFinite(s.load_1) ? `${s.load_1}${s.cpu_count ? ` · ${s.cpu_count} Kerne` : ''}` : '—')
+    setText('#sys-temp', Number.isFinite(s.cpu_temp_c) ? `${s.cpu_temp_c} °C` : '—')
+    const memUsed = s.mem_total != null && s.mem_free != null ? s.mem_total - s.mem_free : null
+    setText('#sys-mem', memUsed != null ? `${formatBytes(memUsed)} / ${formatBytes(s.mem_total)}` : '—')
+    if (s.disk) {
+      setText('#sys-disk', `${formatBytes(s.disk.total - s.disk.free)} / ${formatBytes(s.disk.total)} belegt`)
+    } else {
+      setText('#sys-disk', '—')
+    }
   }
+  renderPasswordStatus()
+}
+
+/** Reflect state.passwordConfigured in the System Eltern-Passwort card. */
+function renderPasswordStatus() {
+  setText('#pw-status', state.passwordConfigured ? 'Passwort ist gesetzt' : 'Nicht gesetzt')
+  const clearBtn = $('#pw-clear-btn')
+  if (clearBtn) clearBtn.hidden = !state.passwordConfigured
+}
+
+async function setPassword() {
+  const inp = $('#pw-new')
+  const pw = (inp?.value ?? '').trim()
+  if (!pw) {
+    feedback('#pw-feedback', 'error', 'Bitte ein Passwort eingeben (oder „Passwort entfernen" nutzen).')
+    return
+  }
+  if (pw.length < 4) {
+    feedback('#pw-feedback', 'error', 'Mindestens 4 Zeichen.')
+    return
+  }
+  const res = await api(`${API}/password`, { method: 'POST', body: { password: pw } })
+  if (!res.ok) {
+    feedback('#pw-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  if (inp) inp.value = ''
+  state.passwordConfigured = !!res.body?.configured
+  renderPasswordStatus()
+  feedback('#pw-feedback', 'success', 'Passwort gespeichert.')
+}
+
+async function clearPassword() {
+  if (!confirm('Eltern-Passwort wirklich entfernen? Danach geht der Zugang nur noch über Magic-Link.')) return
+  const res = await api(`${API}/password`, { method: 'POST', body: { password: '' } })
+  if (!res.ok) {
+    feedback('#pw-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  state.passwordConfigured = !!res.body?.configured
+  renderPasswordStatus()
+  feedback('#pw-feedback', 'success', 'Passwort entfernt.')
+}
+
+/** Phase 17h: submit the no-session password form. On success, re-run
+ *  bootstrap so the session cookie is picked up and the hub appears. */
+async function doLogin() {
+  const inp = $('#login-password')
+  const pw = inp?.value ?? ''
+  if (!pw) {
+    feedback('#login-feedback', 'error', 'Bitte Passwort eingeben.')
+    return
+  }
+  const btn = $('#login-submit-btn')
+  if (btn) btn.disabled = true
+  const res = await api(`${API}/login`, { method: 'POST', body: { password: pw } })
+  if (btn) btn.disabled = false
+  if (!res.ok) {
+    if (res.status === 429) {
+      feedback('#login-feedback', 'error', 'Zu viele Versuche — bitte kurz warten.')
+    } else {
+      feedback('#login-feedback', 'error', 'Falsches Passwort.')
+    }
+    if (inp) {
+      inp.value = ''
+      inp.focus()
+    }
+    return
+  }
+  if (inp) inp.value = ''
+  await bootstrap()
 }
 
 async function systemReboot() {
@@ -1911,10 +1984,22 @@ async function bootstrap() {
   showScreen('loading')
   const res = await api(`${API}/session`)
   if (res.status === 401 || !res.ok) {
+    // Phase 17h: if a parent password is configured, offer a login form on the
+    // no-session screen so the parent can re-enter without a fresh magic-link.
+    const info = await api(`${API}/auth-info`)
+    state.passwordConfigured = !!info.body?.passwordConfigured
+    const pwCard = $('#no-session-password')
+    if (pwCard) pwCard.hidden = !state.passwordConfigured
+    const fb = $('#login-feedback')
+    if (fb) fb.hidden = true
+    const inp = $('#login-password')
+    if (inp) inp.value = ''
     showScreen('no-session')
+    if (state.passwordConfigured && inp) setTimeout(() => inp.focus(), 80)
     return
   }
   state.csrf = res.body.csrf_token
+  state.passwordConfigured = !!res.body.passwordConfigured
   $('#logout-btn').hidden = false
 
   // Returned from Spotify OAuth callback? Land on sync so the user sees
@@ -1970,6 +2055,12 @@ function wire() {
   $('#sys-refresh-btn')?.addEventListener('click', loadSystem)
   $('#sys-reboot-btn')?.addEventListener('click', systemReboot)
   $('#sys-shutdown-btn')?.addEventListener('click', systemShutdown)
+  $('#pw-set-btn')?.addEventListener('click', setPassword)
+  $('#pw-clear-btn')?.addEventListener('click', clearPassword)
+  $('#login-submit-btn')?.addEventListener('click', doLogin)
+  $('#login-password')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doLogin()
+  })
 
   // Telegram (Phase 15f) — config editor.
   $('#tg-back-btn')?.addEventListener('click', () => navigate('hub'))

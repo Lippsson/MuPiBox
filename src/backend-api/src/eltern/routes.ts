@@ -17,7 +17,18 @@ import * as os from 'node:os'
 import { Router } from 'express'
 import QRCode from 'qrcode'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
-import { CSRF_HEADER, SESSION_COOKIE, destroySession, generateMagicLink, redeemMagicLink } from './auth'
+import {
+  CSRF_HEADER,
+  ELTERN_PASSWORD_MIN_LENGTH,
+  SESSION_COOKIE,
+  destroySession,
+  generateMagicLink,
+  hasElternPassword,
+  issueSession,
+  redeemMagicLink,
+  setElternPassword,
+  verifyElternPassword,
+} from './auth'
 import { ipRateLimit, localNetworkOnly, requireCsrf, requireSession } from './middleware'
 import {
   REQUESTED_SCOPES,
@@ -129,13 +140,59 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /** GET /api/eltern/session  — does the current request carry a valid
-   *  session? Used by the WebApp on load to decide login vs. dashboard. */
+   *  session? Used by the WebApp on load to decide login vs. dashboard.
+   *  Also tells the System screen whether a parent password is configured. */
   router.get('/session', requireSession, (req, res) => {
     res.json({
       authenticated: true,
       csrf_header: CSRF_HEADER,
       csrf_token: req.elternSessionCsrf,
+      passwordConfigured: hasElternPassword(deps.getMupiboxConfig()),
     })
+  })
+
+  /** GET /api/eltern/auth-info  — unauthenticated probe so the no-session
+   *  screen can decide whether to offer a password-login form. Returns only
+   *  a boolean; never the hash. */
+  router.get('/auth-info', (_req, res) => {
+    res.json({ passwordConfigured: hasElternPassword(deps.getMupiboxConfig()) })
+  })
+
+  /** POST /api/eltern/login  {password}  (Phase 17h)
+   *  Alternative to magic-link redemption: when the parent has set a password,
+   *  they can log back in after a session timeout without re-issuing a token.
+   *  Rate-limited; the magic-link flow remains the passwordless entry path. */
+  router.post('/login', ipRateLimit(5), async (req, res) => {
+    const body = (req.body as { password?: unknown } | undefined) ?? {}
+    const pw = typeof body.password === 'string' ? body.password : ''
+    const mupibox = deps.getMupiboxConfig()
+    if (!hasElternPassword(mupibox)) {
+      res.status(401).json({ error: 'password login not enabled' })
+      return
+    }
+    const ok = await verifyElternPassword(pw, mupibox)
+    if (!ok) {
+      res.status(401).json({ error: 'invalid password' })
+      return
+    }
+    const ip = req.ip ?? req.socket.remoteAddress ?? ''
+    const session = issueSession(ip)
+    res.setHeader('Set-Cookie', buildSessionCookie(session.sessionId, 24 * 60 * 60))
+    res.json({ ok: true, csrf_header: CSRF_HEADER, csrf_token: session.csrf })
+  })
+
+  /** POST /api/eltern/password  {password}  (Phase 17h)
+   *  Set or clear the parent login password. Empty string clears it. The
+   *  magic-link path is unaffected either way. */
+  router.post('/password', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { password?: unknown } | undefined) ?? {}
+    const pw = typeof body.password === 'string' ? body.password : ''
+    if (pw.trim() && pw.trim().length < ELTERN_PASSWORD_MIN_LENGTH) {
+      res.status(400).json({ error: `password too short (min ${ELTERN_PASSWORD_MIN_LENGTH} chars)` })
+      return
+    }
+    await setElternPassword(pw, deps.updateMupiboxConfig)
+    res.json({ ok: true, configured: hasElternPassword(deps.getMupiboxConfig()) })
   })
 
   /** POST /api/eltern/logout  — destroys the session, clears the cookie. */
