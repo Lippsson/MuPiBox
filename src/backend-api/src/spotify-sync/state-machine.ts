@@ -19,6 +19,7 @@ import { readStateFile, writeStateFile } from './state-file'
 import { acquireSyncLock, releaseSyncLock } from './sync-lock'
 import {
   type BoxLibraryEntry,
+  type SyncDiff,
   type SyncFailureKind,
   type SyncState,
   type SyncStateFile,
@@ -184,32 +185,29 @@ export async function runSync(trigger: SyncTrigger, deps: RunSyncDeps): Promise<
       return mapSpotifyError(err, failureCounters, finalise)
     }
 
-    // 6. Read library
-    let library: BoxLibraryEntry[]
-    try {
-      const raw = fs.readFileSync(deps.dataFile, 'utf8')
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) {
-        return finalise('INTERNAL_ERROR', undefined, { reason: 'data.json root is not an array' })
-      }
-      library = parsed
-    } catch (err) {
-      failureCounters = bumpFailureCounter(failureCounters, 'internal')
-      return finalise('INTERNAL_ERROR', undefined, { reason: `data.json read failed: ${(err as Error).message}` })
-    }
-
-    // 7. Diff
-    const diff = computeSyncDiff(resolved.items, library)
-
-    // 8. Apply with data lock
+    // 6. Read library + diff + apply — all under the data lock. Holding the
+    //    lock across the read guards against /api/add/edit/delete racing us,
+    //    and (critically) the array we hand to applyDiff is the exact same
+    //    array computeSyncDiff matched against: removals/updates carry object
+    //    references into it, so a separate re-read would break identity and
+    //    silently drop every removal/update (the Phase-14b bug fixed here).
     const dataLock = deps.acquireDataLock()
     if (dataLock !== 'acquired') {
       // data.json is being written by /api/add/edit/delete — retry next cron tick
       return finalise('INTERNAL_ERROR', undefined, { reason: `data.json lock unavailable (${dataLock})` })
     }
+    let diff: SyncDiff
     let applyResult: Awaited<ReturnType<typeof applyDiff>>
     try {
-      applyResult = await applyDiff(diff, deps.dataFile, new Date())
+      const raw = fs.readFileSync(deps.dataFile, 'utf8')
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        deps.releaseDataLock()
+        return finalise('INTERNAL_ERROR', undefined, { reason: 'data.json root is not an array' })
+      }
+      const library = parsed as BoxLibraryEntry[]
+      diff = computeSyncDiff(resolved.items, library)
+      applyResult = await applyDiff(diff, library, deps.dataFile, new Date())
     } catch (err) {
       deps.releaseDataLock()
       failureCounters = bumpFailureCounter(failureCounters, 'internal')

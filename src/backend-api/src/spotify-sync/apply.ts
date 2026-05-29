@@ -14,29 +14,25 @@ import { promises as fsPromises } from 'node:fs'
 import type { BoxLibraryEntry, SyncDiff, SyncItem } from './types'
 
 /**
- * Apply the diff to data.json. Caller already holds the data lock —
- * apply itself just reads, mutates, writes atomically.
+ * Apply the diff to data.json. Caller already holds the data lock and
+ * passes the exact `library` array that `computeSyncDiff` matched against
+ * — apply mutates that array and writes it atomically.
+ *
+ * IMPORTANT: `library` MUST be the same array instance the diff was built
+ * from. Removals/updates are matched by object identity (the diff carries
+ * references into this array), so re-reading data.json here would yield
+ * fresh objects that never match — silently dropping every removal and
+ * update. (That was the Phase-14b bug fixed in Phase 17e.)
  *
  * Atomic via tmp+rename (B8 / acquireLock pattern). Returns the post-
  * apply library so the state file can be updated with accurate counts.
  */
 export async function applyDiff(
   diff: SyncDiff,
+  library: BoxLibraryEntry[],
   dataFilePath: string,
   now: Date = new Date(),
 ): Promise<{ libraryAfter: BoxLibraryEntry[]; appliedAdditions: number; appliedUpdates: number; appliedRemovals: number }> {
-  const raw = await fsPromises.readFile(dataFilePath, 'utf8')
-  let library: BoxLibraryEntry[]
-  try {
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) {
-      throw new Error('data.json root is not an array')
-    }
-    library = parsed
-  } catch (err) {
-    throw new Error(`apply: failed to parse data.json (${(err as Error).message})`)
-  }
-
   const isoNow = now.toISOString()
 
   // Removals first — by reference, so the indices we use for updates
