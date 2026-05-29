@@ -44,6 +44,19 @@ function buildClearCookie(): string {
   return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`
 }
 
+/** Canonical BT MAC (AA:BB:CC:DD:EE:FF). */
+const BT_MAC_RE = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/
+
+/** Run a command (no shell — execFile is injection-safe) and capture stdout.
+ *  Never rejects: failures resolve with ok:false so handlers stay simple. */
+function execCapture(cmd: string, args: string[], timeoutMs = 8000): Promise<{ ok: boolean; stdout: string }> {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+      resolve({ ok: !err, stdout: stdout ?? '' })
+    })
+  })
+}
+
 /**
  * Creates the API router for /api/eltern/*. The /eltern landing page
  * (magic-link redemption) is a separate route in server.ts because it
@@ -428,6 +441,95 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       cfg.spotify = spotify
     })
     res.json({ ok: true, mode: clientSecret ? 'classic' : 'pkce' })
+  })
+
+  /**
+   * GET /api/eltern/bluetooth  (Phase 15d)
+   * Power state + paired devices (with connected flag) + autoconnect-service
+   * state. Mirrors the admin bluetooth.php read path; runs as dietpi via sudo
+   * like the PHP does. Empty/off → just {powered:false}.
+   */
+  router.get('/bluetooth', requireSession, async (_req, res) => {
+    const show = await execCapture('sudo', ['-u', 'dietpi', 'bluetoothctl', 'show'])
+    const powered = /Powered:\s*yes/i.test(show.stdout)
+    const devices: Array<{ mac: string; name: string; connected: boolean }> = []
+    if (powered) {
+      const dev = await execCapture('sudo', ['-u', 'dietpi', 'bluetoothctl', 'devices'])
+      const parsed: Array<{ mac: string; name: string }> = []
+      for (const line of dev.stdout.split('\n')) {
+        const m = line.match(/^Device\s+([0-9A-Fa-f:]{17})\s+(.*)$/)
+        if (m && BT_MAC_RE.test(m[1])) parsed.push({ mac: m[1], name: m[2].trim() || m[1] })
+      }
+      for (const d of parsed) {
+        const info = await execCapture('sudo', ['-u', 'dietpi', 'bluetoothctl', 'info', d.mac])
+        devices.push({ ...d, connected: /Connected:\s*yes/i.test(info.stdout) })
+      }
+    }
+    const ac = await execCapture('systemctl', ['is-active', 'mupi_autoconnect_bt'])
+    res.json({ powered, devices, autoconnect: ac.stdout.trim() === 'active' })
+  })
+
+  /** POST /api/eltern/bluetooth/power  — {on:boolean} → start_bt.sh|stop_bt.sh. */
+  router.post('/bluetooth/power', requireSession, requireCsrf, async (req, res) => {
+    const on = (req.body as { on?: unknown } | undefined)?.on === true
+    const script = on ? 'start_bt.sh' : 'stop_bt.sh'
+    const r = await execCapture('sudo', ['-u', 'dietpi', `/usr/local/bin/mupibox/${script}`], 15000)
+    res.json({ ok: r.ok })
+  })
+
+  /** POST /api/eltern/bluetooth/scan  — runs scan_bt.sh, returns discovered
+   *  devices parsed from /tmp/bt_scan (tab-sep; col[1]=MAC, col[2]=name). */
+  router.post('/bluetooth/scan', requireSession, requireCsrf, async (_req, res) => {
+    await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/scan_bt.sh'], 30000)
+    const found: Array<{ mac: string; name: string }> = []
+    try {
+      const raw = readFileSync('/tmp/bt_scan', 'utf8')
+      for (const line of raw.split('\n')) {
+        const cols = line.split('\t')
+        const mac = (cols[1] ?? '').trim()
+        if (BT_MAC_RE.test(mac)) found.push({ mac, name: (cols[2] ?? '').trim() || mac })
+      }
+    } catch {
+      /* no scan file — return empty */
+    }
+    res.json({ ok: true, found })
+  })
+
+  /** POST /api/eltern/bluetooth/pair  — {mac} → pair_bt.sh. */
+  router.post('/bluetooth/pair', requireSession, requireCsrf, async (req, res) => {
+    const mac = String((req.body as { mac?: unknown } | undefined)?.mac ?? '').trim()
+    if (!BT_MAC_RE.test(mac)) {
+      res.status(400).json({ error: 'invalid MAC' })
+      return
+    }
+    const r = await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/pair_bt.sh', mac], 30000)
+    res.json({ ok: r.ok })
+  })
+
+  /** POST /api/eltern/bluetooth/remove  — {mac} → remove_bt.sh + bt restart. */
+  router.post('/bluetooth/remove', requireSession, requireCsrf, async (req, res) => {
+    const mac = String((req.body as { mac?: unknown } | undefined)?.mac ?? '').trim()
+    if (!BT_MAC_RE.test(mac)) {
+      res.status(400).json({ error: 'invalid MAC' })
+      return
+    }
+    await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/remove_bt.sh', mac], 15000)
+    await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/stop_bt.sh'], 15000)
+    await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/start_bt.sh'], 15000)
+    res.json({ ok: true })
+  })
+
+  /** POST /api/eltern/bluetooth/autoconnect  — {enable:boolean}. */
+  router.post('/bluetooth/autoconnect', requireSession, requireCsrf, async (req, res) => {
+    const enable = (req.body as { enable?: unknown } | undefined)?.enable === true
+    if (enable) {
+      await execCapture('sudo', ['systemctl', 'enable', 'mupi_autoconnect_bt'])
+      await execCapture('sudo', ['systemctl', 'start', 'mupi_autoconnect_bt'])
+    } else {
+      await execCapture('sudo', ['systemctl', 'stop', 'mupi_autoconnect_bt'])
+      await execCapture('sudo', ['systemctl', 'disable', 'mupi_autoconnect_bt'])
+    }
+    res.json({ ok: true })
   })
 
   /**

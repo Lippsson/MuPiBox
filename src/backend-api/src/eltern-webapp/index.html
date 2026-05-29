@@ -445,9 +445,38 @@
 
     <section id="screen-bluetooth" class="screen" hidden>
       <div class="card">
-        <h2>Bluetooth</h2>
-        <p>Kopfhörer und Lautsprecher koppeln, paired Devices verwalten.</p>
-        <p class="dim">Phase 15d — braucht BT-Hardware zur Implementierung.</p>
+        <h3>Bluetooth</h3>
+        <div class="status-row">
+          <span>Bluetooth aktiv</span>
+          <label class="toggle">
+            <input type="checkbox" id="bt-power">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <div class="status-row">
+          <span>Auto-Verbinden</span>
+          <label class="toggle">
+            <input type="checkbox" id="bt-autoconnect">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <p class="dim">Auto-Verbinden hilft, wenn bekannte Geräte nach dem Einschalten nicht von selbst verbinden.</p>
+        <div id="bt-power-feedback" class="feedback" hidden></div>
+      </div>
+
+      <div class="card">
+        <h3>Gekoppelte Geräte</h3>
+        <div id="bt-paired-list"><p class="dim">—</p></div>
+      </div>
+
+      <div class="card">
+        <h3>Neue Geräte koppeln</h3>
+        <p class="dim">Gerät zuerst in den Pairing-Modus versetzen, dann scannen (dauert ~10 s).</p>
+        <div class="actions">
+          <button class="ghost" id="bt-scan-btn">🔍 Scannen</button>
+        </div>
+        <div id="bt-scan-list"></div>
+        <div id="bt-feedback" class="feedback" hidden></div>
       </div>
     </section>
 

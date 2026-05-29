@@ -39,7 +39,7 @@ const SECTIONS = {
   caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => loadWlan() },
-  bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => {} },
+  bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => loadBluetooth() },
   telegram:  { title: 'Telegram',            parent: 'hub', loader: () => loadTelegram() },
   system:    { title: 'System',              parent: 'hub', loader: () => loadSystem() },
 }
@@ -699,6 +699,138 @@ async function capsQuietNow() {
     loadCapsStatus()
   } else {
     feedback('#caps-action-feedback', 'error', `Fehler ${res.status}`)
+  }
+}
+
+/* ---------- screen: bluetooth (Phase 15d) ---------- */
+
+async function loadBluetooth() {
+  const res = await api(`${API}/bluetooth`)
+  if (!res.ok) return
+  const b = res.body ?? {}
+  const power = $('#bt-power')
+  if (power) power.checked = b.powered === true
+  const ac = $('#bt-autoconnect')
+  if (ac) ac.checked = b.autoconnect === true
+  renderBtPaired(b.devices ?? [])
+}
+
+function renderBtPaired(devices) {
+  const wrap = $('#bt-paired-list')
+  if (!wrap) return
+  wrap.innerHTML = ''
+  if (!devices.length) {
+    const p = document.createElement('p')
+    p.className = 'dim'
+    p.textContent = 'Keine gekoppelten Geräte.'
+    wrap.appendChild(p)
+    return
+  }
+  for (const d of devices) {
+    const row = document.createElement('div')
+    row.className = 'bt-device-row'
+    const info = document.createElement('span')
+    info.className = 'bt-device-info'
+    info.textContent = d.connected ? `🟢 ${d.name || d.mac}` : `${d.name || d.mac} · ${d.mac}`
+    const rm = document.createElement('button')
+    rm.className = 'ghost'
+    rm.textContent = 'Entkoppeln'
+    rm.addEventListener('click', () => btRemove(d.mac, d.name || d.mac))
+    row.append(info, rm)
+    wrap.appendChild(row)
+  }
+}
+
+async function btSetPower() {
+  const on = $('#bt-power').checked
+  feedback('#bt-power-feedback', 'success', on ? 'Bluetooth wird aktiviert …' : 'Bluetooth wird deaktiviert …')
+  const res = await api(`${API}/bluetooth/power`, { method: 'POST', body: { on } })
+  if (res.ok) {
+    feedback('#bt-power-feedback', 'success', 'Erledigt.')
+    setTimeout(loadBluetooth, 1500)
+  } else {
+    feedback('#bt-power-feedback', 'error', `Fehler ${res.status}`)
+  }
+}
+
+async function btSetAutoconnect() {
+  const enable = $('#bt-autoconnect').checked
+  const res = await api(`${API}/bluetooth/autoconnect`, { method: 'POST', body: { enable } })
+  if (!res.ok) feedback('#bt-power-feedback', 'error', `Auto-Verbinden: Fehler ${res.status}`)
+}
+
+async function btScan() {
+  const btn = $('#bt-scan-btn')
+  if (btn) {
+    btn.disabled = true
+    btn.textContent = '🔍 Scanne … (~10 s)'
+  }
+  feedback('#bt-feedback', 'success', 'Suche nach Geräten …')
+  const res = await api(`${API}/bluetooth/scan`, { method: 'POST' })
+  if (btn) {
+    btn.disabled = false
+    btn.textContent = '🔍 Scannen'
+  }
+  if (!res.ok) {
+    feedback('#bt-feedback', 'error', `Scan fehlgeschlagen (${res.status})`)
+    return
+  }
+  renderBtScan(res.body?.found ?? [])
+}
+
+function renderBtScan(found) {
+  const wrap = $('#bt-scan-list')
+  if (!wrap) return
+  wrap.innerHTML = ''
+  if (!found.length) {
+    const p = document.createElement('p')
+    p.className = 'dim'
+    p.textContent = 'Keine neuen Geräte gefunden. Gerät im Pairing-Modus? Nochmal scannen.'
+    wrap.appendChild(p)
+    return
+  }
+  for (const d of found) {
+    const row = document.createElement('div')
+    row.className = 'bt-device-row'
+    const info = document.createElement('span')
+    info.className = 'bt-device-info'
+    info.textContent = `${d.name || d.mac} · ${d.mac}`
+    const pair = document.createElement('button')
+    pair.className = 'primary'
+    pair.textContent = 'Koppeln'
+    pair.addEventListener('click', () => btPair(d.mac, d.name || d.mac, pair))
+    row.append(info, pair)
+    wrap.appendChild(row)
+  }
+  feedback('#bt-feedback', 'success', `${found.length} Gerät(e) gefunden.`)
+}
+
+async function btPair(mac, name, btn) {
+  if (btn) {
+    btn.disabled = true
+    btn.textContent = 'Koppele …'
+  }
+  const res = await api(`${API}/bluetooth/pair`, { method: 'POST', body: { mac } })
+  if (res.ok) {
+    feedback('#bt-feedback', 'success', `"${name}" gekoppelt.`)
+    setTimeout(loadBluetooth, 1500)
+  } else {
+    feedback('#bt-feedback', 'error', res.body?.error ?? `Koppeln fehlgeschlagen (${res.status})`)
+    if (btn) {
+      btn.disabled = false
+      btn.textContent = 'Koppeln'
+    }
+  }
+}
+
+async function btRemove(mac, name) {
+  if (!confirm(`"${name}" entkoppeln?`)) return
+  const res = await api(`${API}/bluetooth/remove`, { method: 'POST', body: { mac } })
+  if (res.ok) {
+    feedback('#bt-feedback', 'success', `"${name}" entkoppelt.`)
+    setTimeout(loadBluetooth, 1500)
+  } else {
+    feedback('#bt-feedback', 'error', `Entkoppeln fehlgeschlagen (${res.status})`)
   }
 }
 
@@ -1363,6 +1495,11 @@ function wire() {
   $('#tg-back-btn')?.addEventListener('click', () => navigate('hub'))
   $('#tg-save-btn')?.addEventListener('click', saveTelegram)
   $('#tg-add-chat-btn')?.addEventListener('click', addTelegramChat)
+
+  // Bluetooth (Phase 15d) — power/autoconnect toggles + scan/pair/remove.
+  $('#bt-power')?.addEventListener('change', btSetPower)
+  $('#bt-autoconnect')?.addEventListener('change', btSetAutoconnect)
+  $('#bt-scan-btn')?.addEventListener('click', btScan)
 
   // Phase 15h — Caps-screen actions.
   $('#caps-back-btn')?.addEventListener('click', () => navigate('hub'))

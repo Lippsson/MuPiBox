@@ -603,3 +603,14 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
 .tg-chat-row input:first-of-type { flex: 0 0 38%; }
 .tg-chat-row input:nth-of-type(2) { flex: 1 1 auto; }
 .tg-chat-row button { flex: 0 0 auto; padding: 8px 12px; }
+
+/* Bluetooth device rows (Phase 15d) */
+.bt-device-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0;
+}
+.bt-device-info { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-device-row button { flex: 0 0 auto; }
