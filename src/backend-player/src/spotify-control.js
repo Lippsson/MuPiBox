@@ -185,15 +185,17 @@ player.on('percent_pos', (val) => {
   //console.log('track progress is', val);
   currentMeta.progressTime = val
 })
-setInterval(() => {
-  player.getProps(['percent_pos'])
-}, 1000)
-
 player.on('pause', (val) => {
   currentMeta.playing = !val
 })
+// Phase 13 B2: a single per-second timer fetches both props. getProps()
+// iterates and sends one `get_property` per item (see mplayer-wrapper.js), so
+// this is behaviour-identical to the two separate setIntervals it replaces —
+// one JS timer instead of two. The audit's idle-gate half is intentionally
+// NOT done: marginal benefit, with a real risk of stale percent_pos/pause
+// across play/stop transitions (the resume-tracking area Phase 7.5 fixed).
 setInterval(() => {
-  player.getProps(['pause'])
+  player.getProps(['percent_pos', 'pause'])
 }, 1000)
 
 player.on('metadata', (val) => {
