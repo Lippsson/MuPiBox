@@ -1707,17 +1707,33 @@ const getMupiboxConfig = async (): Promise<MupiboxConfig | undefined> => {
   return await mupiboxConfigLoadPromise
 }
 
+// Synchronous config accessor for the Smart-Sync + Eltern deps, which read
+// config from synchronous code paths. Reading the raw mupiboxConfigCache
+// variable directly was a bug: it is undefined on a cold boot (nothing awaits
+// the async getMupiboxConfig() at startup) AND right after every
+// updateMupiboxConfig() call (which invalidates the cache, see ~line 423).
+// In both windows Smart-Sync/Eltern saw `undefined` and fell back to
+// DEFAULT_SPOTIFY_SYNC_CONFIG (prefix "MuPiBox", token "not configured") even
+// though /etc/mupibox/mupiboxconfig.json was fully set up. Lazily (re)warm the
+// cache with a synchronous read — the config is small and changes rarely.
+const getMupiboxConfigSync = (): MupiboxConfig | undefined => {
+  if (mupiboxConfigCache !== undefined) return mupiboxConfigCache
+  try {
+    mupiboxConfigCache = JSON.parse(fs.readFileSync(mupiboxConfigPath, 'utf8')) as MupiboxConfig
+    return mupiboxConfigCache
+  } catch (error) {
+    console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] getMupiboxConfigSync read failed:`, error)
+    return undefined
+  }
+}
+
 // Phase 14b — Spotify Smart-Sync wiring.
 // Dependency-bundle gives the sync module access to box-level helpers
 // (data-lock, config update, config getter) without making it import
-// server.ts internals directly. mupiboxConfigCache reads synchronously
-// — the 60-s scheduler lead-in (see scheduler.ts) gives the async
-// config load time to populate the cache; if it's still undefined at
-// the first sync tick, loadSpotifySyncConfig falls back to defaults
-// and the sync simply runs against the default prefix.
+// server.ts internals directly.
 const spotifySyncDeps: RunSyncDeps = {
   dataFile,
-  getMupiboxConfig: () => mupiboxConfigCache,
+  getMupiboxConfig: getMupiboxConfigSync,
   updateMupiboxConfig,
   acquireDataLock: () => acquireLock(dataLock, '/api/spotify-sync'),
   releaseDataLock: () => releaseLock(dataLock, '/api/spotify-sync'),
@@ -1731,7 +1747,7 @@ app.use('/api/spotify-sync', createSpotifySyncRouter(spotifySyncDeps))
 app.use(
   '/api/eltern',
   createElternApiRouter({
-    getMupiboxConfig: () => mupiboxConfigCache,
+    getMupiboxConfig: getMupiboxConfigSync,
     updateMupiboxConfig,
   }),
 )
