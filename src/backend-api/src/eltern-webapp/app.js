@@ -35,7 +35,7 @@ const SECTIONS = {
   sync:      { title: 'Smart-Sync',          parent: 'hub', loader: () => loadSync() },
   settings:  { title: 'Smart-Sync · Optionen', parent: 'sync', loader: () => loadSettings() },
   wizard:    { title: 'Spotify-Setup',       parent: 'sync', loader: () => loadWizard() },
-  library:   { title: 'Library',             parent: 'hub', loader: () => { loadLibrary(); loadSubscriptions() } },
+  library:   { title: 'Library',             parent: 'hub', loader: () => { loadLibrary(); loadSubscriptions(); loadSyncStatus() } },
   search:    { title: 'Spotify-Suche',       parent: 'library', loader: () => resetSearch() },
   caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
@@ -759,14 +759,12 @@ async function addAlbumFromSearch(albumId, name, btn) {
     }
     return
   }
-  // Best-effort immediate sync so it lands in the box (throttle/offline tolerated;
-  // the next scheduled sync picks it up regardless).
-  await api(`${SYNC_API}/trigger`, { method: 'POST' })
+  const sync = await fireSyncTrigger()
   if (btn) {
     btn.textContent = '✓'
     btn.classList.add('added')
   }
-  feedback('#search-feedback', 'success', `„${name}" hinzugefügt — Sync läuft.`)
+  feedback('#search-feedback', sync.kind, `„${name}" hinzugefügt — ${sync.text}`)
 }
 
 function renderSearchResults(data) {
@@ -868,12 +866,12 @@ async function subscribeArtistFromSearch(artistId, name, btn) {
     }
     return
   }
-  await api(`${SYNC_API}/trigger`, { method: 'POST' })
+  const sync = await fireSyncTrigger()
   if (btn) {
     btn.textContent = '✓'
     btn.classList.add('added')
   }
-  feedback('#search-feedback', 'success', `„${name}" abonniert — Sync läuft. Bereich/Ausschließen in der Bibliothek unter „Verwaltete Inhalte".`)
+  feedback('#search-feedback', sync.kind, `„${name}" abonniert — ${sync.text}. Bereich/Ausschließen in der Bibliothek unter „Verwaltete Inhalte".`)
   loadSubscriptions()
 }
 
@@ -978,8 +976,8 @@ async function unsubscribeArtist(artistId, name) {
     feedback('#managed-feedback', 'error', `Fehler ${res.status}`)
     return
   }
-  await api(`${SYNC_API}/trigger`, { method: 'POST' })
-  feedback('#managed-feedback', 'success', `„${name}" entfernt — Sync räumt auf.`)
+  const sync = await fireSyncTrigger()
+  feedback('#managed-feedback', sync.kind, `„${name}" entfernt — ${sync.text}`)
   loadSubscriptions()
 }
 
@@ -990,8 +988,8 @@ async function removeAlbum(albumId, name) {
     feedback('#managed-feedback', 'error', `Fehler ${res.status}`)
     return
   }
-  await api(`${SYNC_API}/trigger`, { method: 'POST' })
-  feedback('#managed-feedback', 'success', `„${name}" entfernt — Sync räumt auf.`)
+  const sync = await fireSyncTrigger()
+  feedback('#managed-feedback', sync.kind, `„${name}" entfernt — ${sync.text}`)
   loadSubscriptions()
 }
 
@@ -1014,8 +1012,8 @@ async function applyArtistRange(sub, fromStr, toStr, btn) {
     feedback('#managed-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
     return
   }
-  await api(`${SYNC_API}/trigger`, { method: 'POST' })
-  feedback('#managed-feedback', 'success', 'Bereich übernommen — Sync läuft.')
+  const sync = await fireSyncTrigger()
+  feedback('#managed-feedback', sync.kind, `Bereich übernommen — ${sync.text}`)
   loadSubscriptions()
 }
 
@@ -1093,11 +1091,11 @@ async function setExclude(a, al, excluded, panel) {
     feedback('#managed-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
     return
   }
-  await api(`${SYNC_API}/trigger`, { method: 'POST' })
+  const sync = await fireSyncTrigger()
   feedback(
     '#managed-feedback',
-    'success',
-    excluded ? `„${al.name}" ausgeschlossen — Sync räumt auf.` : `„${al.name}" wieder aufgenommen — Sync läuft.`,
+    sync.kind,
+    excluded ? `„${al.name}" ausgeschlossen — ${sync.text}` : `„${al.name}" wieder aufgenommen — ${sync.text}`,
   )
   const r2 = await api(`${SYNC_API}/artist-albums?artistId=${encodeURIComponent(a.id)}`)
   if (r2.ok) renderArtistAlbums(a, r2.body?.albums ?? [], panel)
@@ -1630,21 +1628,102 @@ function escapeHtml(s) {
 
 /* ---------- actions ---------- */
 
+/** Fire a sync trigger and translate the response into an honest, short
+ *  status phrase. Thanks to the trailing-edge scheduler, a throttled trigger
+ *  comes back as 202 'scheduled' (it WILL run automatically when the cooldown
+ *  ends) — so we never claim "läuft" when nothing actually started. */
+async function fireSyncTrigger() {
+  const res = await api(`${SYNC_API}/trigger?source=webapp`, { method: 'POST' })
+  const b = res.body || {}
+  if (res.status === 202 && b.status === 'scheduled') {
+    return { kind: 'info', text: `Sync läuft automatisch in ${b.scheduledInSeconds ?? 60} s` }
+  }
+  if (res.status === 202) return { kind: 'success', text: 'Sync läuft …' }
+  if (res.status === 409) return { kind: 'info', text: 'ein Sync läuft gerade' }
+  if (b.status === 'disabled') return { kind: 'error', text: 'Smart-Sync ist deaktiviert' }
+  return { kind: 'info', text: 'Sync folgt beim nächsten Lauf' }
+}
+
+/** Short local time for sync-status lines. */
+function fmtTimeShort(iso) {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return '—'
+  }
+}
+
+/** Library "Letzter Sync"-Zeile aktualisieren (beim Betreten + nach Läufen). */
+async function loadSyncStatus() {
+  const el = $('#library-sync-status')
+  if (!el) return
+  const s = await api(`${SYNC_API}/status`)
+  if (!s.ok) {
+    el.textContent = ''
+    return
+  }
+  if (!s.body?.enabled) {
+    el.textContent = 'Smart-Sync ist deaktiviert.'
+    return
+  }
+  const st = s.body?.state || {}
+  el.textContent = st.last_sync_end ? `Letzter Sync: ${fmtTimeShort(st.last_sync_end)}` : 'Noch kein Sync gelaufen.'
+}
+
+/** Prominent "Jetzt synchronisieren": triggert + pollt /status bis ein neuer
+ *  Lauf fertig ist und zeigt das Ergebnis (+x / −y). */
+async function manualSyncNow() {
+  const btn = $('#library-sync-btn')
+  const el = $('#library-sync-status')
+  if (btn) btn.disabled = true
+  let before = null
+  try {
+    const s = await api(`${SYNC_API}/status`)
+    before = s.body?.state?.last_sync_start ?? null
+  } catch {}
+  const sync = await fireSyncTrigger()
+  if (el) el.textContent = sync.text
+  const deadline = Date.now() + 90000
+  const poll = async () => {
+    if (Date.now() > deadline) {
+      if (btn) btn.disabled = false
+      loadSyncStatus()
+      return
+    }
+    const s = await api(`${SYNC_API}/status`)
+    const st = s.body?.state
+    const done =
+      st && st.last_sync_start && st.last_sync_start !== before && (st.current_state === 'IDLE' || st.current_state === 'COMPLETED')
+    if (done) {
+      const add = st.additions_count ?? 0
+      const rem = st.removals_count ?? 0
+      const upd = st.updates_count ?? 0
+      if (el) el.textContent = `Sync fertig — +${add} / −${rem}${upd ? ` / ~${upd}` : ''} · ${fmtTimeShort(st.last_sync_end)}`
+      if (btn) btn.disabled = false
+      loadSubscriptions()
+      return
+    }
+    setTimeout(poll, 2000)
+  }
+  setTimeout(poll, 2000)
+}
+
 async function triggerSync() {
   const btn = $('#sync-trigger-btn')
   btn.disabled = true
   feedback('#sync-feedback', 'info', 'Sync gestartet …')
   const res = await api(`${SYNC_API}/trigger?source=webapp`, { method: 'POST' })
-  if (res.status === 202) {
+  if (res.status === 202 && res.body?.status === 'scheduled') {
+    feedback('#sync-feedback', 'info', `Cooldown aktiv — Sync läuft automatisch in ${res.body?.scheduledInSeconds ?? 60} s.`)
+    btn.disabled = false
+  } else if (res.status === 202) {
     feedback('#sync-feedback', 'info', 'Sync läuft im Hintergrund. Aktualisiere Status in ~5 s …')
     setTimeout(async () => {
       await loadSync()
       feedback('#sync-feedback', 'success', 'Status aktualisiert')
       btn.disabled = false
     }, 5000)
-  } else if (res.status === 429) {
-    feedback('#sync-feedback', 'info', `Cooldown aktiv – bitte in ${res.body?.retry_after_seconds ?? 60} s erneut.`)
-    btn.disabled = false
   } else if (res.status === 409) {
     feedback('#sync-feedback', 'info', 'Es läuft bereits ein Sync.')
     btn.disabled = false
@@ -1904,6 +1983,7 @@ function wire() {
 
   // Spotify-Suche (Phase 17a)
   $('#library-search-spotify-btn')?.addEventListener('click', () => navigate('search'))
+  $('#library-sync-btn')?.addEventListener('click', manualSyncNow)
   $('#search-go-btn')?.addEventListener('click', doSearch)
   $('#search-query')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') doSearch()

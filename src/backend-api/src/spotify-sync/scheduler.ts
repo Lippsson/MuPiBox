@@ -16,6 +16,10 @@ const MANUAL_THROTTLE_PATH = '/tmp/.last_sync_trigger'
 
 let timerHandle: ReturnType<typeof setTimeout> | null = null
 let inflight: Promise<RunSyncResult> | null = null
+// Trailing-edge run: when a manual trigger is throttled, we don't drop it —
+// we arm a single timer that fires one run when the cooldown elapses, so a
+// burst of WebApp edits still all land without waiting for the next poll.
+let trailingTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
  * Schedule the next sync after `delaySeconds`. Re-arms itself after each
@@ -62,32 +66,70 @@ function scheduleNext(delaySeconds: number, deps: RunSyncDeps): void {
 }
 
 /**
- * Manual trigger. Returns 'queued' if a run started, 'throttled' if the
- * 60s cooldown is active, 'running' if a sync is already in flight, or
- * 'disabled' if spotify_sync is off.
+ * Manual trigger. Returns 'queued' if a run started now, 'scheduled' if the
+ * cooldown is active (a single trailing run is armed for when it ends),
+ * 'running' if a sync is already in flight, or 'disabled' if spotify_sync
+ * is off.
  */
 export async function triggerManualSync(
   source: Extract<SyncTrigger, 'webapp' | 'telegram'>,
   deps: RunSyncDeps,
 ): Promise<
   | { ok: true; status: 'queued'; estimatedSeconds: number }
-  | { ok: false; status: 'throttled'; retryAfterSeconds: number }
+  | { ok: true; status: 'scheduled'; scheduledInSeconds: number }
   | { ok: false; status: 'running' }
   | { ok: false; status: 'disabled' }
 > {
   const config = loadSpotifySyncConfig(deps.getMupiboxConfig())
   if (!config.enabled) return { ok: false, status: 'disabled' }
-  if (inflight) return { ok: false, status: 'running' }
-  // Cooldown check
   const cooldownLeft = getManualThrottleRemaining(config.manual_throttle_seconds)
+
+  if (inflight) {
+    // A run is in flight, but it may have started *before* this edit's config
+    // write — so it might not include the change. Arm a trailing run so the
+    // edit still lands without waiting for the next 15-min poll.
+    armTrailingRun(source, deps, cooldownLeft)
+    return { ok: false, status: 'running' }
+  }
   if (cooldownLeft > 0) {
-    return { ok: false, status: 'throttled', retryAfterSeconds: cooldownLeft }
+    // Throttled — don't drop the request; arm one trailing run for when the
+    // cooldown ends. A burst of edits coalesces into a single run.
+    armTrailingRun(source, deps, cooldownLeft)
+    return { ok: true, status: 'scheduled', scheduledInSeconds: cooldownLeft }
   }
   markManualTrigger()
+  // An immediate run supersedes any pending trailing run.
+  if (trailingTimer) {
+    clearTimeout(trailingTimer)
+    trailingTimer = null
+  }
   // Fire and forget — caller polls /status. Estimate is a hand-tuned
   // ~3s typical run; not load-bearing for correctness, only for UX.
   void runOnce(source, deps)
   return { ok: true, status: 'queued', estimatedSeconds: 3 }
+}
+
+/**
+ * Arm a single trailing sync run for `delaySeconds` from now (idempotent —
+ * a pending timer is left as-is so a burst of edits coalesces into one run).
+ * When it fires it re-arms itself if a run is still in flight, so the edit
+ * always gets a run that starts *after* it.
+ */
+function armTrailingRun(source: SyncTrigger, deps: RunSyncDeps, delaySeconds: number): void {
+  if (trailingTimer) return
+  const fire = (): void => {
+    if (inflight) {
+      // Current run still going — wait and retry so our edit gets a fresh run.
+      trailingTimer = setTimeout(fire, 5000)
+      if (typeof trailingTimer.unref === 'function') trailingTimer.unref()
+      return
+    }
+    trailingTimer = null
+    markManualTrigger()
+    void runOnce(source, deps)
+  }
+  trailingTimer = setTimeout(fire, Math.max(0, delaySeconds) * 1000 + 250)
+  if (typeof trailingTimer.unref === 'function') trailingTimer.unref()
 }
 
 /** Returns the seconds left on the manual-trigger cooldown, or 0 if free. */

@@ -54,10 +54,11 @@ export function createSpotifySyncRouter(deps: RunSyncDeps): Router {
     const source: 'webapp' | 'telegram' = sourceRaw === 'telegram' ? 'telegram' : 'webapp'
     const result = await triggerManualSync(source, deps)
     if (!result.ok) {
-      const code = result.status === 'throttled' ? 429 : result.status === 'running' ? 409 : 400
+      const code = result.status === 'running' ? 409 : 400
       res.status(code).json(result)
       return
     }
+    // ok: 'queued' (running now) or 'scheduled' (trailing-edge after cooldown).
     res.status(202).json(result)
   })
 
