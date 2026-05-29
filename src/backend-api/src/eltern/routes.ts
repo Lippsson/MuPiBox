@@ -642,6 +642,35 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     })
   })
 
+  /**
+   * POST /api/eltern/library/add-album  (Phase 17b)
+   * Pin a single Spotify album (from the WebApp search) into the Smart-Sync
+   * config (spotify_sync.explicit_albums). The next sync resolves it into the
+   * library as source='spotify-sync'. Idempotent — re-adding the same id is a
+   * no-op. The WebApp triggers a sync afterwards so it lands promptly.
+   */
+  router.post('/library/add-album', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { albumId?: unknown; category?: unknown } | undefined) ?? {}
+    const albumId = String(body.albumId ?? '').trim()
+    if (!/^[A-Za-z0-9]{22}$/.test(albumId)) {
+      res.status(400).json({ error: 'invalid albumId (expected 22-char Spotify id)' })
+      return
+    }
+    const allowed = ['audiobook', 'music', 'other']
+    const catRaw = String(body.category ?? '').trim()
+    const category = allowed.includes(catRaw) ? catRaw : undefined
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      const list = Array.isArray(ss.explicit_albums) ? (ss.explicit_albums as Array<Record<string, unknown>>) : []
+      if (!list.some((a) => a?.id === albumId)) {
+        list.push(category ? { id: albumId, category } : { id: albumId })
+      }
+      ss.explicit_albums = list
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
   return router
 }
 

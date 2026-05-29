@@ -712,7 +712,7 @@ function pickSearchImg(images) {
   return images[1]?.url || images[0]?.url || ''
 }
 
-function searchResultRow(thumb, title, subtitle) {
+function searchResultRow(thumb, title, subtitle, actionEl) {
   const row = document.createElement('div')
   row.className = 'search-result-row'
   const img = document.createElement('img')
@@ -730,7 +730,43 @@ function searchResultRow(thumb, title, subtitle) {
   s.textContent = subtitle
   info.append(t, s)
   row.append(img, info)
+  if (actionEl) row.append(actionEl)
   return row
+}
+
+/** "+" button that pins an album (Phase 17b). Artist-add comes in 17c. */
+function makeAddAlbumBtn(albumId, name) {
+  const b = document.createElement('button')
+  b.className = 'ghost search-add-btn'
+  b.textContent = '+'
+  b.title = 'Zur Box hinzufügen'
+  b.addEventListener('click', () => addAlbumFromSearch(albumId, name, b))
+  return b
+}
+
+async function addAlbumFromSearch(albumId, name, btn) {
+  const category = $('#search-add-category')?.value || 'audiobook'
+  if (btn) {
+    btn.disabled = true
+    btn.textContent = '…'
+  }
+  const res = await api(`${API}/library/add-album`, { method: 'POST', body: { albumId, category } })
+  if (!res.ok) {
+    feedback('#search-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    if (btn) {
+      btn.disabled = false
+      btn.textContent = '+'
+    }
+    return
+  }
+  // Best-effort immediate sync so it lands in the box (throttle/offline tolerated;
+  // the next scheduled sync picks it up regardless).
+  await api(`${SYNC_API}/trigger`, { method: 'POST' })
+  if (btn) {
+    btn.textContent = '✓'
+    btn.classList.add('added')
+  }
+  feedback('#search-feedback', 'success', `„${name}" hinzugefügt — Sync läuft.`)
 }
 
 function renderSearchResults(data) {
@@ -740,11 +776,21 @@ function renderSearchResults(data) {
   const artistNames = (arr) => (arr || []).map((x) => x?.name).filter(Boolean).join(', ')
   const groups = [
     ['Künstler', (data.artists || []).map((a) => searchResultRow(pickSearchImg(a.images), a.name, 'Künstler'))],
-    ['Alben', (data.albums || []).map((a) => searchResultRow(pickSearchImg(a.images), a.name, artistNames(a.artists)))],
+    [
+      'Alben',
+      (data.albums || []).map((a) =>
+        searchResultRow(pickSearchImg(a.images), a.name, artistNames(a.artists), a.id ? makeAddAlbumBtn(a.id, a.name) : undefined),
+      ),
+    ],
     [
       'Titel',
       (data.tracks || []).map((t) =>
-        searchResultRow(pickSearchImg(t.album?.images), t.name, `${artistNames(t.artists)} · ${t.album?.name ?? ''}`),
+        searchResultRow(
+          pickSearchImg(t.album?.images),
+          t.name,
+          `${artistNames(t.artists)} · ${t.album?.name ?? ''}`,
+          t.album?.id ? makeAddAlbumBtn(t.album.id, t.album?.name ?? t.name) : undefined,
+        ),
       ),
     ],
   ]

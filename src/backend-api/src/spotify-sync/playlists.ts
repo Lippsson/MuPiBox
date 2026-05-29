@@ -251,6 +251,29 @@ export async function resolveSyncItems(
     }
   }
 
+  // Phase 17b: explicit single albums pinned via the WebApp search, independent
+  // of any playlist. Fetch each album once and build an album-promotion item;
+  // skip if a playlist already produced the same album (dedupe by groupKey).
+  for (const pin of config.explicit_albums ?? []) {
+    const albumId = pin?.id
+    if (!albumId || items.has(`album:${albumId}`)) continue
+    try {
+      const album = await spotifyGet<{
+        id?: string
+        name?: string
+        album_type?: string
+        artists?: Array<{ id?: string; name?: string }>
+        images?: Array<{ url?: string }>
+      }>(`/albums/${encodeURIComponent(albumId)}`, accessToken)
+      const item = buildExplicitAlbumItem(album, pin.category)
+      if (item) items.set(item.groupKey, item)
+    } catch (err) {
+      console.warn(
+        `${new Date().toLocaleString()}: [spotify-sync] explicit album ${albumId} fetch failed: ${(err as Error).message}`,
+      )
+    }
+  }
+
   // Fill in artist cover images. The track payload only carries artist
   // id+name, so artistCover was always undefined and the box used the album
   // (episode) cover for the artist tile. Batch-fetch the real artist images.
@@ -394,6 +417,30 @@ function resolveSingleTrack(
   }
 
   return undefined
+}
+
+/** Build an album-promotion SyncItem from a fetched Spotify album object
+ *  (Phase 17b explicit-album pins). Category is the parent's pick from the
+ *  WebApp, falling back to 'music' when none was stored. artistCover is filled
+ *  by the fetchArtistCovers step like for playlist items. */
+function buildExplicitAlbumItem(
+  album: { id?: string; name?: string; artists?: Array<{ id?: string; name?: string }>; images?: Array<{ url?: string }> },
+  pinCategory: CategoryType | undefined,
+): SyncItem | undefined {
+  if (!album?.id) return undefined
+  return {
+    groupKey: `album:${album.id}`,
+    mode: 'album',
+    identifierField: 'id',
+    type: 'spotify',
+    category: pinCategory ?? 'music',
+    title: album.name ?? '',
+    artist: album.artists?.[0]?.name ?? '',
+    artistId: album.artists?.[0]?.id,
+    cover: pickImage(album.images),
+    artistCover: undefined,
+    playlistIds: [],
+  }
 }
 
 /** Pick a cover image URL — Spotify orders images by size desc; we want

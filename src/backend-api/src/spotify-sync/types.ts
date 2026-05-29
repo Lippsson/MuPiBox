@@ -29,11 +29,19 @@ export type SyncMode = 'album' | 'episode-only'
 /** Failure category for the threshold-based notification logic (§12.3.1). */
 export type SyncFailureKind = 'auth' | 'network' | 'rate-limit' | 'internal'
 
+/** A single album pinned via the Eltern-WebApp search (Phase 17b), independent
+ *  of any playlist. `category` is the parent's pick at add-time. */
+export interface ExplicitAlbum {
+  id: string
+  category?: CategoryType
+}
+
 /** Per-box configuration (read from mupiboxconfig.json.spotify_sync). */
 export interface SpotifySyncConfig {
   enabled: boolean
   playlist_prefix: string
   playlist_explicit_ids: string[]
+  explicit_albums: ExplicitAlbum[]
   polling_interval_seconds: number
   manual_throttle_seconds: number
   stale_lock_minutes: number
@@ -52,6 +60,7 @@ export const DEFAULT_SPOTIFY_SYNC_CONFIG: SpotifySyncConfig = {
   enabled: false,
   playlist_prefix: 'MuPiBox',
   playlist_explicit_ids: [],
+  explicit_albums: [],
   polling_interval_seconds: 900, // 15 min (Q6=B)
   manual_throttle_seconds: 60,
   stale_lock_minutes: 10,
