@@ -71,21 +71,23 @@ export class HomePage extends SwiperIonicEventsHelper {
     this.isOnline = toSignal(this.mediaService.isOnline())
 
     this.artists = toSignal(
-      combineLatest([toObservable(this.category), toObservable(this.isOnline)]).pipe(
-        map(([category, _isOnline]) => category),
-        // MED-13: combineLatest re-emits whenever EITHER input changes, so
-        // a Wi-Fi blip (online → offline → online → offline → online over
-        // a few seconds) used to trigger a fetch on every transition —
-        // a "re-fetch storm" that flooded /api/data and made the swiper
-        // jitter. distinctUntilChanged on the post-map category collapses
-        // identical-category emissions; we now only fetch when the user
-        // actually switches tabs. Trade-off: going from offline back to
-        // online no longer auto-refreshes — but fetchArtistData reads the
-        // server-side cache either way, and the user can switch tabs to
-        // force a refresh if they need to.
-        distinctUntilChanged(),
+      combineLatest([
+        toObservable(this.category),
+        toObservable(this.isOnline),
+        this.mediaService.getLibraryVersion(),
+      ]).pipe(
+        map(([category, _isOnline, version]) => ({ category, version })),
+        // MED-13: combineLatest re-emits whenever ANY input changes, so a
+        // Wi-Fi blip (online → offline → online …) used to trigger a fetch on
+        // every transition — a "re-fetch storm" that flooded /api/data and
+        // made the swiper jitter. distinctUntilChanged on (category, version)
+        // collapses identical emissions: we fetch when the user switches tabs
+        // OR when the library actually changed (Phase 17g — so a Smart-Sync
+        // add/remove shows up without a manual reload), but never on bare
+        // online/offline flips.
+        distinctUntilChanged((a, b) => a.category === b.category && a.version === b.version),
         tap(() => this.isLoading.set(true)),
-        switchMap((category) => {
+        switchMap(({ category }) => {
           return this.mediaService.fetchArtistData(category).pipe(
             catchError((error) => {
               console.error(error)

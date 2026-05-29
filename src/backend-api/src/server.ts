@@ -322,6 +322,20 @@ app.get('/api/data', (_req, res) => {
   })
 })
 
+app.get('/api/data-version', (_req, res) => {
+  // Cheap change-token for the box frontend's library-change poll (Phase 17g).
+  // activedataFile is a symlink to data.json (or offline_data.json) reconciled
+  // by check_network.sh; statSync follows it. mtime+size flips whenever the
+  // Smart-Sync rewrites the library, so the frontend can re-fetch /api/data
+  // only when something actually changed — no full-list polling.
+  try {
+    const st = fs.statSync(activedataFile)
+    res.json({ version: `${Math.floor(st.mtimeMs)}-${st.size}` })
+  } catch {
+    res.json({ version: '0' })
+  }
+})
+
 app.get('/api/resume', (_req, res) => {
   // Mirror /api/data and /api/activeresume: callers always expect an array.
   // Until the first save resume.json doesn't exist (created on demand by

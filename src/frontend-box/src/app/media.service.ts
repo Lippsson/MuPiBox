@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import { firstValueFrom, from, iif, interval, Observable, of, Subject } from 'rxjs'
-import { catchError, map, mergeAll, mergeMap, shareReplay, switchMap, toArray } from 'rxjs/operators'
+import { catchError, distinctUntilChanged, map, mergeAll, mergeMap, shareReplay, startWith, switchMap, toArray } from 'rxjs/operators'
 import { environment } from '../environments/environment'
 import type { AlbumStop } from './albumstop'
 import type { Artist } from './artist'
@@ -278,6 +278,33 @@ export class MediaService {
 
   public fetchRawMedia(): Observable<Media[]> {
     return this.http.get<Media[]>(`${this.getApiBackendUrl()}/data`)
+  }
+
+  private libraryVersion$?: Observable<string>
+
+  /**
+   * Phase 17g: cheap library-change signal. Polls /api/data-version (a stat,
+   * not the full list) every 20s and emits the change-token, de-duped. The
+   * home/medialist pages fold this into their fetch trigger so the display
+   * auto-refreshes shortly after a Smart-Sync changes the library — without
+   * downloading the whole list on every tick. shareReplay+refCount keeps the
+   * poll alive only while a page is subscribed (idle on the player screen).
+   */
+  public getLibraryVersion(): Observable<string> {
+    if (!this.libraryVersion$) {
+      this.libraryVersion$ = interval(20000).pipe(
+        startWith(0),
+        switchMap(() =>
+          this.http.get<{ version: string }>(`${this.getApiBackendUrl()}/data-version`).pipe(
+            map((r) => r?.version ?? ''),
+            catchError(() => of('')),
+          ),
+        ),
+        distinctUntilChanged(),
+        shareReplay({ bufferSize: 1, refCount: true }),
+      )
+    }
+    return this.libraryVersion$
   }
 
   updateWLAN() {

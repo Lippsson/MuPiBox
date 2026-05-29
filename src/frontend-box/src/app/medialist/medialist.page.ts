@@ -82,9 +82,16 @@ export class MedialistPage extends SwiperIonicEventsHelper {
     this.category.set(navState.category ?? 'audiobook')
 
     this.media = toSignal(
-      combineLatest([toObservable(this.category), toObservable(this.artist)]).pipe(
+      combineLatest([
+        toObservable(this.category),
+        toObservable(this.artist),
+        // Phase 17g: re-fetch when the library changes (e.g. a Smart-Sync
+        // excluded an album of this very artist) so the kid's album list
+        // updates without leaving and re-entering the artist.
+        this.mediaService.getLibraryVersion(),
+      ]).pipe(
         tap(() => this.isLoading.set(true)),
-        switchMap(([category, artist]) => {
+        switchMap(([category, artist, _version]) => {
           if (artist === undefined) {
             return of([])
           }
