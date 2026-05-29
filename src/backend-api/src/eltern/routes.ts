@@ -351,9 +351,14 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         validatedLimits[day] = Math.floor(v)
       }
     }
-    // Validate quietHours.schedule if provided.
+    // Validate quietHours.schedule if provided. Shape is {from,to,label?} —
+    // matching the player (spotify-control.js) and the AdminInterface PHP
+    // (mupi.php writes from/to/label too). A WebApp save in the old {start,end}
+    // shape would have silently corrupted the config: the player would no
+    // longer find any windows. Fixed in 17j.
     const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
-    const validatedSchedule: Record<string, Array<{ start: string; end: string }>> = {}
+    type QuietWindow = { from: string; to: string; label?: string }
+    const validatedSchedule: Record<string, QuietWindow[]> = {}
     if (body.quietHours?.schedule) {
       for (const day of days) {
         const windows = body.quietHours.schedule[day]
@@ -362,19 +367,22 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
           res.status(400).json({ error: `schedule.${day} must be an array` })
           return
         }
-        const accepted: Array<{ start: string; end: string }> = []
+        const accepted: QuietWindow[] = []
         for (const w of windows) {
           if (!w || typeof w !== 'object') {
-            res.status(400).json({ error: `schedule.${day} entry must be {start,end}` })
+            res.status(400).json({ error: `schedule.${day} entry must be {from,to,label?}` })
             return
           }
-          const start = (w as Record<string, unknown>).start
-          const end = (w as Record<string, unknown>).end
-          if (typeof start !== 'string' || typeof end !== 'string' || !HHMM.test(start) || !HHMM.test(end)) {
-            res.status(400).json({ error: `schedule.${day} times must be HH:MM strings` })
+          const rec = w as Record<string, unknown>
+          const from = rec.from
+          const to = rec.to
+          if (typeof from !== 'string' || typeof to !== 'string' || !HHMM.test(from) || !HHMM.test(to)) {
+            res.status(400).json({ error: `schedule.${day} times must be HH:MM strings (fields: from, to)` })
             return
           }
-          accepted.push({ start, end })
+          const entry: QuietWindow = { from, to }
+          if (typeof rec.label === 'string' && rec.label.trim()) entry.label = rec.label.trim().slice(0, 80)
+          accepted.push(entry)
         }
         validatedSchedule[day] = accepted
       }

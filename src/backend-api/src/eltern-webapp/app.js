@@ -507,17 +507,47 @@ async function loadCaps() {
   await Promise.all([loadCapsStatus(), loadCapsConfig(), loadSleepTimer()])
 }
 
+/** Translate the player's raw state token to friendly German for the badge. */
+function capsStateText(state, kind) {
+  if (state === 'normal') return 'Normal'
+  if (state === 'grace') return kind === 'quiet' ? 'Karenz' : 'Karenz (überzogen)'
+  if (state === 'blocked') return kind === 'quiet' ? '🌙 Gesperrt' : '⏸ Gesperrt'
+  return '—'
+}
+
 async function loadCapsStatus() {
   try {
     const res = await fetch('/api/playtime', { credentials: 'same-origin' })
     if (!res.ok) return
     const body = await res.json().catch(() => ({}))
-    const pt = body?.playtime ?? body
-    setText('#caps-today-used', pt?.usedMinutes != null ? `${pt.usedMinutes} Min` : '—')
-    setText('#caps-today-remaining', pt?.remainingMinutes != null ? `${pt.remainingMinutes} Min` : '—')
-    setText('#caps-state', pt?.state ?? '—')
-    setText('#caps-playtime-enabled', pt?.enabled ? '✓' : '✗')
-    setText('#caps-quiet-state', body?.quietHours?.state ?? body?.quietHours?.active ?? '—')
+    // /api/playtime shape (player-side): {enabled, state, playtime:{enabled,state,
+    //   usedSeconds, remainingSeconds, limitMinutes, ...}, quiet:{enabled, state,
+    //   inWindow, label?, ...}, override:{...}}. WebApp was reading non-existent
+    //   keys (usedMinutes, remainingMinutes, body.quietHours.*) — fixed in 17j.
+    const pt = body?.playtime ?? {}
+    const qh = body?.quiet ?? {}
+
+    setText('#caps-playtime-enabled', pt.enabled ? '✓ Aktiv' : '✗ Aus')
+    if (pt.enabled) {
+      const usedMin = Number.isFinite(pt.usedSeconds) ? Math.floor(pt.usedSeconds / 60) : null
+      const remMin = Number.isFinite(pt.remainingSeconds) ? Math.floor(pt.remainingSeconds / 60) : null
+      const limit = Number.isFinite(pt.limitMinutes) ? pt.limitMinutes : null
+      setText('#caps-today-used', usedMin != null && limit != null ? `${usedMin} / ${limit} Min` : usedMin != null ? `${usedMin} Min` : '—')
+      setText('#caps-today-remaining', remMin != null ? `${remMin} Min` : '—')
+      setText('#caps-state', capsStateText(pt.state, 'playtime'))
+    } else {
+      setText('#caps-today-used', '—')
+      setText('#caps-today-remaining', '—')
+      setText('#caps-state', '—')
+    }
+
+    if (qh.enabled) {
+      const label = qh.label ? ` (${qh.label})` : ''
+      const inWin = qh.inWindow ? ' · im Fenster' : ''
+      setText('#caps-quiet-state', `${capsStateText(qh.state, 'quiet')}${label}${inWin && qh.state === 'normal' ? '' : inWin}`)
+    } else {
+      setText('#caps-quiet-state', '✗ Aus')
+    }
   } catch { /* swallow */ }
 }
 
@@ -582,7 +612,10 @@ function renderQuietSchedule() {
     addBtn.addEventListener('click', () => {
       if (!capsConfig.quietHours.schedule) capsConfig.quietHours.schedule = {}
       const list = capsConfig.quietHours.schedule[key] ?? []
-      list.push({ start: '20:00', end: '07:00' })
+      // {from,to,label?} — matches the player (spotify-control.js) and Admin
+      // (mupi.php). The earlier {start,end} was a WebApp-only shape mismatch
+      // that the player couldn't read (fixed in 17j).
+      list.push({ from: '20:00', to: '07:00', label: 'Schlafenszeit' })
       capsConfig.quietHours.schedule[key] = list
       renderQuietSchedule()
     })
@@ -591,17 +624,27 @@ function renderQuietSchedule() {
     windows.forEach((w, idx) => {
       const row = document.createElement('div')
       row.className = 'quiet-window'
-      const s = document.createElement('input')
-      s.type = 'time'
-      s.value = w.start ?? '20:00'
-      s.addEventListener('change', () => { capsConfig.quietHours.schedule[key][idx].start = s.value })
+      const from = document.createElement('input')
+      from.type = 'time'
+      from.value = w.from ?? '20:00'
+      from.addEventListener('change', () => { capsConfig.quietHours.schedule[key][idx].from = from.value })
       const arrow = document.createElement('span')
       arrow.className = 'arrow'
       arrow.textContent = '→'
-      const e = document.createElement('input')
-      e.type = 'time'
-      e.value = w.end ?? '07:00'
-      e.addEventListener('change', () => { capsConfig.quietHours.schedule[key][idx].end = e.value })
+      const to = document.createElement('input')
+      to.type = 'time'
+      to.value = w.to ?? '07:00'
+      to.addEventListener('change', () => { capsConfig.quietHours.schedule[key][idx].to = to.value })
+      const labelInp = document.createElement('input')
+      labelInp.type = 'text'
+      labelInp.className = 'quiet-window-label'
+      labelInp.placeholder = 'Label (optional)'
+      labelInp.value = w.label ?? ''
+      labelInp.addEventListener('input', () => {
+        const v = labelInp.value.trim()
+        if (v) capsConfig.quietHours.schedule[key][idx].label = v
+        else delete capsConfig.quietHours.schedule[key][idx].label
+      })
       const rm = document.createElement('button')
       rm.className = 'remove'
       rm.textContent = '×'
@@ -609,7 +652,7 @@ function renderQuietSchedule() {
         capsConfig.quietHours.schedule[key].splice(idx, 1)
         renderQuietSchedule()
       })
-      row.append(s, arrow, e, rm)
+      row.append(from, arrow, to, labelInp, rm)
       dayEl.appendChild(row)
     })
     root.appendChild(dayEl)
