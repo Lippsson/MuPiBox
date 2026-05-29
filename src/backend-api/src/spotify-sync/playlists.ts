@@ -192,6 +192,34 @@ async function fetchPlaylistTracks(playlistId: string, accessToken: string): Pro
 }
 
 /**
+ * Batch-fetch artist cover images for a set of artist IDs. The per-track album
+ * payload only carries artist id+name (not images), so SyncItems otherwise come
+ * back with artistCover undefined and the box falls back to the album/episode
+ * cover for the artist tile. Spotify allows up to 50 IDs per /artists call.
+ * Failures are non-fatal — a missing cover just keeps the album-cover fallback.
+ */
+async function fetchArtistCovers(artistIds: string[], accessToken: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const unique = [...new Set(artistIds)]
+  for (let i = 0; i < unique.length; i += 50) {
+    const batch = unique.slice(i, i + 50)
+    try {
+      const resp = await spotifyGet<{ artists: Array<{ id?: string; images?: Array<{ url?: string }> } | null> }>(
+        `/artists?ids=${batch.join(',')}`,
+        accessToken,
+      )
+      for (const a of resp.artists ?? []) {
+        const url = pickImage(a?.images)
+        if (a?.id && url) out.set(a.id, url)
+      }
+    } catch (err) {
+      console.warn(`${new Date().toLocaleString()}: [spotify-sync] artist-cover fetch failed: ${(err as Error).message}`)
+    }
+  }
+  return out
+}
+
+/**
  * Walk over discovered playlists, fetch tracks for each, build SyncItems
  * with album-promotion / episode-only / compilation handling. Result is
  * de-duplicated by group_key so the same album referenced from two
@@ -219,6 +247,22 @@ export async function resolveSyncItems(
         if (!existing.playlistIds.includes(playlist.id)) existing.playlistIds.push(playlist.id)
       } else {
         items.set(resolved.groupKey, resolved)
+      }
+    }
+  }
+
+  // Fill in artist cover images. The track payload only carries artist
+  // id+name, so artistCover was always undefined and the box used the album
+  // (episode) cover for the artist tile. Batch-fetch the real artist images.
+  const artistIds = [...items.values()]
+    .map((it) => it.artistId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+  if (artistIds.length > 0) {
+    const covers = await fetchArtistCovers(artistIds, accessToken)
+    for (const it of items.values()) {
+      if (it.artistId && !it.artistCover) {
+        const c = covers.get(it.artistId)
+        if (c) it.artistCover = c
       }
     }
   }
