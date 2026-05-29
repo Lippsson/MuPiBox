@@ -1,4 +1,4 @@
-@if (hat_active && mupihat() !== undefined) {
+@if (hat_active() && mupihat() !== undefined) {
   @if (mupihat().BatteryConnected === 1) {
     @let svgBaseName = mupihat().IBus > 0 ? 'Charging' : 'Battery';
     <!-- Phase-12 follow-up: drive the icon bucket from Bat_Percent (5%-step
