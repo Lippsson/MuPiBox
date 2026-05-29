@@ -38,7 +38,7 @@ const SECTIONS = {
   library:   { title: 'Library',             parent: 'hub', loader: () => loadLibrary() },
   caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
-  wlan:      { title: 'WLAN',                parent: 'hub', loader: () => {} },
+  wlan:      { title: 'WLAN',                parent: 'hub', loader: () => loadWlan() },
   bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => {} },
   telegram:  { title: 'Telegram',            parent: 'hub', loader: () => {} },
   system:    { title: 'System',              parent: 'hub', loader: () => {} },
@@ -702,6 +702,28 @@ async function capsQuietNow() {
   }
 }
 
+/* ---------- screen: wlan (Phase 15c) ---------- */
+
+/** Read-only WLAN/network status from /api/network (same endpoint the box
+ *  frontend's NetworkService uses). No writes — changing the WLAN remotely
+ *  could lock the box off the network, so that stays on the box display. */
+async function loadWlan() {
+  try {
+    const res = await fetch('/api/network', { credentials: 'same-origin' })
+    if (!res.ok) return
+    const n = await res.json().catch(() => ({}))
+    const online = n.onlinestate === 'online'
+    setText('#wlan-online', online ? '🟢 Online' : '🔴 Offline')
+    setText('#wlan-ssid', n.wifi || '—')
+    setText('#wlan-signal', n.wifisignal ? `${n.wifisignal}${n.wifilink ? ` · ${n.wifilink}` : ''}` : '—')
+    setText('#wlan-ip', n.ip || '—')
+    setText('#wlan-gateway', n.gateway || '—')
+    setText('#wlan-dns', n.dns || '—')
+    setText('#wlan-subnet', n.subnet || '—')
+    setText('#wlan-mac', n.mac || '—')
+  } catch { /* swallow — section just shows dashes */ }
+}
+
 /* ---------- screen: power (Phase 15i) ---------- */
 
 /** Pulls /api/mupihat (live readings) + /api/eltern/power-config (profile
@@ -1207,6 +1229,9 @@ function wire() {
 
   // Phase 15i — Power-screen save.
   $('#power-save-btn')?.addEventListener('click', savePowerConfig)
+
+  // WLAN (Phase 15c) — read-only status + manual refresh.
+  $('#wlan-refresh-btn')?.addEventListener('click', loadWlan)
 
   // Phase 15h — Caps-screen actions.
   $('#caps-back-btn')?.addEventListener('click', () => navigate('hub'))

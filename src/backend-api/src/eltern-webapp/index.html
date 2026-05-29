@@ -399,9 +399,47 @@
 
     <section id="screen-wlan" class="screen" hidden>
       <div class="card">
-        <h2>WLAN</h2>
-        <p>Box-WLAN-Verbindung verwalten, neue Netze hinzufügen, Signal-Stärke prüfen.</p>
-        <p class="dim">Phase 15c — braucht Box-Zugriff zur Implementierung.</p>
+        <h3>Verbindung</h3>
+        <div class="status-row">
+          <span class="dim">Status</span>
+          <span class="value" id="wlan-online">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Netzwerk (SSID)</span>
+          <span class="value" id="wlan-ssid">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Signal</span>
+          <span class="value" id="wlan-signal">—</span>
+        </div>
+        <div class="actions">
+          <button class="ghost" id="wlan-refresh-btn">🔄 Aktualisieren</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Netzwerk-Details</h3>
+        <div class="status-row">
+          <span class="dim">IP-Adresse</span>
+          <span class="value" id="wlan-ip">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Gateway</span>
+          <span class="value" id="wlan-gateway">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">DNS</span>
+          <span class="value" id="wlan-dns">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Subnetz</span>
+          <span class="value" id="wlan-subnet">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">MAC</span>
+          <span class="value" id="wlan-mac">—</span>
+        </div>
+        <p class="dim">WLAN-Netz wechseln/hinzufügen: am Box-Display unter Einstellungen → WiFi. (Remote-Ändern folgt.)</p>
       </div>
     </section>
 
