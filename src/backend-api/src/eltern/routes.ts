@@ -650,7 +650,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * no-op. The WebApp triggers a sync afterwards so it lands promptly.
    */
   router.post('/library/add-album', requireSession, requireCsrf, async (req, res) => {
-    const body = (req.body as { albumId?: unknown; category?: unknown } | undefined) ?? {}
+    const body = (req.body as { albumId?: unknown; category?: unknown; name?: unknown } | undefined) ?? {}
     const albumId = String(body.albumId ?? '').trim()
     if (!/^[A-Za-z0-9]{22}$/.test(albumId)) {
       res.status(400).json({ error: 'invalid albumId (expected 22-char Spotify id)' })
@@ -659,13 +659,107 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     const allowed = ['audiobook', 'music', 'other']
     const catRaw = String(body.category ?? '').trim()
     const category = allowed.includes(catRaw) ? catRaw : undefined
+    const name = String(body.name ?? '').trim().slice(0, 120)
     await deps.updateMupiboxConfig((cfg) => {
       const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
       const list = Array.isArray(ss.explicit_albums) ? (ss.explicit_albums as Array<Record<string, unknown>>) : []
       if (!list.some((a) => a?.id === albumId)) {
-        list.push(category ? { id: albumId, category } : { id: albumId })
+        const entry: Record<string, unknown> = { id: albumId }
+        if (name) entry.name = name
+        if (category) entry.category = category
+        list.push(entry)
       }
       ss.explicit_albums = list
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
+  /**
+   * POST /api/eltern/library/subscribe-artist  (Phase 17c/17d)
+   * Upsert a whole-artist subscription: all of the artist's albums get synced,
+   * optionally narrowed to [range_from..range_to] (1-indexed by release date).
+   * Re-subscribing the same id replaces the prior settings (so clearing the
+   * range = re-subscribe without it).
+   */
+  router.post('/library/subscribe-artist', requireSession, requireCsrf, async (req, res) => {
+    const body =
+      (req.body as
+        | { artistId?: unknown; name?: unknown; category?: unknown; range_from?: unknown; range_to?: unknown }
+        | undefined) ?? {}
+    const artistId = String(body.artistId ?? '').trim()
+    if (!/^[A-Za-z0-9]{22}$/.test(artistId)) {
+      res.status(400).json({ error: 'invalid artistId (expected 22-char Spotify id)' })
+      return
+    }
+    const name = String(body.name ?? '').trim().slice(0, 80)
+    const allowed = ['audiobook', 'music', 'other']
+    const catRaw = String(body.category ?? '').trim()
+    const category = allowed.includes(catRaw) ? catRaw : undefined
+    const toNum = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : undefined)
+    const rangeFrom = toNum(body.range_from)
+    const rangeTo = toNum(body.range_to)
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      const list = Array.isArray(ss.artists) ? (ss.artists as Array<Record<string, unknown>>) : []
+      const entry: Record<string, unknown> = { id: artistId }
+      if (name) entry.name = name
+      if (category) entry.category = category
+      if (rangeFrom !== undefined) entry.range_from = rangeFrom
+      if (rangeTo !== undefined) entry.range_to = rangeTo
+      const existing = list.find((a) => a?.id === artistId)
+      if (existing) {
+        for (const k of Object.keys(existing)) if (k !== 'id') delete existing[k]
+        Object.assign(existing, entry)
+      } else {
+        list.push(entry)
+      }
+      ss.artists = list
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
+  /** GET /api/eltern/library/subscriptions  (Phase 17d) — current artist subs
+   *  + explicit albums, for the management list. */
+  router.get('/library/subscriptions', requireSession, (_req, res) => {
+    const ss = (deps.getMupiboxConfig()?.spotify_sync as Record<string, unknown> | undefined) ?? {}
+    res.json({
+      artists: Array.isArray(ss.artists) ? ss.artists : [],
+      explicit_albums: Array.isArray(ss.explicit_albums) ? ss.explicit_albums : [],
+    })
+  })
+
+  /** POST /api/eltern/library/unsubscribe-artist  {artistId}  (Phase 17d).
+   *  The artist's albums become orphans and the next sync removes them. */
+  router.post('/library/unsubscribe-artist', requireSession, requireCsrf, async (req, res) => {
+    const artistId = String((req.body as { artistId?: unknown } | undefined)?.artistId ?? '').trim()
+    if (!artistId) {
+      res.status(400).json({ error: 'artistId required' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      ss.artists = (Array.isArray(ss.artists) ? (ss.artists as Array<Record<string, unknown>>) : []).filter(
+        (a) => a?.id !== artistId,
+      )
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
+  /** POST /api/eltern/library/remove-album  {albumId}  (Phase 17d). */
+  router.post('/library/remove-album', requireSession, requireCsrf, async (req, res) => {
+    const albumId = String((req.body as { albumId?: unknown } | undefined)?.albumId ?? '').trim()
+    if (!albumId) {
+      res.status(400).json({ error: 'albumId required' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      ss.explicit_albums = (
+        Array.isArray(ss.explicit_albums) ? (ss.explicit_albums as Array<Record<string, unknown>>) : []
+      ).filter((a) => a?.id !== albumId)
       cfg.spotify_sync = ss
     })
     res.json({ ok: true })

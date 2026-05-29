@@ -637,3 +637,13 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
 .search-result-info .dim { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-add-btn { flex: 0 0 auto; padding: 6px 14px; font-size: 18px; line-height: 1; }
 .search-add-btn.added { color: var(--primary); border-color: var(--primary); }
+
+/* Managed content (Phase 17d) */
+.managed-row { padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.managed-row:first-of-type { border-top: 0; }
+.managed-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.managed-head .value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.managed-head button { flex: 0 0 auto; }
+.managed-range { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.managed-range input { width: 64px; flex: 0 0 auto; }
+.managed-range button { flex: 0 0 auto; margin-left: auto; }

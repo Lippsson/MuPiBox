@@ -36,7 +36,7 @@ const SECTIONS = {
   settings:  { title: 'Smart-Sync · Optionen', parent: 'sync', loader: () => loadSettings() },
   wizard:    { title: 'Spotify-Setup',       parent: 'sync', loader: () => loadWizard() },
   library:   { title: 'Library',             parent: 'hub', loader: () => loadLibrary() },
-  search:    { title: 'Spotify-Suche',       parent: 'library', loader: () => {} },
+  search:    { title: 'Spotify-Suche',       parent: 'library', loader: () => loadSubscriptions() },
   caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => loadWlan() },
@@ -750,7 +750,7 @@ async function addAlbumFromSearch(albumId, name, btn) {
     btn.disabled = true
     btn.textContent = '…'
   }
-  const res = await api(`${API}/library/add-album`, { method: 'POST', body: { albumId, category } })
+  const res = await api(`${API}/library/add-album`, { method: 'POST', body: { albumId, category, name } })
   if (!res.ok) {
     feedback('#search-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
     if (btn) {
@@ -775,7 +775,12 @@ function renderSearchResults(data) {
   wrap.innerHTML = ''
   const artistNames = (arr) => (arr || []).map((x) => x?.name).filter(Boolean).join(', ')
   const groups = [
-    ['Künstler', (data.artists || []).map((a) => searchResultRow(pickSearchImg(a.images), a.name, 'Künstler'))],
+    [
+      'Künstler',
+      (data.artists || []).map((a) =>
+        searchResultRow(pickSearchImg(a.images), a.name, 'Künstler', a.id ? makeSubscribeArtistBtn(a.id, a.name) : undefined),
+      ),
+    ],
     [
       'Alben',
       (data.albums || []).map((a) =>
@@ -833,6 +838,169 @@ async function doSearch() {
   const fb = $('#search-feedback')
   if (fb) fb.hidden = true
   renderSearchResults(res.body ?? {})
+}
+
+/** "+" button that subscribes to a whole artist (Phase 17c). */
+function makeSubscribeArtistBtn(artistId, name) {
+  const b = document.createElement('button')
+  b.className = 'ghost search-add-btn'
+  b.textContent = '+'
+  b.title = 'Ganzen Künstler abonnieren'
+  b.addEventListener('click', () => subscribeArtistFromSearch(artistId, name, b))
+  return b
+}
+
+async function subscribeArtistFromSearch(artistId, name, btn) {
+  const category = $('#search-add-category')?.value || 'audiobook'
+  if (!confirm(`Alle Alben von „${name}" abonnieren? Den Bereich (Folge von–bis) kannst du danach unter „Verwaltete Inhalte" eingrenzen.`)) {
+    return
+  }
+  if (btn) {
+    btn.disabled = true
+    btn.textContent = '…'
+  }
+  const res = await api(`${API}/library/subscribe-artist`, { method: 'POST', body: { artistId, name, category } })
+  if (!res.ok) {
+    feedback('#search-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    if (btn) {
+      btn.disabled = false
+      btn.textContent = '+'
+    }
+    return
+  }
+  await api(`${SYNC_API}/trigger`, { method: 'POST' })
+  if (btn) {
+    btn.textContent = '✓'
+    btn.classList.add('added')
+  }
+  feedback('#search-feedback', 'success', `„${name}" abonniert — Sync läuft. Bereich/Entfernen unter „Verwaltete Inhalte".`)
+  loadSubscriptions()
+}
+
+/* ---------- managed content (Phase 17d) ---------- */
+
+async function loadSubscriptions() {
+  const res = await api(`${API}/library/subscriptions`)
+  if (!res.ok) return
+  renderSubscriptions(res.body ?? {})
+}
+
+function renderSubscriptions(data) {
+  const wrap = $('#managed-list')
+  if (!wrap) return
+  wrap.innerHTML = ''
+  const artists = data.artists ?? []
+  const albums = data.explicit_albums ?? []
+  if (!artists.length && !albums.length) {
+    const p = document.createElement('p')
+    p.className = 'dim'
+    p.textContent = 'Noch nichts über die Suche hinzugefügt.'
+    wrap.appendChild(p)
+    return
+  }
+  for (const a of artists) {
+    const row = document.createElement('div')
+    row.className = 'managed-row'
+    const head = document.createElement('div')
+    head.className = 'managed-head'
+    const nm = document.createElement('span')
+    nm.className = 'value'
+    nm.textContent = `🎤 ${a.name || a.id}`
+    const rm = document.createElement('button')
+    rm.className = 'ghost'
+    rm.textContent = 'Entfernen'
+    rm.addEventListener('click', () => unsubscribeArtist(a.id, a.name || a.id))
+    head.append(nm, rm)
+    const range = document.createElement('div')
+    range.className = 'managed-range'
+    const lbl = document.createElement('span')
+    lbl.className = 'dim'
+    lbl.textContent = 'Folgen'
+    const from = document.createElement('input')
+    from.type = 'number'
+    from.min = '1'
+    from.placeholder = 'von'
+    from.value = a.range_from ?? ''
+    const sep = document.createElement('span')
+    sep.className = 'dim'
+    sep.textContent = '–'
+    const to = document.createElement('input')
+    to.type = 'number'
+    to.min = '1'
+    to.placeholder = 'bis'
+    to.value = a.range_to ?? ''
+    const apply = document.createElement('button')
+    apply.className = 'ghost'
+    apply.textContent = 'Übernehmen'
+    apply.addEventListener('click', () => applyArtistRange(a, from.value, to.value, apply))
+    range.append(lbl, from, sep, to, apply)
+    row.append(head, range)
+    wrap.appendChild(row)
+  }
+  for (const al of albums) {
+    const row = document.createElement('div')
+    row.className = 'managed-row'
+    const head = document.createElement('div')
+    head.className = 'managed-head'
+    const nm = document.createElement('span')
+    nm.className = 'value'
+    nm.textContent = `💿 ${al.name || al.id}`
+    const rm = document.createElement('button')
+    rm.className = 'ghost'
+    rm.textContent = 'Entfernen'
+    rm.addEventListener('click', () => removeAlbum(al.id, al.name || al.id))
+    head.append(nm, rm)
+    row.append(head)
+    wrap.appendChild(row)
+  }
+}
+
+async function unsubscribeArtist(artistId, name) {
+  if (!confirm(`„${name}" und alle zugehörigen Alben aus der Box entfernen?`)) return
+  const res = await api(`${API}/library/unsubscribe-artist`, { method: 'POST', body: { artistId } })
+  if (!res.ok) {
+    feedback('#search-feedback', 'error', `Fehler ${res.status}`)
+    return
+  }
+  await api(`${SYNC_API}/trigger`, { method: 'POST' })
+  feedback('#search-feedback', 'success', `„${name}" entfernt — Sync räumt auf.`)
+  loadSubscriptions()
+}
+
+async function removeAlbum(albumId, name) {
+  if (!confirm(`„${name}" aus der Box entfernen?`)) return
+  const res = await api(`${API}/library/remove-album`, { method: 'POST', body: { albumId } })
+  if (!res.ok) {
+    feedback('#search-feedback', 'error', `Fehler ${res.status}`)
+    return
+  }
+  await api(`${SYNC_API}/trigger`, { method: 'POST' })
+  feedback('#search-feedback', 'success', `„${name}" entfernt — Sync räumt auf.`)
+  loadSubscriptions()
+}
+
+async function applyArtistRange(sub, fromStr, toStr, btn) {
+  const range_from = fromStr ? Number(fromStr) : undefined
+  const range_to = toStr ? Number(toStr) : undefined
+  if (btn) {
+    btn.disabled = true
+    btn.textContent = '…'
+  }
+  const res = await api(`${API}/library/subscribe-artist`, {
+    method: 'POST',
+    body: { artistId: sub.id, name: sub.name, category: sub.category, range_from, range_to },
+  })
+  if (btn) {
+    btn.disabled = false
+    btn.textContent = 'Übernehmen'
+  }
+  if (!res.ok) {
+    feedback('#search-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  await api(`${SYNC_API}/trigger`, { method: 'POST' })
+  feedback('#search-feedback', 'success', 'Bereich übernommen — Sync läuft.')
+  loadSubscriptions()
 }
 
 /* ---------- screen: bluetooth (Phase 15d) ---------- */

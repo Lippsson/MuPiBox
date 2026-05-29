@@ -274,6 +274,28 @@ export async function resolveSyncItems(
     }
   }
 
+  // Phase 17c: whole-artist subscriptions. Pull the artist's albums, sort by
+  // release date (≈ chronological), apply the optional [range_from..range_to]
+  // window (1-indexed, Phase 17d), and add each as an album-promotion item.
+  for (const sub of config.artists ?? []) {
+    if (!sub?.id) continue
+    try {
+      const albums = await fetchArtistAlbums(sub.id, accessToken, sub.album_types ?? 'album')
+      albums.sort((a, b) => (a.release_date ?? '').localeCompare(b.release_date ?? ''))
+      const from = Math.max(1, sub.range_from ?? 1)
+      const to = sub.range_to && sub.range_to > 0 ? sub.range_to : albums.length
+      for (const album of albums.slice(from - 1, to)) {
+        if (!album?.id || items.has(`album:${album.id}`)) continue
+        const item = buildExplicitAlbumItem(album, sub.category)
+        if (item) items.set(item.groupKey, item)
+      }
+    } catch (err) {
+      console.warn(
+        `${new Date().toLocaleString()}: [spotify-sync] artist subscription ${sub.id} failed: ${(err as Error).message}`,
+      )
+    }
+  }
+
   // Fill in artist cover images. The track payload only carries artist
   // id+name, so artistCover was always undefined and the box used the album
   // (episode) cover for the artist tile. Batch-fetch the real artist images.
@@ -417,6 +439,40 @@ function resolveSingleTrack(
   }
 
   return undefined
+}
+
+/** Minimal album shape used by explicit-album + artist-subscription resolution. */
+type SimpleAlbum = {
+  id?: string
+  name?: string
+  artists?: Array<{ id?: string; name?: string }>
+  images?: Array<{ url?: string }>
+  release_date?: string
+}
+
+/** Fetch all of an artist's albums (paginated, deduped by id, capped at ~300).
+ *  Phase 17c. include_groups defaults to 'album'. */
+async function fetchArtistAlbums(artistId: string, accessToken: string, albumTypes = 'album'): Promise<SimpleAlbum[]> {
+  const out: SimpleAlbum[] = []
+  const seen = new Set<string>()
+  let offset = 0
+  const LIMIT = 50
+  while (out.length < 300) {
+    const page = await spotifyGet<{ items?: SimpleAlbum[] }>(
+      `/artists/${encodeURIComponent(artistId)}/albums?include_groups=${encodeURIComponent(albumTypes)}&market=DE&limit=${LIMIT}&offset=${offset}`,
+      accessToken,
+    )
+    const its = page.items ?? []
+    for (const a of its) {
+      if (a?.id && !seen.has(a.id)) {
+        seen.add(a.id)
+        out.push(a)
+      }
+    }
+    if (its.length < LIMIT) break
+    offset += LIMIT
+  }
+  return out
 }
 
 /** Build an album-promotion SyncItem from a fetched Spotify album object

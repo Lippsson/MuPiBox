@@ -33,7 +33,20 @@ export type SyncFailureKind = 'auth' | 'network' | 'rate-limit' | 'internal'
  *  of any playlist. `category` is the parent's pick at add-time. */
 export interface ExplicitAlbum {
   id: string
+  name?: string
   category?: CategoryType
+}
+
+/** A whole-artist subscription (Phase 17c). The sync pulls the artist's albums
+ *  (album_types, default 'album'), sorts by release_date, and — when a range is
+ *  set — keeps only albums [range_from..range_to] (1-indexed, Phase 17d). */
+export interface ArtistSubscription {
+  id: string
+  name?: string
+  category?: CategoryType
+  album_types?: string
+  range_from?: number
+  range_to?: number
 }
 
 /** Per-box configuration (read from mupiboxconfig.json.spotify_sync). */
@@ -42,6 +55,7 @@ export interface SpotifySyncConfig {
   playlist_prefix: string
   playlist_explicit_ids: string[]
   explicit_albums: ExplicitAlbum[]
+  artists: ArtistSubscription[]
   polling_interval_seconds: number
   manual_throttle_seconds: number
   stale_lock_minutes: number
@@ -61,6 +75,7 @@ export const DEFAULT_SPOTIFY_SYNC_CONFIG: SpotifySyncConfig = {
   playlist_prefix: 'MuPiBox',
   playlist_explicit_ids: [],
   explicit_albums: [],
+  artists: [],
   polling_interval_seconds: 900, // 15 min (Q6=B)
   manual_throttle_seconds: 60,
   stale_lock_minutes: 10,
