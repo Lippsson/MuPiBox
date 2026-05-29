@@ -284,8 +284,9 @@ export async function resolveSyncItems(
       albums.sort((a, b) => (a.release_date ?? '').localeCompare(b.release_date ?? ''))
       const from = Math.max(1, sub.range_from ?? 1)
       const to = sub.range_to && sub.range_to > 0 ? sub.range_to : albums.length
+      const excluded = new Set(sub.exclude_album_ids ?? [])
       for (const album of albums.slice(from - 1, to)) {
-        if (!album?.id || items.has(`album:${album.id}`)) continue
+        if (!album?.id || items.has(`album:${album.id}`) || excluded.has(album.id)) continue
         const item = buildExplicitAlbumItem(album, sub.category)
         if (item) items.set(item.groupKey, item)
       }
@@ -442,7 +443,7 @@ function resolveSingleTrack(
 }
 
 /** Minimal album shape used by explicit-album + artist-subscription resolution. */
-type SimpleAlbum = {
+export type SimpleAlbum = {
   id?: string
   name?: string
   artists?: Array<{ id?: string; name?: string }>
@@ -452,7 +453,11 @@ type SimpleAlbum = {
 
 /** Fetch all of an artist's albums (paginated, deduped by id, capped at ~300).
  *  Phase 17c. include_groups defaults to 'album'. */
-async function fetchArtistAlbums(artistId: string, accessToken: string, albumTypes = 'album'): Promise<SimpleAlbum[]> {
+export async function fetchArtistAlbums(
+  artistId: string,
+  accessToken: string,
+  albumTypes = 'album',
+): Promise<SimpleAlbum[]> {
   const out: SimpleAlbum[] = []
   const seen = new Set<string>()
   let offset = 0

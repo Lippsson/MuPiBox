@@ -702,12 +702,17 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     await deps.updateMupiboxConfig((cfg) => {
       const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
       const list = Array.isArray(ss.artists) ? (ss.artists as Array<Record<string, unknown>>) : []
+      const existing = list.find((a) => a?.id === artistId)
+      // A range edit must not wipe per-album exclusions (Phase 17e).
+      const preservedExclude = Array.isArray(existing?.exclude_album_ids)
+        ? (existing!.exclude_album_ids as unknown[]).filter((x): x is string => typeof x === 'string')
+        : []
       const entry: Record<string, unknown> = { id: artistId }
       if (name) entry.name = name
       if (category) entry.category = category
       if (rangeFrom !== undefined) entry.range_from = rangeFrom
       if (rangeTo !== undefined) entry.range_to = rangeTo
-      const existing = list.find((a) => a?.id === artistId)
+      if (preservedExclude.length) entry.exclude_album_ids = preservedExclude
       if (existing) {
         for (const k of Object.keys(existing)) if (k !== 'id') delete existing[k]
         Object.assign(existing, entry)
@@ -760,6 +765,48 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       ss.explicit_albums = (
         Array.isArray(ss.explicit_albums) ? (ss.explicit_albums as Array<Record<string, unknown>>) : []
       ).filter((a) => a?.id !== albumId)
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
+  /**
+   * POST /api/eltern/library/artist-exclude  {artistId, albumId, excluded}
+   * (Phase 17e) Toggle a single album of a subscribed artist on/off the
+   * subscription's exclude list. Excluded albums are skipped on the next sync
+   * (and removed as orphans). Re-including (excluded:false) drops it from the
+   * list so the sync re-adds it. No-op if the artist isn't subscribed.
+   */
+  router.post('/library/artist-exclude', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { artistId?: unknown; albumId?: unknown; excluded?: unknown } | undefined) ?? {}
+    const artistId = String(body.artistId ?? '').trim()
+    const albumId = String(body.albumId ?? '').trim()
+    if (!/^[A-Za-z0-9]{22}$/.test(artistId) || !/^[A-Za-z0-9]{22}$/.test(albumId)) {
+      res.status(400).json({ error: 'invalid artistId/albumId (expected 22-char Spotify ids)' })
+      return
+    }
+    const excluded = body.excluded === true || body.excluded === 'true'
+    const cur = (deps.getMupiboxConfig()?.spotify_sync as Record<string, unknown> | undefined) ?? {}
+    const curArtists = Array.isArray(cur.artists) ? (cur.artists as Array<Record<string, unknown>>) : []
+    if (!curArtists.some((a) => a?.id === artistId)) {
+      res.status(404).json({ error: 'artist not subscribed' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      const list = Array.isArray(ss.artists) ? (ss.artists as Array<Record<string, unknown>>) : []
+      const sub = list.find((a) => a?.id === artistId)
+      if (!sub) return
+      const ex = new Set(
+        Array.isArray(sub.exclude_album_ids)
+          ? (sub.exclude_album_ids as unknown[]).filter((x): x is string => typeof x === 'string')
+          : [],
+      )
+      if (excluded) ex.add(albumId)
+      else ex.delete(albumId)
+      if (ex.size) sub.exclude_album_ids = [...ex]
+      else delete sub.exclude_album_ids
+      ss.artists = list
       cfg.spotify_sync = ss
     })
     res.json({ ok: true })

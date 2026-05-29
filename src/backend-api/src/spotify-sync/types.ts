@@ -39,7 +39,8 @@ export interface ExplicitAlbum {
 
 /** A whole-artist subscription (Phase 17c). The sync pulls the artist's albums
  *  (album_types, default 'album'), sorts by release_date, and — when a range is
- *  set — keeps only albums [range_from..range_to] (1-indexed, Phase 17d). */
+ *  set — keeps only albums [range_from..range_to] (1-indexed, Phase 17d).
+ *  `exclude_album_ids` drops individual albums inside that window (Phase 17e). */
 export interface ArtistSubscription {
   id: string
   name?: string
@@ -47,6 +48,7 @@ export interface ArtistSubscription {
   album_types?: string
   range_from?: number
   range_to?: number
+  exclude_album_ids?: string[]
 }
 
 /** Per-box configuration (read from mupiboxconfig.json.spotify_sync). */

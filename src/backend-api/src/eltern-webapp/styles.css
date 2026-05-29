@@ -647,3 +647,14 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
 .managed-range { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 .managed-range input { width: 64px; flex: 0 0 auto; }
 .managed-range button { flex: 0 0 auto; margin-left: auto; }
+.managed-btns { display: flex; gap: 6px; flex: 0 0 auto; }
+
+/* Per-artist album include/exclude (Phase 17e) */
+.managed-albums { margin-top: 8px; padding-left: 4px; border-left: 2px solid rgba(255, 255, 255, 0.08); }
+.album-line { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+.album-line .album-idx { flex: 0 0 1.6em; text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.album-line .album-thumb { width: 32px; height: 32px; flex: 0 0 auto; border-radius: 4px; object-fit: cover; background: rgba(255, 255, 255, 0.06); }
+.album-line .album-nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.album-line button { flex: 0 0 auto; padding: 4px 10px; font-size: 13px; }
+.album-line.out { opacity: 0.45; }
+.album-line.excluded .album-nm { text-decoration: line-through; color: var(--text-dim); }

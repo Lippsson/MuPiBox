@@ -12,7 +12,8 @@ import * as fs from 'node:fs'
 import { promises as fsPromises } from 'node:fs'
 import { Router } from 'express'
 import { loadSpotifySyncConfig, loadSpotifyTokenStore } from './config-loader'
-import { requiresReAuth, tokenStillValid } from './auth'
+import { getValidAccessToken, requiresReAuth, tokenStillValid } from './auth'
+import { fetchArtistAlbums } from './playlists'
 import { readStateFile } from './state-file'
 import { triggerManualSync } from './scheduler'
 import type { RunSyncDeps } from './state-machine'
@@ -170,6 +171,63 @@ export function createSpotifySyncRouter(deps: RunSyncDeps): Router {
     })
     const merged = loadSpotifySyncConfig(deps.getMupiboxConfig())
     res.json({ ok: true, applied: mutations, current: merged })
+  })
+
+  /**
+   * GET /api/spotify-sync/artist-albums?artistId=<id>  (Phase 17e)
+   * Lists an artist's albums in the exact order the sync uses (release_date
+   * asc), each tagged with its 1-indexed position, whether it falls inside
+   * the subscription's [range_from..range_to] window, and whether it's
+   * currently on the per-artist exclude list. Powers the album-level
+   * include/exclude UI in the Eltern-WebApp Library section. Read-only.
+   */
+  router.get('/artist-albums', async (req, res) => {
+    const artistId = String(req.query.artistId ?? '').trim()
+    if (!/^[A-Za-z0-9]{22}$/.test(artistId)) {
+      res.status(400).json({ error: 'invalid artistId (expected 22-char Spotify id)' })
+      return
+    }
+    const tokenStore = loadSpotifyTokenStore(deps.getMupiboxConfig())
+    if (!tokenStore) {
+      res.status(409).json({ error: 'spotify not configured' })
+      return
+    }
+    const tok = await getValidAccessToken(tokenStore, deps.updateMupiboxConfig)
+    if (!tok.ok) {
+      res.status(502).json({ error: 'token unavailable', detail: tok.failure.reason })
+      return
+    }
+    const config = loadSpotifySyncConfig(deps.getMupiboxConfig())
+    const sub = (config.artists ?? []).find((a) => a.id === artistId)
+    let albums
+    try {
+      albums = await fetchArtistAlbums(artistId, tok.token, sub?.album_types ?? 'album')
+    } catch (err) {
+      res.status(502).json({ error: `artist albums fetch failed: ${(err as Error).message}` })
+      return
+    }
+    albums.sort((a, b) => (a.release_date ?? '').localeCompare(b.release_date ?? ''))
+    const from = Math.max(1, sub?.range_from ?? 1)
+    const to = sub?.range_to && sub.range_to > 0 ? sub.range_to : albums.length
+    const excluded = new Set(sub?.exclude_album_ids ?? [])
+    res.json({
+      artistId,
+      subscribed: !!sub,
+      range_from: sub?.range_from,
+      range_to: sub?.range_to,
+      albums: albums.map((al, i) => {
+        const position = i + 1
+        return {
+          id: al.id,
+          name: al.name,
+          release_date: al.release_date,
+          cover: al.images?.[0]?.url,
+          position,
+          inRange: position >= from && position <= to,
+          excluded: !!al.id && excluded.has(al.id),
+        }
+      }),
+    })
   })
 
   return router

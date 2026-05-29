@@ -35,8 +35,8 @@ const SECTIONS = {
   sync:      { title: 'Smart-Sync',          parent: 'hub', loader: () => loadSync() },
   settings:  { title: 'Smart-Sync · Optionen', parent: 'sync', loader: () => loadSettings() },
   wizard:    { title: 'Spotify-Setup',       parent: 'sync', loader: () => loadWizard() },
-  library:   { title: 'Library',             parent: 'hub', loader: () => loadLibrary() },
-  search:    { title: 'Spotify-Suche',       parent: 'library', loader: () => loadSubscriptions() },
+  library:   { title: 'Library',             parent: 'hub', loader: () => { loadLibrary(); loadSubscriptions() } },
+  search:    { title: 'Spotify-Suche',       parent: 'library', loader: () => resetSearch() },
   caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => loadWlan() },
@@ -852,7 +852,7 @@ function makeSubscribeArtistBtn(artistId, name) {
 
 async function subscribeArtistFromSearch(artistId, name, btn) {
   const category = $('#search-add-category')?.value || 'audiobook'
-  if (!confirm(`Alle Alben von „${name}" abonnieren? Den Bereich (Folge von–bis) kannst du danach unter „Verwaltete Inhalte" eingrenzen.`)) {
+  if (!confirm(`Alle Alben von „${name}" abonnieren? Bereich (Folge von–bis) und einzelne Alben kannst du danach in der Bibliothek unter „Verwaltete Inhalte" anpassen.`)) {
     return
   }
   if (btn) {
@@ -873,8 +873,17 @@ async function subscribeArtistFromSearch(artistId, name, btn) {
     btn.textContent = '✓'
     btn.classList.add('added')
   }
-  feedback('#search-feedback', 'success', `„${name}" abonniert — Sync läuft. Bereich/Entfernen unter „Verwaltete Inhalte".`)
+  feedback('#search-feedback', 'success', `„${name}" abonniert — Sync läuft. Bereich/Ausschließen in der Bibliothek unter „Verwaltete Inhalte".`)
   loadSubscriptions()
+}
+
+/** Clear stale search results when (re-)entering the search screen. The
+ *  managed-content list now lives in the Library, not here. */
+function resetSearch() {
+  const wrap = $('#search-results')
+  if (wrap) wrap.innerHTML = ''
+  const fb = $('#search-feedback')
+  if (fb) fb.hidden = true
 }
 
 /* ---------- managed content (Phase 17d) ---------- */
@@ -906,11 +915,18 @@ function renderSubscriptions(data) {
     const nm = document.createElement('span')
     nm.className = 'value'
     nm.textContent = `🎤 ${a.name || a.id}`
+    const manage = document.createElement('button')
+    manage.className = 'ghost'
+    manage.textContent = 'Alben verwalten'
+    manage.addEventListener('click', () => toggleArtistAlbums(a, row, manage))
     const rm = document.createElement('button')
     rm.className = 'ghost'
     rm.textContent = 'Entfernen'
     rm.addEventListener('click', () => unsubscribeArtist(a.id, a.name || a.id))
-    head.append(nm, rm)
+    const btns = document.createElement('div')
+    btns.className = 'managed-btns'
+    btns.append(manage, rm)
+    head.append(nm, btns)
     const range = document.createElement('div')
     range.className = 'managed-range'
     const lbl = document.createElement('span')
@@ -959,11 +975,11 @@ async function unsubscribeArtist(artistId, name) {
   if (!confirm(`„${name}" und alle zugehörigen Alben aus der Box entfernen?`)) return
   const res = await api(`${API}/library/unsubscribe-artist`, { method: 'POST', body: { artistId } })
   if (!res.ok) {
-    feedback('#search-feedback', 'error', `Fehler ${res.status}`)
+    feedback('#managed-feedback', 'error', `Fehler ${res.status}`)
     return
   }
   await api(`${SYNC_API}/trigger`, { method: 'POST' })
-  feedback('#search-feedback', 'success', `„${name}" entfernt — Sync räumt auf.`)
+  feedback('#managed-feedback', 'success', `„${name}" entfernt — Sync räumt auf.`)
   loadSubscriptions()
 }
 
@@ -971,11 +987,11 @@ async function removeAlbum(albumId, name) {
   if (!confirm(`„${name}" aus der Box entfernen?`)) return
   const res = await api(`${API}/library/remove-album`, { method: 'POST', body: { albumId } })
   if (!res.ok) {
-    feedback('#search-feedback', 'error', `Fehler ${res.status}`)
+    feedback('#managed-feedback', 'error', `Fehler ${res.status}`)
     return
   }
   await api(`${SYNC_API}/trigger`, { method: 'POST' })
-  feedback('#search-feedback', 'success', `„${name}" entfernt — Sync räumt auf.`)
+  feedback('#managed-feedback', 'success', `„${name}" entfernt — Sync räumt auf.`)
   loadSubscriptions()
 }
 
@@ -995,12 +1011,96 @@ async function applyArtistRange(sub, fromStr, toStr, btn) {
     btn.textContent = 'Übernehmen'
   }
   if (!res.ok) {
-    feedback('#search-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    feedback('#managed-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
     return
   }
   await api(`${SYNC_API}/trigger`, { method: 'POST' })
-  feedback('#search-feedback', 'success', 'Bereich übernommen — Sync läuft.')
+  feedback('#managed-feedback', 'success', 'Bereich übernommen — Sync läuft.')
   loadSubscriptions()
+}
+
+/* ---------- per-artist album include/exclude (Phase 17e) ---------- */
+
+/** Expand/collapse the album list under an artist subscription row. Lazy-
+ *  loads from the sync's own ordering so positions match the range. */
+async function toggleArtistAlbums(a, row, btn) {
+  const open = row.querySelector('.managed-albums')
+  if (open) {
+    open.remove()
+    btn.textContent = 'Alben verwalten'
+    return
+  }
+  btn.disabled = true
+  btn.textContent = 'lädt …'
+  const res = await api(`${SYNC_API}/artist-albums?artistId=${encodeURIComponent(a.id)}`)
+  btn.disabled = false
+  btn.textContent = 'Alben ausblenden'
+  const panel = document.createElement('div')
+  panel.className = 'managed-albums'
+  if (!res.ok) {
+    panel.innerHTML = '<p class="dim">Alben konnten nicht geladen werden.</p>'
+    btn.textContent = 'Alben verwalten'
+  } else {
+    renderArtistAlbums(a, res.body?.albums ?? [], panel)
+  }
+  row.appendChild(panel)
+}
+
+function renderArtistAlbums(a, albums, panel) {
+  panel.innerHTML = ''
+  if (!albums.length) {
+    panel.innerHTML = '<p class="dim">Keine Alben gefunden.</p>'
+    return
+  }
+  for (const al of albums) {
+    const line = document.createElement('div')
+    line.className = 'album-line' + (al.inRange ? '' : ' out') + (al.excluded ? ' excluded' : '')
+    const idx = document.createElement('span')
+    idx.className = 'album-idx'
+    idx.textContent = al.position
+    const thumb = document.createElement('img')
+    thumb.className = 'album-thumb'
+    thumb.alt = ''
+    thumb.loading = 'lazy'
+    if (al.cover) thumb.src = al.cover
+    const nm = document.createElement('span')
+    nm.className = 'album-nm'
+    nm.textContent = al.name || al.id
+    const act = document.createElement('button')
+    act.className = 'ghost'
+    if (!al.inRange) {
+      act.textContent = 'außerhalb'
+      act.disabled = true
+      act.title = 'Liegt außerhalb des gewählten Folgenbereichs'
+    } else if (al.excluded) {
+      act.textContent = 'aufnehmen'
+      act.addEventListener('click', () => setExclude(a, al, false, panel))
+    } else {
+      act.textContent = 'ausschließen'
+      act.addEventListener('click', () => setExclude(a, al, true, panel))
+    }
+    line.append(idx, thumb, nm, act)
+    panel.appendChild(line)
+  }
+}
+
+async function setExclude(a, al, excluded, panel) {
+  const res = await api(`${API}/library/artist-exclude`, {
+    method: 'POST',
+    body: { artistId: a.id, albumId: al.id, excluded },
+  })
+  if (!res.ok) {
+    feedback('#managed-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  await api(`${SYNC_API}/trigger`, { method: 'POST' })
+  feedback(
+    '#managed-feedback',
+    'success',
+    excluded ? `„${al.name}" ausgeschlossen — Sync räumt auf.` : `„${al.name}" wieder aufgenommen — Sync läuft.`,
+  )
+  const r2 = await api(`${SYNC_API}/artist-albums?artistId=${encodeURIComponent(a.id)}`)
+  if (r2.ok) renderArtistAlbums(a, r2.body?.albums ?? [], panel)
 }
 
 /* ---------- screen: bluetooth (Phase 15d) ---------- */
