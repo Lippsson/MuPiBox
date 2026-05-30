@@ -808,6 +808,98 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * GET /api/eltern/theme  (Phase 18 Item 3)
+   * Returns the current theme + the whitelist of installed themes from
+   * mupibox.installedThemes (35+ themes registered by conf_update.sh on box
+   * provisioning). The installed-themes list IS the security boundary —
+   * only those names are accepted by POST and by the preview endpoint.
+   */
+  router.get('/theme', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      res.status(503).json({ error: 'config not yet loaded, please retry' })
+      return
+    }
+    const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+    const current = typeof mb.theme === 'string' ? mb.theme : ''
+    const available = Array.isArray(mb.installedThemes)
+      ? (mb.installedThemes as unknown[]).filter((x): x is string => typeof x === 'string').sort()
+      : []
+    res.json({ current, available })
+  })
+
+  /**
+   * POST /api/eltern/theme  {theme}  (Phase 18 Item 3)
+   * Updates mupibox.theme AND swaps the active_theme.css symlink so the
+   * change is visible after the next display reload — without running the
+   * full setting_update.sh (which on shutdown also rewrites Spotify, Sonos,
+   * spotifyd, display, NTP configs and would be far too broad a side-effect
+   * for a colour change). Theme name is validated against installedThemes
+   * to prevent symlink-target injection.
+   */
+  router.post('/theme', requireSession, requireCsrf, async (req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      res.status(503).json({ error: 'config not yet loaded, please retry' })
+      return
+    }
+    const body = (req.body as { theme?: unknown } | undefined) ?? {}
+    const theme = typeof body.theme === 'string' ? body.theme.trim() : ''
+    const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+    const installed = Array.isArray(mb.installedThemes)
+      ? (mb.installedThemes as unknown[]).filter((x): x is string => typeof x === 'string')
+      : []
+    if (!theme || !installed.includes(theme)) {
+      res.status(400).json({ error: 'theme not in installed-themes whitelist' })
+      return
+    }
+    await deps.updateMupiboxConfig((c) => {
+      const m = ((c.mupibox as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      m.theme = theme
+      c.mupibox = m
+    })
+    const symlinkPath = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/active_theme.css'
+    const target = `/home/dietpi/MuPiBox/themes/${theme}.css`
+    try {
+      await fsp.rm(symlinkPath, { force: true })
+      await fsp.symlink(target, symlinkPath)
+    } catch (err) {
+      res.status(500).json({ error: `symlink update failed: ${(err as Error).message}` })
+      return
+    }
+    res.json({ ok: true, theme })
+  })
+
+  /**
+   * GET /api/eltern/theme-preview/:name  (Phase 18 Item 3)
+   * Serves the theme preview PNG that AdminInterface ships under
+   * /var/www/images/<name>.png. Name MUST be in the installed-themes
+   * whitelist — without that check this would be a /var/www/images path
+   * traversal sink. Cache-friendly so the WebApp grid doesn't refetch on
+   * every render.
+   */
+  router.get('/theme-preview/:name', requireSession, (req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      res.status(503).end()
+      return
+    }
+    const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+    const installed = Array.isArray(mb.installedThemes)
+      ? (mb.installedThemes as unknown[]).filter((x): x is string => typeof x === 'string')
+      : []
+    const name = String(req.params.name ?? '').replace(/\.png$/, '')
+    if (!installed.includes(name)) {
+      res.status(404).end()
+      return
+    }
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    res.sendFile(`/var/www/images/${name}.png`, (err) => {
+      if (err && !res.headersSent) res.status(404).end()
+    })
+  })
+
+  /**
    * POST /api/eltern/spotify-credentials
    * Persists the user-provided clientId (and optional clientSecret) into
    * mupiboxconfig.json.spotify. This is the wizard-step-3 endpoint that

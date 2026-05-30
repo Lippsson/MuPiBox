@@ -44,6 +44,7 @@ const SECTIONS = {
   bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => loadBluetooth() },
   telegram:  { title: 'Telegram',            parent: 'hub', loader: () => loadTelegram() },
   system:    { title: 'System',              parent: 'hub', loader: () => loadSystem() },
+  theme:     { title: 'Theme',               parent: 'hub', loader: () => loadTheme() },
 }
 
 /** Switch to a screen — hides all .screen sections, shows the requested
@@ -1529,6 +1530,60 @@ async function clearPassword() {
   state.passwordConfigured = !!res.body?.configured
   renderPasswordStatus()
   feedback('#pw-feedback', 'success', 'Passwort entfernt.')
+}
+
+/* ---------- Theme-Switcher (Phase 18 Item 3) ---------- */
+
+async function loadTheme() {
+  const wrap = $('#theme-grid')
+  if (!wrap) return
+  const res = await api(`${API}/theme`)
+  if (!res.ok) {
+    wrap.innerHTML = `<p class="dim">Lade-Fehler ${res.status}</p>`
+    return
+  }
+  const current = res.body?.current ?? ''
+  const available = res.body?.available ?? []
+  if (!available.length) {
+    wrap.innerHTML = '<p class="dim">Keine Themes registriert.</p>'
+    return
+  }
+  wrap.innerHTML = ''
+  for (const name of available) {
+    const card = document.createElement('div')
+    card.className = 'theme-card' + (name === current ? ' active' : '')
+    const img = document.createElement('img')
+    img.className = 'theme-preview'
+    img.src = `${API}/theme-preview/${encodeURIComponent(name)}`
+    img.alt = name
+    img.loading = 'lazy'
+    img.addEventListener('error', () => {
+      img.style.opacity = '0.25'
+      img.removeAttribute('src')
+    })
+    const lbl = document.createElement('div')
+    lbl.className = 'theme-name'
+    lbl.textContent = name
+    const badge = document.createElement('div')
+    badge.className = 'theme-badge'
+    if (name === current) badge.textContent = '✓ aktiv'
+    card.append(img, lbl, badge)
+    if (name !== current) {
+      card.addEventListener('click', () => applyTheme(name))
+    }
+    wrap.appendChild(card)
+  }
+}
+
+async function applyTheme(theme) {
+  if (!confirm(`Theme auf „${theme}" umstellen? Wird beim nächsten Box-Display-Reload sichtbar.`)) return
+  const res = await api(`${API}/theme`, { method: 'POST', body: { theme } })
+  if (!res.ok) {
+    feedback('#theme-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  feedback('#theme-feedback', 'success', `Theme „${theme}" gespeichert. Aktiv beim nächsten Display-Reload.`)
+  loadTheme()
 }
 
 /** Phase 17h: submit the no-session password form. On success, re-run

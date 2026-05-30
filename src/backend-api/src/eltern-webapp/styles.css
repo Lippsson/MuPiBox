@@ -604,6 +604,36 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
 .tg-chat-row input:nth-of-type(2) { flex: 1 1 auto; }
 .tg-chat-row button { flex: 0 0 auto; padding: 8px 12px; }
 
+/* Theme-Switcher grid (Phase 18 Item 3) */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.theme-card {
+  background: var(--card-elevated);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.1s, outline-color 0.1s;
+  outline: 2px solid transparent;
+}
+.theme-card:hover { transform: translateY(-2px); }
+.theme-card.active { outline-color: var(--primary); cursor: default; }
+.theme-card.active:hover { transform: none; }
+.theme-preview {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  display: block;
+}
+.theme-name { font-size: 13px; margin-top: 6px; word-break: break-word; }
+.theme-badge { font-size: 11px; color: var(--primary); min-height: 1em; margin-top: 2px; }
+
 /* WLAN list rows (Phase 18 Item 2) */
 .wlan-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .wlan-row {
