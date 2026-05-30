@@ -129,9 +129,9 @@
           <span class="hub-card-sub" id="hub-card-history-sub">Heute & 7 Tage</span>
         </a>
         <a href="#display" class="hub-card" data-section="display">
-          <span class="hub-card-icon">📡</span>
-          <span class="hub-card-title">Live-Status</span>
-          <span class="hub-card-sub">Was läuft, Akku, Caps, Schlaftimer</span>
+          <span class="hub-card-icon">📺</span>
+          <span class="hub-card-title">Display jetzt</span>
+          <span class="hub-card-sub">Was die Box zeigt</span>
         </a>
       </div>
     </section>
@@ -910,36 +910,19 @@
       </div>
     </section>
 
-    <!-- Phase 18 Item 8: Box-Display-Live-Preview (Variante A: Status-Panel). -->
+    <!-- Phase 18 Item 8: Box-Display-Live-Preview — zeigt was die Box auf
+         ihrem Display anzeigt: Cover + Titel + Künstler. -->
     <section id="screen-display" class="screen" hidden>
-      <div class="card">
-        <h3 class="display-now-header">
-          <span id="disp-now-icon">⏹</span>
-          <span id="disp-now-title">Box ist ruhig</span>
-        </h3>
-        <p class="dim" id="disp-now-meta">—</p>
-      </div>
-      <div class="card">
-        <h3>Status</h3>
-        <div class="status-row">
-          <span class="dim">Lautstärke</span>
-          <span class="value" id="disp-volume">—</span>
+      <div class="card display-mirror" id="display-mirror">
+        <div class="display-frame">
+          <img class="display-cover" id="disp-cover" alt="" hidden>
+          <div class="display-cover-placeholder" id="disp-cover-placeholder">
+            <span class="display-cover-icon" id="disp-cover-icon">⏹</span>
+          </div>
         </div>
-        <div class="status-row">
-          <span class="dim">Akku</span>
-          <span class="value" id="disp-battery">—</span>
-        </div>
-        <div class="status-row">
-          <span class="dim">Spielzeit-Cap</span>
-          <span class="value" id="disp-cap">—</span>
-        </div>
-        <div class="status-row">
-          <span class="dim">Ruhezeit</span>
-          <span class="value" id="disp-quiet">—</span>
-        </div>
-        <div class="status-row">
-          <span class="dim">Schlaftimer</span>
-          <span class="value" id="disp-sleep">—</span>
+        <div class="display-text">
+          <div class="display-title" id="disp-now-title">Box ist ruhig</div>
+          <div class="display-artist" id="disp-now-meta">—</div>
         </div>
       </div>
       <p class="dim" id="disp-updated">Aktualisiert alle 5 s.</p>

@@ -46,7 +46,7 @@ const SECTIONS = {
   system:    { title: 'System',              parent: 'hub', loader: () => loadSystem() },
   theme:     { title: 'Theme',               parent: 'hub', loader: () => loadTheme() },
   history:   { title: 'Hör-Verlauf',         parent: 'hub', loader: () => loadHistory() },
-  display:   { title: 'Live-Status',         parent: 'hub', loader: () => loadDisplay() },
+  display:   { title: 'Display jetzt',       parent: 'hub', loader: () => loadDisplay() },
 }
 
 /** Switch to a screen — hides all .screen sections, shows the requested
@@ -1538,87 +1538,41 @@ async function clearPassword() {
 
 let displayPollHandle = null
 
-/** Aggregates /playback + /audio + /api/mupihat + /api/playtime + /sleeptimer
- *  for a Live-Status-Panel that mirrors what the box display itself shows.
- *  Pure reuse of existing endpoints — no new backend. Polls every 5 s while
- *  the screen is active. */
+/** Mirror of what the box display itself shows: cover + title + artist.
+ *  Reuses /api/eltern/playback (which already has cover, title, artist
+ *  resolution from the Spotify state endpoint). Polls every 5 s while
+ *  the screen is active. Status info (Akku, Caps etc.) gehört in die
+ *  jeweiligen eigenen Sektionen, nicht hierher. */
 async function loadDisplay() {
   if (displayPollHandle) {
     clearTimeout(displayPollHandle)
     displayPollHandle = null
   }
-  const [playback, audio, hat, pt, st] = await Promise.all([
-    api(`${API}/playback`).catch(() => ({ ok: false })),
-    api(`${API}/audio`).catch(() => ({ ok: false })),
-    fetch('/api/mupihat', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
-    fetch('/api/playtime', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
-    api(`${API}/sleeptimer`).catch(() => ({ ok: false })),
-  ])
+  const res = await api(`${API}/playback`).catch(() => ({ ok: false }))
+  const b = res.ok ? (res.body ?? {}) : {}
+  const cover = $('#disp-cover')
+  const placeholder = $('#disp-cover-placeholder')
+  const icon = $('#disp-cover-icon')
 
-  // Now-Playing-Header
-  if (playback.ok) {
-    const b = playback.body ?? {}
-    if (b.playing) {
-      setText('#disp-now-icon', '▶')
-      setText('#disp-now-title', b.title || '(läuft)')
-      setText('#disp-now-meta', `${b.artist || ''}${b.artist && b.album ? ' · ' : ''}${b.album || ''}` || 'Wird abgespielt')
-    } else if (b.title || b.artist) {
-      setText('#disp-now-icon', '⏸')
-      setText('#disp-now-title', b.title || '—')
-      setText('#disp-now-meta', `${b.artist || ''} (pausiert)`)
-    } else {
-      setText('#disp-now-icon', '⏹')
-      setText('#disp-now-title', 'Box ist ruhig')
-      setText('#disp-now-meta', 'Nichts wird abgespielt')
+  if (b.coverUrl) {
+    if (cover) {
+      cover.src = b.coverUrl
+      cover.hidden = false
     }
-  }
-
-  // Volume
-  if (audio.ok) {
-    const a = audio.body ?? {}
-    const cur = Number.isFinite(a.current) ? `${a.current} %` : '—'
-    const max = Number.isFinite(a.maxVolume) ? ` (Cap ${a.maxVolume} %)` : ''
-    setText('#disp-volume', `${cur}${max}`)
-  }
-
-  // Battery
-  const pct = hat?.Bat_Percent ?? Number.parseInt(String(hat?.Bat_SOC ?? '').replace('%', ''), 10)
-  const charging = (hat?.IBus ?? 0) > 0
-  setText(
-    '#disp-battery',
-    Number.isFinite(pct) ? `${charging ? '⚡ ' : ''}${pct} % · ${hat?.Vbat ?? '—'} mV` : '—',
-  )
-
-  // Cap-Status
-  const ptB = pt?.playtime ?? {}
-  if (ptB.enabled) {
-    const used = Math.floor((ptB.usedSeconds ?? 0) / 60)
-    const limit = ptB.limitMinutes ?? '?'
-    const stateText = ptB.state === 'normal' ? 'Normal' : ptB.state === 'grace' ? 'Karenz' : '⏸ Gesperrt'
-    setText('#disp-cap', `${stateText} · ${used}/${limit} Min`)
+    if (placeholder) placeholder.hidden = true
   } else {
-    setText('#disp-cap', '✗ Aus')
+    if (cover) cover.hidden = true
+    if (placeholder) placeholder.hidden = false
+    if (icon) icon.textContent = b.playing ? '▶' : (b.title || b.artist) ? '⏸' : '⏹'
   }
 
-  // Quiet-Status
-  const qh = pt?.quiet ?? {}
-  if (qh.enabled) {
-    if (qh.state === 'blocked') setText('#disp-quiet', `🌙 ${qh.label || 'Ruhezeit'}`)
-    else if (qh.state === 'grace') setText('#disp-quiet', `🌙 Karenz`)
-    else setText('#disp-quiet', 'Normal')
+  if (b.playing || b.title || b.artist) {
+    setText('#disp-now-title', b.title || '—')
+    const meta = `${b.artist || ''}${b.artist && b.album ? ' · ' : ''}${b.album || ''}`
+    setText('#disp-now-meta', meta || (b.playing ? 'Wird abgespielt' : 'Pausiert'))
   } else {
-    setText('#disp-quiet', '✗ Aus')
-  }
-
-  // Sleeptimer
-  if (st.ok) {
-    const s = st.body ?? {}
-    if (s.active) {
-      const rem = Number(s.remaining_seconds) || 0
-      setText('#disp-sleep', `Aktiv — ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')} verbleibend`)
-    } else {
-      setText('#disp-sleep', 'Aus')
-    }
+    setText('#disp-now-title', 'Box ist ruhig')
+    setText('#disp-now-meta', 'Display zeigt nichts an')
   }
 
   setText('#disp-updated', `Aktualisiert um ${new Date().toLocaleTimeString('de-DE')}`)

@@ -934,6 +934,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       let title = ''
       let artist = ''
       let album = ''
+      let coverUrl: string | null = null
       if (player === 'mplayer') {
         playing = local.playing === true
         title = String(local.currentTrackname ?? '')
@@ -947,8 +948,9 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
               item?: {
                 name?: string
                 artists?: Array<{ name?: string }>
-                album?: { name?: string }
-                show?: { name?: string; publisher?: string }
+                album?: { name?: string; images?: Array<{ url?: string }> }
+                show?: { name?: string; publisher?: string; images?: Array<{ url?: string }> }
+                images?: Array<{ url?: string }>
               }
             }
             playing = state.is_playing === true
@@ -960,6 +962,14 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
             } else if (Array.isArray(state.item?.artists) && state.item.artists[0]?.name) {
               artist = String(state.item.artists[0].name)
             }
+            // Cover art priority: episode-own > show > album. Spotify orders
+            // images largest-first, so [0] is the highest-res available.
+            const candidates = [
+              state.item?.images?.[0]?.url,
+              state.item?.show?.images?.[0]?.url,
+              state.item?.album?.images?.[0]?.url,
+            ].filter((u): u is string => typeof u === 'string' && u.length > 0)
+            if (candidates.length > 0) coverUrl = candidates[0]
           }
         } catch {
           /* state fetch failed → stays not-playing */
@@ -972,6 +982,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         title,
         artist,
         album,
+        coverUrl,
         volume: typeof local.volume === 'number' ? local.volume : null,
       })
     } catch (err) {
