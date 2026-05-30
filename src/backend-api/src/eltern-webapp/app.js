@@ -1723,6 +1723,10 @@ function renderPlayback(b) {
     if (icon) icon.hidden = false
   }
 
+  // Track ist nur dann "wiederaufnehmbar" wenn der Player auch wirklich
+  // einen aktiven Slot hat (currentPlayer gesetzt). Sonst liefert play/stop
+  // auf der Player-API einen Fehler ("nichts zu starten").
+  const hasTrack = !!b.player && (!!b.title || !!b.artist)
   if (b.playing) {
     if (icon) icon.textContent = '▶'
     setText('#playback-title', b.title || '(läuft)')
@@ -1734,7 +1738,7 @@ function renderPlayback(b) {
     }
     if (toggleIcon) toggleIcon.textContent = '⏸'
     if (stopBtn) stopBtn.hidden = false
-  } else if (b.title || b.artist) {
+  } else if (hasTrack) {
     if (icon) icon.textContent = '⏸'
     setText('#playback-title', b.title || '—')
     setText('#playback-meta', `${b.artist || ''}${b.artist && b.album ? ' · ' : ''}${b.album || ''}` || 'Pausiert')
@@ -1768,7 +1772,13 @@ function renderPlayback(b) {
 async function playbackAction(action) {
   const res = await api(`${API}/playback/${action}`, { method: 'POST' })
   if (!res.ok) {
-    toast('error', `Aktion ${action} fehlgeschlagen: ${res.body?.error ?? res.status}`)
+    const code = res.body?.error ?? ''
+    const friendly = {
+      playtime_limit_reached: 'Spielzeit-Limit erreicht. Heute keine weitere Wiedergabe.',
+      quiet_hours_active: 'Gerade ist Ruhezeit. Wiedergabe ist pausiert.',
+      no_active_track: 'Kein Titel aktiv — bitte erst etwas auf der Box auswählen.',
+    }[code] ?? `Aktion ${action} fehlgeschlagen: ${code || res.status}`
+    toast(code === 'playtime_limit_reached' || code === 'quiet_hours_active' ? 'warn' : 'error', friendly)
     return
   }
   // Kurze Verzögerung, damit der Player den Zustand übernommen hat, dann refresh.
