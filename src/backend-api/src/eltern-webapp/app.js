@@ -46,6 +46,7 @@ const SECTIONS = {
   system:    { title: 'System',              parent: 'hub', loader: () => loadSystem() },
   theme:     { title: 'Theme',               parent: 'hub', loader: () => loadTheme() },
   history:   { title: 'Hör-Verlauf',         parent: 'hub', loader: () => loadHistory() },
+  display:   { title: 'Display jetzt',       parent: 'hub', loader: () => loadDisplay() },
 }
 
 /** Switch to a screen — hides all .screen sections, shows the requested
@@ -1531,6 +1532,100 @@ async function clearPassword() {
   state.passwordConfigured = !!res.body?.configured
   renderPasswordStatus()
   feedback('#pw-feedback', 'success', 'Passwort entfernt.')
+}
+
+/* ---------- Display-Live-Preview (Phase 18 Item 8) ---------- */
+
+let displayPollHandle = null
+
+/** Aggregates /playback + /audio + /api/mupihat + /api/playtime + /sleeptimer
+ *  for a Live-Status-Panel that mirrors what the box display itself shows.
+ *  Pure reuse of existing endpoints — no new backend. Polls every 5 s while
+ *  the screen is active. */
+async function loadDisplay() {
+  if (displayPollHandle) {
+    clearTimeout(displayPollHandle)
+    displayPollHandle = null
+  }
+  const [playback, audio, hat, pt, st] = await Promise.all([
+    api(`${API}/playback`).catch(() => ({ ok: false })),
+    api(`${API}/audio`).catch(() => ({ ok: false })),
+    fetch('/api/mupihat', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+    fetch('/api/playtime', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+    api(`${API}/sleeptimer`).catch(() => ({ ok: false })),
+  ])
+
+  // Now-Playing-Header
+  if (playback.ok) {
+    const b = playback.body ?? {}
+    if (b.playing) {
+      setText('#disp-now-icon', '▶')
+      setText('#disp-now-title', b.title || '(läuft)')
+      setText('#disp-now-meta', `${b.artist || ''}${b.artist && b.album ? ' · ' : ''}${b.album || ''}` || 'Wird abgespielt')
+    } else if (b.title || b.artist) {
+      setText('#disp-now-icon', '⏸')
+      setText('#disp-now-title', b.title || '—')
+      setText('#disp-now-meta', `${b.artist || ''} (pausiert)`)
+    } else {
+      setText('#disp-now-icon', '⏹')
+      setText('#disp-now-title', 'Box ist ruhig')
+      setText('#disp-now-meta', 'Nichts wird abgespielt')
+    }
+  }
+
+  // Volume
+  if (audio.ok) {
+    const a = audio.body ?? {}
+    const cur = Number.isFinite(a.current) ? `${a.current} %` : '—'
+    const max = Number.isFinite(a.maxVolume) ? ` (Cap ${a.maxVolume} %)` : ''
+    setText('#disp-volume', `${cur}${max}`)
+  }
+
+  // Battery
+  const pct = hat?.Bat_Percent ?? Number.parseInt(String(hat?.Bat_SOC ?? '').replace('%', ''), 10)
+  const charging = (hat?.IBus ?? 0) > 0
+  setText(
+    '#disp-battery',
+    Number.isFinite(pct) ? `${charging ? '⚡ ' : ''}${pct} % · ${hat?.Vbat ?? '—'} mV` : '—',
+  )
+
+  // Cap-Status
+  const ptB = pt?.playtime ?? {}
+  if (ptB.enabled) {
+    const used = Math.floor((ptB.usedSeconds ?? 0) / 60)
+    const limit = ptB.limitMinutes ?? '?'
+    const stateText = ptB.state === 'normal' ? 'Normal' : ptB.state === 'grace' ? 'Karenz' : '⏸ Gesperrt'
+    setText('#disp-cap', `${stateText} · ${used}/${limit} Min`)
+  } else {
+    setText('#disp-cap', '✗ Aus')
+  }
+
+  // Quiet-Status
+  const qh = pt?.quiet ?? {}
+  if (qh.enabled) {
+    if (qh.state === 'blocked') setText('#disp-quiet', `🌙 ${qh.label || 'Ruhezeit'}`)
+    else if (qh.state === 'grace') setText('#disp-quiet', `🌙 Karenz`)
+    else setText('#disp-quiet', 'Normal')
+  } else {
+    setText('#disp-quiet', '✗ Aus')
+  }
+
+  // Sleeptimer
+  if (st.ok) {
+    const s = st.body ?? {}
+    if (s.active) {
+      const rem = Number(s.remaining_seconds) || 0
+      setText('#disp-sleep', `Aktiv — ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')} verbleibend`)
+    } else {
+      setText('#disp-sleep', 'Aus')
+    }
+  }
+
+  setText('#disp-updated', `Aktualisiert um ${new Date().toLocaleTimeString('de-DE')}`)
+
+  if (state.currentSection === 'display') {
+    displayPollHandle = setTimeout(loadDisplay, 5000)
+  }
 }
 
 /* ---------- Quick-Pause / Now-Playing (Phase 18 Item 5) ---------- */

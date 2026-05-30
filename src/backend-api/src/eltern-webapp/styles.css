@@ -604,6 +604,10 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
 .tg-chat-row input:nth-of-type(2) { flex: 1 1 auto; }
 .tg-chat-row button { flex: 0 0 auto; padding: 8px 12px; }
 
+/* Display-Live-Preview (Phase 18 Item 8) */
+.display-now-header { display: flex; align-items: center; gap: 12px; margin: 0 0 6px 0; }
+.display-now-header > span:first-child { font-size: 28px; }
+
 /* Akku-Chart (Phase 18 Item 6) */
 .battery-chart { display: block; width: 100%; height: 180px; }
 
