@@ -2413,8 +2413,7 @@ async function loadStatusBand() {
     chipCap.classList.remove('is-ok', 'is-warn', 'is-danger')
     if (ptB.enabled) {
       const used = Math.floor((ptB.usedSeconds ?? 0) / 60)
-      const limit = ptB.limitMinutes ?? '?'
-      setText('#status-chip-cap', `${used}/${limit}`)
+      setText('#status-chip-cap', `${used} m`)
       if (ptB.state === 'blocked') chipCap.classList.add('is-danger')
       else if (ptB.state === 'grace') chipCap.classList.add('is-warn')
     } else {

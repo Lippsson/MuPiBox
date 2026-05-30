@@ -277,6 +277,16 @@ a { color: var(--brand); text-decoration: none; transition: color var(--motion-f
   0%, 100% { opacity: 0.6; }
   50% { opacity: 1; }
 }
+/* Enge Viewports: 2x2-Grid statt 4 Pillen, sonst klippt der Wert. */
+@media (max-width: 380px) {
+  .status-band {
+    grid-template-columns: repeat(2, 1fr);
+    border-radius: 20px;
+    padding: 6px;
+    gap: 4px;
+  }
+  .status-chip { padding: 9px 10px; }
+}
 
 /* Hub-Grid pro Gruppe: kompakte 2-Spalter, beim Tablet+ 3 Spalten. */
 .hub-grid {
