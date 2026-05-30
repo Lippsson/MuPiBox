@@ -46,7 +46,6 @@ const SECTIONS = {
   system:    { title: 'System',              parent: 'hub', loader: () => loadSystem() },
   theme:     { title: 'Theme',               parent: 'hub', loader: () => loadTheme() },
   history:   { title: 'Hör-Verlauf',         parent: 'hub', loader: () => loadHistory() },
-  display:   { title: 'Display jetzt',       parent: 'hub', loader: () => loadDisplay() },
 }
 
 /** Switch to a screen — hides all .screen sections, shows the requested
@@ -1534,55 +1533,7 @@ async function clearPassword() {
   feedback('#pw-feedback', 'success', 'Passwort entfernt.')
 }
 
-/* ---------- Display-Live-Preview (Phase 18 Item 8) ---------- */
-
-let displayPollHandle = null
-
-/** Mirror of what the box display itself shows: cover + title + artist.
- *  Reuses /api/eltern/playback (which already has cover, title, artist
- *  resolution from the Spotify state endpoint). Polls every 5 s while
- *  the screen is active. Status info (Akku, Caps etc.) gehört in die
- *  jeweiligen eigenen Sektionen, nicht hierher. */
-async function loadDisplay() {
-  if (displayPollHandle) {
-    clearTimeout(displayPollHandle)
-    displayPollHandle = null
-  }
-  const res = await api(`${API}/playback`).catch(() => ({ ok: false }))
-  const b = res.ok ? (res.body ?? {}) : {}
-  const cover = $('#disp-cover')
-  const placeholder = $('#disp-cover-placeholder')
-  const icon = $('#disp-cover-icon')
-
-  if (b.coverUrl) {
-    if (cover) {
-      cover.src = b.coverUrl
-      cover.hidden = false
-    }
-    if (placeholder) placeholder.hidden = true
-  } else {
-    if (cover) cover.hidden = true
-    if (placeholder) placeholder.hidden = false
-    if (icon) icon.textContent = b.playing ? '▶' : (b.title || b.artist) ? '⏸' : '⏹'
-  }
-
-  if (b.playing || b.title || b.artist) {
-    setText('#disp-now-title', b.title || '—')
-    const meta = `${b.artist || ''}${b.artist && b.album ? ' · ' : ''}${b.album || ''}`
-    setText('#disp-now-meta', meta || (b.playing ? 'Wird abgespielt' : 'Pausiert'))
-  } else {
-    setText('#disp-now-title', 'Box ist ruhig')
-    setText('#disp-now-meta', 'Display zeigt nichts an')
-  }
-
-  setText('#disp-updated', `Aktualisiert um ${new Date().toLocaleTimeString('de-DE')}`)
-
-  if (state.currentSection === 'display') {
-    displayPollHandle = setTimeout(loadDisplay, 5000)
-  }
-}
-
-/* ---------- Quick-Pause / Now-Playing (Phase 18 Item 5) ---------- */
+/* ---------- Quick-Pause / Now-Playing (Phase 18 Item 5 + 8) ---------- */
 
 let playbackPollHandle = null
 
@@ -1612,9 +1563,24 @@ async function loadPlayback() {
 
 function renderPlayback(b) {
   const icon = $('#playback-icon')
+  const cover = $('#playback-cover')
   const pauseBtn = $('#playback-pause-btn')
   const playBtn = $('#playback-play-btn')
   const stopBtn = $('#playback-stop-btn')
+
+  // Cover-Bild: wenn vorhanden, zeigen + Icon ausblenden. Sonst Icon
+  // als Status-Glyph (▶/⏸/⏹).
+  if (b.coverUrl) {
+    if (cover) {
+      if (cover.src !== b.coverUrl) cover.src = b.coverUrl
+      cover.hidden = false
+    }
+    if (icon) icon.hidden = true
+  } else {
+    if (cover) cover.hidden = true
+    if (icon) icon.hidden = false
+  }
+
   if (b.playing) {
     if (icon) icon.textContent = '▶'
     setText('#playback-title', b.title || '(läuft)')
@@ -1625,7 +1591,7 @@ function renderPlayback(b) {
   } else if (b.title || b.artist) {
     if (icon) icon.textContent = '⏸'
     setText('#playback-title', b.title || '—')
-    setText('#playback-meta', b.artist || 'Pausiert')
+    setText('#playback-meta', `${b.artist || ''}${b.artist && b.album ? ' · ' : ''}${b.album || ''}` || 'Pausiert')
     if (pauseBtn) pauseBtn.hidden = true
     if (playBtn) playBtn.hidden = false
     if (stopBtn) stopBtn.hidden = false

@@ -61,10 +61,14 @@
         <p class="dim">Was möchtest du tun?</p>
       </div>
 
-      <!-- Phase 18 Item 5: Quick-Pause / Now-Playing-Widget. -->
+      <!-- Phase 18 Item 5+8: Now-Playing-Widget mit Cover (Display-Mirror in
+           der Hub-Karte selbst — was die Box zeigt + Steuerung in einem). -->
       <div class="card playback-card" id="playback-card">
         <div class="playback-info">
-          <span class="playback-icon" id="playback-icon">⏹</span>
+          <div class="playback-cover-wrap">
+            <img class="playback-cover" id="playback-cover" alt="" hidden>
+            <span class="playback-icon" id="playback-icon">⏹</span>
+          </div>
           <div class="playback-text">
             <div class="playback-title" id="playback-title">—</div>
             <div class="playback-meta" id="playback-meta">Nichts wird abgespielt</div>
@@ -127,11 +131,6 @@
           <span class="hub-card-icon">📊</span>
           <span class="hub-card-title">Hör-Verlauf</span>
           <span class="hub-card-sub" id="hub-card-history-sub">Heute & 7 Tage</span>
-        </a>
-        <a href="#display" class="hub-card" data-section="display">
-          <span class="hub-card-icon">📺</span>
-          <span class="hub-card-title">Display jetzt</span>
-          <span class="hub-card-sub">Was die Box zeigt</span>
         </a>
       </div>
     </section>
@@ -910,23 +909,6 @@
       </div>
     </section>
 
-    <!-- Phase 18 Item 8: Box-Display-Live-Preview — zeigt was die Box auf
-         ihrem Display anzeigt: Cover + Titel + Künstler. -->
-    <section id="screen-display" class="screen" hidden>
-      <div class="card display-mirror" id="display-mirror">
-        <div class="display-frame">
-          <img class="display-cover" id="disp-cover" alt="" hidden>
-          <div class="display-cover-placeholder" id="disp-cover-placeholder">
-            <span class="display-cover-icon" id="disp-cover-icon">⏹</span>
-          </div>
-        </div>
-        <div class="display-text">
-          <div class="display-title" id="disp-now-title">Box ist ruhig</div>
-          <div class="display-artist" id="disp-now-meta">—</div>
-        </div>
-      </div>
-      <p class="dim" id="disp-updated">Aktualisiert alle 5 s.</p>
-    </section>
 
     <!-- Phase 18 Item 4: Hör-Verlauf — Tages-Summary + 7-Tage-Chart + Top-Listen. -->
     <section id="screen-history" class="screen" hidden>
