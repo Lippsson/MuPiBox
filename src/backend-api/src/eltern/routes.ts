@@ -652,6 +652,162 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * GET /api/eltern/wlan/scan  (Phase 18 Item 2)
+   * Returns visible Wi-Fi networks, parsed from `iwlist wlan0 scanning`. We
+   * dedup by SSID (keep the strongest signal) and drop hidden networks
+   * (empty SSID). Slow — iwlist takes ~3-5 s.
+   */
+  router.get('/wlan/scan', requireSession, (_req, res) => {
+    execFile('sudo', ['/usr/sbin/iwlist', 'wlan0', 'scanning'], { timeout: 12000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
+      if (err) {
+        res.status(500).json({ error: `iwlist failed: ${err.message}` })
+        return
+      }
+      const blocks = stdout.split(/Cell \d+ -/)
+      const byBest = new Map<string, { ssid: string; signal_dbm: number; encrypted: boolean }>()
+      for (const blk of blocks) {
+        const ssidMatch = blk.match(/ESSID:"([^"]*)"/)
+        if (!ssidMatch) continue
+        const ssid = ssidMatch[1]
+        if (!ssid) continue // hidden network
+        const sigMatch = blk.match(/Signal level=(-?\d+)\s*dBm/)
+        const signal_dbm = sigMatch ? Number.parseInt(sigMatch[1], 10) : -100
+        const encrypted = /Encryption key:on/.test(blk)
+        const prev = byBest.get(ssid)
+        if (!prev || signal_dbm > prev.signal_dbm) {
+          byBest.set(ssid, { ssid, signal_dbm, encrypted })
+        }
+      }
+      const networks = [...byBest.values()].sort((a, b) => b.signal_dbm - a.signal_dbm)
+      res.json({ networks })
+    })
+  })
+
+  /**
+   * GET /api/eltern/wlan/saved  (Phase 18 Item 2)
+   * Lists wpa_supplicant's saved networks via `wpa_cli list_networks`. The
+   * `[CURRENT]` flag marks which one is connected — the WebApp disables
+   * "remove" on that row so the box can't be locked out via this UI.
+   */
+  router.get('/wlan/saved', requireSession, (_req, res) => {
+    execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'list_networks'], { timeout: 5000 }, (err, stdout) => {
+      if (err) {
+        res.status(500).json({ error: `wpa_cli failed: ${err.message}` })
+        return
+      }
+      const lines = stdout.split('\n')
+      const networks: Array<{ id: number; ssid: string; active: boolean }> = []
+      for (const ln of lines) {
+        // Header line: "network id / ssid / bssid / flags" — skip
+        if (!ln || ln.startsWith('network id')) continue
+        const parts = ln.split('\t')
+        if (parts.length < 2) continue
+        const id = Number.parseInt(parts[0], 10)
+        if (!Number.isFinite(id)) continue
+        const ssid = parts[1] ?? ''
+        const flags = parts[3] ?? ''
+        networks.push({ id, ssid, active: flags.includes('[CURRENT]') })
+      }
+      res.json({ networks })
+    })
+  })
+
+  /**
+   * POST /api/eltern/wlan/add  {ssid, password?}  (Phase 18 Item 2)
+   * Queues a new Wi-Fi entry by writing to wlan.json — same mechanism that
+   * AdminInterface/network.php has used for ages. The add_wifi.sh daemon
+   * polls the file every 2 s, runs `wpa_passphrase` (or appends an open
+   * network if password is empty) and `wpa_cli reconfigure`. The current
+   * connection is NOT touched: wpa_supplicant only switches if the new SSID
+   * is reachable.
+   */
+  router.post('/wlan/add', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { ssid?: unknown; password?: unknown } | undefined) ?? {}
+    const ssid = typeof body.ssid === 'string' ? body.ssid : ''
+    const password = typeof body.password === 'string' ? body.password : ''
+    if (!ssid || ssid.length > 32 || /[\r\n\0]/.test(ssid)) {
+      res.status(400).json({ error: 'ssid must be 1-32 chars, no line breaks or NUL' })
+      return
+    }
+    // WPA/WPA2-PSK: 8-63 chars. Empty = treat as open network.
+    if (password && (password.length < 8 || password.length > 63)) {
+      res.status(400).json({ error: 'password must be empty (open network) or 8-63 chars' })
+      return
+    }
+    const WLAN_FILE = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json'
+    let existing: unknown
+    try {
+      const raw = await fsp.readFile(WLAN_FILE, 'utf8')
+      existing = JSON.parse(raw)
+    } catch {
+      existing = []
+    }
+    const queue = Array.isArray(existing) ? existing : []
+    queue.push({ ssid, pw: password })
+    try {
+      await fsp.writeFile(WLAN_FILE, JSON.stringify(queue, null, 4), 'utf8')
+    } catch (writeErr) {
+      res.status(500).json({ error: `failed to queue wlan: ${(writeErr as Error).message}` })
+      return
+    }
+    res.json({ ok: true, queued_position: queue.length })
+  })
+
+  /**
+   * POST /api/eltern/wlan/remove  {ssid}  (Phase 18 Item 2)
+   * Removes a saved Wi-Fi network via wpa_cli, then persists the config. The
+   * currently-connected network is refused (409) — the no-lockout safeguard
+   * that the user explicitly asked for over a more elaborate test-connect
+   * mechanism (which can't work when the WebApp lives on a separate device).
+   */
+  router.post('/wlan/remove', requireSession, requireCsrf, (req, res) => {
+    const body = (req.body as { ssid?: unknown } | undefined) ?? {}
+    const ssid = typeof body.ssid === 'string' ? body.ssid : ''
+    if (!ssid) {
+      res.status(400).json({ error: 'ssid required' })
+      return
+    }
+    execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'list_networks'], { timeout: 5000 }, (err, stdout) => {
+      if (err) {
+        res.status(500).json({ error: `wpa_cli failed: ${err.message}` })
+        return
+      }
+      let targetId: number | null = null
+      let targetActive = false
+      for (const ln of stdout.split('\n')) {
+        if (!ln || ln.startsWith('network id')) continue
+        const parts = ln.split('\t')
+        if (parts.length < 2) continue
+        if (parts[1] !== ssid) continue
+        targetId = Number.parseInt(parts[0], 10)
+        targetActive = (parts[3] ?? '').includes('[CURRENT]')
+        break
+      }
+      if (targetId === null) {
+        res.status(404).json({ error: 'ssid not in saved networks' })
+        return
+      }
+      if (targetActive) {
+        res.status(409).json({ error: 'refusing to remove the currently-connected network — would lock the box out' })
+        return
+      }
+      execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'remove_network', String(targetId)], { timeout: 5000 }, (rmErr, rmOut) => {
+        if (rmErr || !/OK/.test(rmOut)) {
+          res.status(500).json({ error: `remove_network failed: ${rmErr?.message ?? rmOut.trim()}` })
+          return
+        }
+        execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'save_config'], { timeout: 5000 }, (saveErr, saveOut) => {
+          if (saveErr || !/OK/.test(saveOut)) {
+            res.status(500).json({ error: `save_config failed: ${saveErr?.message ?? saveOut.trim()}` })
+            return
+          }
+          res.json({ ok: true })
+        })
+      })
+    })
+  })
+
+  /**
    * POST /api/eltern/spotify-credentials
    * Persists the user-provided clientId (and optional clientSecret) into
    * mupiboxconfig.json.spotify. This is the wizard-step-3 endpoint that

@@ -1574,24 +1574,142 @@ async function systemShutdown() {
 
 /* ---------- screen: wlan (Phase 15c) ---------- */
 
-/** Read-only WLAN/network status from /api/network (same endpoint the box
- *  frontend's NetworkService uses). No writes — changing the WLAN remotely
- *  could lock the box off the network, so that stays on the box display. */
+/** Status (read-only) + Phase 18 Item 2 management (add/list/remove). The
+ *  active-network is rendered with the remove-button disabled — we can't
+ *  test-roll-back a switch over a network the WebApp is using, so the safer
+ *  pattern is "add only" + "remove inactive only". */
 async function loadWlan() {
   try {
     const res = await fetch('/api/network', { credentials: 'same-origin' })
-    if (!res.ok) return
-    const n = await res.json().catch(() => ({}))
-    const online = n.onlinestate === 'online'
-    setText('#wlan-online', online ? '🟢 Online' : '🔴 Offline')
-    setText('#wlan-ssid', n.wifi || '—')
-    setText('#wlan-signal', n.wifisignal ? `${n.wifisignal}${n.wifilink ? ` · ${n.wifilink}` : ''}` : '—')
-    setText('#wlan-ip', n.ip || '—')
-    setText('#wlan-gateway', n.gateway || '—')
-    setText('#wlan-dns', n.dns || '—')
-    setText('#wlan-subnet', n.subnet || '—')
-    setText('#wlan-mac', n.mac || '—')
-  } catch { /* swallow — section just shows dashes */ }
+    if (res.ok) {
+      const n = await res.json().catch(() => ({}))
+      const online = n.onlinestate === 'online'
+      setText('#wlan-online', online ? '🟢 Online' : '🔴 Offline')
+      setText('#wlan-ssid', n.wifi || '—')
+      setText('#wlan-signal', n.wifisignal ? `${n.wifisignal}${n.wifilink ? ` · ${n.wifilink}` : ''}` : '—')
+      setText('#wlan-ip', n.ip || '—')
+      setText('#wlan-gateway', n.gateway || '—')
+      setText('#wlan-dns', n.dns || '—')
+      setText('#wlan-subnet', n.subnet || '—')
+      setText('#wlan-mac', n.mac || '—')
+    }
+  } catch { /* swallow */ }
+  loadWlanSaved()
+}
+
+async function loadWlanSaved() {
+  const wrap = $('#wlan-saved-list')
+  if (!wrap) return
+  const res = await api(`${API}/wlan/saved`)
+  if (!res.ok) {
+    wrap.innerHTML = `<p class="dim">Lade-Fehler ${res.status}</p>`
+    return
+  }
+  const networks = res.body?.networks ?? []
+  if (!networks.length) {
+    wrap.innerHTML = '<p class="dim">Keine gespeicherten Netze.</p>'
+    return
+  }
+  wrap.innerHTML = ''
+  for (const n of networks) {
+    const row = document.createElement('div')
+    row.className = 'wlan-row' + (n.active ? ' active' : '')
+    const nm = document.createElement('span')
+    nm.className = 'wlan-ssid'
+    nm.textContent = n.ssid
+    const badge = document.createElement('span')
+    badge.className = 'wlan-badge'
+    badge.textContent = n.active ? '✓ aktiv' : ''
+    const rm = document.createElement('button')
+    rm.className = 'ghost'
+    rm.textContent = 'Entfernen'
+    if (n.active) {
+      rm.disabled = true
+      rm.title = 'Aktives Netz — kann nicht entfernt werden'
+    } else {
+      rm.addEventListener('click', () => removeWlan(n.ssid))
+    }
+    row.append(nm, badge, rm)
+    wrap.appendChild(row)
+  }
+}
+
+async function scanWlan() {
+  const btn = $('#wlan-scan-btn')
+  const wrap = $('#wlan-scan-results')
+  if (!wrap) return
+  if (btn) {
+    btn.disabled = true
+    btn.textContent = 'Scannt …'
+  }
+  wrap.hidden = false
+  wrap.innerHTML = '<p class="dim">Scan läuft (~5 s) …</p>'
+  const res = await api(`${API}/wlan/scan`)
+  if (btn) {
+    btn.disabled = false
+    btn.textContent = '📡 Scan'
+  }
+  if (!res.ok) {
+    wrap.innerHTML = `<p class="dim">Scan fehlgeschlagen (${res.status}).</p>`
+    return
+  }
+  const networks = res.body?.networks ?? []
+  if (!networks.length) {
+    wrap.innerHTML = '<p class="dim">Keine Netze in Reichweite gefunden.</p>'
+    return
+  }
+  wrap.innerHTML = ''
+  for (const n of networks) {
+    const row = document.createElement('button')
+    row.type = 'button'
+    row.className = 'wlan-row wlan-scan-row'
+    const nm = document.createElement('span')
+    nm.className = 'wlan-ssid'
+    nm.textContent = `${n.encrypted ? '🔒 ' : ''}${n.ssid}`
+    const sig = document.createElement('span')
+    sig.className = 'wlan-badge'
+    sig.textContent = `${n.signal_dbm} dBm`
+    row.append(nm, sig)
+    row.addEventListener('click', () => {
+      const ssidIn = $('#wlan-add-ssid')
+      const pwIn = $('#wlan-add-password')
+      if (ssidIn) ssidIn.value = n.ssid
+      if (pwIn && n.encrypted) pwIn.focus()
+      else if (pwIn) pwIn.value = ''
+      wrap.hidden = true
+    })
+    wrap.appendChild(row)
+  }
+}
+
+async function addWlan() {
+  const ssid = ($('#wlan-add-ssid')?.value ?? '').trim()
+  const password = $('#wlan-add-password')?.value ?? ''
+  if (!ssid) {
+    feedback('#wlan-add-feedback', 'error', 'Bitte SSID eingeben.')
+    return
+  }
+  const res = await api(`${API}/wlan/add`, { method: 'POST', body: { ssid, password } })
+  if (!res.ok) {
+    feedback('#wlan-add-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  feedback('#wlan-add-feedback', 'success', `„${ssid}" in die Warteschlange — Box probiert die Verbindung in wenigen Sekunden.`)
+  if ($('#wlan-add-ssid')) $('#wlan-add-ssid').value = ''
+  if ($('#wlan-add-password')) $('#wlan-add-password').value = ''
+  // 3 s warten, dann saved-Liste neu laden — der Daemon braucht ~2 s.
+  setTimeout(() => loadWlanSaved(), 3500)
+}
+
+async function removeWlan(ssid) {
+  if (!confirm(`„${ssid}" aus den gespeicherten Netzen entfernen?`)) return
+  const res = await api(`${API}/wlan/remove`, { method: 'POST', body: { ssid } })
+  if (!res.ok) {
+    feedback('#wlan-add-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  feedback('#wlan-add-feedback', 'success', `„${ssid}" entfernt.`)
+  loadWlanSaved()
 }
 
 /* ---------- screen: power (Phase 15i) ---------- */
@@ -2280,6 +2398,8 @@ function wire() {
 
   // WLAN (Phase 15c) — read-only status + manual refresh.
   $('#wlan-refresh-btn')?.addEventListener('click', loadWlan)
+  $('#wlan-add-btn')?.addEventListener('click', addWlan)
+  $('#wlan-scan-btn')?.addEventListener('click', scanWlan)
 
   // System (Phase 15g) — status refresh + reboot/shutdown.
   $('#sys-refresh-btn')?.addEventListener('click', loadSystem)

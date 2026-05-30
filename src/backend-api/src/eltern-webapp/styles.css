@@ -604,6 +604,30 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
 .tg-chat-row input:nth-of-type(2) { flex: 1 1 auto; }
 .tg-chat-row button { flex: 0 0 auto; padding: 8px 12px; }
 
+/* WLAN list rows (Phase 18 Item 2) */
+.wlan-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.wlan-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  text-align: left;
+}
+.wlan-row:first-child { border-top: 0; }
+.wlan-row.active { color: var(--primary); }
+.wlan-ssid { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wlan-badge { flex: 0 0 auto; color: var(--text-dim); font-size: 13px; }
+.wlan-row.active .wlan-badge { color: var(--primary); font-weight: bold; }
+.wlan-row button { flex: 0 0 auto; }
+.wlan-scan-row { cursor: pointer; color: inherit; }
+.wlan-scan-row:hover { background: rgba(255, 255, 255, 0.04); }
+
 /* Bluetooth device rows (Phase 15d) */
 .bt-device-row {
   display: flex;

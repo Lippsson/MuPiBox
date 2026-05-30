@@ -509,7 +509,35 @@
           <span class="dim">MAC</span>
           <span class="value" id="wlan-mac">—</span>
         </div>
-        <p class="dim">WLAN-Netz wechseln/hinzufügen: am Box-Display unter Einstellungen → WiFi. (Remote-Ändern folgt.)</p>
+      </div>
+
+      <!-- Phase 18 Item 2: WLAN-Verwaltung. Add bleibt safe (Box wechselt
+           nicht aktiv), Remove ist für die aktive Verbindung gesperrt. -->
+      <div class="card">
+        <h3>Neues WLAN hinzufügen</h3>
+        <p class="dim">Box bleibt im aktuellen Netz. wpa_supplicant wechselt erst, wenn das neue Netz reachable ist.</p>
+        <div class="form-row">
+          <label for="wlan-add-ssid">SSID</label>
+          <input type="text" id="wlan-add-ssid" maxlength="32" autocomplete="off">
+        </div>
+        <div class="form-row">
+          <label for="wlan-add-password">Passwort (8–63 Zeichen, leer = offenes Netz)</label>
+          <input type="password" id="wlan-add-password" autocomplete="new-password">
+        </div>
+        <div class="actions">
+          <button class="primary" id="wlan-add-btn">Hinzufügen</button>
+          <button class="ghost" id="wlan-scan-btn">📡 Scan</button>
+        </div>
+        <div id="wlan-scan-results" class="wlan-list" hidden></div>
+        <div id="wlan-add-feedback" class="feedback" hidden></div>
+      </div>
+
+      <div class="card">
+        <h3>Gespeicherte Netze</h3>
+        <p class="dim">Die aktive Verbindung kann nicht entfernt werden — sonst wäre die Box danach offline.</p>
+        <div id="wlan-saved-list" class="wlan-list">
+          <p class="dim">Lade…</p>
+        </div>
       </div>
     </section>
 
