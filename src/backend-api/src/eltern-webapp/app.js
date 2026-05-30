@@ -1700,8 +1700,8 @@ async function loadPlayback() {
 function renderPlayback(b) {
   const icon = $('#playback-icon')
   const cover = $('#playback-cover')
-  const pauseBtn = $('#playback-pause-btn')
-  const playBtn = $('#playback-play-btn')
+  const toggleBtn = $('#playback-toggle-btn')
+  const toggleIcon = $('#playback-toggle-icon')
   const stopBtn = $('#playback-stop-btn')
   const progressWrap = $('#playback-progress')
   const progressFill = $('#playback-progress-fill')
@@ -1727,22 +1727,29 @@ function renderPlayback(b) {
     if (icon) icon.textContent = '▶'
     setText('#playback-title', b.title || '(läuft)')
     setText('#playback-meta', `${b.artist || ''}${b.artist && b.album ? ' · ' : ''}${b.album || ''}` || 'Wird abgespielt')
-    if (pauseBtn) pauseBtn.hidden = false
-    if (playBtn) playBtn.hidden = true
+    if (toggleBtn) {
+      toggleBtn.hidden = false
+      toggleBtn.dataset.state = 'playing'
+      toggleBtn.setAttribute('aria-label', 'Pause')
+    }
+    if (toggleIcon) toggleIcon.textContent = '⏸'
     if (stopBtn) stopBtn.hidden = false
   } else if (b.title || b.artist) {
     if (icon) icon.textContent = '⏸'
     setText('#playback-title', b.title || '—')
     setText('#playback-meta', `${b.artist || ''}${b.artist && b.album ? ' · ' : ''}${b.album || ''}` || 'Pausiert')
-    if (pauseBtn) pauseBtn.hidden = true
-    if (playBtn) playBtn.hidden = false
+    if (toggleBtn) {
+      toggleBtn.hidden = false
+      toggleBtn.dataset.state = 'paused'
+      toggleBtn.setAttribute('aria-label', 'Abspielen')
+    }
+    if (toggleIcon) toggleIcon.textContent = '▶'
     if (stopBtn) stopBtn.hidden = false
   } else {
     if (icon) icon.textContent = '⏹'
     setText('#playback-title', 'Box ist ruhig')
     setText('#playback-meta', 'Nichts wird abgespielt')
-    if (pauseBtn) pauseBtn.hidden = true
-    if (playBtn) playBtn.hidden = true
+    if (toggleBtn) toggleBtn.hidden = true
     if (stopBtn) stopBtn.hidden = true
   }
 
@@ -2973,8 +2980,10 @@ function wire() {
   $('#audio-save-btn')?.addEventListener('click', saveAudioConfig)
 
   // Quick-Pause (Phase 18 Item 5)
-  $('#playback-pause-btn')?.addEventListener('click', () => playbackAction('pause'))
-  $('#playback-play-btn')?.addEventListener('click', () => playbackAction('play'))
+  $('#playback-toggle-btn')?.addEventListener('click', (e) => {
+    const state = e.currentTarget.dataset.state
+    playbackAction(state === 'playing' ? 'pause' : 'play')
+  })
   $('#playback-stop-btn')?.addEventListener('click', () => playbackAction('stop'))
 
   // Confirm-Dialog (Welle 4) — OK/Cancel-Buttons + Backdrop-Click + Esc.
