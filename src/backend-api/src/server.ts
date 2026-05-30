@@ -1981,7 +1981,19 @@ app.get('/eltern', buildElternLandingHandler())
 // Static WebApp assets (HTML/CSS/JS). The landing handler above runs
 // first and either redeems a token (-> redirect) or calls next() so the
 // static middleware below serves the shell.
-app.use('/eltern', express.static(path.join(__dirname, 'eltern-webapp')))
+app.use(
+  '/eltern',
+  express.static(path.join(__dirname, 'eltern-webapp'), {
+    // ETag bleibt aktiv, aber keine implizite Browser-Cache-Frist: bei
+    // jedem Request wird via If-None-Match revalidiert. 304 wenn nichts
+    // neu — kostet wenig und stellt sicher dass neu deployte HTML/JS
+    // sofort ankommen statt im aggressiven Mobile-Browser-Cache zu
+    // hängen.
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-cache')
+    },
+  }),
+)
 
 // Catch-all handler: send back Angular's index.html file for any non-API routes
 // This must be placed after all API routes but before starting the server
