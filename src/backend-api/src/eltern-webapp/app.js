@@ -46,7 +46,7 @@ const SECTIONS = {
   system:    { title: 'System',              parent: 'hub', loader: () => loadSystem() },
   theme:     { title: 'Theme',               parent: 'hub', loader: () => loadTheme() },
   history:   { title: 'Hör-Verlauf',         parent: 'hub', loader: () => loadHistory() },
-  display:   { title: 'Display jetzt',       parent: 'hub', loader: () => loadDisplay() },
+  display:   { title: 'Live-Status',         parent: 'hub', loader: () => loadDisplay() },
 }
 
 /** Switch to a screen — hides all .screen sections, shows the requested

@@ -925,28 +925,44 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       }
       const local = (await localRes.json()) as Record<string, unknown>
       const player = String(local.currentPlayer ?? '')
-      const playing =
-        (player === 'mplayer' && local.playing === true) ||
-        (player === 'spotify' && local.pause === false && !!local.currentTrackname)
-      // For Spotify we can fetch a nicer artist+title from /state.
-      let title = String(local.currentTrackname ?? '')
+
+      // The /local fields (playing, currentTrackname, album) are mplayer-side
+      // and stay empty during Spotify playback. For Spotify the canonical
+      // truth is /state.is_playing + /state.item.* — that's the
+      // getMyCurrentPlaybackState response from the Spotify API.
+      let playing = false
+      let title = ''
       let artist = ''
-      const album = String(local.album ?? '')
-      if (player === 'spotify' && playing) {
+      let album = ''
+      if (player === 'mplayer') {
+        playing = local.playing === true
+        title = String(local.currentTrackname ?? '')
+        album = String(local.album ?? '')
+      } else if (player === 'spotify') {
         try {
           const stateRes = await fetch('http://127.0.0.1:5005/state', { signal: AbortSignal.timeout(3000) })
           if (stateRes.ok) {
             const state = (await stateRes.json()) as {
-              item?: { name?: string; artists?: Array<{ name?: string }>; show?: { name?: string } }
+              is_playing?: boolean
+              item?: {
+                name?: string
+                artists?: Array<{ name?: string }>
+                album?: { name?: string }
+                show?: { name?: string; publisher?: string }
+              }
             }
+            playing = state.is_playing === true
             if (state.item?.name) title = String(state.item.name)
-            if (state.item?.show?.name) artist = String(state.item.show.name)
-            else if (Array.isArray(state.item?.artists) && state.item.artists[0]?.name) {
+            if (state.item?.album?.name) album = String(state.item.album.name)
+            if (state.item?.show?.name) {
+              artist = String(state.item.show.name)
+              if (!album && state.item.show.publisher) album = String(state.item.show.publisher)
+            } else if (Array.isArray(state.item?.artists) && state.item.artists[0]?.name) {
               artist = String(state.item.artists[0].name)
             }
           }
         } catch {
-          /* fall back to local-derived values */
+          /* state fetch failed → stays not-playing */
         }
       }
       res.json({
