@@ -1172,6 +1172,7 @@ select:focus, textarea:focus {
   cursor: pointer;
   transition: transform 80ms, background var(--motion-fast), box-shadow var(--motion-fast);
 }
+.playback-actions button[hidden] { display: none; }
 .playback-actions button:active { transform: scale(0.93); }
 
 .playback-btn-main {
