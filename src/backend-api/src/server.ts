@@ -437,6 +437,111 @@ async function updateMupiboxConfig(mutate: (cfg: Record<string, unknown>) => voi
   mupiboxConfigCache = undefined
 }
 
+// === Phase 18 Item 4: Play-Log poller =========================================
+// Records what's playing on the box by polling the player's own HTTP API on
+// localhost:5005 every 10 s. State machine emits "start" when something new
+// begins playing and "stop" (with duration) when it ends or changes. We
+// deliberately do NOT modify spotify-control.js — that runs the audio and
+// must stay rock-solid.
+
+const PLAY_LOG_PATH = '/home/dietpi/.mupibox/play_log.jsonl'
+const PLAY_LOG_POLL_MS = 10_000
+const PLAYER_HOST = 'http://127.0.0.1:5005'
+
+let lastPlayFingerprint: string | null = null
+let lastPlayStartTs: number | null = null
+let lastPlayMeta: { source: string; title: string; artist: string; album: string } | null = null
+
+async function fetchCurrentPlayerState(): Promise<
+  { fingerprint: string | null; meta: typeof lastPlayMeta } | null
+> {
+  try {
+    const localRes = await fetch(`${PLAYER_HOST}/local`, { signal: AbortSignal.timeout(4000) })
+    if (!localRes.ok) return null
+    const local = (await localRes.json()) as Record<string, unknown>
+    // Player playing if mplayer says so (playing:true) OR spotify says it's
+    // not paused. currentTrackname empty means nothing real to log.
+    const player = String(local.currentPlayer ?? '')
+    const playing =
+      (player === 'mplayer' && local.playing === true) ||
+      (player === 'spotify' && local.pause === false)
+    if (!playing) return { fingerprint: null, meta: null }
+
+    const source = String(local.currentType ?? 'unknown')
+    let title = String(local.currentTrackname ?? '')
+    let artist = ''
+    const album = String(local.album ?? '')
+
+    if (player === 'spotify') {
+      try {
+        const stateRes = await fetch(`${PLAYER_HOST}/state`, { signal: AbortSignal.timeout(4000) })
+        if (stateRes.ok) {
+          const state = (await stateRes.json()) as {
+            item?: { name?: string; artists?: Array<{ name?: string }>; show?: { name?: string } }
+          }
+          if (state.item?.name) title = String(state.item.name)
+          if (state.item?.show?.name) artist = String(state.item.show.name)
+          else if (Array.isArray(state.item?.artists) && state.item.artists[0]?.name) {
+            artist = String(state.item.artists[0].name)
+          }
+        }
+      } catch {
+        // keep currentMeta-derived values
+      }
+    }
+    if (!title) return { fingerprint: null, meta: null }
+    const fingerprint = `${source}|${artist}|${album}|${title}`
+    return { fingerprint, meta: { source, title, artist, album } }
+  } catch {
+    return null
+  }
+}
+
+function appendPlayLogLine(entry: Record<string, unknown>): void {
+  fs.appendFile(PLAY_LOG_PATH, `${JSON.stringify(entry)}\n`, (err) => {
+    if (err) console.warn(`${new Date().toLocaleString()}: [play-log] append failed: ${err.message}`)
+  })
+}
+
+async function tickPlayLog(): Promise<void> {
+  const state = await fetchCurrentPlayerState()
+  if (state === null) return // transient — skip this tick
+  const now = Date.now()
+  if (state.fingerprint === lastPlayFingerprint) return // no change
+
+  if (lastPlayFingerprint !== null && lastPlayStartTs !== null && lastPlayMeta !== null) {
+    appendPlayLogLine({
+      ts: new Date(now).toISOString(),
+      event: 'stop',
+      duration_seconds: Math.max(0, Math.round((now - lastPlayStartTs) / 1000)),
+      ...lastPlayMeta,
+    })
+  }
+  if (state.fingerprint !== null && state.meta !== null) {
+    appendPlayLogLine({
+      ts: new Date(now).toISOString(),
+      event: 'start',
+      ...state.meta,
+    })
+    lastPlayFingerprint = state.fingerprint
+    lastPlayStartTs = now
+    lastPlayMeta = state.meta
+  } else {
+    lastPlayFingerprint = null
+    lastPlayStartTs = null
+    lastPlayMeta = null
+  }
+}
+
+function startPlayLogPoller(): void {
+  const timer = setInterval(() => {
+    void tickPlayLog()
+  }, PLAY_LOG_POLL_MS)
+  if (typeof timer.unref === 'function') timer.unref()
+}
+
+// === End Phase 18 Item 4 =======================================================
+
 // Logical-day computation must match the player's `getLogicalDay` so `todayBonus`
 // works consistently across processes (resetHour shifts when "today" begins).
 function computeLogicalDate(now: Date, resetHour: number): string {
@@ -1817,6 +1922,11 @@ if (!testServe) {
   startScheduler(spotifySyncDeps)
   // Eltern-WebApp rate-limit map cleanup tick.
   startBucketCleanup()
+  // Phase 18 Item 4: Play-Log poller — sniffs localhost:5005 (the player's
+  // own HTTP API) every 10 s and writes a jsonl log of track-starts/-stops
+  // so the Eltern-WebApp can show what was played today / this week. No
+  // player change needed — zero risk to audio.
+  startPlayLogPoller()
   // Phase 18 Item 1: apply mupibox.startupVolume on backend-api start so the
   // box doesn't pick up wherever the last session left off (which can be loud
   // — especially after a charge cycle when the kid had cranked it up). The

@@ -107,6 +107,11 @@
           <span class="hub-card-title">Theme</span>
           <span class="hub-card-sub">Display-Aussehen</span>
         </a>
+        <a href="#history" class="hub-card" data-section="history">
+          <span class="hub-card-icon">📊</span>
+          <span class="hub-card-title">Hör-Verlauf</span>
+          <span class="hub-card-sub" id="hub-card-history-sub">Heute & 7 Tage</span>
+        </a>
       </div>
     </section>
 
@@ -864,6 +869,35 @@
         </ul>
         <div class="actions">
           <button class="primary" id="wizard-finish-btn">Fertig → Zum Dashboard</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Phase 18 Item 4: Hör-Verlauf — Tages-Summary + 7-Tage-Chart + Top-Listen. -->
+    <section id="screen-history" class="screen" hidden>
+      <div class="card">
+        <h3>Heute</h3>
+        <div class="hist-headline">
+          <span class="hist-mins" id="hist-today-mins">— Min</span>
+          <span class="dim" id="hist-today-count">— Titel</span>
+        </div>
+        <p class="dim" id="hist-today-top">—</p>
+      </div>
+      <div class="card">
+        <h3>Letzte 7 Tage</h3>
+        <div id="hist-week-chart" class="hist-chart"></div>
+        <p class="dim" id="hist-week-summary">—</p>
+      </div>
+      <div class="card">
+        <h3>Top Künstler (7 Tage)</h3>
+        <div id="hist-top-artists">
+          <p class="dim">Lade …</p>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Top Titel (7 Tage)</h3>
+        <div id="hist-top-titles">
+          <p class="dim">Lade …</p>
         </div>
       </div>
     </section>

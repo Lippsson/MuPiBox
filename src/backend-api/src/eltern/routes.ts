@@ -808,6 +808,132 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * GET /api/eltern/playlog?range=today|week  (Phase 18 Item 4)
+   * Reads the play_log.jsonl that the backend-api's own poller writes and
+   * aggregates by track / artist / day. No DB — just walking the file once
+   * per request, which is fine until the daughter listens to a few thousand
+   * tracks (~MB-range jsonl). Pairs start/stop entries; an unpaired tail
+   * "start" is the currently-playing track (we extrapolate its duration to
+   * "now" so the Heute-Karte shows recent minutes immediately).
+   */
+  router.get('/playlog', requireSession, (req, res) => {
+    const range = String(req.query.range ?? 'today')
+    if (range !== 'today' && range !== 'week') {
+      res.status(400).json({ error: 'range must be today or week' })
+      return
+    }
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const cutoffMs = range === 'today' ? todayStart.getTime() : now.getTime() - 7 * 24 * 3600 * 1000
+
+    let raw = ''
+    try {
+      raw = readFileSync('/home/dietpi/.mupibox/play_log.jsonl', 'utf8')
+    } catch {
+      // file may not exist yet — return empty result
+    }
+    type Entry = {
+      ts: string
+      event: 'start' | 'stop'
+      source?: string
+      title?: string
+      artist?: string
+      album?: string
+      duration_seconds?: number
+    }
+    const entries: Entry[] = []
+    for (const ln of raw.split('\n')) {
+      if (!ln) continue
+      try {
+        const e = JSON.parse(ln) as Entry
+        if (Date.parse(e.ts) >= cutoffMs) entries.push(e)
+      } catch {
+        /* skip malformed line */
+      }
+    }
+
+    type Play = { tsMs: number; source: string; title: string; artist: string; album: string; duration: number }
+    const plays: Play[] = []
+    let pending: { tsMs: number; source: string; title: string; artist: string; album: string } | null = null
+    for (const e of entries) {
+      if (e.event === 'start') {
+        if (pending !== null) {
+          // orphan start (no stop recorded — e.g. backend-api restarted mid-track).
+          // Extrapolate up to the new start's ts so the gap is attributed to it.
+          plays.push({ ...pending, duration: Math.max(0, Math.round((Date.parse(e.ts) - pending.tsMs) / 1000)) })
+        }
+        pending = {
+          tsMs: Date.parse(e.ts),
+          source: e.source ?? '',
+          title: e.title ?? '',
+          artist: e.artist ?? '',
+          album: e.album ?? '',
+        }
+      } else if (e.event === 'stop' && pending !== null) {
+        plays.push({ ...pending, duration: e.duration_seconds ?? 0 })
+        pending = null
+      }
+    }
+    if (pending !== null) {
+      // Currently still playing — extrapolate to now so today's number reflects reality.
+      plays.push({ ...pending, duration: Math.max(0, Math.round((Date.now() - pending.tsMs) / 1000)) })
+    }
+
+    const totalSeconds = plays.reduce((s, p) => s + p.duration, 0)
+    const totalMinutes = Math.round(totalSeconds / 60)
+    const trackCount = plays.length
+
+    const artistMap = new Map<string, { name: string; seconds: number; count: number }>()
+    for (const p of plays) {
+      const key = p.artist || '(unbekannt)'
+      const cur = artistMap.get(key) ?? { name: key, seconds: 0, count: 0 }
+      cur.seconds += p.duration
+      cur.count += 1
+      artistMap.set(key, cur)
+    }
+    const topArtists = [...artistMap.values()]
+      .sort((a, b) => b.seconds - a.seconds)
+      .slice(0, 5)
+      .map((a) => ({ name: a.name, minutes: Math.round(a.seconds / 60), count: a.count }))
+
+    const titleMap = new Map<string, { title: string; artist: string; seconds: number; count: number }>()
+    for (const p of plays) {
+      const key = `${p.artist}|${p.title}`
+      const cur = titleMap.get(key) ?? { title: p.title, artist: p.artist, seconds: 0, count: 0 }
+      cur.seconds += p.duration
+      cur.count += 1
+      titleMap.set(key, cur)
+    }
+    const topTitles = [...titleMap.values()]
+      .sort((a, b) => b.seconds - a.seconds)
+      .slice(0, 5)
+      .map((t) => ({ title: t.title, artist: t.artist, minutes: Math.round(t.seconds / 60), count: t.count }))
+
+    const dateKey = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const timeline: Array<{ date: string; minutes: number }> = []
+    if (range === 'today') {
+      timeline.push({ date: dateKey(todayStart), minutes: totalMinutes })
+    } else {
+      const dayBuckets = new Map<string, number>()
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(todayStart.getTime() - i * 24 * 3600 * 1000)
+        dayBuckets.set(dateKey(d), 0)
+      }
+      for (const p of plays) {
+        const d = new Date(p.tsMs)
+        const key = dateKey(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+        if (dayBuckets.has(key)) dayBuckets.set(key, (dayBuckets.get(key) ?? 0) + p.duration / 60)
+      }
+      for (const [date, mins] of dayBuckets) {
+        timeline.push({ date, minutes: Math.round(mins) })
+      }
+    }
+
+    res.json({ range, totalMinutes, trackCount, topArtists, topTitles, timeline })
+  })
+
+  /**
    * GET /api/eltern/theme  (Phase 18 Item 3)
    * Returns the current theme + the whitelist of installed themes from
    * mupibox.installedThemes (35+ themes registered by conf_update.sh on box

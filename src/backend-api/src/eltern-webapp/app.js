@@ -45,6 +45,7 @@ const SECTIONS = {
   telegram:  { title: 'Telegram',            parent: 'hub', loader: () => loadTelegram() },
   system:    { title: 'System',              parent: 'hub', loader: () => loadSystem() },
   theme:     { title: 'Theme',               parent: 'hub', loader: () => loadTheme() },
+  history:   { title: 'Hör-Verlauf',         parent: 'hub', loader: () => loadHistory() },
 }
 
 /** Switch to a screen — hides all .screen sections, shows the requested
@@ -1530,6 +1531,87 @@ async function clearPassword() {
   state.passwordConfigured = !!res.body?.configured
   renderPasswordStatus()
   feedback('#pw-feedback', 'success', 'Passwort entfernt.')
+}
+
+/* ---------- Hör-Verlauf (Phase 18 Item 4) ---------- */
+
+async function loadHistory() {
+  // Two parallel fetches: today summary + 7-day stats with charts.
+  const [today, week] = await Promise.all([
+    api(`${API}/playlog?range=today`),
+    api(`${API}/playlog?range=week`),
+  ])
+  if (today.ok) renderHistoryToday(today.body ?? {})
+  if (week.ok) renderHistoryWeek(week.body ?? {})
+}
+
+function renderHistoryToday(d) {
+  setText('#hist-today-mins', `${d.totalMinutes ?? 0} Min`)
+  setText('#hist-today-count', `${d.trackCount ?? 0} Titel`)
+  const top = (d.topArtists ?? []).slice(0, 3).map((a) => `${a.name} (${a.minutes} Min)`).join(' · ')
+  setText('#hist-today-top', top || 'Heute noch nichts gespielt.')
+}
+
+function renderHistoryWeek(d) {
+  // Tagesbalken (Mini-SVG): pro-Tag-Minuten, lineare Skala, ohne Lib.
+  const tl = d.timeline ?? []
+  const wrap = $('#hist-week-chart')
+  if (wrap) {
+    wrap.innerHTML = ''
+    if (!tl.length) {
+      wrap.innerHTML = '<p class="dim">Keine Daten.</p>'
+    } else {
+      const max = Math.max(1, ...tl.map((x) => x.minutes))
+      const dayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+      for (const day of tl) {
+        const bar = document.createElement('div')
+        bar.className = 'hist-bar'
+        const fill = document.createElement('div')
+        fill.className = 'hist-bar-fill'
+        fill.style.height = `${Math.max(2, Math.round((day.minutes / max) * 100))}%`
+        fill.title = `${day.date}: ${day.minutes} Min`
+        const lbl = document.createElement('span')
+        lbl.className = 'hist-bar-label'
+        const dt = new Date(day.date)
+        lbl.textContent = dayNames[dt.getDay()]
+        const val = document.createElement('span')
+        val.className = 'hist-bar-value'
+        val.textContent = day.minutes
+        bar.append(fill, val, lbl)
+        wrap.appendChild(bar)
+      }
+    }
+  }
+  setText('#hist-week-summary', `Insgesamt ${d.totalMinutes ?? 0} Min in ${d.trackCount ?? 0} Titeln.`)
+
+  const ta = $('#hist-top-artists')
+  if (ta) {
+    const arts = d.topArtists ?? []
+    if (!arts.length) ta.innerHTML = '<p class="dim">Noch keine Daten.</p>'
+    else {
+      ta.innerHTML = ''
+      for (const a of arts) {
+        const row = document.createElement('div')
+        row.className = 'hist-row'
+        row.innerHTML = `<span class="hist-row-name">${escapeHtml(a.name)}</span><span class="hist-row-meta">${a.minutes} Min · ${a.count}×</span>`
+        ta.appendChild(row)
+      }
+    }
+  }
+  const tt = $('#hist-top-titles')
+  if (tt) {
+    const tits = d.topTitles ?? []
+    if (!tits.length) tt.innerHTML = '<p class="dim">Noch keine Daten.</p>'
+    else {
+      tt.innerHTML = ''
+      for (const t of tits) {
+        const row = document.createElement('div')
+        row.className = 'hist-row'
+        row.innerHTML = `<span class="hist-row-name">${escapeHtml(t.title)}<span class="dim"> — ${escapeHtml(t.artist || '')}</span></span><span class="hist-row-meta">${t.minutes} Min · ${t.count}×</span>`
+        tt.appendChild(row)
+      }
+    }
+  }
 }
 
 /* ---------- Theme-Switcher (Phase 18 Item 3) ---------- */
