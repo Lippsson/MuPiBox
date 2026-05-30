@@ -808,6 +808,79 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * GET /api/eltern/playback  (Phase 18 Item 5)
+   * Snapshot of what's playing on the box (current track + paused/playing
+   * state). Just proxies the player's own /local — same data the box's
+   * frontend already gets from it.
+   */
+  router.get('/playback', requireSession, async (_req, res) => {
+    try {
+      const localRes = await fetch('http://127.0.0.1:5005/local', { signal: AbortSignal.timeout(3000) })
+      if (!localRes.ok) {
+        res.status(502).json({ error: 'player unreachable' })
+        return
+      }
+      const local = (await localRes.json()) as Record<string, unknown>
+      const player = String(local.currentPlayer ?? '')
+      const playing =
+        (player === 'mplayer' && local.playing === true) ||
+        (player === 'spotify' && local.pause === false && !!local.currentTrackname)
+      // For Spotify we can fetch a nicer artist+title from /state.
+      let title = String(local.currentTrackname ?? '')
+      let artist = ''
+      const album = String(local.album ?? '')
+      if (player === 'spotify' && playing) {
+        try {
+          const stateRes = await fetch('http://127.0.0.1:5005/state', { signal: AbortSignal.timeout(3000) })
+          if (stateRes.ok) {
+            const state = (await stateRes.json()) as {
+              item?: { name?: string; artists?: Array<{ name?: string }>; show?: { name?: string } }
+            }
+            if (state.item?.name) title = String(state.item.name)
+            if (state.item?.show?.name) artist = String(state.item.show.name)
+            else if (Array.isArray(state.item?.artists) && state.item.artists[0]?.name) {
+              artist = String(state.item.artists[0].name)
+            }
+          }
+        } catch {
+          /* fall back to local-derived values */
+        }
+      }
+      res.json({
+        playing,
+        player,
+        source: String(local.currentType ?? ''),
+        title,
+        artist,
+        album,
+        volume: typeof local.volume === 'number' ? local.volume : null,
+      })
+    } catch (err) {
+      res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
+    }
+  })
+
+  /** POST /api/eltern/playback/pause|play|stop  (Phase 18 Item 5)
+   *  Quick-Pause / Quick-Play / Quick-Stop. Just forwards to the player's
+   *  HTTP API on localhost:5005, where the corresponding command handler
+   *  already exists (used by the box display + Telegram bot). No state
+   *  duplicated on the backend-api side. */
+  for (const action of ['pause', 'play', 'stop'] as const) {
+    router.post(`/playback/${action}`, requireSession, requireCsrf, async (_req, res) => {
+      try {
+        const r = await fetch(`http://127.0.0.1:5005/${action}`, { signal: AbortSignal.timeout(3000) })
+        if (!r.ok) {
+          res.status(502).json({ error: `player rejected ${action} (HTTP ${r.status})` })
+          return
+        }
+        res.json({ ok: true, action })
+      } catch (err) {
+        res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
+      }
+    })
+  }
+
+  /**
    * GET /api/eltern/playlog?range=today|week  (Phase 18 Item 4)
    * Reads the play_log.jsonl that the backend-api's own poller writes and
    * aggregates by track / artist / day. No DB — just walking the file once

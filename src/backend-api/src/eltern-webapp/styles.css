@@ -604,6 +604,15 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
 .tg-chat-row input:nth-of-type(2) { flex: 1 1 auto; }
 .tg-chat-row button { flex: 0 0 auto; padding: 8px 12px; }
 
+/* Quick-Pause hub widget (Phase 18 Item 5) */
+.playback-card { display: flex; flex-direction: column; gap: 12px; }
+.playback-info { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.playback-icon { font-size: 28px; flex: 0 0 auto; }
+.playback-text { flex: 1 1 auto; min-width: 0; }
+.playback-title { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playback-meta { color: var(--text-dim); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playback-actions { justify-content: flex-end; }
+
 /* Hör-Verlauf chart + rows (Phase 18 Item 4) */
 .hist-headline { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
 .hist-mins { font-size: 28px; font-weight: bold; color: var(--primary); }

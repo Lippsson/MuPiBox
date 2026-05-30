@@ -1533,6 +1533,73 @@ async function clearPassword() {
   feedback('#pw-feedback', 'success', 'Passwort entfernt.')
 }
 
+/* ---------- Quick-Pause / Now-Playing (Phase 18 Item 5) ---------- */
+
+let playbackPollHandle = null
+
+async function loadPlayback() {
+  if (playbackPollHandle) {
+    clearTimeout(playbackPollHandle)
+    playbackPollHandle = null
+  }
+  let res
+  try {
+    res = await api(`${API}/playback`)
+  } catch {
+    return
+  }
+  if (!res.ok) {
+    setText('#playback-title', '—')
+    setText('#playback-meta', 'Status nicht verfügbar')
+    return
+  }
+  const b = res.body ?? {}
+  renderPlayback(b)
+  // Self-schedule next poll while still on hub.
+  if (state.currentSection === 'hub') {
+    playbackPollHandle = setTimeout(loadPlayback, 5000)
+  }
+}
+
+function renderPlayback(b) {
+  const icon = $('#playback-icon')
+  const pauseBtn = $('#playback-pause-btn')
+  const playBtn = $('#playback-play-btn')
+  const stopBtn = $('#playback-stop-btn')
+  if (b.playing) {
+    if (icon) icon.textContent = '▶'
+    setText('#playback-title', b.title || '(läuft)')
+    setText('#playback-meta', `${b.artist || ''}${b.artist && b.album ? ' · ' : ''}${b.album || ''}` || 'Wird abgespielt')
+    if (pauseBtn) pauseBtn.hidden = false
+    if (playBtn) playBtn.hidden = true
+    if (stopBtn) stopBtn.hidden = false
+  } else if (b.title || b.artist) {
+    if (icon) icon.textContent = '⏸'
+    setText('#playback-title', b.title || '—')
+    setText('#playback-meta', b.artist || 'Pausiert')
+    if (pauseBtn) pauseBtn.hidden = true
+    if (playBtn) playBtn.hidden = false
+    if (stopBtn) stopBtn.hidden = false
+  } else {
+    if (icon) icon.textContent = '⏹'
+    setText('#playback-title', 'Box ist ruhig')
+    setText('#playback-meta', 'Nichts wird abgespielt')
+    if (pauseBtn) pauseBtn.hidden = true
+    if (playBtn) playBtn.hidden = true
+    if (stopBtn) stopBtn.hidden = true
+  }
+}
+
+async function playbackAction(action) {
+  const res = await api(`${API}/playback/${action}`, { method: 'POST' })
+  if (!res.ok) {
+    alert(`Aktion ${action} fehlgeschlagen: ${res.body?.error ?? res.status}`)
+    return
+  }
+  // Kurze Verzögerung, damit der Player den Zustand übernommen hat, dann refresh.
+  setTimeout(loadPlayback, 600)
+}
+
 /* ---------- Hör-Verlauf (Phase 18 Item 4) ---------- */
 
 async function loadHistory() {
@@ -2012,6 +2079,7 @@ async function stopSleepTimer() {
  *  shows battery %. Other cards stay descriptive — they'll be wired
  *  with real data in 15c/d/f/g once their backends exist. */
 async function loadHub() {
+  loadPlayback() // Phase 18 Item 5: top Now-Playing card
   // Sync-Card sub: last sync + counts. Fail silently — hub overview
   // shouldn't break if the sync endpoint hiccups.
   try {
@@ -2569,6 +2637,11 @@ function wire() {
     if (row) row.style.opacity = on ? '1' : '0.5'
   })
   $('#audio-save-btn')?.addEventListener('click', saveAudioConfig)
+
+  // Quick-Pause (Phase 18 Item 5)
+  $('#playback-pause-btn')?.addEventListener('click', () => playbackAction('pause'))
+  $('#playback-play-btn')?.addEventListener('click', () => playbackAction('play'))
+  $('#playback-stop-btn')?.addEventListener('click', () => playbackAction('stop'))
 
   // Telegram (Phase 15f) — config editor.
   $('#tg-back-btn')?.addEventListener('click', () => navigate('hub'))
