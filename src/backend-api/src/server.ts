@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process'
+import { exec, execFile } from 'node:child_process'
 import dns from 'node:dns'
 import fs from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -1817,4 +1817,24 @@ if (!testServe) {
   startScheduler(spotifySyncDeps)
   // Eltern-WebApp rate-limit map cleanup tick.
   startBucketCleanup()
+  // Phase 18 Item 1: apply mupibox.startupVolume on backend-api start so the
+  // box doesn't pick up wherever the last session left off (which can be loud
+  // — especially after a charge cycle when the kid had cranked it up). The
+  // 1.5 s delay lets the audio subsystem settle on a cold boot.
+  setTimeout(() => {
+    try {
+      const v = (getMupiboxConfigSync()?.mupibox as { startupVolume?: number } | undefined)?.startupVolume
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100) {
+        execFile('/usr/bin/amixer', ['sset', 'Master', `${Math.floor(v)}%`], { timeout: 3000 }, (err) => {
+          if (err) {
+            console.warn(`${new Date().toLocaleString()}: [startup-volume] amixer failed: ${err.message}`)
+          } else {
+            console.log(`${new Date().toLocaleString()}: [startup-volume] applied ${Math.floor(v)}%`)
+          }
+        })
+      }
+    } catch (err) {
+      console.warn(`${new Date().toLocaleString()}: [startup-volume] error: ${(err as Error).message}`)
+    }
+  }, 1500).unref?.()
 }

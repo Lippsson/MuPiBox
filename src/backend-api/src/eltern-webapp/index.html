@@ -622,6 +622,35 @@
       </div>
 
       <div class="card">
+        <h3>Audio</h3>
+        <div class="status-row">
+          <span class="dim">Aktuelle Lautstärke</span>
+          <span class="value" id="audio-current">—</span>
+        </div>
+        <div class="form-row">
+          <label for="audio-volume">Jetzt setzen — <span id="audio-volume-out" class="dim">—</span> %</label>
+          <input type="range" id="audio-volume" min="0" max="100" step="5" value="50">
+        </div>
+        <div class="form-row">
+          <label for="audio-max">Hörschutz / Maximum — <span id="audio-max-out" class="dim">90</span> %</label>
+          <input type="range" id="audio-max" min="10" max="100" step="5" value="90">
+          <p class="dim">Begrenzt, wie laut die Box wird — gilt für Display, WebApp und Box-Slider.</p>
+        </div>
+        <div class="form-row">
+          <label><input type="checkbox" id="audio-startup-enable"> Beim Box-Start auf festen Wert setzen</label>
+        </div>
+        <div class="form-row" id="audio-startup-row">
+          <label for="audio-startup">Startup-Wert — <span id="audio-startup-out" class="dim">30</span> %</label>
+          <input type="range" id="audio-startup" min="0" max="100" step="5" value="30">
+          <p class="dim">Sonst behält die Box den Wert von vor dem Abschalten.</p>
+        </div>
+        <div class="actions">
+          <button class="primary" id="audio-save-btn">Maximum + Startup speichern</button>
+        </div>
+        <div id="audio-feedback" class="feedback" hidden></div>
+      </div>
+
+      <div class="card">
         <h3>Eltern-Passwort</h3>
         <p class="dim">Optional. Mit gesetztem Passwort kannst du dich nach Sitzungsablauf direkt anmelden — ohne neuen Magic-Link. Magic-Link funktioniert weiterhin ohne Passwort.</p>
         <div class="status-row">

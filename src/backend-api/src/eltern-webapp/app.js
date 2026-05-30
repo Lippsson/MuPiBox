@@ -1386,6 +1386,108 @@ async function loadSystem() {
     }
   }
   renderPasswordStatus()
+  loadAudio()
+}
+
+/* ---------- Audio (Phase 18 Item 1) ---------- */
+
+let audioVolumeDebounce = null
+
+async function loadAudio() {
+  let res = await api(`${API}/audio`)
+  if (res.status === 503) {
+    // Config briefly not loaded right after pm2 restart — retry once.
+    await new Promise((r) => setTimeout(r, 500))
+    res = await api(`${API}/audio`)
+  }
+  if (!res.ok) return
+  const a = res.body ?? {}
+  setText('#audio-current', Number.isFinite(a.current) ? `${a.current} %` : '—')
+
+  const live = $('#audio-volume')
+  if (live && Number.isFinite(a.current)) {
+    live.value = a.current
+    setText('#audio-volume-out', a.current)
+  }
+  const max = $('#audio-max')
+  if (max && Number.isFinite(a.maxVolume)) {
+    max.value = a.maxVolume
+    setText('#audio-max-out', a.maxVolume)
+  }
+  const en = $('#audio-startup-enable')
+  const startup = $('#audio-startup')
+  const startupRow = $('#audio-startup-row')
+  const startupEnabled = Number.isFinite(a.startupVolume)
+  if (en) en.checked = startupEnabled
+  if (startup) {
+    startup.value = startupEnabled ? a.startupVolume : 30
+    setText('#audio-startup-out', startupEnabled ? a.startupVolume : 30)
+    startup.disabled = !startupEnabled
+  }
+  if (startupRow) startupRow.style.opacity = startupEnabled ? '1' : '0.5'
+}
+
+/** Debounced live setter: only POST 250 ms after the user stops dragging
+ *  so we don't spam amixer with every intermediate value. */
+function setLiveVolume(v) {
+  if (audioVolumeDebounce) clearTimeout(audioVolumeDebounce)
+  audioVolumeDebounce = setTimeout(async () => {
+    let res = await api(`${API}/audio/volume`, { method: 'POST', body: { volume: v } })
+    if (res.status === 503) {
+      await new Promise((r) => setTimeout(r, 500))
+      res = await api(`${API}/audio/volume`, { method: 'POST', body: { volume: v } })
+    }
+    if (!res.ok) {
+      feedback('#audio-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+      return
+    }
+    const applied = res.body?.applied ?? v
+    setText('#audio-current', `${applied} %`)
+    if (res.body?.capped) {
+      feedback('#audio-feedback', 'info', `Vom Hörschutz auf ${applied} % begrenzt.`)
+      const sl = $('#audio-volume')
+      if (sl) {
+        sl.value = applied
+        setText('#audio-volume-out', applied)
+      }
+    } else {
+      const fb = $('#audio-feedback')
+      if (fb) fb.hidden = true
+    }
+  }, 250)
+}
+
+async function saveAudioConfig() {
+  const max = Math.floor(Number($('#audio-max').value))
+  const startupEnabled = $('#audio-startup-enable').checked
+  const startupVal = startupEnabled ? Math.floor(Number($('#audio-startup').value)) : null
+  if (!Number.isFinite(max) || max < 10 || max > 100) {
+    feedback('#audio-feedback', 'error', 'Hörschutz muss zwischen 10 und 100 % liegen.')
+    return
+  }
+  if (startupEnabled && (!Number.isFinite(startupVal) || startupVal < 0 || startupVal > 100)) {
+    feedback('#audio-feedback', 'error', 'Startup-Wert muss zwischen 0 und 100 % liegen.')
+    return
+  }
+  if (startupEnabled && startupVal > max) {
+    feedback('#audio-feedback', 'error', `Startup-Wert ${startupVal} % > Hörschutz ${max} % — bitte senken oder Hörschutz heben.`)
+    return
+  }
+  const res = await api(`${API}/audio/config`, {
+    method: 'POST',
+    body: { maxVolume: max, startupVolume: startupVal },
+  })
+  if (!res.ok) {
+    feedback('#audio-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  feedback(
+    '#audio-feedback',
+    'success',
+    startupVal != null
+      ? `Gespeichert. Hörschutz ${max} %, Startup ${startupVal} %.`
+      : `Gespeichert. Hörschutz ${max} %, Startup deaktiviert.`,
+  )
 }
 
 /** Reflect state.passwordConfigured in the System Eltern-Passwort card. */
@@ -2189,6 +2291,27 @@ function wire() {
   $('#login-password')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') doLogin()
   })
+
+  // Audio (Phase 18 Item 1)
+  $('#audio-volume')?.addEventListener('input', (e) => {
+    const v = Number(e.target.value)
+    setText('#audio-volume-out', v)
+    setLiveVolume(v)
+  })
+  $('#audio-max')?.addEventListener('input', (e) => {
+    setText('#audio-max-out', Number(e.target.value))
+  })
+  $('#audio-startup')?.addEventListener('input', (e) => {
+    setText('#audio-startup-out', Number(e.target.value))
+  })
+  $('#audio-startup-enable')?.addEventListener('change', (e) => {
+    const on = e.target.checked
+    const startup = $('#audio-startup')
+    const row = $('#audio-startup-row')
+    if (startup) startup.disabled = !on
+    if (row) row.style.opacity = on ? '1' : '0.5'
+  })
+  $('#audio-save-btn')?.addEventListener('click', saveAudioConfig)
 
   // Telegram (Phase 15f) — config editor.
   $('#tg-back-btn')?.addEventListener('click', () => navigate('hub'))

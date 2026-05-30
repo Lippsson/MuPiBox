@@ -539,6 +539,119 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * GET /api/eltern/audio  (Phase 18 Item 1)
+   * Returns the live ALSA Master volume, the configured hearing-protection
+   * cap (`mupibox.maxVolume`), and the optional startup default
+   * (`mupibox.startupVolume`, null if disabled). Live value comes from amixer
+   * and may be off by a tick when the kid spins the touchscreen dial.
+   */
+  router.get('/audio', requireSession, (_req, res) => {
+    // Defensive: getMupiboxConfig() can briefly return undefined right after
+    // pm2 restart or while updateMupiboxConfig is mid-cp (cache cleared, file
+    // potentially partially written so the readFileSync fallback also fails).
+    // Returning fallback values from here would lie about the cap — the cap
+    // check below would think the limit is 100 % and let any volume through.
+    // 503 so the caller retries instead.
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      res.status(503).json({ error: 'config not yet loaded, please retry' })
+      return
+    }
+    execFile('/usr/bin/amixer', ['sget', 'Master'], { timeout: 3000 }, (err, stdout) => {
+      let current: number | null = null
+      if (!err && stdout) {
+        // Output varies by sound card: `Right:`, `Front Right:`, or `Mono:`.
+        // Match the bracketed percent anywhere in the output instead.
+        const m = stdout.match(/\[(\d+)%\]/)
+        if (m) current = Number.parseInt(m[1], 10)
+      }
+      const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+      const maxVolume = typeof mb.maxVolume === 'number' ? mb.maxVolume : 100
+      const startupVolume = typeof mb.startupVolume === 'number' ? mb.startupVolume : null
+      res.json({ current, maxVolume, startupVolume })
+    })
+  })
+
+  /**
+   * POST /api/eltern/audio/volume  {volume}  (Phase 18 Item 1)
+   * Live volume control. Server-side clamps to the configured maxVolume cap
+   * so a parent in the WebApp can't go above the hearing-protection limit
+   * (matches the player's own cap enforcement for touchscreen volume-up).
+   */
+  router.post('/audio/volume', requireSession, requireCsrf, (req, res) => {
+    const body = (req.body as { volume?: unknown } | undefined) ?? {}
+    const raw = Number(body.volume)
+    if (!Number.isFinite(raw) || raw < 0 || raw > 100) {
+      res.status(400).json({ error: 'volume must be a number between 0 and 100' })
+      return
+    }
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      // Same defence as GET /audio: without a loaded config we don't know the
+      // cap, so refuse rather than silently let any volume through.
+      res.status(503).json({ error: 'config not yet loaded, please retry' })
+      return
+    }
+    const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+    const cap = typeof mb.maxVolume === 'number' ? mb.maxVolume : 100
+    const requested = Math.floor(raw)
+    const applied = Math.min(requested, cap)
+    execFile('/usr/bin/amixer', ['sset', 'Master', `${applied}%`], { timeout: 3000 }, (err) => {
+      if (err) {
+        res.status(500).json({ error: `amixer failed: ${err.message}` })
+        return
+      }
+      res.json({ ok: true, applied, capped: applied < requested })
+    })
+  })
+
+  /**
+   * POST /api/eltern/audio/config  {maxVolume?, startupVolume?}  (Phase 18 Item 1)
+   * Persist the hearing-protection cap and/or the startup-default volume.
+   * `startupVolume: null` removes the startup default (so the box keeps
+   * wherever the last session left off). Cap is min 10 % to avoid an
+   * accidentally-muted box that looks broken.
+   */
+  router.post('/audio/config', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { maxVolume?: unknown; startupVolume?: unknown } | undefined) ?? {}
+    const mutations: { maxVolume?: number; startupVolume?: number | null } = {}
+    if (body.maxVolume !== undefined) {
+      const v = Number(body.maxVolume)
+      if (!Number.isFinite(v) || v < 10 || v > 100) {
+        res.status(400).json({ error: 'maxVolume must be a number between 10 and 100' })
+        return
+      }
+      mutations.maxVolume = Math.floor(v)
+    }
+    if (body.startupVolume !== undefined) {
+      if (body.startupVolume === null) {
+        mutations.startupVolume = null
+      } else {
+        const v = Number(body.startupVolume)
+        if (!Number.isFinite(v) || v < 0 || v > 100) {
+          res.status(400).json({ error: 'startupVolume must be a number between 0 and 100, or null' })
+          return
+        }
+        mutations.startupVolume = Math.floor(v)
+      }
+    }
+    if (Object.keys(mutations).length === 0) {
+      res.status(400).json({ error: 'no recognised fields in body' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const mb = ((cfg.mupibox as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      if (mutations.maxVolume !== undefined) mb.maxVolume = mutations.maxVolume
+      if (mutations.startupVolume !== undefined) {
+        if (mutations.startupVolume === null) delete mb.startupVolume
+        else mb.startupVolume = mutations.startupVolume
+      }
+      cfg.mupibox = mb
+    })
+    res.json({ ok: true, applied: mutations })
+  })
+
+  /**
    * POST /api/eltern/spotify-credentials
    * Persists the user-provided clientId (and optional clientSecret) into
    * mupiboxconfig.json.spotify. This is the wizard-step-3 endpoint that
