@@ -133,11 +133,144 @@ function setText(sel, text) {
 }
 
 function feedback(sel, kind, text) {
+  // Phase 19 Welle 4: Inline-Feedback gibt's nur noch für Sektionen, die
+  // ein dediziertes Feld haben (z.B. Login, Add-Sheet). Alles andere wird
+  // automatisch als Toast ausgespielt, damit die Meldung nicht in einer
+  // Karte versteckt unten dranklebt und auf Hub-Ebene gesehen wird.
   const el = $(sel)
-  if (!el) return
+  if (!el || !document.body.contains(el)) {
+    toast(kind, text)
+    return
+  }
   el.hidden = false
   el.className = `feedback ${kind}`
   el.textContent = text
+}
+
+/** Welle 4 — Toast-System. Globaler Container unten Mitte. Erlaubt
+ *  Stapelung; auto-hide nach 3.5 s (Fehler 5 s); manuell früher
+ *  schliessbar via Tap. Icons: ✓ ! i ⚠. */
+function toast(kind, text, opts = {}) {
+  const stack = $('#toast-stack')
+  if (!stack) return
+  const el = document.createElement('div')
+  el.className = `toast ${kind}`
+  el.setAttribute('role', kind === 'error' ? 'alert' : 'status')
+  const ic = document.createElement('span')
+  ic.className = 'toast-icon'
+  ic.setAttribute('aria-hidden', 'true')
+  ic.textContent = kind === 'success' ? '✓' : kind === 'error' ? '!' : kind === 'warn' ? '⚠' : 'i'
+  const tx = document.createElement('span')
+  tx.className = 'toast-text'
+  tx.textContent = text
+  el.append(ic, tx)
+  el.addEventListener('click', () => dismissToast(el))
+  stack.appendChild(el)
+  const ttl = opts.duration ?? (kind === 'error' ? 5000 : 3500)
+  setTimeout(() => dismissToast(el), ttl)
+}
+function dismissToast(el) {
+  if (!el || el.classList.contains('is-hiding')) return
+  el.classList.add('is-hiding')
+  setTimeout(() => el.remove(), 250)
+}
+
+/** Welle 4 — confirmDialog im Sheet-System, ersetzt native confirm().
+ *  Liefert ein Promise<boolean>. `destructive: true` färbt OK rot. */
+let _confirmResolve = null
+function confirmDialog(title, body, opts = {}) {
+  const back = $('#confirm-backdrop')
+  const sheet = back?.querySelector('.confirm-sheet')
+  const okBtn = $('#confirm-ok-btn')
+  const cancelBtn = $('#confirm-cancel-btn')
+  if (!back || !sheet || !okBtn || !cancelBtn) return Promise.resolve(window.confirm(`${title}\n\n${body}`))
+  setText('#confirm-title', title)
+  setText('#confirm-body', body || '')
+  okBtn.textContent = opts.confirmLabel ?? 'OK'
+  cancelBtn.textContent = opts.cancelLabel ?? 'Abbrechen'
+  sheet.classList.toggle('is-destructive', !!opts.destructive)
+  back.hidden = false
+  return new Promise((resolve) => {
+    _confirmResolve = resolve
+    setTimeout(() => okBtn.focus(), 50)
+  })
+}
+function _confirmClose(result) {
+  const back = $('#confirm-backdrop')
+  if (back) back.hidden = true
+  const r = _confirmResolve
+  _confirmResolve = null
+  if (r) r(result)
+}
+
+/** Welle 5 — Empty-State-HTML-Snippet. icon ist optional Emoji,
+ *  text der Hauptsatz. Mit ctaLabel + ctaHref/ctaOnClick optional Button. */
+function emptyStateHtml(icon, text) {
+  return `<div class="empty-state"><div class="empty-state-icon" aria-hidden="true">${icon ?? '·'}</div><div class="empty-state-text">${text ?? ''}</div></div>`
+}
+
+/** Welle 5 — Skelett-Linien. n = Anzahl Zeilen. */
+function skeletonLines(n = 3) {
+  let s = ''
+  for (let i = 0; i < n; i++) s += '<div class="skeleton skeleton-line"></div>'
+  return s
+}
+
+/** Welle 6 — Range-Slider-Fill: aktualisiert --range-pct anhand des
+ *  aktuellen Werts, damit der Track links vom Thumb farbig wird (WebKit
+ *  hat keine native progress-pseudo). Wird beim Init für alle Slider
+ *  einmalig gebunden + dann via 'input'-Event live nachgeführt. */
+function updateRangeFill(input) {
+  if (!input) return
+  const min = Number(input.min) || 0
+  const max = Number(input.max) || 100
+  const val = Number(input.value) || 0
+  const pct = max > min ? ((val - min) / (max - min)) * 100 : 0
+  input.style.setProperty('--range-pct', `${pct}%`)
+}
+function initRangeFills() {
+  document.querySelectorAll('input[type="range"]').forEach((inp) => {
+    updateRangeFill(inp)
+    inp.addEventListener('input', () => updateRangeFill(inp))
+  })
+}
+
+/* ---------- Welle 7 — Format-Helpers ---------- */
+
+/** Sekunden → "12:34" (mm:ss) für Countdowns / Progress.
+ *  Über 60 min: "1:23:45" (hh:mm:ss). */
+function fmtDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '—'
+  const s = Math.floor(seconds % 60)
+  const m = Math.floor(seconds / 60) % 60
+  const h = Math.floor(seconds / 3600)
+  const pad = (n) => String(n).padStart(2, '0')
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
+}
+
+/** Sekunden → "45 Min" / "1 h 23 min" für tageshäppchen-Anzeige
+ *  (Hör-Verlauf, Cap-Status). */
+function fmtMinutes(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '—'
+  const totalMin = Math.round(seconds / 60)
+  if (totalMin < 60) return `${totalMin} Min`
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return m > 0 ? `${h} h ${m} min` : `${h} h`
+}
+
+/** Date/ISO → "HH:MM" lokal, fürs Schnellzeigen. */
+function fmtClock(d) {
+  if (!d) return '—'
+  const date = d instanceof Date ? d : new Date(d)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+}
+
+/** mV → "8.30 V" für die Akku-Anzeige. */
+function fmtVoltage(mV) {
+  if (!Number.isFinite(mV)) return '—'
+  return `${(mV / 1000).toFixed(2)} V`
 }
 
 function formatRelative(isoString) {
@@ -359,7 +492,7 @@ function openLibraryEditSheet(item) {
       closeLibraryEditSheet()
       await loadLibrary()
     } else {
-      alert(`Speichern fehlgeschlagen (${res.status}).`)
+      toast('error', `Speichern fehlgeschlagen (${res.status}).`)
     }
   })
   actions.appendChild(saveBtn)
@@ -368,7 +501,7 @@ function openLibraryEditSheet(item) {
     delBtn.className = 'danger'
     delBtn.textContent = 'Löschen'
     delBtn.addEventListener('click', async () => {
-      if (!confirm(`„${updated_or_label(item)}" wirklich löschen?`)) return
+      if (!(await confirmDialog(`„${updated_or_label(item)}" löschen?`, 'Der Eintrag verschwindet aus der Box-Library.', { destructive: true, confirmLabel: 'Löschen' }))) return
       const res = await fetch('/api/delete', {
         method: 'POST',
         credentials: 'same-origin',
@@ -379,7 +512,7 @@ function openLibraryEditSheet(item) {
         closeLibraryEditSheet()
         await loadLibrary()
       } else {
-        alert(`Löschen fehlgeschlagen (${res.status}).`)
+        toast('error', `Löschen fehlgeschlagen (${res.status}).`)
       }
     })
     actions.appendChild(delBtn)
@@ -896,7 +1029,7 @@ function makeSubscribeArtistBtn(artistId, name) {
 
 async function subscribeArtistFromSearch(artistId, name, btn) {
   const category = $('#search-add-category')?.value || 'audiobook'
-  if (!confirm(`Alle Alben von „${name}" abonnieren? Bereich (Folge von–bis) und einzelne Alben kannst du danach in der Bibliothek unter „Verwaltete Inhalte" anpassen.`)) {
+  if (!(await confirmDialog(`„${name}" abonnieren?`, 'Alle Alben des Künstlers werden hinzugefügt. Bereich (Folge von–bis) und einzelne Alben passt du danach in der Bibliothek unter „Verwaltete Inhalte" an.', { confirmLabel: 'Abonnieren' }))) {
     return
   }
   if (btn) {
@@ -1016,7 +1149,7 @@ function renderSubscriptions(data) {
 }
 
 async function unsubscribeArtist(artistId, name) {
-  if (!confirm(`„${name}" und alle zugehörigen Alben aus der Box entfernen?`)) return
+  if (!(await confirmDialog(`„${name}" entfernen?`, 'Der Künstler und alle zugehörigen Alben werden aus der Box entfernt.', { destructive: true, confirmLabel: 'Entfernen' }))) return
   const res = await api(`${API}/library/unsubscribe-artist`, { method: 'POST', body: { artistId } })
   if (!res.ok) {
     feedback('#managed-feedback', 'error', `Fehler ${res.status}`)
@@ -1028,7 +1161,7 @@ async function unsubscribeArtist(artistId, name) {
 }
 
 async function removeAlbum(albumId, name) {
-  if (!confirm(`„${name}" aus der Box entfernen?`)) return
+  if (!(await confirmDialog(`„${name}" entfernen?`, 'Das Album verschwindet aus der Box.', { destructive: true, confirmLabel: 'Entfernen' }))) return
   const res = await api(`${API}/library/remove-album`, { method: 'POST', body: { albumId } })
   if (!res.ok) {
     feedback('#managed-feedback', 'error', `Fehler ${res.status}`)
@@ -1269,7 +1402,7 @@ async function btPair(mac, name, btn) {
 }
 
 async function btRemove(mac, name) {
-  if (!confirm(`"${name}" entkoppeln?`)) return
+  if (!(await confirmDialog(`„${name}" entkoppeln?`, 'Das Bluetooth-Gerät wird von der Box gelöst.', { destructive: true, confirmLabel: 'Entkoppeln' }))) return
   const res = await api(`${API}/bluetooth/remove`, { method: 'POST', body: { mac } })
   if (res.ok) {
     feedback('#bt-feedback', 'success', `"${name}" entkoppelt.`)
@@ -1410,11 +1543,13 @@ async function loadAudio() {
   if (live && Number.isFinite(a.current)) {
     live.value = a.current
     setText('#audio-volume-out', a.current)
+    updateRangeFill(live)
   }
   const max = $('#audio-max')
   if (max && Number.isFinite(a.maxVolume)) {
     max.value = a.maxVolume
     setText('#audio-max-out', a.maxVolume)
+    updateRangeFill(max)
   }
   const en = $('#audio-startup-enable')
   const startup = $('#audio-startup')
@@ -1425,6 +1560,7 @@ async function loadAudio() {
     startup.value = startupEnabled ? a.startupVolume : 30
     setText('#audio-startup-out', startupEnabled ? a.startupVolume : 30)
     startup.disabled = !startupEnabled
+    updateRangeFill(startup)
   }
   if (startupRow) startupRow.style.opacity = startupEnabled ? '1' : '0.5'
 }
@@ -1522,7 +1658,7 @@ async function setPassword() {
 }
 
 async function clearPassword() {
-  if (!confirm('Eltern-Passwort wirklich entfernen? Danach geht der Zugang nur noch über Magic-Link.')) return
+  if (!(await confirmDialog('Eltern-Passwort entfernen?', 'Danach geht der Zugang nur noch über Magic-Link.', { destructive: true, confirmLabel: 'Entfernen' }))) return
   const res = await api(`${API}/password`, { method: 'POST', body: { password: '' } })
   if (!res.ok) {
     feedback('#pw-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
@@ -1567,12 +1703,18 @@ function renderPlayback(b) {
   const pauseBtn = $('#playback-pause-btn')
   const playBtn = $('#playback-play-btn')
   const stopBtn = $('#playback-stop-btn')
+  const progressWrap = $('#playback-progress')
+  const progressFill = $('#playback-progress-fill')
 
-  // Cover-Bild: wenn vorhanden, zeigen + Icon ausblenden. Sonst Icon
-  // als Status-Glyph (▶/⏸/⏹).
+  // Cover-Bild: wenn vorhanden, zeigen + Icon ausblenden. Wechsel sanft
+  // via Opacity damit das Bild nicht flackert.
   if (b.coverUrl) {
     if (cover) {
-      if (cover.src !== b.coverUrl) cover.src = b.coverUrl
+      if (cover.src !== b.coverUrl) {
+        cover.style.opacity = '0'
+        cover.src = b.coverUrl
+        cover.onload = () => { cover.style.opacity = '1' }
+      }
       cover.hidden = false
     }
     if (icon) icon.hidden = true
@@ -1603,12 +1745,23 @@ function renderPlayback(b) {
     if (playBtn) playBtn.hidden = true
     if (stopBtn) stopBtn.hidden = true
   }
+
+  // Progress-Bar: nur sichtbar wenn wir Dauer kennen und etwas läuft/pausiert.
+  if (progressWrap && progressFill) {
+    if (Number.isFinite(b.progressMs) && Number.isFinite(b.durationMs) && b.durationMs > 0) {
+      const pct = Math.max(0, Math.min(100, (b.progressMs / b.durationMs) * 100))
+      progressFill.style.width = `${pct}%`
+      progressWrap.hidden = false
+    } else {
+      progressWrap.hidden = true
+    }
+  }
 }
 
 async function playbackAction(action) {
   const res = await api(`${API}/playback/${action}`, { method: 'POST' })
   if (!res.ok) {
-    alert(`Aktion ${action} fehlgeschlagen: ${res.body?.error ?? res.status}`)
+    toast('error', `Aktion ${action} fehlgeschlagen: ${res.body?.error ?? res.status}`)
     return
   }
   // Kurze Verzögerung, damit der Player den Zustand übernommen hat, dann refresh.
@@ -1740,7 +1893,7 @@ async function loadTheme() {
 }
 
 async function applyTheme(theme) {
-  if (!confirm(`Theme auf „${theme}" umstellen? Wird beim nächsten Box-Display-Reload sichtbar.`)) return
+  if (!(await confirmDialog(`Theme auf „${theme}" wechseln?`, 'Wird beim nächsten Box-Display-Reload sichtbar.', { confirmLabel: 'Anwenden' }))) return
   const res = await api(`${API}/theme`, { method: 'POST', body: { theme } })
   if (!res.ok) {
     feedback('#theme-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
@@ -1780,13 +1933,13 @@ async function doLogin() {
 }
 
 async function systemReboot() {
-  if (!confirm('Box wirklich neu starten? Dauert ~1 Minute, die WebApp verliert kurz die Verbindung.')) return
+  if (!(await confirmDialog('Box neu starten?', 'Dauert ~1 Minute. Die WebApp verliert kurz die Verbindung.', { destructive: true, confirmLabel: 'Neustart' }))) return
   feedback('#sys-feedback', 'success', 'Neustart wird ausgelöst …')
   await fetch('/api/reboot', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
 }
 
 async function systemShutdown() {
-  if (!confirm('Box wirklich ausschalten? Sie muss danach am Gerät wieder eingeschaltet werden.')) return
+  if (!(await confirmDialog('Box ausschalten?', 'Sie muss danach am Gerät selbst wieder eingeschaltet werden.', { destructive: true, confirmLabel: 'Ausschalten' }))) return
   feedback('#sys-feedback', 'success', 'Ausschalten wird ausgelöst …')
   await fetch('/api/shutdown', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
 }
@@ -1921,7 +2074,7 @@ async function addWlan() {
 }
 
 async function removeWlan(ssid) {
-  if (!confirm(`„${ssid}" aus den gespeicherten Netzen entfernen?`)) return
+  if (!(await confirmDialog(`„${ssid}" entfernen?`, 'Das gespeicherte Netz wird aus wpa_supplicant gelöscht.', { destructive: true, confirmLabel: 'Entfernen' }))) return
   const res = await api(`${API}/wlan/remove`, { method: 'POST', body: { ssid } })
   if (!res.ok) {
     feedback('#wlan-add-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
@@ -2023,8 +2176,8 @@ async function loadPowerLive() {
       }
     }
     setText('#power-state', charging ? 'Wird geladen' : (body?.Bat_Stat ?? body?.Charger_Status ?? '—'))
-    setText('#power-vbat', body?.Vbat ? `${body.Vbat} mV` : '—')
-    setText('#power-vbus', body?.Vbus ? `${body.Vbus} mV` : '—')
+    setText('#power-vbat', body?.Vbat ? fmtVoltage(body.Vbat) : '—')
+    setText('#power-vbus', body?.Vbus ? fmtVoltage(body.Vbus) : '—')
     setText('#power-ibat', typeof body?.Ibat === 'number' ? `${body.Ibat} mA` : '—')
     setText('#power-temp', typeof body?.Temp === 'number' ? `${body.Temp} °C` : '—')
     setText('#power-chargerstatus', body?.Charger_Status ?? '—')
@@ -2055,7 +2208,7 @@ async function saveBatteryProfile() {
   const vreg = Number($('#pwr-prof-vreg')?.value)
   // VREG-Sicherheits-Confirm: zu hoch = Akku-Schaden. Frag explizit nach.
   if (Number.isFinite(vreg) && vreg > 8400) {
-    if (!confirm(`VREG ${vreg} mV ist HOCH (> 8400 mV) — bei 2S-Li-Ion kann das die Zellen schädigen. Sicher übernehmen?`)) {
+    if (!(await confirmDialog(`VREG ${vreg} mV ist hoch`, 'Über 8400 mV kann bei 2S-Li-Ion die Zellen schädigen. Bist du sicher?', { destructive: true, confirmLabel: 'Trotzdem speichern' }))) {
       return
     }
   }
@@ -2122,14 +2275,10 @@ async function loadSleepTimer() {
       const b = res.body ?? {}
       if (b.active) {
         const rem = Number(b.remaining_seconds) || 0
-        const mins = Math.floor(rem / 60)
-        const secs = rem % 60
         const until = b.until_iso ? new Date(b.until_iso) : null
-        const untilText = until
-          ? ` (um ${until.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr)`
-          : ''
+        const untilText = until ? ` (um ${fmtClock(until)} Uhr)` : ''
         if (statusEl) {
-          statusEl.textContent = `Aktiv — Box schaltet in ${mins}:${String(secs).padStart(2, '0')} aus${untilText}`
+          statusEl.textContent = `Aktiv — Box schaltet in ${fmtDuration(rem)} aus${untilText}`
         }
         if (stopBtn) stopBtn.hidden = false
         intervalMs = 5000
@@ -2169,7 +2318,7 @@ async function startSleepTimer() {
 }
 
 async function stopSleepTimer() {
-  if (!confirm('Schlaftimer wirklich stoppen?')) return
+  if (!(await confirmDialog('Schlaftimer stoppen?', 'Die Box läuft danach weiter wie gewohnt.', { confirmLabel: 'Stoppen' }))) return
   const res = await api(`${API}/sleeptimer/stop`, { method: 'POST' })
   if (!res.ok) {
     feedback('#sleeptimer-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
@@ -2187,6 +2336,7 @@ async function stopSleepTimer() {
  *  with real data in 15c/d/f/g once their backends exist. */
 async function loadHub() {
   loadPlayback() // Phase 18 Item 5: top Now-Playing card
+  loadStatusBand() // Phase 19 Welle 2: 4-Chip Live-Status oberhalb Grid
   // Sync-Card sub: last sync + counts. Fail silently — hub overview
   // shouldn't break if the sync endpoint hiccups.
   try {
@@ -2225,6 +2375,88 @@ async function loadHub() {
       }
     }
   } catch { /* swallow */ }
+}
+
+/** Live-Status-Band (Welle 2). Vier Chips: Akku, Cap, Quiet, Netz.
+ *  Aggregiert in einem Promise.all, färbt jeden Chip nach Zustand
+ *  (ok/warn/danger). Pollt nicht; loadHub() ruft das beim Eintritt
+ *  und das Playback-Polling stösst es indirekt nicht an — bewusst, damit
+ *  der Band nicht ständig flackert. */
+async function loadStatusBand() {
+  const [hat, pt, net] = await Promise.all([
+    fetch('/api/mupihat', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    fetch('/api/playtime', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    fetch('/api/network', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+  ])
+
+  // Akku-Chip
+  const chipBat = $('a[href="#power"].status-chip') // nimmt den ersten Battery-Chip
+  if (chipBat) {
+    let pct = hat?.Bat_Percent
+    if (!Number.isFinite(pct)) pct = Number.parseInt(String(hat?.Bat_SOC ?? '').replace('%', ''), 10)
+    const charging = (hat?.IBus ?? 0) > 0
+    chipBat.classList.remove('is-ok', 'is-warn', 'is-danger', 'is-active')
+    if (Number.isFinite(pct)) {
+      setText('#status-chip-battery', `${charging ? '⚡' : ''}${pct}%`)
+      if (pct <= 15) chipBat.classList.add('is-danger')
+      else if (pct <= 30) chipBat.classList.add('is-warn')
+      else if (charging) chipBat.classList.add('is-active')
+    } else {
+      setText('#status-chip-battery', '—')
+    }
+  }
+
+  // Cap-Chip
+  const ptB = pt?.playtime ?? {}
+  const chipCap = $('a[href="#caps"].status-chip:nth-of-type(2)')
+  if (chipCap) {
+    chipCap.classList.remove('is-ok', 'is-warn', 'is-danger')
+    if (ptB.enabled) {
+      const used = Math.floor((ptB.usedSeconds ?? 0) / 60)
+      const limit = ptB.limitMinutes ?? '?'
+      setText('#status-chip-cap', `${used}/${limit}`)
+      if (ptB.state === 'blocked') chipCap.classList.add('is-danger')
+      else if (ptB.state === 'grace') chipCap.classList.add('is-warn')
+    } else {
+      setText('#status-chip-cap', 'aus')
+      chipCap.classList.add('is-warn')
+    }
+  }
+
+  // Quiet-Chip
+  const qh = pt?.quiet ?? {}
+  const chipQuiet = $('#status-chip-quiet')?.closest('.status-chip')
+  if (chipQuiet) {
+    chipQuiet.classList.remove('is-ok', 'is-warn', 'is-danger')
+    if (qh.enabled) {
+      if (qh.state === 'blocked') {
+        setText('#status-chip-quiet', qh.label || 'Ruhe')
+        chipQuiet.classList.add('is-warn')
+      } else if (qh.state === 'grace') {
+        setText('#status-chip-quiet', 'Karenz')
+        chipQuiet.classList.add('is-warn')
+      } else {
+        setText('#status-chip-quiet', 'frei')
+      }
+    } else {
+      setText('#status-chip-quiet', 'aus')
+    }
+  }
+
+  // Netz-Chip
+  const chipNet = $('#status-chip-net')?.closest('.status-chip')
+  if (chipNet) {
+    chipNet.classList.remove('is-ok', 'is-warn', 'is-danger')
+    if (net?.onlinestate === 'online' && net?.wifi) {
+      setText('#status-chip-net', net.wifi)
+    } else if (net?.wifi) {
+      setText('#status-chip-net', net.wifi + ' (offline)')
+      chipNet.classList.add('is-danger')
+    } else {
+      setText('#status-chip-net', 'offline')
+      chipNet.classList.add('is-danger')
+    }
+  }
 }
 
 /* ---------- screen: sync (Phase 14, formerly 'dashboard') ---------- */
@@ -2326,7 +2558,7 @@ async function promoteConflict(conflict) {
     feedback('#sync-feedback', 'error', 'Konflikt-Identifier unvollständig.')
     return
   }
-  if (!confirm(`„${conflict.manualArtist ?? '?'} – ${conflict.manualTitle ?? '?'}" vom Sync verwalten lassen?\n\nAb sofort werden Titel/Cover/Artist vom Sync aktualisiert. Deine Overrides bleiben erhalten.`)) {
+  if (!(await confirmDialog(`„${conflict.manualArtist ?? '?'} – ${conflict.manualTitle ?? '?'}" vom Sync verwalten lassen?`, 'Ab sofort werden Titel/Cover/Artist vom Sync aktualisiert. Deine Overrides bleiben erhalten.', { confirmLabel: 'Übergeben' }))) {
     return
   }
   const res = await api(`${SYNC_API}/conflicts/promote`, {
@@ -2371,15 +2603,8 @@ async function fireSyncTrigger() {
   return { kind: 'info', text: 'Sync folgt beim nächsten Lauf' }
 }
 
-/** Short local time for sync-status lines. */
-function fmtTimeShort(iso) {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return '—'
-  }
-}
+/** Welle 7: alias auf fmtClock — keeps existing call sites. */
+const fmtTimeShort = fmtClock
 
 /** Library "Letzter Sync"-Zeile aktualisieren (beim Betreten + nach Läufen). */
 async function loadSyncStatus() {
@@ -2482,7 +2707,7 @@ async function connectSpotify() {
 }
 
 async function disconnectSpotify() {
-  if (!confirm('Spotify-Verbindung trennen? Smart-Sync wird gestoppt.')) return
+  if (!(await confirmDialog('Spotify-Verbindung trennen?', 'Smart-Sync wird gestoppt.', { destructive: true, confirmLabel: 'Trennen' }))) return
   const res = await api(`${API}/spotify-oauth/disconnect`, { method: 'POST' })
   if (res.ok) {
     await loadSync()
@@ -2591,7 +2816,7 @@ function updateWizardExamples() {
 async function wizardSaveClientId() {
   const clientId = $('#wizard-client-id').value.trim()
   if (!clientId || !/^[a-zA-Z0-9]+$/.test(clientId) || clientId.length < 16) {
-    alert('Bitte eine gültige Client ID einfügen (mind. 16 Zeichen, nur Buchstaben + Zahlen).')
+    toast('warn', 'Bitte eine gültige Client ID einfügen (mind. 16 Zeichen, nur Buchstaben + Zahlen).')
     return
   }
   // Optional Client-Secret-Feld (Phase 14e — wizard kann auch klassisch
@@ -2603,7 +2828,7 @@ async function wizardSaveClientId() {
     body: { clientId, clientSecret },
   })
   if (!res.ok) {
-    alert(`Speichern fehlgeschlagen: ${res.body?.error ?? res.status}`)
+    toast('error', `Speichern fehlgeschlagen: ${res.body?.error ?? res.status}`)
     return
   }
   setWizardStep(4)
@@ -2616,7 +2841,7 @@ async function wizardConnectSpotify() {
 async function wizardFinish() {
   const name = $('#wizard-box-name').value.trim()
   if (name.length < 2) {
-    alert('Box-Name muss mindestens 2 Zeichen lang sein.')
+    toast('warn', 'Box-Name muss mindestens 2 Zeichen lang sein.')
     return
   }
   const res = await api(`${SYNC_API}/config`, {
@@ -2628,7 +2853,7 @@ async function wizardFinish() {
     state.wizardStep = 1
     navigate('sync')
   } else {
-    alert(`Konfiguration speichern fehlgeschlagen: ${res.status}`)
+    toast('error', `Konfiguration speichern fehlgeschlagen: ${res.status}`)
   }
 }
 
@@ -2655,6 +2880,8 @@ async function bootstrap() {
   state.csrf = res.body.csrf_token
   state.passwordConfigured = !!res.body.passwordConfigured
   $('#logout-btn').hidden = false
+  // Welle 6: Initialise Range-Slider-Fill (--range-pct CSS-Variable).
+  initRangeFills()
 
   // Returned from Spotify OAuth callback? Land on sync so the user sees
   // the confirmation feedback immediately, and strip the query so a
@@ -2751,6 +2978,16 @@ function wire() {
   $('#playback-play-btn')?.addEventListener('click', () => playbackAction('play'))
   $('#playback-stop-btn')?.addEventListener('click', () => playbackAction('stop'))
 
+  // Confirm-Dialog (Welle 4) — OK/Cancel-Buttons + Backdrop-Click + Esc.
+  $('#confirm-ok-btn')?.addEventListener('click', () => _confirmClose(true))
+  $('#confirm-cancel-btn')?.addEventListener('click', () => _confirmClose(false))
+  $('#confirm-backdrop')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'confirm-backdrop') _confirmClose(false)
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#confirm-backdrop')?.hidden) _confirmClose(false)
+  })
+
   // Telegram (Phase 15f) — config editor.
   $('#tg-back-btn')?.addEventListener('click', () => navigate('hub'))
   $('#tg-save-btn')?.addEventListener('click', saveTelegram)
@@ -2835,7 +3072,7 @@ function wire() {
         btn.textContent = '✓'
         setTimeout(() => { btn.textContent = old }, 1200)
       } catch {
-        alert('Bitte manuell kopieren: ' + text)
+        toast('info', 'Bitte manuell kopieren: ' + text)
       }
     })
   }

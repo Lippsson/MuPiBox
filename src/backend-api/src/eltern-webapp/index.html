@@ -20,6 +20,21 @@
 
   <main id="app-root">
     <!-- Loading-State während Session-Check -->
+    <!-- Phase 19 Welle 4: Globaler Toast-Container (fixed unten) + Confirm-Sheet (overlay). -->
+    <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+    <div class="sheet-backdrop" id="confirm-backdrop" hidden>
+      <div class="sheet confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+        <div class="sheet-body">
+          <h3 id="confirm-title">Bestätigen</h3>
+          <p id="confirm-body" class="dim"></p>
+          <div class="actions confirm-actions">
+            <button class="ghost" id="confirm-cancel-btn">Abbrechen</button>
+            <button class="primary" id="confirm-ok-btn">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <section id="screen-loading" class="screen">
       <div class="loading">
         <div class="spinner"></div>
@@ -56,90 +71,132 @@
          Sektionen, die noch nicht implementiert sind, zeigen einen
          „Bald"-Hinweis statt eines Klicks ins Leere. -->
     <section id="screen-hub" class="screen" hidden>
-      <div class="card hub-greeting">
-        <h2 id="hub-greeting">Hallo!</h2>
-        <p class="dim">Was möchtest du tun?</p>
+      <div class="hub-greeting">
+        <h1 id="hub-greeting">Hallo</h1>
+        <p class="mute" id="hub-greeting-sub">Schön, dass du da bist.</p>
       </div>
 
-      <!-- Phase 18 Item 5+8: Now-Playing-Widget mit Cover (Display-Mirror in
-           der Hub-Karte selbst — was die Box zeigt + Steuerung in einem). -->
-      <div class="card playback-card" id="playback-card">
-        <div class="playback-info">
-          <div class="playback-cover-wrap">
-            <img class="playback-cover" id="playback-cover" alt="" hidden>
-            <span class="playback-icon" id="playback-icon">⏹</span>
-          </div>
-          <div class="playback-text">
-            <div class="playback-title" id="playback-title">—</div>
-            <div class="playback-meta" id="playback-meta">Nichts wird abgespielt</div>
+      <!-- Now-Playing-Widget — Hero. Cover + Title + Steuerung. -->
+      <div class="card-elevated playback-card" id="playback-card">
+        <div class="playback-cover-wrap">
+          <img class="playback-cover" id="playback-cover" alt="" hidden>
+          <span class="playback-icon" id="playback-icon">⏹</span>
+        </div>
+        <div class="playback-text">
+          <div class="playback-title" id="playback-title">Box ist ruhig</div>
+          <div class="playback-meta" id="playback-meta">Nichts wird abgespielt</div>
+          <div class="playback-progress" id="playback-progress" hidden>
+            <div class="playback-progress-fill" id="playback-progress-fill"></div>
           </div>
         </div>
-        <div class="actions playback-actions">
-          <button class="primary" id="playback-pause-btn" hidden>⏸ Pause</button>
-          <button class="primary" id="playback-play-btn" hidden>▶ Play</button>
-          <button class="ghost" id="playback-stop-btn" hidden>⏹ Stop</button>
+        <div class="playback-actions">
+          <button class="playback-btn-stop" id="playback-stop-btn" hidden aria-label="Stop">
+            <span aria-hidden="true">⏹</span>
+          </button>
+          <button class="playback-btn-main" id="playback-pause-btn" hidden aria-label="Pause">
+            <span aria-hidden="true">⏸</span>
+          </button>
+          <button class="playback-btn-main" id="playback-play-btn" hidden aria-label="Play">
+            <span aria-hidden="true">▶</span>
+          </button>
         </div>
       </div>
 
-      <div class="hub-grid">
-        <a href="#sync" class="hub-card" data-section="sync">
-          <span class="hub-card-icon">🎵</span>
-          <span class="hub-card-title">Spotify Smart-Sync</span>
-          <span class="hub-card-sub" id="hub-card-sync-sub">—</span>
+      <!-- Live-Status-Band: vier klickbare Chips, jeweils zur Sektion. -->
+      <nav class="status-band" aria-label="Live-Status">
+        <a href="#power" class="status-chip" data-section="power">
+          <span class="status-chip-icon">🔋</span>
+          <span class="status-chip-value" id="status-chip-battery">—</span>
         </a>
-        <a href="#library" class="hub-card" data-section="library">
-          <span class="hub-card-icon">📚</span>
-          <span class="hub-card-title">Library</span>
-          <span class="hub-card-sub">Inhalte verwalten</span>
+        <a href="#caps" class="status-chip" data-section="caps">
+          <span class="status-chip-icon">⏱</span>
+          <span class="status-chip-value" id="status-chip-cap">—</span>
         </a>
-        <a href="#caps" class="hub-card" data-section="caps">
-          <span class="hub-card-icon">⏱️</span>
-          <span class="hub-card-title">Spielzeit &amp; Ruhe</span>
-          <span class="hub-card-sub">Limits + Quiet-Hours</span>
+        <a href="#caps" class="status-chip" data-section="caps">
+          <span class="status-chip-icon">🌙</span>
+          <span class="status-chip-value" id="status-chip-quiet">—</span>
         </a>
-        <a href="#power" class="hub-card" data-section="power">
-          <span class="hub-card-icon">🔋</span>
-          <span class="hub-card-title">Akku</span>
-          <span class="hub-card-sub" id="hub-card-power-sub">—</span>
+        <a href="#wlan" class="status-chip" data-section="wlan">
+          <span class="status-chip-icon">📡</span>
+          <span class="status-chip-value" id="status-chip-net">—</span>
         </a>
-        <a href="#wlan" class="hub-card" data-section="wlan">
-          <span class="hub-card-icon">📶</span>
-          <span class="hub-card-title">WLAN</span>
-          <span class="hub-card-sub">Box-Verbindung</span>
-        </a>
-        <a href="#bluetooth" class="hub-card" data-section="bluetooth">
-          <span class="hub-card-icon">🎧</span>
-          <span class="hub-card-title">Bluetooth</span>
-          <span class="hub-card-sub">Kopfhörer &amp; Lautsprecher</span>
-        </a>
-        <a href="#telegram" class="hub-card" data-section="telegram">
-          <span class="hub-card-icon">📞</span>
-          <span class="hub-card-title">Telegram</span>
-          <span class="hub-card-sub">Eltern-Bot</span>
-        </a>
-        <a href="#system" class="hub-card" data-section="system">
-          <span class="hub-card-icon">⚙️</span>
-          <span class="hub-card-title">System</span>
-          <span class="hub-card-sub">Backup, Updates, Logs</span>
-        </a>
-        <a href="#theme" class="hub-card" data-section="theme">
-          <span class="hub-card-icon">🎨</span>
-          <span class="hub-card-title">Theme</span>
-          <span class="hub-card-sub">Display-Aussehen</span>
-        </a>
-        <a href="#history" class="hub-card" data-section="history">
-          <span class="hub-card-icon">📊</span>
-          <span class="hub-card-title">Hör-Verlauf</span>
-          <span class="hub-card-sub" id="hub-card-history-sub">Heute & 7 Tage</span>
-        </a>
+      </nav>
+
+      <!-- Drei semantische Gruppen statt eine flache Liste mit 10 Karten. -->
+      <div class="card-flat">
+        <div class="section-label">Heute &amp; Jetzt</div>
+        <div class="hub-grid">
+          <a href="#history" class="hub-card" data-section="history" style="--i:0">
+            <span class="hub-card-icon">📊</span>
+            <span class="hub-card-title">Hör-Verlauf</span>
+            <span class="hub-card-sub" id="hub-card-history-sub">Heute &amp; 7 Tage</span>
+          </a>
+          <a href="#caps" class="hub-card" data-section="caps" style="--i:1">
+            <span class="hub-card-icon">⏱️</span>
+            <span class="hub-card-title">Spielzeit &amp; Ruhe</span>
+            <span class="hub-card-sub">Limits + Quiet-Hours</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="card-flat">
+        <div class="section-label">Inhalte</div>
+        <div class="hub-grid">
+          <a href="#library" class="hub-card" data-section="library" style="--i:2">
+            <span class="hub-card-icon">📚</span>
+            <span class="hub-card-title">Library</span>
+            <span class="hub-card-sub">Inhalte verwalten</span>
+          </a>
+          <a href="#sync" class="hub-card" data-section="sync" style="--i:3">
+            <span class="hub-card-icon">🎵</span>
+            <span class="hub-card-title">Spotify Smart-Sync</span>
+            <span class="hub-card-sub" id="hub-card-sync-sub">—</span>
+          </a>
+          <a href="#theme" class="hub-card" data-section="theme" style="--i:4">
+            <span class="hub-card-icon">🎨</span>
+            <span class="hub-card-title">Theme</span>
+            <span class="hub-card-sub">Display-Aussehen</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="card-flat">
+        <div class="section-label">Box</div>
+        <div class="hub-grid">
+          <a href="#power" class="hub-card" data-section="power" style="--i:5">
+            <span class="hub-card-icon">🔋</span>
+            <span class="hub-card-title">Akku</span>
+            <span class="hub-card-sub" id="hub-card-power-sub">—</span>
+          </a>
+          <a href="#wlan" class="hub-card" data-section="wlan" style="--i:6">
+            <span class="hub-card-icon">📶</span>
+            <span class="hub-card-title">WLAN</span>
+            <span class="hub-card-sub">Box-Verbindung</span>
+          </a>
+          <a href="#bluetooth" class="hub-card" data-section="bluetooth" style="--i:7">
+            <span class="hub-card-icon">🎧</span>
+            <span class="hub-card-title">Bluetooth</span>
+            <span class="hub-card-sub">Kopfhörer &amp; Lautsprecher</span>
+          </a>
+          <a href="#telegram" class="hub-card" data-section="telegram" style="--i:8">
+            <span class="hub-card-icon">📞</span>
+            <span class="hub-card-title">Telegram</span>
+            <span class="hub-card-sub">Eltern-Bot</span>
+          </a>
+          <a href="#system" class="hub-card" data-section="system" style="--i:9">
+            <span class="hub-card-icon">⚙️</span>
+            <span class="hub-card-title">System</span>
+            <span class="hub-card-sub">Audio, Sicherheit, Power</span>
+          </a>
+        </div>
       </div>
     </section>
 
     <!-- Smart-Sync (war vorher 'screen-dashboard') -->
     <section id="screen-sync" class="screen" hidden>
-      <div class="card">
-        <h2 id="box-title">LeniBox</h2>
-        <p class="dim" id="box-subtitle">Spotify Smart-Sync</p>
+      <div class="card-flat">
+        <h2 id="box-title" style="margin:0 4px 4px">LeniBox</h2>
+        <p class="mute" id="box-subtitle" style="margin:0 4px">Spotify Smart-Sync</p>
       </div>
 
       <div class="card" id="spotify-card">
@@ -230,7 +287,9 @@
       </div>
 
       <div class="library-list" id="library-list">
-        <div class="dim" style="padding: 24px; text-align: center;">Lade…</div>
+        <div class="skeleton skeleton-block"></div>
+        <div class="skeleton skeleton-block"></div>
+        <div class="skeleton skeleton-block"></div>
       </div>
 
       <!-- Item-Detail-Sheet (overlay) -->
@@ -737,7 +796,7 @@
         </div>
         <div class="actions">
           <button class="primary" id="pw-set-btn">Speichern</button>
-          <button class="ghost" id="pw-clear-btn" hidden>Passwort entfernen</button>
+          <button class="danger" id="pw-clear-btn" hidden>Passwort entfernen</button>
         </div>
         <div id="pw-feedback" class="feedback" hidden></div>
       </div>
@@ -747,7 +806,7 @@
         <p class="dim">Neustart dauert ~1 Minute. Ausschalten: Box geht aus und muss am Gerät wieder eingeschaltet werden.</p>
         <div class="actions">
           <button class="ghost" id="sys-reboot-btn">🔄 Neustart</button>
-          <button class="ghost" id="sys-shutdown-btn">⏻ Ausschalten</button>
+          <button class="danger" id="sys-shutdown-btn">⏻ Ausschalten</button>
         </div>
         <div id="sys-feedback" class="feedback" hidden></div>
       </div>
@@ -761,9 +820,9 @@
          Polling-Intervall, enable toggle). Distinct from the full setup
          wizard, which is only for the first-time Spotify-App registration. -->
     <section id="screen-settings" class="screen" hidden>
-      <div class="card">
-        <h2>Smart-Sync-Einstellungen</h2>
-        <p class="dim">Box-Name + Sync-Intervall. Spotify-Verbindung änderst du im Dashboard.</p>
+      <div class="card-flat">
+        <h2 style="margin:0 4px 4px">Smart-Sync-Einstellungen</h2>
+        <p class="mute" style="margin:0 4px">Box-Name + Sync-Intervall. Spotify-Verbindung änderst du im Dashboard.</p>
       </div>
 
       <div class="card">
@@ -817,9 +876,9 @@
 
     <!-- Setup-Wizard -->
     <section id="screen-wizard" class="screen" hidden>
-      <div class="card">
-        <h2>Spotify-Setup</h2>
-        <p class="dim" id="wizard-step-label">Schritt 1 von 5</p>
+      <div class="card-flat">
+        <h2 style="margin:0 4px 4px">Spotify-Setup</h2>
+        <p class="mute" id="wizard-step-label" style="margin:0 4px">Schritt 1 von 5</p>
       </div>
 
       <div class="card wizard-step" id="wizard-step-1">

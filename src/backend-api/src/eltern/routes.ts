@@ -935,6 +935,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       let artist = ''
       let album = ''
       let coverUrl: string | null = null
+      let progressMs: number | null = null
+      let durationMs: number | null = null
       if (player === 'mplayer') {
         playing = local.playing === true
         title = String(local.currentTrackname ?? '')
@@ -945,8 +947,10 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
           if (stateRes.ok) {
             const state = (await stateRes.json()) as {
               is_playing?: boolean
+              progress_ms?: number
               item?: {
                 name?: string
+                duration_ms?: number
                 artists?: Array<{ name?: string }>
                 album?: { name?: string; images?: Array<{ url?: string }> }
                 show?: { name?: string; publisher?: string; images?: Array<{ url?: string }> }
@@ -954,6 +958,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
               }
             }
             playing = state.is_playing === true
+            if (typeof state.progress_ms === 'number') progressMs = state.progress_ms
+            if (typeof state.item?.duration_ms === 'number') durationMs = state.item.duration_ms
             if (state.item?.name) title = String(state.item.name)
             if (state.item?.album?.name) album = String(state.item.album.name)
             if (state.item?.show?.name) {
@@ -983,6 +989,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         artist,
         album,
         coverUrl,
+        progressMs,
+        durationMs,
         volume: typeof local.volume === 'number' ? local.volume : null,
       })
     } catch (err) {
