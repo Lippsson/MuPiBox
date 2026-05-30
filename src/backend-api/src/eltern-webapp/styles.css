@@ -1175,6 +1175,42 @@ select:focus, textarea:focus {
 .playback-actions button[hidden] { display: none; }
 .playback-actions button:active { transform: scale(0.93); }
 
+/* Volume-Slider unter den Buttons. Icon links, Track mit Cap-Marker,
+   Wert rechts. Tap-Target des Sliders kommt aus den globalen
+   input[type="range"]-Regeln. */
+.playback-volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+  margin-top: 4px;
+}
+.playback-volume[hidden], .playback-volume-cap[hidden] { display: none; }
+.playback-volume-icon { font-size: 16px; opacity: 0.7; flex: 0 0 auto; }
+.playback-volume-track { position: relative; flex: 1 1 auto; min-width: 0; }
+.playback-volume-track input[type="range"] { width: 100%; margin: 0; }
+.playback-volume-cap {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 14px;
+  background: var(--danger);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 1px;
+  opacity: 0.7;
+}
+.playback-volume-out {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  flex: 0 0 auto;
+  min-width: 36px;
+  text-align: right;
+}
+
 .playback-btn-main {
   width: 64px;
   height: 64px;

@@ -97,6 +97,14 @@
             <span aria-hidden="true" id="playback-toggle-icon">▶</span>
           </button>
         </div>
+        <div class="playback-volume" id="playback-volume" hidden>
+          <span class="playback-volume-icon" aria-hidden="true">🔊</span>
+          <div class="playback-volume-track">
+            <input type="range" id="playback-volume-input" min="0" max="100" step="5" value="50" aria-label="Lautstärke">
+            <span class="playback-volume-cap" id="playback-volume-cap" hidden title="Hörschutz-Limit"></span>
+          </div>
+          <span class="playback-volume-out" id="playback-volume-out">—</span>
+        </div>
       </div>
 
       <!-- Live-Status-Band: vier klickbare Chips, jeweils zur Sektion. -->

@@ -1672,6 +1672,66 @@ async function clearPassword() {
 /* ---------- Quick-Pause / Now-Playing (Phase 18 Item 5 + 8) ---------- */
 
 let playbackPollHandle = null
+let playbackVolDebounce = null
+let playbackMaxVolume = 100
+
+/** Lädt /audio einmalig beim Hub-Eintritt: setzt initialen Slider-Wert,
+ *  Cap-Marker und unhide. Danach synct renderPlayback() den Wert aus dem
+ *  5-s-Polling weiter (siehe unten). */
+async function loadPlaybackVolume() {
+  let res
+  try { res = await api(`${API}/audio`) } catch { return }
+  if (res.status === 503) {
+    await new Promise((r) => setTimeout(r, 500))
+    res = await api(`${API}/audio`)
+  }
+  if (!res.ok) return
+  const a = res.body ?? {}
+  playbackMaxVolume = Number.isFinite(a.maxVolume) ? a.maxVolume : 100
+  const wrap = $('#playback-volume')
+  const slider = $('#playback-volume-input')
+  const cap = $('#playback-volume-cap')
+  if (!wrap || !slider) return
+  if (Number.isFinite(a.current)) {
+    slider.value = a.current
+    setText('#playback-volume-out', `${a.current}%`)
+    updateRangeFill(slider)
+  }
+  if (cap) {
+    if (playbackMaxVolume < 100) {
+      cap.style.left = `${playbackMaxVolume}%`
+      cap.hidden = false
+    } else {
+      cap.hidden = true
+    }
+  }
+  wrap.hidden = false
+}
+
+function setPlaybackVolume(v) {
+  if (playbackVolDebounce) clearTimeout(playbackVolDebounce)
+  playbackVolDebounce = setTimeout(async () => {
+    let res = await api(`${API}/audio/volume`, { method: 'POST', body: { volume: v } })
+    if (res.status === 503) {
+      await new Promise((r) => setTimeout(r, 500))
+      res = await api(`${API}/audio/volume`, { method: 'POST', body: { volume: v } })
+    }
+    if (!res.ok) {
+      toast('error', res.body?.error ?? `Lautstärke nicht setzbar (${res.status})`)
+      return
+    }
+    const applied = res.body?.applied ?? v
+    setText('#playback-volume-out', `${applied}%`)
+    if (res.body?.capped) {
+      const sl = $('#playback-volume-input')
+      if (sl) {
+        sl.value = applied
+        updateRangeFill(sl)
+      }
+      toast('info', `Vom Hörschutz auf ${applied} % begrenzt.`)
+    }
+  }, 200)
+}
 
 async function loadPlayback() {
   if (playbackPollHandle) {
@@ -1755,6 +1815,17 @@ function renderPlayback(b) {
     setText('#playback-meta', 'Nichts wird abgespielt')
     if (toggleBtn) toggleBtn.hidden = true
     if (stopBtn) stopBtn.hidden = true
+  }
+
+  // Volume-Slider mit Box-Wert syncen — aber nicht während User draggt
+  // (focus = aktive Interaktion, eigene Eingabe nicht überschreiben).
+  const volSlider = $('#playback-volume-input')
+  if (volSlider && Number.isFinite(b.volume) && document.activeElement !== volSlider) {
+    if (Number(volSlider.value) !== b.volume) {
+      volSlider.value = b.volume
+      setText('#playback-volume-out', `${b.volume}%`)
+      updateRangeFill(volSlider)
+    }
   }
 
   // Progress-Bar: nur sichtbar wenn wir Dauer kennen und etwas läuft/pausiert.
@@ -2353,6 +2424,7 @@ async function stopSleepTimer() {
  *  with real data in 15c/d/f/g once their backends exist. */
 async function loadHub() {
   loadPlayback() // Phase 18 Item 5: top Now-Playing card
+  loadPlaybackVolume() // Volume-Slider im Hero (Phase 19 follow-up)
   loadStatusBand() // Phase 19 Welle 2: 4-Chip Live-Status oberhalb Grid
   // Sync-Card sub: last sync + counts. Fail silently — hub overview
   // shouldn't break if the sync endpoint hiccups.
@@ -2995,6 +3067,12 @@ function wire() {
     playbackAction(state === 'playing' ? 'pause' : 'play')
   })
   $('#playback-stop-btn')?.addEventListener('click', () => playbackAction('stop'))
+  $('#playback-volume-input')?.addEventListener('input', (e) => {
+    const v = Number(e.target.value)
+    setText('#playback-volume-out', `${v}%`)
+    updateRangeFill(e.target)
+    setPlaybackVolume(v)
+  })
 
   // Confirm-Dialog (Welle 4) — OK/Cancel-Buttons + Backdrop-Click + Esc.
   $('#confirm-ok-btn')?.addEventListener('click', () => _confirmClose(true))
