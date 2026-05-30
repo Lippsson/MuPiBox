@@ -475,6 +475,15 @@
         <p class="dim">Profil-Auswahl + Custom-Werte über Admin-Interface (MuPiHAT-Page).</p>
       </div>
 
+      <!-- Phase 18 Item 6: 24h Akku-Verlauf — Mini-SVG-Liniendiagramm. -->
+      <div class="card">
+        <h3>Akku-Verlauf (24 h)</h3>
+        <svg id="battery-chart" class="battery-chart" viewBox="0 0 600 180" preserveAspectRatio="none">
+          <text x="300" y="90" text-anchor="middle" fill="var(--text-dim)" font-size="14">Lade …</text>
+        </svg>
+        <p class="dim" id="battery-chart-info">—</p>
+      </div>
+
       <div class="card">
         <h3>Auto-Shutdown</h3>
         <p class="dim">Box schaltet sich selbst aus, wenn niemand hört. 0 = nie ausschalten.</p>

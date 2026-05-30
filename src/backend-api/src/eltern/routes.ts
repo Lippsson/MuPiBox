@@ -808,6 +808,40 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * GET /api/eltern/battery-history?hours=24  (Phase 18 Item 6)
+   * Reads /home/dietpi/.mupibox/battery_log.jsonl that the server.ts poller
+   * writes once a minute. Filtered to the last `hours` (default 24, max
+   * 168 = 7 days). Sampled down to ~120 points so the SVG chart in the
+   * WebApp stays smooth even after a few days of history.
+   */
+  router.get('/battery-history', requireSession, (req, res) => {
+    const hours = Math.max(1, Math.min(168, Math.floor(Number(req.query.hours) || 24)))
+    let raw = ''
+    try {
+      raw = readFileSync('/home/dietpi/.mupibox/battery_log.jsonl', 'utf8')
+    } catch {
+      res.json({ hours, samples: [] })
+      return
+    }
+    const cutoffMs = Date.now() - hours * 3600 * 1000
+    type Sample = { ts: string; vbat: number | null; percent: number | null; vbus: number | null; ibat: number | null }
+    const all: Sample[] = []
+    for (const ln of raw.split('\n')) {
+      if (!ln) continue
+      try {
+        const e = JSON.parse(ln) as Sample
+        if (e.ts && Date.parse(e.ts) >= cutoffMs) all.push(e)
+      } catch {
+        /* skip malformed */
+      }
+    }
+    // Downsample to roughly 120 points so the chart stays light.
+    const TARGET = 120
+    const samples = all.length <= TARGET ? all : all.filter((_, i) => i % Math.ceil(all.length / TARGET) === 0)
+    res.json({ hours, samples })
+  })
+
+  /**
    * GET /api/eltern/playback  (Phase 18 Item 5)
    * Snapshot of what's playing on the box (current track + paused/playing
    * state). Just proxies the player's own /local — same data the box's

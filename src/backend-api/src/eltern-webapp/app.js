@@ -1921,7 +1921,70 @@ async function removeWlan(ssid) {
 /** Pulls /api/mupihat (live readings) + /api/eltern/power-config (profile
  *  + idle timeouts) in parallel, renders the power-section. */
 async function loadPower() {
-  await Promise.all([loadPowerLive(), loadPowerConfig()])
+  await Promise.all([loadPowerLive(), loadPowerConfig(), loadBatteryChart()])
+}
+
+/** Phase 18 Item 6: 24 h battery chart — fetches the per-minute snapshot
+ *  log written by the backend's startBatteryLogPoller and renders a simple
+ *  SVG polyline (percent over time). No chart library. */
+async function loadBatteryChart() {
+  const svg = $('#battery-chart')
+  const info = $('#battery-chart-info')
+  if (!svg) return
+  const res = await api(`${API}/battery-history?hours=24`)
+  if (!res.ok) {
+    svg.innerHTML = `<text x="300" y="90" text-anchor="middle" fill="#888" font-size="14">Fehler ${res.status}</text>`
+    return
+  }
+  const samples = res.body?.samples ?? []
+  if (samples.length < 2) {
+    svg.innerHTML = `<text x="300" y="90" text-anchor="middle" fill="#888" font-size="14">Sammelt Daten — bitte ein paar Minuten warten.</text>`
+    if (info) info.textContent = `Bisher ${samples.length} Datenpunkt(e). Die Aufzeichnung läuft alle 60 s.`
+    return
+  }
+  const W = 600
+  const H = 180
+  const padL = 30
+  const padR = 8
+  const padT = 8
+  const padB = 24
+  const tsMs = samples.map((s) => Date.parse(s.ts))
+  const minTs = tsMs[0]
+  const maxTs = tsMs[tsMs.length - 1]
+  const tsRange = Math.max(1, maxTs - minTs)
+  const xs = (i) => padL + ((tsMs[i] - minTs) / tsRange) * (W - padL - padR)
+  const ys = (v) => padT + (1 - v / 100) * (H - padT - padB)
+  // Build polyline points only for samples that have a percent value
+  let path = ''
+  for (let i = 0; i < samples.length; i++) {
+    const p = samples[i].percent
+    if (p == null) continue
+    const x = xs(i).toFixed(1)
+    const y = ys(p).toFixed(1)
+    path += `${path ? 'L' : 'M'}${x},${y} `
+  }
+  // Grid lines at 0/25/50/75/100 % plus labels
+  let grid = ''
+  for (const v of [0, 25, 50, 75, 100]) {
+    const y = ys(v).toFixed(1)
+    grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(255,255,255,0.06)" />`
+    grid += `<text x="${padL - 4}" y="${y}" text-anchor="end" dominant-baseline="middle" fill="#888" font-size="10">${v}%</text>`
+  }
+  // X-axis time labels (start, mid, end)
+  const fmt = (ms) => {
+    const d = new Date(ms)
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+  const xlabels = `
+    <text x="${padL}" y="${H - 6}" fill="#888" font-size="10">${fmt(minTs)}</text>
+    <text x="${(padL + W - padR) / 2}" y="${H - 6}" text-anchor="middle" fill="#888" font-size="10">${fmt(minTs + tsRange / 2)}</text>
+    <text x="${W - padR}" y="${H - 6}" text-anchor="end" fill="#888" font-size="10">${fmt(maxTs)}</text>`
+  svg.innerHTML = `${grid}<path d="${path}" fill="none" stroke="var(--primary)" stroke-width="2" />${xlabels}`
+  if (info) {
+    const last = samples[samples.length - 1]
+    const hoursCovered = Math.round((maxTs - minTs) / 36000) / 100
+    info.textContent = `${samples.length} Messpunkte über ${hoursCovered} h, zuletzt ${last.percent ?? '—'} % bei ${fmt(maxTs)}.`
+  }
 }
 
 async function loadPowerLive() {

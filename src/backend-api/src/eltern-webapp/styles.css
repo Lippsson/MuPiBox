@@ -604,6 +604,9 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
 .tg-chat-row input:nth-of-type(2) { flex: 1 1 auto; }
 .tg-chat-row button { flex: 0 0 auto; padding: 8px 12px; }
 
+/* Akku-Chart (Phase 18 Item 6) */
+.battery-chart { display: block; width: 100%; height: 180px; }
+
 /* Quick-Pause hub widget (Phase 18 Item 5) */
 .playback-card { display: flex; flex-direction: column; gap: 12px; }
 .playback-info { display: flex; gap: 12px; align-items: center; min-width: 0; }

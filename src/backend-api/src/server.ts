@@ -542,6 +542,84 @@ function startPlayLogPoller(): void {
 
 // === End Phase 18 Item 4 =======================================================
 
+// === Phase 18 Item 6: Battery-Log poller =======================================
+// /tmp/.rrd only tracks CPU/RAM/temp, NOT the battery. So we sample
+// /api/mupihat ourselves once a minute and write a jsonl. Trim to keep
+// roughly the last 8 days (more than enough for a 24h chart; cap stops
+// the file growing without bound).
+
+const BATTERY_LOG_PATH = '/home/dietpi/.mupibox/battery_log.jsonl'
+const BATTERY_LOG_POLL_MS = 60_000
+const BATTERY_LOG_KEEP_DAYS = 8
+const BATTERY_LOG_TRIM_EVERY_TICKS = 60 // ≈ every hour
+let batteryLogTickCount = 0
+
+function readMupihatSnapshot(): Record<string, unknown> | null {
+  try {
+    if (!fs.existsSync(mupihat)) return null
+    const raw = fs.readFileSync(mupihat, 'utf8')
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function trimBatteryLog(): void {
+  try {
+    if (!fs.existsSync(BATTERY_LOG_PATH)) return
+    const cutoffMs = Date.now() - BATTERY_LOG_KEEP_DAYS * 24 * 3600 * 1000
+    const raw = fs.readFileSync(BATTERY_LOG_PATH, 'utf8')
+    const kept: string[] = []
+    for (const ln of raw.split('\n')) {
+      if (!ln) continue
+      try {
+        const e = JSON.parse(ln) as { ts?: string }
+        if (e.ts && Date.parse(e.ts) >= cutoffMs) kept.push(ln)
+      } catch {
+        /* skip malformed */
+      }
+    }
+    const tmp = `${BATTERY_LOG_PATH}.tmp.${process.pid}`
+    fs.writeFileSync(tmp, kept.length ? `${kept.join('\n')}\n` : '', 'utf8')
+    fs.renameSync(tmp, BATTERY_LOG_PATH)
+  } catch (err) {
+    console.warn(`${new Date().toLocaleString()}: [battery-log] trim failed: ${(err as Error).message}`)
+  }
+}
+
+function tickBatteryLog(): void {
+  const snap = readMupihatSnapshot()
+  if (!snap) return
+  const entry = {
+    ts: new Date().toISOString(),
+    vbat: typeof snap.Vbat === 'number' ? snap.Vbat : null,
+    vbus: typeof snap.Vbus === 'number' ? snap.Vbus : null,
+    ibat: typeof snap.Ibat === 'number' ? snap.Ibat : null,
+    percent: typeof snap.Bat_Percent === 'number' ? snap.Bat_Percent : null,
+    charger_status: typeof snap.Charger_Status === 'string' ? snap.Charger_Status : null,
+    temp: typeof snap.Temp === 'number' ? snap.Temp : null,
+  }
+  fs.appendFile(BATTERY_LOG_PATH, `${JSON.stringify(entry)}\n`, (err) => {
+    if (err) console.warn(`${new Date().toLocaleString()}: [battery-log] append failed: ${err.message}`)
+  })
+  batteryLogTickCount++
+  if (batteryLogTickCount >= BATTERY_LOG_TRIM_EVERY_TICKS) {
+    batteryLogTickCount = 0
+    trimBatteryLog()
+  }
+}
+
+function startBatteryLogPoller(): void {
+  // First tick after 5 s so we have a starting datapoint without waiting a full minute.
+  setTimeout(() => {
+    tickBatteryLog()
+    const timer = setInterval(tickBatteryLog, BATTERY_LOG_POLL_MS)
+    if (typeof timer.unref === 'function') timer.unref()
+  }, 5000).unref?.()
+}
+
+// === End Phase 18 Item 6 =======================================================
+
 // Logical-day computation must match the player's `getLogicalDay` so `todayBonus`
 // works consistently across processes (resetHour shifts when "today" begins).
 function computeLogicalDate(now: Date, resetHour: number): string {
@@ -1927,6 +2005,11 @@ if (!testServe) {
   // so the Eltern-WebApp can show what was played today / this week. No
   // player change needed — zero risk to audio.
   startPlayLogPoller()
+  // Phase 18 Item 6: Battery-Log poller — writes /api/mupihat snapshots
+  // every 60 s into a jsonl so the WebApp can plot a 24h chart. No RRD —
+  // the existing /tmp/.rrd only tracks CPU/RAM. Forward-looking: chart
+  // fills up over the next few hours.
+  startBatteryLogPoller()
   // Phase 18 Item 1: apply mupibox.startupVolume on backend-api start so the
   // box doesn't pick up wherever the last session left off (which can be loud
   // — especially after a charge cycle when the kid had cranked it up). The
