@@ -2022,16 +2022,45 @@ async function loadPowerConfig() {
   const body = res.body ?? {}
   setText('#power-profile-name', body.battery?.selected ?? '—')
   const p = body.battery?.profile ?? {}
-  setText('#power-profile-v100', p.v_100 ? `${p.v_100} mV` : '—')
-  setText('#power-profile-warn', p.th_warning ? `${p.th_warning} mV` : '—')
-  setText('#power-profile-shut', p.th_shutdown ? `${p.th_shutdown} mV` : '—')
-  // vreg (Phase 13a) — optional field on the profile. Shows "POR-Default"
-  // when missing so parents see that the box is using the chip's factory
-  // setting rather than a profile-configured limit.
-  setText('#power-profile-vreg', p.vreg ? `${p.vreg} mV` : 'Werks-Default')
+  // Phase 18 Item 7: profile fields are now editable inputs (mV).
+  // Number conversion because config stores them as strings.
+  if ($('#pwr-prof-v100')) $('#pwr-prof-v100').value = p.v_100 ? Number(p.v_100) : ''
+  if ($('#pwr-prof-warn')) $('#pwr-prof-warn').value = p.th_warning ? Number(p.th_warning) : ''
+  if ($('#pwr-prof-shut')) $('#pwr-prof-shut').value = p.th_shutdown ? Number(p.th_shutdown) : ''
+  if ($('#pwr-prof-vreg')) $('#pwr-prof-vreg').value = p.vreg ? Number(p.vreg) : ''
   const t = body.timeout ?? {}
   $('#power-idle-shutdown').value = t.idlePiShutdown ?? 0
   $('#power-idle-display').value = t.idleDisplayOff ?? 10
+}
+
+async function saveBatteryProfile() {
+  const v100 = Number($('#pwr-prof-v100')?.value)
+  const warn = Number($('#pwr-prof-warn')?.value)
+  const shut = Number($('#pwr-prof-shut')?.value)
+  const vreg = Number($('#pwr-prof-vreg')?.value)
+  // VREG-Sicherheits-Confirm: zu hoch = Akku-Schaden. Frag explizit nach.
+  if (Number.isFinite(vreg) && vreg > 8400) {
+    if (!confirm(`VREG ${vreg} mV ist HOCH (> 8400 mV) — bei 2S-Li-Ion kann das die Zellen schädigen. Sicher übernehmen?`)) {
+      return
+    }
+  }
+  const batteryProfile = {}
+  if (Number.isFinite(v100) && v100 > 0) batteryProfile.v_100 = v100
+  if (Number.isFinite(warn) && warn > 0) batteryProfile.th_warning = warn
+  if (Number.isFinite(shut) && shut > 0) batteryProfile.th_shutdown = shut
+  if (Number.isFinite(vreg) && vreg > 0) batteryProfile.vreg = vreg
+  if (Object.keys(batteryProfile).length === 0) {
+    feedback('#pwr-prof-feedback', 'error', 'Keine Werte zum Speichern.')
+    return
+  }
+  const res = await api(`${API}/power-config`, { method: 'POST', body: { batteryProfile } })
+  if (!res.ok) {
+    feedback('#pwr-prof-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+    return
+  }
+  const vregMsg = Number.isFinite(vreg) && vreg > 0 ? ' VREG (Chip-Register) greift erst nach mupihat-Reset oder Box-Neustart.' : ''
+  feedback('#pwr-prof-feedback', 'success', `Profil gespeichert. Software-Werte greifen sofort.${vregMsg}`)
+  loadPowerConfig()
 }
 
 async function savePowerConfig() {
@@ -2657,6 +2686,7 @@ function wire() {
 
   // Phase 15i — Power-screen save.
   $('#power-save-btn')?.addEventListener('click', savePowerConfig)
+  $('#pwr-prof-save-btn')?.addEventListener('click', saveBatteryProfile)
   $('#sleeptimer-start-btn')?.addEventListener('click', startSleepTimer)
   $('#sleeptimer-stop-btn')?.addEventListener('click', stopSleepTimer)
   $('#sleeptimer-minutes')?.addEventListener('input', (e) => {

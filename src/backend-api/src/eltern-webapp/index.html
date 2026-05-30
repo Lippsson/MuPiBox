@@ -450,29 +450,36 @@
         </div>
       </div>
 
+      <!-- Phase 18 Item 7: aktives Akku-Profil editierbar. Profil-Auswahl
+           bleibt in der Admin-Mupihat-Page. -->
       <div class="card">
         <h3>Aktives Akku-Profil</h3>
         <div class="status-row">
           <span class="dim">Profil</span>
           <span class="value" id="power-profile-name">—</span>
         </div>
-        <div class="status-row">
-          <span class="dim">Voll-Spannung (v_100)</span>
-          <span class="value" id="power-profile-v100">—</span>
+        <p class="dim">Werte in mV. <strong>VREG</strong> (Lade-Schluss-Spannung) ist sicherheitskritisch — zu hoch kocht die Zellen. Nur ändern, wenn du weißt was du tust.</p>
+        <div class="form-row">
+          <label for="pwr-prof-v100">Voll-Spannung v_100 (5000–9000)</label>
+          <input type="number" id="pwr-prof-v100" min="5000" max="9000" step="50">
         </div>
-        <div class="status-row">
-          <span class="dim">Warnung (th_warning)</span>
-          <span class="value" id="power-profile-warn">—</span>
+        <div class="form-row">
+          <label for="pwr-prof-warn">Warnung th_warning (5500–8000)</label>
+          <input type="number" id="pwr-prof-warn" min="5500" max="8000" step="50">
         </div>
-        <div class="status-row">
-          <span class="dim">Shutdown (th_shutdown)</span>
-          <span class="value" id="power-profile-shut">—</span>
+        <div class="form-row">
+          <label for="pwr-prof-shut">Shutdown th_shutdown (5000–7500, muss &lt; warning)</label>
+          <input type="number" id="pwr-prof-shut" min="5000" max="7500" step="50">
         </div>
-        <div class="status-row">
-          <span class="dim">Lade-Schluss (VREG)</span>
-          <span class="value" id="power-profile-vreg">—</span>
+        <div class="form-row">
+          <label for="pwr-prof-vreg">⚠ Lade-Schluss VREG (6000–8500)</label>
+          <input type="number" id="pwr-prof-vreg" min="6000" max="8500" step="50">
         </div>
-        <p class="dim">Profil-Auswahl + Custom-Werte über Admin-Interface (MuPiHAT-Page).</p>
+        <div class="actions">
+          <button class="primary" id="pwr-prof-save-btn">Profil speichern</button>
+        </div>
+        <div id="pwr-prof-feedback" class="feedback" hidden></div>
+        <p class="dim">Neue Profile anlegen oder löschen weiterhin über das Admin-Interface (MuPiHAT-Page).</p>
       </div>
 
       <!-- Phase 18 Item 6: 24h Akku-Verlauf — Mini-SVG-Liniendiagramm. -->

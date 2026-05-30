@@ -451,26 +451,95 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * Phase 1's config). Phase 15i.
    */
   router.post('/power-config', requireSession, requireCsrf, async (req, res) => {
-    const body = (req.body ?? {}) as { idlePiShutdown?: unknown; idleDisplayOff?: unknown }
-    const mutations: Record<string, string> = {}
+    const body = (req.body ?? {}) as {
+      idlePiShutdown?: unknown
+      idleDisplayOff?: unknown
+      batteryProfile?: Record<string, unknown>
+    }
+    const timeoutMutations: Record<string, string> = {}
     if (typeof body.idlePiShutdown === 'number' && Number.isFinite(body.idlePiShutdown)) {
       const v = Math.max(0, Math.min(1440, Math.floor(body.idlePiShutdown)))
-      mutations.idlePiShutdown = String(v)
+      timeoutMutations.idlePiShutdown = String(v)
     }
     if (typeof body.idleDisplayOff === 'number' && Number.isFinite(body.idleDisplayOff)) {
       const v = Math.max(0, Math.min(1440, Math.floor(body.idleDisplayOff)))
-      mutations.idleDisplayOff = String(v)
+      timeoutMutations.idleDisplayOff = String(v)
     }
-    if (Object.keys(mutations).length === 0) {
+
+    // Phase 18 Item 7: edit the ACTIVE battery profile (selected_battery).
+    // VREG-in-mV especially safety-critical — too high cooks the cells.
+    // Validation pro-Feld + Cross-Field (th_shutdown < th_warning).
+    let profileMutations: Record<string, string> | null = null
+    if (body.batteryProfile && typeof body.batteryProfile === 'object') {
+      const ranges: Record<string, [number, number]> = {
+        v_100: [5000, 9000],
+        v_75: [5000, 9000],
+        v_50: [5000, 9000],
+        v_25: [5000, 9000],
+        v_0: [5000, 9000],
+        th_warning: [5500, 8000],
+        th_shutdown: [5000, 7500],
+        vreg: [6000, 8500],
+      }
+      const candidates: Record<string, string> = {}
+      for (const [field, [lo, hi]] of Object.entries(ranges)) {
+        const raw = body.batteryProfile[field]
+        if (raw === undefined || raw === null || raw === '') continue
+        const n = Math.floor(Number(raw))
+        if (!Number.isFinite(n) || n < lo || n > hi) {
+          res.status(400).json({ error: `${field} must be ${lo}-${hi} mV` })
+          return
+        }
+        candidates[field] = String(n)
+      }
+      // Sanity: th_shutdown should be strictly below th_warning. Read existing
+      // profile values for fields the caller didn't update so the cross-check
+      // covers partial updates too.
+      const cfgRead = deps.getMupiboxConfig()
+      const mupihatRead = (cfgRead?.mupihat as Record<string, unknown> | undefined) ?? {}
+      const selectedRead = String(mupihatRead.selected_battery ?? '')
+      const typesRead = Array.isArray(mupihatRead.battery_types)
+        ? (mupihatRead.battery_types as Array<Record<string, unknown>>)
+        : []
+      const profileRead = typesRead.find((p) => p?.name === selectedRead)
+      const profConfigRead = (profileRead?.config as Record<string, unknown> | undefined) ?? {}
+      const finalShutdown = Number(candidates.th_shutdown ?? profConfigRead.th_shutdown ?? 0)
+      const finalWarning = Number(candidates.th_warning ?? profConfigRead.th_warning ?? 0)
+      if (finalShutdown && finalWarning && finalShutdown >= finalWarning) {
+        res.status(400).json({ error: `th_shutdown (${finalShutdown}) must be < th_warning (${finalWarning})` })
+        return
+      }
+      if (Object.keys(candidates).length > 0) profileMutations = candidates
+    }
+
+    if (Object.keys(timeoutMutations).length === 0 && !profileMutations) {
       res.status(400).json({ error: 'no recognised fields in body' })
       return
     }
+
     await deps.updateMupiboxConfig((cfg) => {
-      const timeout = ((cfg.timeout as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
-      Object.assign(timeout, mutations)
-      cfg.timeout = timeout
+      if (Object.keys(timeoutMutations).length > 0) {
+        const timeout = ((cfg.timeout as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+        Object.assign(timeout, timeoutMutations)
+        cfg.timeout = timeout
+      }
+      if (profileMutations) {
+        const mupihat = ((cfg.mupihat as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+        const selected = String(mupihat.selected_battery ?? '')
+        const types = Array.isArray(mupihat.battery_types)
+          ? (mupihat.battery_types as Array<Record<string, unknown>>)
+          : []
+        const profile = types.find((p) => p?.name === selected)
+        if (profile) {
+          const pConfig = ((profile.config as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+          Object.assign(pConfig, profileMutations)
+          profile.config = pConfig
+          mupihat.battery_types = types
+          cfg.mupihat = mupihat
+        }
+      }
     })
-    res.json({ ok: true, applied: mutations })
+    res.json({ ok: true, applied: { timeout: timeoutMutations, batteryProfile: profileMutations } })
   })
 
   /**
