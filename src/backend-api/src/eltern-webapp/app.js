@@ -1763,6 +1763,8 @@ function renderPlayback(b) {
   const toggleBtn = $('#playback-toggle-btn')
   const toggleIcon = $('#playback-toggle-icon')
   const stopBtn = $('#playback-stop-btn')
+  const prevBtn = $('#playback-prev-btn')
+  const nextBtn = $('#playback-next-btn')
   const progressWrap = $('#playback-progress')
   const progressFill = $('#playback-progress-fill')
 
@@ -1798,6 +1800,8 @@ function renderPlayback(b) {
     }
     if (toggleIcon) toggleIcon.textContent = '⏸'
     if (stopBtn) stopBtn.hidden = false
+    if (prevBtn) prevBtn.hidden = false
+    if (nextBtn) nextBtn.hidden = false
   } else if (hasTrack) {
     if (icon) icon.textContent = '⏸'
     setText('#playback-title', b.title || '—')
@@ -1809,12 +1813,16 @@ function renderPlayback(b) {
     }
     if (toggleIcon) toggleIcon.textContent = '▶'
     if (stopBtn) stopBtn.hidden = false
+    if (prevBtn) prevBtn.hidden = false
+    if (nextBtn) nextBtn.hidden = false
   } else {
     if (icon) icon.textContent = '⏹'
     setText('#playback-title', 'Box ist ruhig')
     setText('#playback-meta', 'Nichts wird abgespielt')
     if (toggleBtn) toggleBtn.hidden = true
     if (stopBtn) stopBtn.hidden = true
+    if (prevBtn) prevBtn.hidden = true
+    if (nextBtn) nextBtn.hidden = true
   }
 
   // Volume-Slider mit Box-Wert syncen — aber nicht während User draggt
@@ -3067,6 +3075,8 @@ function wire() {
     playbackAction(state === 'playing' ? 'pause' : 'play')
   })
   $('#playback-stop-btn')?.addEventListener('click', () => playbackAction('stop'))
+  $('#playback-prev-btn')?.addEventListener('click', () => playbackAction('previous'))
+  $('#playback-next-btn')?.addEventListener('click', () => playbackAction('next'))
   $('#playback-volume-input')?.addEventListener('input', (e) => {
     const v = Number(e.target.value)
     setText('#playback-volume-out', `${v}%`)

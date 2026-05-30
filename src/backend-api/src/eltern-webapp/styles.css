@@ -1235,6 +1235,20 @@ select:focus, textarea:focus {
   .playback-btn-stop:hover { color: var(--danger); border-color: var(--danger); }
 }
 
+/* Track-Skip-Buttons — gleiches Look-and-Feel wie Stop, aber Akzent in
+   Brand statt Danger beim Hover. */
+.playback-btn-skip {
+  width: 48px;
+  height: 48px;
+  font-size: 22px;
+  background: var(--bg-overlay);
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+}
+@media (hover: hover) {
+  .playback-btn-skip:hover { color: var(--brand); border-color: var(--brand); }
+}
+
 /* Sticky Mini-Player auf Sub-Sektionen (Welle 3): wenn auf hub, full hero.
    Außerhalb hub: gar nicht angezeigt (es lebt nur im screen-hub). */
 

@@ -1003,7 +1003,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    *  HTTP API on localhost:5005, where the corresponding command handler
    *  already exists (used by the box display + Telegram bot). No state
    *  duplicated on the backend-api side. */
-  for (const action of ['pause', 'play', 'stop'] as const) {
+  for (const action of ['pause', 'play', 'stop', 'next', 'previous'] as const) {
     router.post(`/playback/${action}`, requireSession, requireCsrf, async (_req, res) => {
       try {
         const r = await fetch(`http://127.0.0.1:5005/${action}`, { signal: AbortSignal.timeout(3000) })
