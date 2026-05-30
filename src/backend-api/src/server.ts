@@ -1975,6 +1975,7 @@ app.use(
   createElternApiRouter({
     getMupiboxConfig: getMupiboxConfigSync,
     updateMupiboxConfig,
+    activeDataPath: activedataFile,
   }),
 )
 app.get('/eltern', buildElternLandingHandler())

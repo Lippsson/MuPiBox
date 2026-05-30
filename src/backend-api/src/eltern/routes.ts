@@ -42,6 +42,7 @@ import {
 export interface ElternRouterDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
   updateMupiboxConfig: (mutate: (cfg: Record<string, unknown>) => void) => Promise<void>
+  activeDataPath: string
 }
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
@@ -1008,7 +1009,10 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       try {
         const r = await fetch(`http://127.0.0.1:5005/${action}`, { signal: AbortSignal.timeout(3000) })
         if (!r.ok) {
-          res.status(502).json({ error: `player rejected ${action} (HTTP ${r.status})` })
+          // Player liefert bei Cap/Quiet einen 423 mit {error:'playtime_limit_reached'} etc.
+          // Reichen wir 1:1 durch, damit die friendly-error-Mapping im Frontend greift.
+          const body = await r.json().catch(() => ({ error: `player rejected ${action} (HTTP ${r.status})` }))
+          res.status(r.status).json(body)
           return
         }
         res.json({ ok: true, action })
@@ -1017,6 +1021,101 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       }
     })
   }
+
+  /**
+   * POST /api/eltern/library/play  { index }
+   * Startet ein Library-Item auf der Box. Liest active_data.json, mapped den
+   * Type auf den passenden Player-Command-Pfad (mirror PlayerService.playMedia
+   * aus frontend-box) und proxied an localhost:5005. Nutzt /current/ als
+   * Device-Prefix — Player setzt damit activeDevice=null und Spotify nimmt
+   * das zuletzt aktive Connect-Device (typisch die Box).
+   */
+  router.post('/library/play', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { index?: unknown } | undefined) ?? {}
+    const idx = Number(body.index)
+    if (!Number.isInteger(idx) || idx < 0) {
+      res.status(400).json({ error: 'invalid_index' })
+      return
+    }
+    let library: unknown
+    try {
+      library = JSON.parse(await fsp.readFile(deps.activeDataPath, 'utf8'))
+    } catch {
+      res.status(500).json({ error: 'library_unavailable' })
+      return
+    }
+    if (!Array.isArray(library)) {
+      res.status(500).json({ error: 'library_malformed' })
+      return
+    }
+    const item = library[idx] as Record<string, unknown> | undefined
+    if (!item || typeof item !== 'object') {
+      res.status(404).json({ error: 'item_not_found' })
+      return
+    }
+    if (item.isResume === true || item.category === 'resume') {
+      res.status(400).json({ error: 'resume_entry_not_playable' })
+      return
+    }
+    const enc = encodeURIComponent
+    const type = String(item.type ?? '')
+    let url = ''
+    switch (type) {
+      case 'library': {
+        const cat = String(item.category ?? '')
+        const artist = String(item.artist ?? '')
+        const title = String(item.title ?? item.id ?? '')
+        url = `musicsearch/library/album/${enc(cat)}:${enc(artist)}:${enc(title)}`
+        break
+      }
+      case 'spotify': {
+        if (item.playlistid) url = `spotify/now/spotify:playlist:${enc(String(item.playlistid))}:0:0`
+        else if (item.id) url = `spotify/now/spotify:album:${enc(String(item.id))}:0:0`
+        else if (item.showid) url = `spotify/now/spotify:episode:${enc(String(item.showid))}:0:0`
+        else if (item.audiobookid) url = `spotify/now/spotify:show:${enc(String(item.audiobookid))}:0:0`
+        else {
+          res.status(400).json({ error: 'spotify_id_missing' })
+          return
+        }
+        break
+      }
+      case 'radio': {
+        const id = String(item.id ?? '')
+        const title = String(item.title ?? 'Radio')
+        const artist = String(item.artist ?? '')
+        url = `radio/${enc(id)}/${enc(title)}:title:artist:${enc(artist)}`
+        break
+      }
+      case 'rss': {
+        const id = String(item.id ?? '')
+        const title = String(item.title ?? 'Episode')
+        const artist = String(item.artist ?? '')
+        url = `rss/${enc(id)}/${enc(title)}:title:artist:${enc(artist)}`
+        break
+      }
+      default:
+        res.status(400).json({ error: `unsupported_type: ${type}` })
+        return
+    }
+    try {
+      const r = await fetch(`http://127.0.0.1:5005/current/${url}`, { signal: AbortSignal.timeout(5000) })
+      if (!r.ok) {
+        const errBody = await r.json().catch(() => ({ error: `player rejected play (HTTP ${r.status})` }))
+        res.status(r.status).json(errBody)
+        return
+      }
+      res.json({
+        ok: true,
+        item: {
+          type,
+          artist: typeof item.artist === 'string' ? item.artist : null,
+          title: typeof item.title === 'string' ? item.title : null,
+        },
+      })
+    } catch (err) {
+      res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
+    }
+  })
 
   /**
    * GET /api/eltern/playlog?range=today|week  (Phase 18 Item 4)

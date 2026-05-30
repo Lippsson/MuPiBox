@@ -37,6 +37,7 @@ const SECTIONS = {
   settings:  { title: 'Smart-Sync · Optionen', parent: 'sync', loader: () => loadSettings() },
   wizard:    { title: 'Spotify-Setup',       parent: 'sync', loader: () => loadWizard() },
   library:   { title: 'Library',             parent: 'hub', loader: () => { loadLibrary(); loadSubscriptions(); loadSyncStatus() } },
+  play:      { title: 'Wiedergabe starten',  parent: 'hub', loader: () => loadPlay() },
   search:    { title: 'Spotify-Suche',       parent: 'library', loader: () => resetSearch() },
   caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
@@ -1864,6 +1865,146 @@ async function playbackAction(action) {
   setTimeout(loadPlayback, 600)
 }
 
+/* ---------- Wiedergabe starten (Stufe A, Variante β) ----------
+ *  Tile-Grid aus active_data.json, Tap = POST /library/play {index}.
+ *  Eigener State (search + categoryFilter), unabhängig von der Library-
+ *  Sektion (die hat ihren eigenen). */
+
+const playState = {
+  items: [],
+  search: '',
+  category: 'all',  // all | music | audiobook | radio
+}
+
+async function loadPlay() {
+  const grid = $('#play-grid')
+  if (!grid) return
+  grid.innerHTML = skeletonLines(6)
+  try {
+    const res = await fetch('/api/data', { credentials: 'same-origin' })
+    if (!res.ok) {
+      grid.innerHTML = emptyStateHtml('⚠️', `Library nicht geladen (${res.status})`)
+      return
+    }
+    const data = await res.json()
+    playState.items = Array.isArray(data) ? data : []
+    renderPlay()
+  } catch (err) {
+    grid.innerHTML = emptyStateHtml('⚠️', `Fehler: ${escapeHtml(err.message)}`)
+  }
+}
+
+function renderPlay() {
+  const grid = $('#play-grid')
+  if (!grid) return
+  const q = playState.search.trim().toLowerCase()
+  const cat = playState.category
+  const filtered = playState.items
+    .map((item, idx) => ({ item, idx }))
+    .filter(({ item }) => {
+      if (!item || typeof item !== 'object') return false
+      if (item.isResume === true || item.category === 'resume') return false
+      // Filter nach Top-Level-Kategorie. 'radio' deckt sowohl category='radio'
+      // als auch type='radio' ab (manche Einträge haben nur eines gesetzt).
+      if (cat === 'radio') {
+        if (item.category !== 'radio' && item.type !== 'radio') return false
+      } else if (cat !== 'all') {
+        if (item.category !== cat) return false
+      }
+      // type='spotify' mit nur artistid (whole-artist subscription) ist nicht
+      // einzeln abspielbar — gehört in die Library-Sektion zum Verwalten.
+      if (item.type === 'spotify' && !item.id && !item.playlistid && !item.showid && !item.audiobookid) return false
+      if (q) {
+        const a = String(item.artist_override ?? item.artist ?? '').toLowerCase()
+        const t = String(item.title_override ?? item.title ?? '').toLowerCase()
+        if (!a.includes(q) && !t.includes(q)) return false
+      }
+      return true
+    })
+  if (filtered.length === 0) {
+    grid.innerHTML = emptyStateHtml('🎧', q ? 'Nichts zur Suche gefunden.' : 'Keine Einträge in dieser Kategorie.')
+    return
+  }
+  grid.innerHTML = filtered.map(({ item, idx }) => {
+    const artist = escapeHtml(String(item.artist_override ?? item.artist ?? ''))
+    const title = escapeHtml(String(item.title_override ?? item.title ?? item.artist ?? '—'))
+    const cover = item.cover ? escapeHtml(String(item.cover)) : ''
+    const typeLabel = playTypeLabel(item)
+    const coverEl = cover
+      ? `<img class="play-tile-cover" src="${cover}" alt="" loading="lazy">`
+      : `<div class="play-tile-cover-placeholder">${typeIcon(item)}</div>`
+    return `
+      <button class="play-tile" data-idx="${idx}" aria-label="Spielen: ${title}">
+        ${coverEl}
+        ${typeLabel ? `<span class="play-tile-badge">${typeLabel}</span>` : ''}
+        <div class="play-tile-overlay">
+          <div class="play-tile-title">${title}</div>
+          <div class="play-tile-artist">${artist}</div>
+        </div>
+      </button>`
+  }).join('')
+}
+
+function playTypeLabel(item) {
+  const t = item.type
+  if (t === 'spotify') return 'Spotify'
+  if (t === 'library') return 'Lokal'
+  if (t === 'radio' || item.category === 'radio') return 'Radio'
+  if (t === 'rss') return 'Podcast'
+  return ''
+}
+
+function typeIcon(item) {
+  const t = item.type
+  if (t === 'spotify') return '🎵'
+  if (t === 'library') return '💾'
+  if (t === 'radio' || item.category === 'radio') return '📻'
+  if (t === 'rss') return '🎙️'
+  return '🎧'
+}
+
+async function playLibraryItem(idx) {
+  const item = playState.items[idx]
+  if (!item) return
+  // Wenn schon was läuft: kurze Bestätigung. Im Idle direkt loslegen.
+  let playback
+  try {
+    const r = await api(`${API}/playback`)
+    playback = r.ok ? r.body : null
+  } catch { /* egal — wenn /playback hängt, fragen wir trotzdem nicht */ }
+  if (playback?.playing) {
+    const currentLabel = playback.title || playback.artist || 'der aktuelle Titel'
+    const newLabel = String(item.title_override ?? item.title ?? item.artist ?? 'neuer Titel')
+    const ok = await confirmDialog(
+      'Wiedergabe überschreiben?',
+      `Aktuell läuft „${currentLabel}". Mit „${newLabel}" überschreiben?`,
+      { confirmLabel: 'Jetzt spielen' },
+    )
+    if (!ok) return
+  }
+  const res = await api(`${API}/library/play`, { method: 'POST', body: { index: idx } })
+  if (!res.ok) {
+    const code = res.body?.error ?? ''
+    const friendly = {
+      playtime_limit_reached: 'Spielzeit-Limit erreicht. Heute keine weitere Wiedergabe.',
+      quiet_hours_active: 'Gerade ist Ruhezeit. Wiedergabe ist pausiert.',
+      spotify_id_missing: 'Diesem Eintrag fehlt die Spotify-ID.',
+      resume_entry_not_playable: 'Resume-Einträge können nicht direkt gestartet werden.',
+      item_not_found: 'Eintrag nicht mehr in der Library.',
+      library_unavailable: 'Library konnte nicht geladen werden.',
+    }[code] ?? `Wiedergabe fehlgeschlagen: ${code || res.status}`
+    toast(code === 'playtime_limit_reached' || code === 'quiet_hours_active' ? 'warn' : 'error', friendly)
+    return
+  }
+  const t = res.body?.item?.title ?? res.body?.item?.artist ?? 'Titel'
+  toast('success', `▶ ${t}`)
+  // Kurze Verzögerung, dann zurück zum Hub damit man Now-Playing sieht.
+  setTimeout(() => {
+    navigate('hub')
+    loadPlayback()
+  }, 800)
+}
+
 /* ---------- Hör-Verlauf (Phase 18 Item 4) ---------- */
 
 async function loadHistory() {
@@ -3082,6 +3223,25 @@ function wire() {
     setText('#playback-volume-out', `${v}%`)
     updateRangeFill(e.target)
     setPlaybackVolume(v)
+  })
+
+  // Wiedergabe-Sektion (Stufe A, Variante β)
+  $('#play-search')?.addEventListener('input', (e) => {
+    playState.search = e.target.value
+    renderPlay()
+  })
+  $('#play-filter-pills')?.addEventListener('click', (e) => {
+    const pill = e.target.closest('.play-pill')
+    if (!pill) return
+    playState.category = pill.dataset.cat ?? 'all'
+    for (const p of $$('.play-pill')) p.classList.toggle('is-active', p === pill)
+    renderPlay()
+  })
+  $('#play-grid')?.addEventListener('click', (e) => {
+    const tile = e.target.closest('.play-tile')
+    if (!tile) return
+    const idx = Number(tile.dataset.idx)
+    if (Number.isInteger(idx)) playLibraryItem(idx)
   })
 
   // Confirm-Dialog (Welle 4) — OK/Cancel-Buttons + Backdrop-Click + Esc.

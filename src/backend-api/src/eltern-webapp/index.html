@@ -137,12 +137,17 @@
       <div class="card-flat">
         <div class="section-label">Heute &amp; Jetzt</div>
         <div class="hub-grid">
-          <a href="#history" class="hub-card" data-section="history" style="--i:0">
+          <a href="#play" class="hub-card" data-section="play" style="--i:0">
+            <span class="hub-card-icon">▶️</span>
+            <span class="hub-card-title">Wiedergabe starten</span>
+            <span class="hub-card-sub">Album auswählen</span>
+          </a>
+          <a href="#history" class="hub-card" data-section="history" style="--i:1">
             <span class="hub-card-icon">📊</span>
             <span class="hub-card-title">Hör-Verlauf</span>
             <span class="hub-card-sub" id="hub-card-history-sub">Heute &amp; 7 Tage</span>
           </a>
-          <a href="#caps" class="hub-card" data-section="caps" style="--i:1">
+          <a href="#caps" class="hub-card" data-section="caps" style="--i:2">
             <span class="hub-card-icon">⏱️</span>
             <span class="hub-card-title">Spielzeit &amp; Ruhe</span>
             <span class="hub-card-sub">Limits + Quiet-Hours</span>
@@ -153,17 +158,17 @@
       <div class="card-flat">
         <div class="section-label">Inhalte</div>
         <div class="hub-grid">
-          <a href="#library" class="hub-card" data-section="library" style="--i:2">
+          <a href="#library" class="hub-card" data-section="library" style="--i:3">
             <span class="hub-card-icon">📚</span>
             <span class="hub-card-title">Library</span>
             <span class="hub-card-sub">Inhalte verwalten</span>
           </a>
-          <a href="#sync" class="hub-card" data-section="sync" style="--i:3">
+          <a href="#sync" class="hub-card" data-section="sync" style="--i:4">
             <span class="hub-card-icon">🎵</span>
             <span class="hub-card-title">Spotify Smart-Sync</span>
             <span class="hub-card-sub" id="hub-card-sync-sub">—</span>
           </a>
-          <a href="#theme" class="hub-card" data-section="theme" style="--i:4">
+          <a href="#theme" class="hub-card" data-section="theme" style="--i:5">
             <span class="hub-card-icon">🎨</span>
             <span class="hub-card-title">Theme</span>
             <span class="hub-card-sub">Display-Aussehen</span>
@@ -174,27 +179,27 @@
       <div class="card-flat">
         <div class="section-label">Box</div>
         <div class="hub-grid">
-          <a href="#power" class="hub-card" data-section="power" style="--i:5">
+          <a href="#power" class="hub-card" data-section="power" style="--i:6">
             <span class="hub-card-icon">🔋</span>
             <span class="hub-card-title">Akku</span>
             <span class="hub-card-sub" id="hub-card-power-sub">—</span>
           </a>
-          <a href="#wlan" class="hub-card" data-section="wlan" style="--i:6">
+          <a href="#wlan" class="hub-card" data-section="wlan" style="--i:7">
             <span class="hub-card-icon">📶</span>
             <span class="hub-card-title">WLAN</span>
             <span class="hub-card-sub">Box-Verbindung</span>
           </a>
-          <a href="#bluetooth" class="hub-card" data-section="bluetooth" style="--i:7">
+          <a href="#bluetooth" class="hub-card" data-section="bluetooth" style="--i:8">
             <span class="hub-card-icon">🎧</span>
             <span class="hub-card-title">Bluetooth</span>
             <span class="hub-card-sub">Kopfhörer &amp; Lautsprecher</span>
           </a>
-          <a href="#telegram" class="hub-card" data-section="telegram" style="--i:8">
+          <a href="#telegram" class="hub-card" data-section="telegram" style="--i:9">
             <span class="hub-card-icon">📞</span>
             <span class="hub-card-title">Telegram</span>
             <span class="hub-card-sub">Eltern-Bot</span>
           </a>
-          <a href="#system" class="hub-card" data-section="system" style="--i:9">
+          <a href="#system" class="hub-card" data-section="system" style="--i:10">
             <span class="hub-card-icon">⚙️</span>
             <span class="hub-card-title">System</span>
             <span class="hub-card-sub">Audio, Sicherheit, Power</span>
@@ -1006,6 +1011,23 @@
         <div id="hist-top-titles">
           <p class="dim">Lade …</p>
         </div>
+      </div>
+    </section>
+
+    <!-- Wiedergabe starten: Tile-Grid aus der Library, Tap = Play auf Box. -->
+    <section id="screen-play" class="screen" hidden>
+      <div class="card-flat">
+        <div class="play-toolbar">
+          <input type="search" id="play-search" class="play-search" placeholder="Suchen — Künstler oder Titel" autocomplete="off">
+          <div class="play-filter-pills" id="play-filter-pills" role="tablist" aria-label="Filter">
+            <button class="play-pill is-active" data-cat="all">Alle</button>
+            <button class="play-pill" data-cat="music">Musik</button>
+            <button class="play-pill" data-cat="audiobook">Hörspiel</button>
+            <button class="play-pill" data-cat="radio">Radio</button>
+          </div>
+        </div>
+      </div>
+      <div class="play-grid" id="play-grid">
       </div>
     </section>
 
