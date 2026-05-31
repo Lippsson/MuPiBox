@@ -373,6 +373,13 @@ const currentMeta = {
   totalTracks: '',
   progressTime: '',
   volume: 0,
+  // Phase 19 Stufe B: wer hat den letzten Command geschickt? Werte:
+  // 'box' (Default — Display-Frontend), 'eltern' (WebApp-Proxy),
+  // 'telegram' (Bot), 'unknown' (alles andere). triggerAt = ms-Epoch.
+  // Display pollt /local und navigiert zur Player-View, wenn neuer
+  // triggerSource !== 'box' kommt.
+  triggerSource: 'box',
+  triggerAt: 0,
 }
 
 // === Playtime Limit (daily listening cap) ===
@@ -1741,7 +1748,12 @@ app.get('/state', (_req, res) => {
 /*endpoint to return all local metainformation*/
 /*only used if sonos-kids-player is modified*/
 app.get('/local', (_req, res) => {
-  res.send(currentMeta)
+  // Frische Object-Komposition statt res.send(currentMeta) — Express
+  // setzt sonst einen ETag/Content-Length aus dem initialen Object-Shape
+  // und neue Felder (triggerSource/triggerAt aus Phase 19 Stufe B)
+  // landen nicht in der Response, obwohl die Mutationen am Objekt
+  // ankommen.
+  res.json({ ...currentMeta })
 })
 
 app.get('/spotify/token', (_req, res) => {
@@ -1760,7 +1772,23 @@ app.get('/spotify/token', (_req, res) => {
 /*sonos-kids-controller sends commands via http get and uses path names for encoding*/
 /*commands are as defined in sonos-kids-controller and mapped spotify calls*/
 app.use((req, res) => {
-  const command = path.parse(req.url)
+  // Phase 19 Stufe B: Quelle aus optionalem ?src=... Query lesen.
+  // path.parse() ignoriert Query nicht — parsen wir vorher mit URL().
+  // Base-URL ist irrelevant, sie wird nur vom URL-Constructor verlangt.
+  let pathname = req.url
+  let triggerSource = 'box'
+  try {
+    const u = new URL(req.url, 'http://localhost')
+    pathname = u.pathname
+    const src = u.searchParams.get('src')
+    if (src && /^[a-z0-9_-]{1,20}$/i.test(src)) triggerSource = src
+  } catch {
+    /* malformed — bleibt 'box', pathname bleibt req.url */
+  }
+  currentMeta.triggerSource = triggerSource
+  currentMeta.triggerAt = Date.now()
+
+  const command = path.parse(pathname)
   log.debug(`${now()}: [Spotify Control]name: ${command.name}`)
   log.debug(`${now()}: [Spotify Control]dir: ${command.dir}`)
 

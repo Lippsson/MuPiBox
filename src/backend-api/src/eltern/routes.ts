@@ -1007,7 +1007,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   for (const action of ['pause', 'play', 'stop', 'next', 'previous'] as const) {
     router.post(`/playback/${action}`, requireSession, requireCsrf, async (_req, res) => {
       try {
-        const r = await fetch(`http://127.0.0.1:5005/${action}`, { signal: AbortSignal.timeout(3000) })
+        const r = await fetch(`http://127.0.0.1:5005/${action}?src=eltern`, { signal: AbortSignal.timeout(3000) })
         if (!r.ok) {
           // Player liefert bei Cap/Quiet einen 423 mit {error:'playtime_limit_reached'} etc.
           // Reichen wir 1:1 durch, damit die friendly-error-Mapping im Frontend greift.
@@ -1098,7 +1098,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         return
     }
     try {
-      const r = await fetch(`http://127.0.0.1:5005/current/${url}`, { signal: AbortSignal.timeout(5000) })
+      const r = await fetch(`http://127.0.0.1:5005/current/${url}?src=eltern`, { signal: AbortSignal.timeout(5000) })
       if (!r.ok) {
         const errBody = await r.json().catch(() => ({ error: `player rejected play (HTTP ${r.status})` }))
         res.status(r.status).json(errBody)

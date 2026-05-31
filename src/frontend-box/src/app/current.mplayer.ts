@@ -13,4 +13,10 @@ export interface CurrentMPlayer {
   totalTracks?: number
   progressTime?: number
   volume?: number
+  // Phase 19 Stufe B: wer hat den letzten Command an den Player geschickt?
+  // Display-Frontend ('box', Default), Eltern-WebApp ('eltern'),
+  // Telegram-Bot ('telegram'). Display nutzt das um bei externer Wiedergabe
+  // automatisch zur Player-View zu navigieren.
+  triggerSource?: string
+  triggerAt?: number
 }
