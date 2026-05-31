@@ -110,12 +110,16 @@ export class PlayerPage implements OnInit {
     this.spotify$ = this.mediaService.current$
     this.local$ = this.mediaService.local$
 
-    if (this.router.currentNavigation()?.extras.state?.media) {
-      this.media = this.router.currentNavigation().extras.state.media
+    const navState = this.router.currentNavigation()?.extras.state ?? {}
+    if (navState.media) {
+      this.media = navState.media
       if (isResumeEntry(this.media)) {
         this.resumePlay = true
       }
-      this.isExternalPlayback = false
+      // Phase 19 Stufe B: extern getriggerter Track (Eltern-WebApp etc.)
+      // läuft schon — Player-Page darf NICHT erneut playMedia() rufen,
+      // sonst doppelter Start oder Konflikt mit dem Trigger-Pfad.
+      this.isExternalPlayback = navState.externalPlayback === true
     } else {
       this.isExternalPlayback = true
     }

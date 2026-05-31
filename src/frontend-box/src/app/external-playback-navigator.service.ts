@@ -82,7 +82,7 @@ export class ExternalPlaybackNavigatorService {
           this.lastSeenTriggerAt = at
           if (!this.isCurrentlyOnPlayerPage() && !this.isNavigatingToPlayer) {
             console.log(`🎵 External playback trigger from "${src}" — navigating to /player`)
-            this.navigateToPlayerExternal()
+            this.navigateToPlayerExternal(data)
           }
           return
         }
@@ -90,15 +90,20 @@ export class ExternalPlaybackNavigatorService {
       })
   }
 
-  /** Wie navigateToPlayerPage(), aber ohne Media-Snapshot — die Player-
-   *  Page rendert den Track aus mediaService.local$ / current$ live. */
-  private navigateToPlayerExternal(): void {
+  /** Navigation aus dem Polling-Pfad: baut bei mplayer-Tracks (Library/RSS/
+   *  Radio) ein Media-Objekt aus den /local-Daten und gibt es als
+   *  navigationExtras.state mit. Player-Page erkennt am `externalPlayback:
+   *  true` Flag dass Track schon läuft und ruft NICHT playMedia() doppelt. */
+  private navigateToPlayerExternal(data: CurrentMPlayer): void {
+    const media = this.buildMediaFromLocal(data)
     this.isNavigatingToPlayer = true
+    const extras: NavigationExtras = { state: { externalPlayback: true } }
+    if (media) (extras.state as Record<string, unknown>).media = media
     this.router
-      .navigate(['/player'])
+      .navigate(['/player'], extras)
       .then((success) => {
         if (success) {
-          console.log('✅ Navigated to /player after external trigger')
+          console.log('✅ Navigated to /player after external trigger', media ? `(media: ${media.type})` : '(no media)')
         } else {
           console.warn('⚠️ External-trigger navigation to /player returned false')
         }
@@ -110,6 +115,23 @@ export class ExternalPlaybackNavigatorService {
         console.error('❌ External-trigger navigation failed:', error)
         this.isNavigatingToPlayer = false
       })
+  }
+
+  /** Baut ein Media-Object aus /local-Daten. Spotify-Tracks lassen wir
+   *  null und delegieren an handleExternalPlayback (das nutzt schon
+   *  spotifyService.currentTrack$ für ein vollständiges Media-Objekt). */
+  private buildMediaFromLocal(data: CurrentMPlayer): Media | null {
+    if (data.currentPlayer !== 'mplayer') return null
+    const path = String((data as { path?: string }).path ?? '')
+    const pathParts = path.split('/').filter(Boolean)
+    const category = pathParts[0] || 'music'
+    const artist = pathParts[1] || ''
+    const title = String(data.album ?? pathParts[2] ?? '')
+    // currentType aus /local mappt direkt auf media.type
+    const ctype = String((data as { currentType?: string }).currentType ?? 'local')
+    const type: Media['type'] =
+      ctype === 'rss' ? 'rss' : ctype === 'radio' ? 'radio' : 'library'
+    return { type, category, artist, title } as Media
   }
 
   private isCurrentlyOnPlayerPage(): boolean {
