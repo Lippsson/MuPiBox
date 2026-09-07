@@ -267,6 +267,12 @@ class bq25792:
                     # the POR default (typ. 8400 mV / 4.20 V/cell) stays active.
                     vreg_raw = bt["config"].get("vreg")
                     self.battery_conf["vreg"] = int(vreg_raw) if vreg_raw not in (None, "", "0") else None
+                    # Optional VSYSMIN per battery profile, same opt-in shape as
+                    # vreg above. battery_conf is an explicit whitelist, not a
+                    # copy of the profile dict -- a key that is not listed here
+                    # never reaches write_defaults(), no matter what the JSON says.
+                    vsysmin_raw = bt["config"].get("vsysmin")
+                    self.battery_conf["vsysmin"] = int(vsysmin_raw) if vsysmin_raw not in (None, "", "0") else None
                     logging.info("Battery configuration loaded from JSON: %s", self.battery_conf_file)
                     break
             return 0
