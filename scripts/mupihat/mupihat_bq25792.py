@@ -126,6 +126,26 @@ class bq25792:
     hat.read_all_register()
     print(hat.to_json())
     """
+
+    # Plausibility bounds for the ADC readings, per signal: (min, max).
+    # The BQ25792 ADC occasionally returns single-sample garbage. Observed on
+    # a live box: IBus 9892 mA while the input was hard-limited to 1700 mA,
+    # and Ibat 2428 mA at an input power of 8.7 W. Those spikes propagate
+    # straight into /tmp/mupihat.json and from there into battery_log.jsonl
+    # and the frontend charts, where a single outlier flattens the whole
+    # y-axis. The bounds are deliberately wide -- they reject the physically
+    # impossible, not the merely unusual.
+    _ADC_LIMITS = {
+        'Vbat': (0, 20000),     # chip supports up to 4S (~18.8 V VREG)
+        'Vbus': (0, 30000),     # VBUS ADC range per datasheet
+        'IBus': (-5000, 5000),  # MuPiHAT input path cannot carry more
+        'Ibat': (-6000, 6000),
+    }
+    # Never substitute a held value forever: after this many consecutive
+    # rejects we trust the sensor again, so a genuine new operating point
+    # (or a real fault) cannot be masked indefinitely.
+    _ADC_MAX_HOLD = 5
+
      # constructor method
     def __init__(self, i2c_device=1, i2c_addr=0x6b, busWS_ms=10, exit_on_error = False, battery_conf_file="/etc/mupibox/mupiboxconfig.json"):
         try:
@@ -146,6 +166,10 @@ class bq25792:
             # change but long enough to absorb the load-sag transients.
             self._vbat_history: list[int] = []
             self._vbat_history_max = 8
+            # ADC plausibility filter: last accepted reading per signal and
+            # how many implausible samples in a row we have suppressed.
+            self._adc_last: dict[str, int] = {}
+            self._adc_reject_streak: dict[str, int] = {}
             self.i2c_device = i2c_device
             self.i2c_addr = i2c_addr
             self.busWS_ms = busWS_ms
@@ -5570,11 +5594,53 @@ class bq25792:
         """
         return self.REG41_TDIE_ADC.get_IC_temperature()
 
+    def _adc_filter(self, name: str, value, reason: str = None):
+        """
+        Reject implausible ADC samples and hold the last accepted value instead.
+
+        Every consumer -- to_json(), the log loop, battery_soc(),
+        battery_percent_granular() -- goes through the read_* methods, so this
+        is the single choke point where an outlier can be stopped before it
+        reaches /tmp/mupihat.json, battery_log.jsonl and the frontend charts.
+
+        `reason` lets the caller reject a sample that is inside the static
+        bounds but fails a cross-check (see read_Ibat). Returns the last
+        accepted value while suppressing, and falls back to passing the raw
+        value through once _ADC_MAX_HOLD rejects in a row have piled up, so a
+        real change of operating point is never masked permanently.
+        """
+        if reason is None:
+            lo, hi = self._ADC_LIMITS[name]
+            if value is None:
+                reason = "no reading"
+            elif not lo <= value <= hi:
+                reason = f"outside {lo}..{hi}"
+
+        if reason is None:
+            self._adc_last[name] = value
+            self._adc_reject_streak[name] = 0
+            return value
+
+        streak = self._adc_reject_streak.get(name, 0) + 1
+        self._adc_reject_streak[name] = streak
+        last = self._adc_last.get(name)
+
+        if last is None or streak > self._ADC_MAX_HOLD:
+            logging.error(
+                "ADC %s implausible (%s, %s) and no usable fallback after %d "
+                "rejects -- passing the raw value through.", name, value, reason, streak)
+            self._adc_last[name] = value
+            return value
+
+        logging.warning("ADC %s implausible (%s, %s), holding last value %s.",
+                        name, value, reason, last)
+        return last
+
     def read_Vbat(self) -> int:
         """
         Reads the VBAT_ADC register and returns the battery voltage in mV.
         """
-        return self.REG3B_VBAT_ADC.get_Vbat()
+        return self._adc_filter('Vbat', self.REG3B_VBAT_ADC.get_Vbat())
 
 
     def read_Vbus(self):
@@ -5582,7 +5648,7 @@ class bq25792:
         Reads the VBUS_ADC register and returns the bus voltage in mV.
         If the read operation fails, it returns the last known value.
         """
-        return self.REG35_VBUS_ADC.get_Vbus()
+        return self._adc_filter('Vbus', self.REG35_VBUS_ADC.get_Vbus())
 
     def read_Ibus(self):
         """
@@ -5590,13 +5656,32 @@ class bq25792:
         The IBUS ADC reading is reported in 2's complement.
         If the read operation fails, it returns the last known value.
         """
-        return self.REG31_IBUS_ADC.get_Ibus()
+        return self._adc_filter('IBus', self.REG31_IBUS_ADC.get_Ibus())
 
     def read_Ibat(self) -> int:
         """
         Reads the IBAT_ADC register and returns the battery current in mA.
+
+        On top of the static bounds this cross-checks charge current against
+        input power: the converter cannot put more into the battery than the
+        input delivers. The observed 2428 mA spike sat well inside the static
+        bounds but claimed 15.6 W of charge power from an 8.7 W input -- only
+        the energy check catches that class of outlier. Discharge (negative
+        Ibat) is fed from the battery itself and is not bounded this way, so
+        it is checked against the static limits only.
         """
-        return self.REG33_IBAT_ADC.get_Ibat()
+        ibat = self.REG33_IBAT_ADC.get_Ibat()
+        reason = None
+        if ibat is not None and ibat > 0:
+            # All four come from the register cache filled by
+            # read_all_register(), so this costs no extra I2C traffic.
+            vbat, vbus, ibus = self.read_Vbat(), self.read_Vbus(), self.read_Ibus()
+            if all(v is not None for v in (vbat, vbus, ibus)) and vbat > 0 and ibus > 0:
+                # 1.1 covers ADC tolerance; the converter is never >100% efficient.
+                ibat_max = (vbus * ibus * 1.1) / vbat
+                if ibat > ibat_max:
+                    reason = f"charge power exceeds input power (max ~{int(ibat_max)} mA)"
+        return self._adc_filter('Ibat', ibat, reason)
 
 
     def read_InputCurrentLimit(self) -> int:
@@ -5671,10 +5756,68 @@ class bq25792:
             logging.error("mask_all_INTERRUPTS failed.")
             return -1
     
+    def _verify_register(self, addr: int, expected: int, label: str, width: int = 1) -> bool:
+        """
+        Read a register back after writing it and log when the write did not stick.
+
+        The BQ25792 silently ignores writes that violate its internal
+        constraints -- there is no error bit and no exception. Observed in the
+        field: with the charger latched to 4 cells, VREG could not be set below
+        VSYSMIN (12000 mV), so every write of 8300 mV was dropped while the
+        driver cheerfully logged "VREG set to 8300 mV". The chip kept 16800 mV,
+        the pack sat in precharge for three months and slowly drained. The
+        input current limit fails the same way (driver logs 2200 mA, register
+        holds 1790 mA because the external ILIM_HIZ pin governs).
+
+        A write without a read-back is a wish, not a setting.
+        """
+        try:
+            raw = self.read_register(addr, width)
+            actual = raw[0] if width == 1 else (raw[0] << 8) | raw[1]
+        except I2CError:
+            logging.warning("%s: read-back failed, cannot verify the write.", label)
+            return False
+        if actual != expected:
+            logging.warning("%s: write did not stick -- wrote 0x%0*X, chip holds 0x%0*X.",
+                            label, width * 2, expected, width * 2, actual)
+            return False
+        logging.info("%s: verified.", label)
+        return True
+
+    def _battery_cell_count(self):
+        """
+        Derive the pack's cell count from the configured battery profile.
+
+        The charger latches CELL from the PROG pin resistance at POR. That
+        latch was observed to come up wrong once on a live box (4 cells for a
+        2S pack), and every derived default follows it off a cliff: VREG
+        16800 mV, VSYSMIN 12000 mV, and a precharge-to-fastcharge threshold of
+        71.4% x VREG = 12 V that a 2S pack can never reach. The pack then sits
+        in precharge forever, gets no current, and discharges while plugged in.
+
+        Deriving the count from the profile lets write_defaults() correct such
+        a misread instead of inheriting it. Returns None when the profile
+        carries no usable pack voltage (e.g. the USB-C / no-battery profile),
+        in which case the POR latch is left untouched.
+        """
+        for key in ("vreg", "v_100"):
+            try:
+                mv = int(self.battery_conf.get(key) or 0)
+            except (TypeError, ValueError):
+                continue
+            if mv < 3000:          # no battery configured on this profile
+                continue
+            cells = int(round(mv / 4200.0))
+            if 1 <= cells <= 4:
+                return cells
+            logging.warning("Battery profile %s=%s mV implies %d cells, out of range 1-4.",
+                            key, mv, cells)
+        return None
+
     def write_defaults(self):
         '''
-        Write default settings to the charger IC.   
-        ''' 
+        Write default settings to the charger IC.
+        '''
         #Watchdog
         reg = self.REG10_Charger_Control_1
         reg.set_WATCHDOG(7) #160s watchdog
@@ -5705,6 +5848,53 @@ class bq25792:
         reg.set_EN_EXTILIM(1) # Enable External ILIM_HIZ Input Current Limit pin input
         self.write_register(reg)
 
+        # The next three writes MUST stay in this order: CELL, then VSYSMIN,
+        # then VREG. The chip derives VREG and VSYSMIN defaults from the cell
+        # count and rejects a VREG below VSYSMIN, so writing VREG first means
+        # writing it into a value the chip immediately overrides (when CELL
+        # changes) or refuses outright (when VSYSMIN is still the 4S default).
+        # That ordering bug is exactly what kept an 8300 mV VREG from ever
+        # reaching the register.
+
+        # Correct a wrong PROG-pin cell latch. Writing CELL makes the chip
+        # re-derive VREG and VSYSMIN for that cell count on its own -- verified
+        # on hardware: CELL 4S -> 2S moved VSYSMIN 12000 -> 7000 mV and VREG
+        # 16800 -> 8400 mV in the same instant.
+        cells = self._battery_cell_count()
+        if cells:
+            try:
+                reg0a = self.read_register(0x0A, 1)[0]
+                want = (reg0a & 0b00111111) | ((cells - 1) << 6)
+                if want != reg0a:
+                    logging.warning(
+                        "Charger reports %d cell(s) but the battery profile implies %d -- correcting.",
+                        (reg0a >> 6) + 1, cells)
+                    self.safe_execute(self.bq.write_byte_data, self.i2c_addr, 0x0A, want)
+                    self._verify_register(0x0A, want, f"CELL ({cells}s)")
+            except I2CError:
+                logging.error("CELL correction failed, keeping the POR latch.")
+
+        # Optional VSYSMIN override from the battery profile. Left alone when
+        # unset, so existing installs keep the cell-derived POR default.
+        # Lowering it below the pack voltage stops the converter from boosting
+        # the system rail above the battery: on a deeply discharged 2S pack
+        # that measured +30% charge current and -11 °C at identical input
+        # power. The trade-off is less brown-out headroom at the very end of
+        # discharge, so keep it at or above the profile's th_shutdown.
+        vsysmin_mv = self.battery_conf.get("vsysmin")
+        if vsysmin_mv:
+            try:
+                vsysmin_mv = int(vsysmin_mv)
+            except (TypeError, ValueError):
+                vsysmin_mv = 0
+            # BQ25792 REG00 spec: 2500-16000 mV range, 250 mV step
+            if 2500 <= vsysmin_mv <= 16000:
+                value = (vsysmin_mv - 2500) // 250
+                self.safe_execute(self.bq.write_byte_data, self.i2c_addr, 0x00, value)
+                self._verify_register(0x00, value, f"VSYSMIN ({value * 250 + 2500} mV)")
+            else:
+                logging.warning(f"VSYSMIN value {vsysmin_mv} mV out of range (2500-16000), keeping POR default")
+
         # Phase 13a: apply VREG (Charge Voltage Limit) from the active
         # battery profile, when configured. 8300 mV = 4.15 V/cell on a 2S
         # pack — Samsung INR21700-50E datasheet maps that to ~3x the cycle
@@ -5720,10 +5910,15 @@ class bq25792:
                 reg.set(vreg_mv_aligned // 10)
                 self.write_register_word(reg)
                 logging.info(f"VREG (Charge Voltage Limit) set to {vreg_mv_aligned} mV from battery profile")
+                self._verify_register(0x01, vreg_mv_aligned // 10, f"VREG ({vreg_mv_aligned} mV)", width=2)
             else:
                 logging.warning(f"VREG value {vreg_mv} mV out of range (3000-18800), keeping POR default")
 
         self.set_input_current_limit(2200) # 2.2A input current limit
+        # Expect this one to come back lower: with EN_EXTILIM set the external
+        # ILIM_HIZ resistor governs and the chip clamps to it (1790 mA on this
+        # HAT). Verifying it anyway turns a silent discrepancy into a log line.
+        self._verify_register(0x06, 220, "Input current limit (2200 mA)", width=2)
 
         self.mask_all_INTERRUPTS()  
         return
