@@ -16,8 +16,17 @@ export class ExternalPlaybackNavigatorService {
   /** Phase 19 Stufe B: höchster triggerAt-Wert, den wir aus /local schon
    *  gesehen haben. Beim Start initialisiert auf aktuellen Wert (kein
    *  Navigieren auf Baseline), danach hochgezählt sobald ein neuer
-   *  externer Trigger (src !== 'box') erkannt wird. */
-  private lastSeenTriggerAt = 0
+   *  externer Trigger (src !== 'box') erkannt wird.
+   *
+   *  `null` heißt "Baseline noch nicht gesetzt" und ist bewusst NICHT 0:
+   *  spotify-control.js initialisiert triggerAt selbst mit 0 und setzt es
+   *  erst beim ersten Wiedergabebefehl auf Date.now(). Mit 0 als Sentinel
+   *  blieb die Baseline nach jedem Player-Neustart auf 0 stehen, und der
+   *  erste echte externe Trigger lief in den Baseline-Zweig statt in die
+   *  Navigation — das Display folgte erst beim zweiten Tippen. */
+  private lastSeenTriggerAt: number | null = null
+  /** Tick-Zähler für die gedrosselte Abfrage auf der Player-Page. */
+  private pollTick = 0
 
   constructor(
     private router: Router,
@@ -60,6 +69,14 @@ export class ExternalPlaybackNavigatorService {
     // Display switcht in <3s", ohne unnötiges Load auf den Player.
     interval(2000)
       .pipe(
+        // Auf der Player-Page wird grundsätzlich nicht navigiert (siehe
+        // isCurrentlyOnPlayerPage()-Guard unten) — dort hält der Poll nur
+        // noch lastSeenTriggerAt aktuell, und dafür reicht ein Fünftel der
+        // Frequenz. Das ist genau der Zustand, in dem die Box am längsten
+        // steht (Kind hört etwas) und auf Akku läuft: 43.200 Requests/Tag
+        // sinken damit auf rund 9.000, ohne dass die Reaktionszeit ausserhalb
+        // der Player-Page leidet.
+        filter(() => !this.isCurrentlyOnPlayerPage() || this.pollTick++ % 5 === 0),
         switchMap(() =>
           this.http
             .get<CurrentMPlayer>(`${environment.backend.playerUrl}/local`)
@@ -74,7 +91,7 @@ export class ExternalPlaybackNavigatorService {
         const src = data.triggerSource ?? 'box'
         // Baseline-Tick: erstes Polling-Ergebnis nur lastSeen setzen, nicht
         // auf einen historischen Trigger reagieren.
-        if (this.lastSeenTriggerAt === 0) {
+        if (this.lastSeenTriggerAt === null) {
           this.lastSeenTriggerAt = at
           return
         }

@@ -3344,6 +3344,36 @@ function wire() {
   }
 }
 
+/* Pausiert die beiden Self-Scheduling-Poller (Hub-Wiedergabe alle 5s,
+ * Spielzeit-Status alle 5-30s), solange die Seite nicht sichtbar ist.
+ * Ohne das pollt ein vergessener Handy-Tab die Box endlos weiter -- auch
+ * bei ausgeschaltetem Display, und die Box läuft auf Akku. Beim
+ * Zurückkehren wird sofort einmal aktualisiert, damit nicht bis zum
+ * nächsten Intervall veraltete Werte stehen. */
+function pauseSectionPolling() {
+  if (playbackPollHandle) {
+    clearTimeout(playbackPollHandle)
+    playbackPollHandle = null
+  }
+  if (sleepTimerTickHandle) {
+    clearTimeout(sleepTimerTickHandle)
+    sleepTimerTickHandle = null
+  }
+}
+
+function resumeSectionPolling() {
+  // Nur wieder anwerfen, wenn der Bootstrap durch ist (state.csrf gesetzt) --
+  // sonst laufen die Poller gegen eine noch nicht authentifizierte Session.
+  if (!state.csrf) return
+  if (state.currentSection === 'hub') loadPlayback()
+  else if (state.currentSection === 'caps') loadSleepTimer()
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseSectionPolling()
+  else resumeSectionPolling()
+})
+
 document.addEventListener('DOMContentLoaded', () => {
   wire()
   // Phase 15a: hash-based routing. hashchange re-routes (browser back/

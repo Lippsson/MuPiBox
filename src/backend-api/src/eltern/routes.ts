@@ -1126,7 +1126,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * "start" is the currently-playing track (we extrapolate its duration to
    * "now" so the Heute-Karte shows recent minutes immediately).
    */
-  router.get('/playlog', requireSession, (req, res) => {
+  router.get('/playlog', requireSession, async (req, res) => {
     const range = String(req.query.range ?? 'today')
     if (range !== 'today' && range !== 'week') {
       res.status(400).json({ error: 'range must be today or week' })
@@ -1138,7 +1138,11 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
 
     let raw = ''
     try {
-      raw = readFileSync('/home/dietpi/.mupibox/play_log.jsonl', 'utf8')
+      // Bewusst asynchron: die Datei liegt im MB-Bereich, und readFileSync
+      // hätte den einzigen Thread des Backends blockiert -- also auch
+      // Wiedergabesteuerung und Display-Sync, während jemand den
+      // Hör-Verlauf öffnet.
+      raw = await fsp.readFile('/home/dietpi/.mupibox/play_log.jsonl', 'utf8')
     } catch {
       // file may not exist yet — return empty result
     }

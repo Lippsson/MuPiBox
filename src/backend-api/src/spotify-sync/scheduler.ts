@@ -48,16 +48,29 @@ function scheduleNext(delaySeconds: number, deps: RunSyncDeps): void {
   if (timerHandle) clearTimeout(timerHandle)
   timerHandle = setTimeout(async () => {
     timerHandle = null
-    const config = loadSpotifySyncConfig(deps.getMupiboxConfig())
-    if (!config.enabled) {
-      // Re-poll the config periodically even when disabled, so the user
-      // can flip the toggle in the WebApp without a backend restart.
-      scheduleNext(config.polling_interval_seconds, deps)
-      return
+    // Fallback, falls schon das Laden der Config wirft: lieber in einer
+    // Minute nochmal versuchen als den Scheduler verlieren.
+    let next = 60
+    try {
+      const config = loadSpotifySyncConfig(deps.getMupiboxConfig())
+      if (!config.enabled) {
+        // Re-poll the config periodically even when disabled, so the user
+        // can flip the toggle in the WebApp without a backend restart.
+        next = config.polling_interval_seconds
+      } else {
+        const result = await runOnce('cron', deps)
+        // Honour rate-limit retry-after if present, else standard interval.
+        next =
+          result.state === 'RATE_LIMITED' && result.retryAfterSeconds ? result.retryAfterSeconds : config.polling_interval_seconds
+      }
+    } catch (err) {
+      // runSync() endet mit try/finally ohne catch, kann also durchwerfen.
+      // Ohne dieses catch bliebe die Neuplanung unten aus und der Scheduler
+      // wäre bis zum nächsten Backend-Neustart still tot -- ohne Hinweis im
+      // UI, weil /status weiter den letzten erfolgreichen Lauf zeigt.
+      console.error(`${new Date().toLocaleString()}: [spotify-sync] scheduled run threw: ${(err as Error).message}`)
     }
-    const result = await runOnce('cron', deps)
-    // Honour rate-limit retry-after if present, else standard interval.
-    const next = result.state === 'RATE_LIMITED' && result.retryAfterSeconds ? result.retryAfterSeconds : config.polling_interval_seconds
+    // Muss in JEDEM Pfad passieren, sonst endet die Kette hier.
     scheduleNext(next, deps)
   }, delaySeconds * 1000)
   // Keep the event loop responsive — sync polling isn't a reason to
@@ -105,7 +118,9 @@ export async function triggerManualSync(
   }
   // Fire and forget — caller polls /status. Estimate is a hand-tuned
   // ~3s typical run; not load-bearing for correctness, only for UX.
-  void runOnce(source, deps)
+  runOnce(source, deps).catch((err) => {
+    console.error(`${new Date().toLocaleString()}: [spotify-sync] manual run threw: ${(err as Error).message}`)
+  })
   return { ok: true, status: 'queued', estimatedSeconds: 3 }
 }
 
@@ -126,7 +141,9 @@ function armTrailingRun(source: SyncTrigger, deps: RunSyncDeps, delaySeconds: nu
     }
     trailingTimer = null
     markManualTrigger()
-    void runOnce(source, deps)
+    runOnce(source, deps).catch((err) => {
+      console.error(`${new Date().toLocaleString()}: [spotify-sync] trailing run threw: ${(err as Error).message}`)
+    })
   }
   trailingTimer = setTimeout(fire, Math.max(0, delaySeconds) * 1000 + 250)
   if (typeof trailingTimer.unref === 'function') trailingTimer.unref()

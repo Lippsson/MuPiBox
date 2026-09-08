@@ -5,6 +5,11 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import cors from 'cors'
 import express from 'express'
+import type {
+  NextFunction as ExpressNextFunction,
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+} from 'express'
 import jsonfile from 'jsonfile'
 import ky from 'ky'
 import xmlparser from 'xml-js'
@@ -503,6 +508,41 @@ function appendPlayLogLine(entry: Record<string, unknown>): void {
   })
 }
 
+// Der Hör-Verlauf wuchs bis hierher unbegrenzt -- anders als battery_log,
+// das seit Phase 18 Item 6 auf 8 Tage getrimmt wird. Nach gut drei Monaten
+// standen 2,1 MB auf der SD-Karte, und /api/eltern/playlog liest die Datei
+// bei JEDEM Aufruf komplett ein. Unbegrenztes Wachstum heisst also nicht nur
+// SD-Wear, sondern auch stetig steigende Latenz der Hör-Verlauf-Seite.
+// 90 Tage lassen Raum für längere Auswertungen (der Endpoint selbst braucht
+// höchstens 7) und deckeln die Datei bei rund 2 MB.
+const PLAY_LOG_KEEP_DAYS = 90
+const PLAY_LOG_TRIM_EVERY_TICKS = 360 // bei 10s-Takt ≈ einmal pro Stunde
+let playLogTickCount = 0
+
+function trimPlayLog(): void {
+  try {
+    if (!fs.existsSync(PLAY_LOG_PATH)) return
+    const cutoffMs = Date.now() - PLAY_LOG_KEEP_DAYS * 24 * 3600 * 1000
+    const raw = fs.readFileSync(PLAY_LOG_PATH, 'utf8')
+    const kept: string[] = []
+    for (const ln of raw.split('\n')) {
+      if (!ln) continue
+      try {
+        const e = JSON.parse(ln) as { ts?: string }
+        if (e.ts && Date.parse(e.ts) >= cutoffMs) kept.push(ln)
+      } catch {
+        /* skip malformed */
+      }
+    }
+    if (kept.length === raw.split('\n').filter(Boolean).length) return // nichts zu tun
+    const tmp = `${PLAY_LOG_PATH}.tmp.${process.pid}`
+    fs.writeFileSync(tmp, kept.length ? `${kept.join('\n')}\n` : '', 'utf8')
+    fs.renameSync(tmp, PLAY_LOG_PATH)
+  } catch (err) {
+    console.warn(`${new Date().toLocaleString()}: [play-log] trim failed: ${(err as Error).message}`)
+  }
+}
+
 async function tickPlayLog(): Promise<void> {
   const state = await fetchCurrentPlayerState()
   if (state === null) return // transient — skip this tick
@@ -535,7 +575,16 @@ async function tickPlayLog(): Promise<void> {
 
 function startPlayLogPoller(): void {
   const timer = setInterval(() => {
-    void tickPlayLog()
+    // .catch statt void: tickPlayLog() macht einen HTTP-Call zum Player,
+    // und eine abgelehnte Promise ohne Handler beendet unter Node >= 15
+    // den ganzen Prozess.
+    tickPlayLog().catch((err) => {
+      console.warn(`${new Date().toLocaleString()}: [play-log] tick failed: ${(err as Error).message}`)
+    })
+    if (++playLogTickCount >= PLAY_LOG_TRIM_EVERY_TICKS) {
+      playLogTickCount = 0
+      trimPlayLog()
+    }
   }, PLAY_LOG_POLL_MS)
   if (typeof timer.unref === 'function') timer.unref()
 }
@@ -2003,6 +2052,38 @@ if (productionServe) {
     res.sendFile('index.html', { root: path.join(__dirname, 'www') })
   })
 }
+
+// Zentraler Fehler-Handler. Muss nach allen Routen stehen und zwingend vier
+// Parameter haben -- daran erkennt Express eine Error-Middleware. Express 5
+// leitet auch abgelehnte Promises aus async-Handlern hierher, so dass ein
+// Fehler in einer der ~98 Routen als sauberes JSON-500 endet statt als
+// unbehandelte Rejection.
+app.use((err: Error, _req: ExpressRequest, res: ExpressResponse, _next: ExpressNextFunction) => {
+  console.error(
+    `${new Date().toLocaleString()}: [mupibox-backend-api] unhandled route error: ${err?.message}`,
+    err?.stack,
+  )
+  if (res.headersSent) return
+  res.status(500).json({ error: 'internal error' })
+})
+
+// Prozessweites Sicherheitsnetz für alles ausserhalb des Request-Pfads:
+// Timer, Poller, Scheduler. Node beendet sich seit v15 bei einer
+// unbehandelten Rejection -- für ein Gerät im Kinderzimmer ist ein
+// protokollierter Fehler die bessere Wahl als ein Neustart mitten im
+// Hörspiel. uncaughtException bleibt dagegen fatal: Danach kann der
+// Prozesszustand inkonsistent sein, da ist ein sauberer pm2-Neustart
+// ehrlicher als Weiterlaufen.
+process.on('unhandledRejection', (reason) => {
+  console.error(
+    `${new Date().toLocaleString()}: [mupibox-backend-api] unhandled promise rejection:`,
+    reason instanceof Error ? `${reason.message}\n${reason.stack}` : reason,
+  )
+})
+process.on('uncaughtException', (err) => {
+  console.error(`${new Date().toLocaleString()}: [mupibox-backend-api] uncaught exception: ${err.message}`, err.stack)
+  process.exit(1)
+})
 
 if (!testServe) {
   app.listen(8200)
