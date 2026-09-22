@@ -252,6 +252,58 @@ const isPrivateHost = (host: string): boolean => {
   return PRIVATE_IP_REGEXES.some((r) => r.test(h))
 }
 
+// Single guard for EVERY server-side fetch of a caller-supplied URL. The rules
+// used to live inline in /api/rssfeed only, and the RSS episode-image proxy
+// added later fetched whatever URL it was handed — which reopened the exact
+// LAN-pivot the inline checks were written to close. Keeping the policy in one
+// place means the next endpoint that proxies a URL cannot silently miss it.
+type RemoteUrlCheck = { url: URL } | { error: string; status: number }
+const checkRemoteUrl = (raw: string): RemoteUrlCheck => {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return { error: 'Invalid URL', status: 400 }
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { error: 'Only http(s) URLs are allowed', status: 400 }
+  }
+  if (isPrivateHost(parsed.hostname)) {
+    return { error: 'Private / loopback hosts are not allowed', status: 403 }
+  }
+  return { url: parsed }
+}
+
+// Episode artwork is a few hundred KB; anything past this is either broken or
+// hostile. Without a cap the whole body was read into memory before anything
+// looked at its size — enough to OOM a Pi from a single request.
+const RSS_IMAGE_MAX_BYTES = 8_000_000
+
+// Reads a response body but aborts as soon as the cap is exceeded, so an
+// oversized (or endless) body never fully lands in memory. Falls back to
+// arrayBuffer() when the runtime gives us no readable stream.
+async function readBodyCapped(response: Response, maxBytes: number): Promise<Buffer> {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    const whole = Buffer.from(await response.arrayBuffer())
+    if (whole.length > maxBytes) throw new Error(`response exceeds ${maxBytes} bytes`)
+    return whole
+  }
+  const chunks: Buffer[] = []
+  let total = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.length
+    if (total > maxBytes) {
+      await reader.cancel()
+      throw new Error(`response exceeds ${maxBytes} bytes`)
+    }
+    chunks.push(Buffer.from(value))
+  }
+  return Buffer.concat(chunks)
+}
+
 // Routes
 app.get('/api/rssfeed', async (req, res) => {
   const rssUrl = req.query.url
@@ -259,19 +311,9 @@ app.get('/api/rssfeed', async (req, res) => {
     res.status(500).send('Given url is not a string.')
     return
   }
-  let parsed: URL
-  try {
-    parsed = new URL(rssUrl)
-  } catch {
-    res.status(400).send('Invalid URL')
-    return
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    res.status(400).send('Only http(s) URLs are allowed')
-    return
-  }
-  if (isPrivateHost(parsed.hostname)) {
-    res.status(403).send('Private / loopback hosts are not allowed')
+  const checked = checkRemoteUrl(rssUrl)
+  if ('error' in checked) {
+    res.status(checked.status).send(checked.error)
     return
   }
   // Defence-in-depth: probe with HEAD before the full GET.
@@ -709,6 +751,17 @@ function cancelRssImageJob(job: RssImageJob): void {
 // `stillWaiting` tells whether the requesting browser is still there; without it the
 // request is a background preparation.
 function ensureRssImage(imageUrl: string, stillWaiting?: () => boolean): Promise<string | undefined> {
+  // Same guard as /api/rssfeed. Both entry points reach here with a URL the
+  // box did not choose: the /api/rssfeed/image query parameter, and the
+  // itunes:image hrefs out of a podcast feed (warmRssEpisodeCovers) — so a
+  // prepared feed could drive internal requests with no user interaction at
+  // all. Rejecting here covers both callers.
+  const checked = checkRemoteUrl(imageUrl)
+  if ('error' in checked) {
+    console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] refused RSS image URL (${checked.error}): ${imageUrl}`)
+    return Promise.resolve(undefined)
+  }
+
   const local = rssImageLocalFile(imageUrl)
   if (!local) {
     return Promise.resolve(undefined)
@@ -741,7 +794,14 @@ function ensureRssImage(imageUrl: string, stillWaiting?: () => boolean): Promise
     job.start = () => {
       void (async () => {
         try {
-          const buffer = Buffer.from(await ky.get(imageUrl, { timeout: rssImageTimeoutMs }).arrayBuffer())
+          const response = await ky.get(imageUrl, { timeout: rssImageTimeoutMs })
+          // Reject on the advertised size first (cheap), then enforce the cap
+          // while reading — servers may understate or omit content-length.
+          const advertised = Number.parseInt(response.headers.get('content-length') ?? '0', 10)
+          if (advertised > RSS_IMAGE_MAX_BYTES) {
+            throw new Error(`image advertises ${advertised} bytes, cap is ${RSS_IMAGE_MAX_BYTES}`)
+          }
+          const buffer = await readBodyCapped(response, RSS_IMAGE_MAX_BYTES)
           await mkdir(rssCoverDir, { recursive: true })
           const temp = `${local.file}.${process.pid}.tmp`
           await writeFile(temp, buffer)
