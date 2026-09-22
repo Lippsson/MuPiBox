@@ -30,6 +30,7 @@ import {
   verifyElternPassword,
 } from './auth'
 import { ipRateLimit, localNetworkOnly, requireCsrf, requireSession } from './middleware'
+import { localOnly } from '../request-guard'
 import {
   REQUESTED_SCOPES,
   buildAuthorizeUrl,
@@ -91,7 +92,10 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    *
    * Body: { source?: 'telegram' | 'cloud-batterie-tap' | 'admin' }.
    */
-  router.post('/magic-link/generate', ipRateLimit(10), (req, res) => {
+  // Only on the box itself: its callers are the Telegram bot (localhost:8200) and the kiosk's
+  // settings page. Reachable from the LAN it handed any device a full parents' session and
+  // made the parents' password pointless.
+  router.post('/magic-link/generate', localOnly, ipRateLimit(10), (req, res) => {
     const body = (req.body ?? {}) as { source?: unknown }
     const source = typeof body.source === 'string' ? body.source : 'unknown'
     const link = generateMagicLink(source)

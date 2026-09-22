@@ -9,6 +9,7 @@
 // + config to verify the sync loop works end-to-end.
 
 import * as fs from 'node:fs'
+import { localOrElternSession } from '../request-guard'
 import { promises as fsPromises } from 'node:fs'
 import { Router } from 'express'
 import { loadSpotifySyncConfig, loadSpotifyTokenStore } from './config-loader'
@@ -49,7 +50,7 @@ export function createSpotifySyncRouter(deps: RunSyncDeps): Router {
 
   /** POST /api/spotify-sync/trigger
    *  Manual sync trigger. Source query param `?source=webapp|telegram`. */
-  router.post('/trigger', async (req, res) => {
+  router.post('/trigger', localOrElternSession, async (req, res) => {
     const sourceRaw = typeof req.query.source === 'string' ? req.query.source : 'webapp'
     const source: 'webapp' | 'telegram' = sourceRaw === 'telegram' ? 'telegram' : 'webapp'
     const result = await triggerManualSync(source, deps)
@@ -81,7 +82,7 @@ export function createSpotifySyncRouter(deps: RunSyncDeps): Router {
    * Caller takes the data lock — same pattern as /api/edit. Atomic
    * write via tmp+rename.
    */
-  router.post('/conflicts/promote', async (req, res) => {
+  router.post('/conflicts/promote', localOrElternSession, async (req, res) => {
     const body = (req.body ?? {}) as { identifierField?: unknown; identifierValue?: unknown }
     const allowedFields = ['id', 'artistid', 'showid', 'audiobookid', 'playlistid'] as const
     const field = typeof body.identifierField === 'string' ? body.identifierField : ''
@@ -132,7 +133,7 @@ export function createSpotifySyncRouter(deps: RunSyncDeps): Router {
    *  Update mutable fields. Body: { enabled?, playlist_prefix?,
    *  polling_interval_seconds?, playlist_explicit_ids?, notify_on_*? }.
    *  Unknown fields are ignored. */
-  router.post('/config', async (req, res) => {
+  router.post('/config', localOrElternSession, async (req, res) => {
     const body = req.body as Partial<SpotifySyncConfig>
     if (!body || typeof body !== 'object') {
       res.status(400).json({ error: 'body must be a JSON object' })

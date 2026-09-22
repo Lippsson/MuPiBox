@@ -835,12 +835,8 @@ function getCapsOverrideMinutes() {
 async function capsExtend() {
   const mins = getCapsOverrideMinutes()
   if (mins === null) return
-  const res = await fetch('/api/playtime/extend', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ minutes: mins }),
-  })
+  // via api(): sends the session's CSRF token, which these endpoints require off-box
+  const res = await api('/api/playtime/extend', { method: 'POST', body: { minutes: mins } })
   if (res.ok) {
     feedback('#caps-action-feedback', 'success', `+${mins} Min Bonus hinzugefügt.`)
     loadCapsStatus()
@@ -852,12 +848,8 @@ async function capsExtend() {
 async function capsRelease() {
   const mins = getCapsOverrideMinutes()
   if (mins === null) return
-  const res = await fetch('/api/playtime/release', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ minutes: mins }),
-  })
+  // via api(): sends the session's CSRF token, which these endpoints require off-box
+  const res = await api('/api/playtime/release', { method: 'POST', body: { minutes: mins } })
   if (res.ok) {
     feedback('#caps-action-feedback', 'success', `Override für ${mins} Min aktiv.`)
     loadCapsStatus()
@@ -869,12 +861,8 @@ async function capsRelease() {
 async function capsQuietNow() {
   const mins = getCapsOverrideMinutes()
   if (mins === null) return
-  const res = await fetch('/api/quiethours/now', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ minutes: mins }),
-  })
+  // via api(): sends the session's CSRF token, which these endpoints require off-box
+  const res = await api('/api/quiethours/now', { method: 'POST', body: { minutes: mins } })
   if (res.ok) {
     feedback('#caps-action-feedback', 'success', `Sofort-Stopp für ${mins} Min aktiviert.`)
     loadCapsStatus()

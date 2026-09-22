@@ -30,6 +30,7 @@ import { startScheduler } from './spotify-sync/scheduler'
 import type { RunSyncDeps } from './spotify-sync/state-machine'
 import { buildElternLandingHandler, createElternApiRouter } from './eltern/routes'
 import { startBucketCleanup } from './eltern/middleware'
+import { browserGuard, corsOptionsFor, localOrElternSession } from './request-guard'
 
 // Force IPv4 for DNS lookups to avoid EAI_AGAIN errors on Raspberry Pi
 // This fixes issues where IPv6 is misconfigured or not supported
@@ -201,7 +202,10 @@ let spotifyApiService: SpotifyApiService | undefined
 
 // We export the app so we can use it in testing.
 export const app = express()
-app.use(cors())
+// Refuse requests a foreign web page makes through a visitor's browser, then CORS for the box
+// itself only (was: cors() for every origin). See request-guard.ts.
+app.use(browserGuard)
+app.use(cors(corsOptionsFor))
 app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
 
@@ -1273,7 +1277,7 @@ function computeLogicalDate(now: Date, resetHour: number): string {
 // Calling extend repeatedly accumulates: existing bonus for today is kept and
 // added to. Always uses the *current* day at the time of call, so e.g. an
 // /extend at 23:30 with resetHour=4 still applies to "today" until 04:00.
-app.post('/api/playtime/extend', async (req, res) => {
+app.post('/api/playtime/extend', localOrElternSession, async (req, res) => {
   const minutes = Number(req.body?.minutes)
   if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440) {
     res.status(400).json({ error: 'minutes must be a positive number <= 1440' })
@@ -1304,7 +1308,7 @@ app.post('/api/playtime/extend', async (req, res) => {
 // POST /api/playtime/release  body: { minutes?: number }
 // Sets `playbackOverride.allowUntil = now + minutes*60_000`. While that timestamp
 // is in the future, all blocks are bypassed. Default 60 min if not specified.
-app.post('/api/playtime/release', async (req, res) => {
+app.post('/api/playtime/release', localOrElternSession, async (req, res) => {
   const minutes = req.body?.minutes !== undefined ? Number(req.body.minutes) : 60
   if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440) {
     res.status(400).json({ error: 'minutes must be a positive number <= 1440' })
@@ -1336,7 +1340,7 @@ app.post('/api/playtime/release', async (req, res) => {
 // without opening the admin UI. Live-reload in the player picks the change up
 // within ~50 ms; no restart needed.
 const PLAYTIME_DAY_KEYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
-app.post('/api/playtime/limit', async (req, res) => {
+app.post('/api/playtime/limit', localOrElternSession, async (req, res) => {
   const day = String(req.body?.day || '').toLowerCase()
   const minutes = Number(req.body?.minutes)
   if (!PLAYTIME_DAY_KEYS.has(day)) {
@@ -1372,7 +1376,7 @@ app.post('/api/playtime/limit', async (req, res) => {
 // POST /api/quiethours/now  body: { minutes?: number }
 // Sets `playbackOverride.forceBlockUntil = now + minutes*60_000`. Forces playback
 // off immediately (kid sees the override overlay). Default 60 min.
-app.post('/api/quiethours/now', async (req, res) => {
+app.post('/api/quiethours/now', localOrElternSession, async (req, res) => {
   const minutes = req.body?.minutes !== undefined ? Number(req.body.minutes) : 60
   if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440) {
     res.status(400).json({ error: 'minutes must be a positive number <= 1440' })
@@ -1490,7 +1494,8 @@ app.get('/api/wlan', (_req, res) => {
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
       res.json([])
     } else {
-      res.json(data)
+      // Queued entries carry the WiFi password in plain text; nobody reading this needs it.
+      res.json(redactSecrets(data))
     }
   })
 })
@@ -2601,6 +2606,28 @@ app.get('/api/sonos', (_req, res) => {
   res.status(200).send(config['node-sonos-http-api'])
 })
 
+// Keys whose values are secrets. The endpoint is unauthenticated and was readable by any web page
+// (cors *), and it returned the whole file: Spotify client secret and tokens, Telegram bot token,
+// MQTT and Synology passwords, the admin password hash and the parents' password hash + salt.
+// The box frontend only needs display settings, so these keys are dropped at any depth.
+const SECRET_CONFIG_KEYS = /^(password|pass|pwd|pw|psk|secret|clientsecret|token|accesstoken|refreshtoken|hash|salt|sid|apikey|api_key|username|user|cookie)$/i
+
+function redactSecrets(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactSecrets)
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [key, child] of Object.entries(value)) {
+      if (!SECRET_CONFIG_KEYS.test(key)) {
+        out[key] = redactSecrets(child)
+      }
+    }
+    return out
+  }
+  return value
+}
+
 app.get('/api/config', (_req, res) => {
   fs.readFile(mupiboxConfigPath, 'utf8', (err, data) => {
     if (err) {
@@ -2611,7 +2638,7 @@ app.get('/api/config', (_req, res) => {
 
     try {
       const mupiboxConfig = JSON.parse(data)
-      res.json(mupiboxConfig)
+      res.json(redactSecrets(mupiboxConfig))
     } catch (parseError) {
       const errorMessage = parseError instanceof Error ? parseError.message : String(parseError)
       console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error parsing mupibox config: ${errorMessage}`)

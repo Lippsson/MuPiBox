@@ -12,6 +12,7 @@ require __DIR__ . '/includes/auth_check.php';
 	if ($WIFI_IF === '') { $WIFI_IF = 'wlan0'; }
 	$commandSSID="sudo iwgetid -r";
 	$WIFI=exec($commandSSID);
+	$WIFI = htmlspecialchars($WIFI, ENT_QUOTES); // an SSID is free text chosen by whoever runs the network
 	$wifi_icon = "";
 	$commandLQ="sudo iwconfig ".$WIFI_IF." | awk '/Link Quality/{split($2,a,\"=|/\");print int((a[2]/a[3])*100)\"\"}' | tr -d '%'";
 	$LINKQ=exec($commandLQ);

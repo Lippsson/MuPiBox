@@ -173,7 +173,8 @@
                                                 while (($line = fgetcsv($string, 0, "\t")) !== false) {
                                                         if($bt > 1)
                                                                 {
-                                                                print "<option value='".$line[1]."'>".$line[2]."</option>";
+                                                                // names come from any device in radio range: escape them
+                                                                print "<option value='".htmlspecialchars($line[1] ?? '', ENT_QUOTES)."'>".htmlspecialchars($line[2] ?? '', ENT_QUOTES)."</option>";
                                                                 }
                                                         $bt++;
                                                 }

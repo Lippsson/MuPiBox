@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <?php
-	session_start();
+	if (session_status() === PHP_SESSION_NONE) {
+		// not readable by page scripts, and not sent along with requests other sites trigger
+		session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax']);
+		session_start();
+	}
 
 	// CSRF helpers are defined in includes/csrf.php — pages that need
 	// CSRF protection must `require csrf.php` BEFORE include('header.php')
@@ -8,6 +12,20 @@
 	// can no longer set 403 headers. Including csrf.php here too keeps
 	// the helpers available for csrf_field() calls deeper in the body.
 	require_once __DIR__ . '/csrf.php';
+
+	// Every admin page includes this file before it handles a form, so the CSRF check lives here
+	// for all of them: before, only five pages checked the token and the others (mupi, network,
+	// admin, smart, spotify, cover, synology) accepted a form posted by any foreign web page.
+	// The token is added to every POST form of the page automatically (output filter below), so
+	// no page has to remember csrf_field() - bluetooth.php, which called csrf_check() but never
+	// printed the field, answered every action with 403.
+	csrf_check();
+	ob_start(function ($html) {
+		$field = csrf_field();
+		return preg_replace_callback('/<form\b[^>]*>/i', function ($m) use ($field) {
+			return preg_match('/\bmethod\s*=\s*["\']?post\b/i', $m[0]) ? $m[0] . $field : $m[0];
+		}, $html);
+	});
 
 	// B8: shared save_mupiboxconfig($data) writer with flock serialisation.
 	// Replaces the ~15 inline `file_put_contents+sudo mv` patterns across
@@ -105,7 +123,8 @@
 	// truth for whether the caller is allowed in — mirror it here.
 	$authGatePassed = !$loginEnabled
 		|| (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true);
-	if ($authGatePassed) {
+	// The token in the link: a plain link or <img> on a foreign page must not shut the box down.
+	if ($authGatePassed && hash_equals(csrf_token(), (string)($_GET['csrf_token'] ?? ''))) {
 		if (isset($_GET['hshutdown'])) {
 			$shutdown = 1;
 			$change=99;
@@ -173,11 +192,15 @@
 		if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 			if (isset($_POST['password'])) {
 				if (password_verify($_POST['password'], $hashedPassword)) {
+					// new session id at login: a session id planted before the login must not
+					// become a logged-in one (session fixation)
+					session_regenerate_id(true);
 					$_SESSION['logged_in'] = true;
 					header("Location: " . $_SERVER['PHP_SELF']);
 					exit;
 				} else {
-					$error = "Wrong password!";
+					sleep(1); // slows down password guessing
+					$loginError = "Wrong password!"; // was $error, which the form never printed
 				}
 			}
 			?>
@@ -220,9 +243,9 @@
 				<div id="Wifi_Icon"> </div>
 				<div id="Battery_Icon"> </div>
 				<div id="Fan_Icon"> </div>
-				<a href="?hshutdown=1" onclick="confirm('Do really want to shutdown?') || stopEvent(event)" ><iconify-icon icon="ic:outline-power-settings-new" title="Shutdown" ></iconify-icon></a>
-				<a href="?hreboot=1" onclick="confirm('Do really want to reboot?') || stopEvent(event)" ><iconify-icon icon="ic:outline-restart-alt" title="Reboot" ></iconify-icon></a>
-				<a href="?hchromerestart=1" onclick="confirm('Do really want to restart chrome kiosk?') || stopEvent(event)" ><iconify-icon icon="tabler:brand-chrome"  title="Restart chrome browser" ></iconify-icon></a>
+				<a href="?hshutdown=1&csrf_token=<?= urlencode(csrf_token()) ?>" onclick="confirm('Do really want to shutdown?') || stopEvent(event)" ><iconify-icon icon="ic:outline-power-settings-new" title="Shutdown" ></iconify-icon></a>
+				<a href="?hreboot=1&csrf_token=<?= urlencode(csrf_token()) ?>" onclick="confirm('Do really want to reboot?') || stopEvent(event)" ><iconify-icon icon="ic:outline-restart-alt" title="Reboot" ></iconify-icon></a>
+				<a href="?hchromerestart=1&csrf_token=<?= urlencode(csrf_token()) ?>" onclick="confirm('Do really want to restart chrome kiosk?') || stopEvent(event)" ><iconify-icon icon="tabler:brand-chrome"  title="Restart chrome browser" ></iconify-icon></a>
 			</div>
 			<div class="topnav" id="myTopnav">
 				<a href="<?= $link ?>index.php"><i class="fa fa-fw fa-home"></i> Home</a>
