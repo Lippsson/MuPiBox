@@ -39,11 +39,11 @@ if [ ${wled_active} = true ]; then
 		sleep 3
 	done
 	wled_data='{"ps":'${wled_main_id}'}'
-	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 	wled_data='{"bri":'${wled_brightness_def}'}'
-	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 	wled_data='{"on":true}'
-	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 fi
 
 # Phase 13b (B3): mtime-cached config reads + slower polling. The previous
@@ -84,7 +84,7 @@ do
 		then
 			if [ ${wled_active} = true ]; then
 				wled_data='{"bri":'${wled_brightness_def}'}'
-				/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+				/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 			fi
 			# Atomic-update (HIGH-8).
 			_TMP="${TMP_LEDFILE}.tmp.$$"
@@ -94,7 +94,7 @@ do
 		then
 			if [ ${wled_active} = true ]; then
 				wled_data='{"bri":'${wled_brightness_dim}'}'
-				/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+				/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 			fi
 			_TMP="${TMP_LEDFILE}.tmp.$$"
 			/usr/bin/jq '.led_dim_mode = 0' "${TMP_LEDFILE}" > "${_TMP}" && mv "${_TMP}" "${TMP_LEDFILE}" || rm -f "${_TMP}"

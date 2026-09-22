@@ -726,7 +726,13 @@ function finalizeQuietHoursBlock(reason) {
   quietHoursState.graceEndsAt = null
   if (hasConfiguredTelegram()) {
     const msg = label ? `Ruhezeit gestartet: ${label}` : 'Ruhezeit gestartet'
-    cmdCall(`/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "${msg.replace(/"/g, '\\"')}"`)
+    // No shell: the label is free text from the parents' UI, and escaping only `"` left
+    // $(...) and backticks inside the double quotes executable.
+    require('node:child_process').execFile(
+      '/usr/bin/python3',
+      ['/usr/local/bin/mupibox/telegram_send_message.py', msg],
+      (e) => e && console.error(`${new Date().toLocaleString()}: [QuietHours] Telegram message failed: ${e.message}`),
+    )
   }
   try {
     stop()

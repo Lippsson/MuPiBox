@@ -73,12 +73,28 @@
 		$CHANGE_TXT=$CHANGE_TXT."<li>Sleeptimer stopped</li>";
 		}
 
+	// Changing the password needs the current one (a forged request or an unattended browser must
+	// not be able to replace it), and the new one must not be empty or shorter than the form allows.
 	if($_POST['submitpw'])
 		{
-		$hash = password_hash($_POST['newpwd'], PASSWORD_DEFAULT);
-		$data["interfacelogin"]["password"]=$hash;
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>New password has been set</li>";
+		$newpwd = (string)($_POST['newpwd'] ?? '');
+		$curpwd = (string)($_POST['curpwd'] ?? '');
+		$oldhash = $data["interfacelogin"]["password"] ?? '';
+		if( strlen($newpwd) < 6 )
+			{
+			$CHANGE_TXT=$CHANGE_TXT."<li>Password not changed: at least 6 characters</li>";
+			}
+		else if( $oldhash !== '' && !password_verify($curpwd, $oldhash) )
+			{
+			$CHANGE_TXT=$CHANGE_TXT."<li>Password not changed: current password is wrong</li>";
+			}
+		else
+			{
+			$hash = password_hash($newpwd, PASSWORD_DEFAULT);
+			$data["interfacelogin"]["password"]=$hash;
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>New password has been set</li>";
+			}
 		}
 
 
@@ -332,11 +348,13 @@
   {
 	$tvcommand = "sudo su dietpi -c '/usr/bin/amixer sget Master | grep \"Right:\" | cut -d\" \" -f7 | sed \"s/\\[//g\" | sed \"s/\\]//g\" | sed \"s/\%//g\"'";
 	$tvresult = exec($tvcommand, $tvoutput);
-	if($_POST['thisvolume'] != $tvoutput[0])
-		{ 
-		$command="sudo su dietpi -c '/usr/bin/pactl set-sink-volume @DEFAULT_SINK@ " . $_POST['thisvolume'] . "%'";
+	// The value went unchecked into a root shell (www-data has sudo ALL): accept an integer 0..100 only.
+	$thisvolume = max(0, min(100, intval($_POST['thisvolume'] ?? 0)));
+	if($thisvolume != $tvoutput[0])
+		{
+		$command="sudo su dietpi -c '/usr/bin/pactl set-sink-volume @DEFAULT_SINK@ " . $thisvolume . "%'";
 		$set_volume = exec($command, $output );
-		$CHANGE_TXT=$CHANGE_TXT."<li>Volume: " . $_POST['thisvolume'] . "%</li>";
+		$CHANGE_TXT=$CHANGE_TXT."<li>Volume: " . $thisvolume . "%</li>";
 		$change=2;
 		}
   }
@@ -376,18 +394,26 @@
 		$change=2;
 		}
   }
- if( $data["mupibox"]["physicalDevice"]!=$_POST['audio'] && $_POST['audioset'])
+ // Only a soundcard from the offered list (it went into a root shell unchecked).
+ $known_soundcards = array_map(function ($d) { return $d['tname']; }, $data["mupibox"]["AudioDevices"] ?? array());
+ if( $data["mupibox"]["physicalDevice"]!=$_POST['audio'] && $_POST['audioset'] && in_array($_POST['audio'], $known_soundcards, true))
 	{
 	$data["mupibox"]["physicalDevice"]=$_POST['audio'];
-	$command = "sudo /boot/dietpi/func/dietpi-set_hardware soundcard '" . $_POST['audio'] . "'";
+	$command = "sudo /boot/dietpi/func/dietpi-set_hardware soundcard " . escapeshellarg($_POST['audio']);
 	$change_soundcard = exec($command, $output, $change_soundcard );
 	$CHANGE_TXT=$CHANGE_TXT."<li>Soundcard changed to  ".$data["mupibox"]["physicalDevice"]."x</li>";
 	$change=2;
 	}
- if( $data["mupibox"]["host"]!=$_POST['hostname'] && $_POST['submithn'])
+ // A valid hostname only (RFC 1123 label) - the value went unchecked into a root shell.
+ $hostname_valid = preg_match('/^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/', (string)($_POST['hostname'] ?? ''));
+ if( $_POST['submithn'] && !$hostname_valid )
+  {
+  $CHANGE_TXT=$CHANGE_TXT."<li>Invalid hostname (letters, digits and '-' only, max. 63 characters)</li>";
+  }
+ if( $data["mupibox"]["host"]!=$_POST['hostname'] && $_POST['submithn'] && $hostname_valid)
   {
   $data["mupibox"]["host"]=$_POST['hostname'];
-  $command = "sudo /boot/dietpi/func/change_hostname " . $_POST['hostname'];
+  $command = "sudo /boot/dietpi/func/change_hostname " . escapeshellarg($_POST['hostname']);
   $change_hostname = exec($command, $output, $change_hostname );
   $CHANGE_TXT=$CHANGE_TXT."<li>Hostname changed to  ".$data["mupibox"]["host"]." [reboot is necessary]</li>";
   $change=1;
@@ -578,7 +604,8 @@ if( $_POST['fan_control'] )
   $CHANGE_TXT = $CHANGE_TXT."<li>Quiet hours saved (".$quiethours_window_count." window(s), live, no restart needed)</li>";
   $change = 2;
   }
- if( $data["shim"]["ledPin"]!=$_POST['ledPin'] && $_POST['ledPin'])
+ // Only one of the offered GPIO pins (it went unchecked into a root sed command).
+ if( $data["shim"]["ledPin"]!=$_POST['ledPin'] && $_POST['ledPin'] && in_array($_POST['ledPin'], array("4", "12", "13", "17", "18", "21", "22", "23", "24", "25", "27"), true))
   {
   $data["shim"]["ledPin"]=$_POST['ledPin'];
   $CHANGE_TXT=$CHANGE_TXT."<li>New GPIO for Power-LED set to ".$data["shim"]["ledPin"]. "  [reboot is necessary]</li>";
@@ -726,7 +753,10 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				The default password is "MuP1B0x"!
 				</p>
 				<div>
-				<input id="newpwd" name="newpwd" class="element text medium" type="password" minlength="6" maxlength="255" value=""/>
+				<label for="curpwd">Current password</label>
+				<input id="curpwd" name="curpwd" class="element text medium" type="password" maxlength="255" value="" autocomplete="current-password"/>
+				<label for="newpwd">New password</label>
+				<input id="newpwd" name="newpwd" class="element text medium" type="password" minlength="6" maxlength="255" value="" autocomplete="new-password"/>
 				<input type="submit" class="button_text" value="Set new password" name="submitpw" >
 				</div>
 			</li>

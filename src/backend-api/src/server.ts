@@ -4089,15 +4089,12 @@ app.post('/api/telegram/screen', (req, res) => {
         return
       }
 
-      const message = req.body?.message || ''
-      const args = message
-        ? message
-            .split('\n')
-            .map((line: string) => `"${line.replace(/"/g, '\\"')}"`)
-            .join(' ')
-        : ''
+      // One argument per line, passed without a shell: the old code wrapped each line in "..." and
+      // ran it through exec(), where $(...) and backticks inside double quotes are still executed.
+      const message = typeof req.body?.message === 'string' ? req.body.message : ''
+      const args = message ? message.split('\n') : []
 
-      exec(`/usr/bin/python3 /usr/local/bin/mupibox/telegram_notify_screen.py ${args}`, (error, _stdout, stderr) => {
+      execFile('/usr/bin/python3', ['/usr/local/bin/mupibox/telegram_notify_screen.py', ...args], (error, _stdout, stderr) => {
         if (error) {
           console.error(
             `${new Date().toLocaleString()}: [MuPiBox-Server] Error sending telegram notification: ${error.message}`,
