@@ -88,9 +88,13 @@
 		return $value;
 	}
 
+	// the WiFi adapter in use (a USB adapter if there is one, else the onboard one);
+	// cached too, the helper script is one more fork per render.
+	$WIFI_IF = trim(mupibox_cached_exec('wifi_iface', 30, '/usr/local/bin/mupibox/mupi_wifi_iface.sh'));
+	if ($WIFI_IF === '') { $WIFI_IF = 'wlan0'; }
 	$commandSSID="sudo iwgetid -r";
 	$WIFI = mupibox_cached_exec('wifi_ssid', 5, $commandSSID);
-	$commandLQ="sudo iwconfig wlan0 | awk '/Link Quality/{split($2,a,\"=|/\");print int((a[2]/a[3])*100)\"\"}' | tr -d '%'";
+	$commandLQ="sudo iwconfig ".escapeshellarg($WIFI_IF)." | awk '/Link Quality/{split($2,a,\"=|/\");print int((a[2]/a[3])*100)\"\"}' | tr -d '%'";
 	$LINKQ = mupibox_cached_exec('wifi_linkq', 5, $commandLQ);
 	
 	// These GET handlers reboot/shutdown the box and run privileged scripts
