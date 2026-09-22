@@ -21,6 +21,7 @@ import {
 import { addIcons } from 'ionicons'
 import { arrowBackOutline } from 'ionicons/icons'
 import { Observable, of } from 'rxjs'
+import { ElternMagicLinkService } from '../eltern-magic-link.service'
 import { MediaService } from '../media.service'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 
@@ -55,6 +56,7 @@ export interface SettingsMenuEntry {
 })
 export class SettingsPage {
   private mediaService = inject(MediaService)
+  private elternMagicLink = inject(ElternMagicLinkService)
   protected network = toSignal(this.mediaService.network$, { initialValue: null })
 
   protected menuEntries: Signal<SettingsMenuEntry[]> = computed(() => {
@@ -105,6 +107,11 @@ export class SettingsPage {
       this.router.navigate(['/bluetooth'])
     } else if (entry.data === 'shutdown') {
       this.shutdownMessage()
+    } else if (entry.data === 'eltern-webapp') {
+      // Shows the magic-link QR overlay. The box IP comes from the network
+      // signal; generateAndShow() handles the undefined case itself by
+      // falling back to the hostname.
+      void this.elternMagicLink.generateAndShow(this.network()?.ip)
     }
   }
 

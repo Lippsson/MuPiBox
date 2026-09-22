@@ -440,23 +440,12 @@ export class PlayerPage implements OnInit, AfterViewInit {
         this.logService.error('[PlayerPage] Failed to resume local library playback')
         return
       }
-      let j = 1
-      for (let i = 1; i < this.media.resumelocalcurrentTracknr; i++) {
-        setTimeout(() => {
-          this.skipNext()
-          j = i + 1
-          if (j === this.media.resumelocalcurrentTracknr) {
-            setTimeout(() => {
-              this.playerService.seekPosition(this.media.resumelocalprogressTime)
-            }, 2000)
-          }
-        }, 2000)
-      }
-      if (this.media.resumelocalcurrentTracknr === 1) {
-        setTimeout(() => {
-          this.playerService.seekPosition(this.media.resumelocalprogressTime)
-        }, 2000)
-      }
+      // No client-side skip/seek here on purpose: resumeLibraryMedia() hands
+      // track number and progress to the backend, which does the jump in one
+      // atomic pt_step. The N×setTimeout(skipNext) loop that used to live here
+      // would run a SECOND time on top of that — landing the listener far past
+      // the saved position and playing an audible fragment of every track in
+      // between.
     } else if (this.media.type === 'nas') {
       const success = await this.playerService.playMedia(this.media)
       if (!success) {

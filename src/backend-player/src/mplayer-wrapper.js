@@ -22,24 +22,19 @@ const createPlayer = () => {
     ['[protocol.http]', 'cache=1024', 'cache-min=10', '[protocol.https]', 'cache=1024', 'cache-min=10', ''].join('\n'),
   )
 
-  const proc = spawn(
-    'mplayer',
-    [
-      '-slave', // 😔
-      '-idle',
-      '-novideo',
-      '-quiet',
-      // Network streams and podcasts are buffered before they start (see streamProfile below).
-      '-include',
-      streamProfile,
-      '-msglevel',
-      'all=1:global=4:cplayer=4:cache=6',
-    ],
-    {
-      env: process.env,
-      stdio: ['pipe', 'pipe', 'ignore'],
-    },
-  )
+  // Auto-respawn state. Previously a single mplayer crash (SIGSEGV, OOM, a
+  // decoder bug on a broken file) left the player dead until pm2 restarted
+  // backend-player — the box stayed silent and only a reboot brought it back.
+  // `proc` is therefore a let: spawnMplayer() below replaces it with a fresh
+  // process and re-attaches every listener, and exec() always writes to
+  // whichever process is current.
+  let proc = null
+  let shutdown = false
+  let respawnAttempts = 0
+  let healthyTimer = null
+  // Buffer for the raw-byte line splitting further down. Reset on every spawn
+  // so a half-received line from the dead process cannot bleed into the new one.
+  let pending = Buffer.alloc(0)
 
   // wrapper -> mplayer
   const exec = (cmd, args = []) => {
@@ -68,6 +63,12 @@ const createPlayer = () => {
       } else str += arg
     }
     debug(`exec: ${str}`)
+    // Commands sent during the respawn gap would otherwise throw on a null
+    // proc and take the whole backend-player down with them.
+    if (!proc || !proc.stdin || proc.stdin.destroyed) {
+      debug('exec dropped: no live mplayer process')
+      return
+    }
     proc.stdin.write(`${str}\n`)
   }
   const getProps = (props) => {
@@ -85,16 +86,14 @@ const createPlayer = () => {
   const setVolume = (amount) => exec('pausing_keep volume', [amount, '1'])
   const stop = () => exec('stop')
 
-  let closed = false
-  proc.on('close', (code) => {
-    closed = true
-    out.emit('close', code)
-    if (code > 0) {
-      // todo: emit err from proc.stderr
-    }
-  })
   const close = () => {
-    if (!closed) exec('quit')
+    // Deliberate shutdown: stop respawning, then ask mplayer to quit.
+    shutdown = true
+    if (healthyTimer) {
+      clearTimeout(healthyTimer)
+      healthyTimer = null
+    }
+    exec('quit')
   }
 
   // mplayer -> wrapper
@@ -117,28 +116,96 @@ const createPlayer = () => {
     out.emit(prop, val)
   }
 
-  // The cache fill level arrives as status text ("Cache fill: 12.50% (131072 bytes)").
-  proc.stdout.on('data', (chunk) => {
-    const matches = [...chunk.toString('latin1').matchAll(/Cache fill:\s*([\d.]+)%/g)]
-    if (matches.length > 0) out.emit('cache-fill', Number.parseFloat(matches[matches.length - 1][1]))
-  })
+  // Spawns mplayer and wires up every listener. Called once at startup and
+  // again after each unexpected exit — the stdout handlers below MUST be
+  // re-attached per process, they belong to that process's stream.
+  const spawnMplayer = () => {
+    if (shutdown) return
+    pending = Buffer.alloc(0)
 
-  // Lines are split from the raw bytes (byline would turn them into UTF-8 text first and
-  // destroy Latin-1 characters before decodeLine sees them).
-  let pending = Buffer.alloc(0)
-  proc.stdout.on('data', (chunk) => {
-    pending = Buffer.concat([pending, chunk])
-    let end = pending.indexOf(10)
-    while (end >= 0) {
-      const text = decodeLine(pending.subarray(0, end))
-      pending = pending.subarray(end + 1)
-      // Status text is written with carriage returns and can sit in front of an answer.
-      onLine(text.includes('\r') ? text.slice(text.lastIndexOf('\r') + 1) : text)
-      end = pending.indexOf(10)
+    proc = spawn(
+      'mplayer',
+      [
+        '-slave', // 😔
+        '-idle',
+        '-novideo',
+        '-quiet',
+        // Network streams and podcasts are buffered before they start (see streamProfile above).
+        '-include',
+        streamProfile,
+        '-msglevel',
+        'all=1:global=4:cplayer=4:cache=6',
+      ],
+      {
+        env: process.env,
+        stdio: ['pipe', 'pipe', 'ignore'],
+      },
+    )
+
+    // Spawn-itself errors (binary missing, ENOMEM during fork). Without this
+    // listener Node re-throws and kills the entire backend-player.
+    proc.on('error', (err) => {
+      debug(`mplayer process error: ${err.message}`)
+      out.emit('mplayer-error', err)
+    })
+
+    // EPIPE on stdin when mplayer dies mid-write. The close handler owns the
+    // respawn; here we only absorb the error so it is not uncaught.
+    if (proc.stdin) {
+      proc.stdin.on('error', (err) => {
+        debug(`mplayer stdin error: ${err.message}`)
+      })
     }
-    // Status text without a line break must not pile up.
-    if (pending.length > 65536) pending = Buffer.alloc(0)
-  })
+
+    // The cache fill level arrives as status text ("Cache fill: 12.50% (131072 bytes)").
+    proc.stdout.on('data', (chunk) => {
+      const matches = [...chunk.toString('latin1').matchAll(/Cache fill:\s*([\d.]+)%/g)]
+      if (matches.length > 0) out.emit('cache-fill', Number.parseFloat(matches[matches.length - 1][1]))
+    })
+
+    // Lines are split from the raw bytes (byline would turn them into UTF-8 text first and
+    // destroy Latin-1 characters before decodeLine sees them).
+    proc.stdout.on('data', (chunk) => {
+      pending = Buffer.concat([pending, chunk])
+      let end = pending.indexOf(10)
+      while (end >= 0) {
+        const text = decodeLine(pending.subarray(0, end))
+        pending = pending.subarray(end + 1)
+        // Status text is written with carriage returns and can sit in front of an answer.
+        onLine(text.includes('\r') ? text.slice(text.lastIndexOf('\r') + 1) : text)
+        end = pending.indexOf(10)
+      }
+      // Status text without a line break must not pile up.
+      if (pending.length > 65536) pending = Buffer.alloc(0)
+    })
+
+    proc.on('close', (code) => {
+      if (healthyTimer) {
+        clearTimeout(healthyTimer)
+        healthyTimer = null
+      }
+      out.emit('close', code)
+      if (shutdown) return
+
+      // Exponential backoff: 1, 2, 4, 8, 16, then capped. A binary that is
+      // missing or instantly crashing must not spin the CPU in a respawn loop.
+      respawnAttempts += 1
+      const delayMs = Math.min(1000 * 2 ** (respawnAttempts - 1), MPLAYER_RESPAWN_MAX_BACKOFF_MS)
+      debug(`mplayer exited (code ${code}), respawn attempt ${respawnAttempts} in ${delayMs}ms`)
+      const timer = setTimeout(spawnMplayer, delayMs)
+      if (typeof timer.unref === 'function') timer.unref()
+    })
+
+    // A process that ran this long is considered healthy, so the next crash
+    // starts its backoff from 1s again instead of inheriting an old, long delay.
+    healthyTimer = setTimeout(() => {
+      respawnAttempts = 0
+      healthyTimer = null
+    }, MPLAYER_HEALTHY_RUN_MS)
+    if (typeof healthyTimer.unref === 'function') healthyTimer.unref()
+  }
+
+  spawnMplayer()
 
   out.exec = exec
   out.getProps = getProps
