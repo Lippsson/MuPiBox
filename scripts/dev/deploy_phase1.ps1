@@ -7,11 +7,11 @@
 #
 # Usage (from the repo root, in PowerShell):
 #
-#   .\scripts\dev\deploy_phase1.ps1 -Box dietpi@10.4.22.21
+#   .\scripts\dev\deploy_phase1.ps1 -Box dietpi@mupibox.local
 #
 # Or skip the build if deploy.zip is already current:
 #
-#   .\scripts\dev\deploy_phase1.ps1 -Box dietpi@10.4.22.21 -SkipBuild
+#   .\scripts\dev\deploy_phase1.ps1 -Box dietpi@mupibox.local -SkipBuild
 #
 # Flags:
 #   -SkipBuild   Reuse src/deploy.zip as-is (debugging / re-runs).
