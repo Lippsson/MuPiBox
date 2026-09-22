@@ -79,6 +79,11 @@ export class SettingsPage {
         imgSrc: of('../../assets/power.svg'),
         data: 'shutdown',
       },
+      {
+        name: 'Eltern-WebApp',
+        imgSrc: of('../../assets/eltern.svg'),
+        data: 'eltern-webapp',
+      },
     ]
     return out
   })
@@ -112,13 +117,23 @@ export class SettingsPage {
         {
           text: 'Shutdown',
           handler: () => {
-            this.http.post('/api/shutdown', {}).subscribe()
+            // LOW-6: previously `subscribe()` with no error handler. A
+            // failed POST (network blip, backend down) silently disappeared,
+            // and the user got an Ionic alert dismiss with no feedback that
+            // the shutdown didn't fire. Wire up an error logger so the
+            // failure at least lands in chrome_debug.log.
+            this.http.post('/api/shutdown', {}).subscribe({
+              error: (err) => console.error('[settings] /api/shutdown failed:', err),
+            })
           },
         },
         {
           text: 'Reboot',
           handler: () => {
-            this.http.post('/api/reboot', {}).subscribe()
+            // LOW-6: same fix.
+            this.http.post('/api/reboot', {}).subscribe({
+              error: (err) => console.error('[settings] /api/reboot failed:', err),
+            })
           },
         },
         {

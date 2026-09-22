@@ -8,6 +8,9 @@ const debug = require('debug')('mplayer-wrapper')
 
 const parsers = require('./parsers')
 
+const MPLAYER_RESPAWN_MAX_BACKOFF_MS = 30_000
+const MPLAYER_HEALTHY_RUN_MS = 30_000
+
 const createPlayer = () => {
   const out = new EventEmitter()
 
@@ -44,12 +47,26 @@ const createPlayer = () => {
     for (const arg of args) {
       str += ' '
       if ('string' === typeof arg) {
-        if (arg.includes(' ')) str += `"`
-        str += jsStringEscape(arg)
-        if (arg.includes(' ')) str += `"`
+        // Decode percent-encoded paths/URLs FIRST, then escape. Decoding
+        // AFTER jsStringEscape undid the quote/newline protection and let
+        // `%22%0Astop%0A` become a literal `"\nstop\n` injection into
+        // mplayer's slave protocol (HIGH-7). Decoding before the escape
+        // keeps the legitimate use case (RSS/playlist track names with
+        // %20 etc. that callers pass through) while jsStringEscape now
+        // sees and escapes any quote/newline that came out of the decode.
+        let decoded = arg
+        try {
+          decoded = decodeURIComponent(arg)
+        } catch {
+          // Malformed percent sequence (e.g. a literal `%FF` that isn't
+          // valid UTF-8). Fall through with the original string —
+          // jsStringEscape will still neutralise quotes/newlines.
+        }
+        if (decoded.includes(' ')) str += `"`
+        str += jsStringEscape(decoded)
+        if (decoded.includes(' ')) str += `"`
       } else str += arg
     }
-    str = decodeURIComponent(str)
     debug(`exec: ${str}`)
     proc.stdin.write(`${str}\n`)
   }

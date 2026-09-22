@@ -26,23 +26,41 @@
 	$dlcd_rotation_state=`sed -n '/^[[:blank:]]*display_lcd_rotate=/{s/^[^=]*=//p;q}' /boot/config.txt`;
 	$hdmi_rotation_state=`sed -n '/^[[:blank:]]*display_hdmi_rotate=/{s/^[^=]*=//p;q}' /boot/config.txt`;
 
-	if(isset($_POST['hdmi_rotation']) && $_POST['hdmi_rotation'] != substr($hdmi_rotation_state,0,-1))
+	// Display rotations: dietpi accepts integer rotation values (0/90/180/270
+	// for HDMI, 0/1/2/3 for LCD-flips). The values were spliced into a
+	// double-quoted shell string verbatim — a POST with hdmi_rotation="0\";
+	// rm -rf /; #" would have torn the quoting apart. intval() collapses
+	// anything non-numeric to 0 (safe default = no rotation).
+	$rotationWhitelist = [0, 1, 2, 3, 90, 180, 270];
+	if(isset($_POST['hdmi_rotation']))
 		{
-		exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'display_hdmi_rotate=' 'display_hdmi_rotate=" . $_POST['hdmi_rotation'] . "' /boot/config.txt\"");
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>Set HDMI-Rotation [reboot is necessary]</li>";
+		$hdmiRot = intval($_POST['hdmi_rotation']);
+		if (in_array($hdmiRot, $rotationWhitelist, true) && $hdmiRot != substr($hdmi_rotation_state,0,-1))
+			{
+			exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'display_hdmi_rotate=' 'display_hdmi_rotate=" . $hdmiRot . "' /boot/config.txt\"");
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>Set HDMI-Rotation [reboot is necessary]</li>";
+			}
 		}
-	if(isset($_POST['lcd_rotation']) && $_POST['lcd_rotation'] != substr($lcd_rotation_state,0,-1))
+	if(isset($_POST['lcd_rotation']))
 		{
-		exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'lcd_rotate=' 'lcd_rotate=" . $_POST['lcd_rotation'] . "' /boot/config.txt\"");
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>Set LCD-Rotation [reboot is necessary]</li>";
+		$lcdRot = intval($_POST['lcd_rotation']);
+		if (in_array($lcdRot, $rotationWhitelist, true) && $lcdRot != substr($lcd_rotation_state,0,-1))
+			{
+			exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'lcd_rotate=' 'lcd_rotate=" . $lcdRot . "' /boot/config.txt\"");
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>Set LCD-Rotation [reboot is necessary]</li>";
+			}
 		}
-	if(isset($_POST['dlcd_rotation']) && $_POST['dlcd_rotation'] != substr($dlcd_rotation_state,0,-1))
+	if(isset($_POST['dlcd_rotation']))
 		{
-		exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'display_lcd_rotate=' 'display_lcd_rotate=" . $_POST['dlcd_rotation'] . "' /boot/config.txt\"");
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>Set Display-LCD-Rotation [reboot is necessary]</li>";
+		$dlcdRot = intval($_POST['dlcd_rotation']);
+		if (in_array($dlcdRot, $rotationWhitelist, true) && $dlcdRot != substr($dlcd_rotation_state,0,-1))
+			{
+			exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'display_lcd_rotate=' 'display_lcd_rotate=" . $dlcdRot . "' /boot/config.txt\"");
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>Set Display-LCD-Rotation [reboot is necessary]</li>";
+			}
 		}
 
 	if($_POST['stop_sleeptimer'] == "Stop running timer")
@@ -163,12 +181,25 @@
 			
 	if($_POST['potimer'])
 		{
-		$timerSleepingTime=$_POST['powerofftimer']*60;
-		$command = "sudo nohup /usr/local/bin/mupibox/./sleep_timer.sh ".$timerSleepingTime."  > /dev/null 2>&1 &";
-		exec($command);
-		$change=3;
-		$CHANGE_TXT=$CHANGE_TXT."<li>".$_POST['powerofftimer']." minutes sleeptimer started</li>";
-		//sudo pkill -f "sleep_timer.sh"
+		// powerofftimer is in minutes (admin-typed). intval() forces it to
+		// an integer; the *60 just produces another integer, so even
+		// without escapeshellarg() the shell only sees digits. Plus a
+		// sanity cap: 24 hours is the longest a parent could reasonably
+		// want, beyond that it's an input mistake or an attacker.
+		$minutes = intval($_POST['powerofftimer'] ?? 0);
+		if ($minutes > 0 && $minutes <= 24 * 60)
+			{
+			$timerSleepingTime = $minutes * 60;
+			$command = "sudo nohup /usr/local/bin/mupibox/./sleep_timer.sh " . $timerSleepingTime . "  > /dev/null 2>&1 &";
+			exec($command);
+			$change=3;
+			$CHANGE_TXT=$CHANGE_TXT."<li>" . $minutes . " minutes sleeptimer started</li>";
+			//sudo pkill -f "sleep_timer.sh"
+			}
+		else
+			{
+			$CHANGE_TXT=$CHANGE_TXT."<li>ERROR: invalid sleeptimer value, refused</li>";
+			}
 		}
 
 	if( $_POST['change_netboot'] == "activate for next boot" )
@@ -233,12 +264,25 @@
 
 	if ($_POST['change_cpug'])
 		{
-		$command = "sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'CONFIG_CPU_GOVERNOR=' 'CONFIG_CPU_GOVERNOR=".$_POST['cpugovernor']."' /boot/dietpi.txt\"";
-		$test=exec($command, $output, $result );
-		$command = "sudo /boot/dietpi/func/dietpi-set_cpu";
-		exec($command, $output, $result );
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>CPU Governor changet to  ".$_POST['cpugovernor']."</li>";
+		// H6: $_POST['cpugovernor'] floss bisher ungeprüft als Substring in
+		// einen verschachtelten `sudo su -c "...G_CONFIG_INJECT 'CONFIG_CPU_GOVERNOR=<wert>'..."`-
+		// Aufruf — post-auth Command-Injection. Whitelist gegen die vom Kernel
+		// tatsächlich angebotenen Governors aus scaling_available_governors;
+		// das ist auch genau die Liste, aus der der HTML-<select> generiert wird.
+		$available = explode(' ', trim((string)@file_get_contents(
+			'/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors')));
+		$cpug_input = (string)($_POST['cpugovernor'] ?? '');
+		if (in_array($cpug_input, $available, true)) {
+			$command = "sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'CONFIG_CPU_GOVERNOR=' 'CONFIG_CPU_GOVERNOR=".$cpug_input."' /boot/dietpi.txt\"";
+			$test=exec($command, $output, $result );
+			$command = "sudo /boot/dietpi/func/dietpi-set_cpu";
+			exec($command, $output, $result );
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>CPU Governor changet to  ".htmlspecialchars($cpug_input, ENT_QUOTES, 'UTF-8')."</li>";
+		} else {
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>CPU Governor change rejected: invalid value</li>";
+		}
 		}
 
 	if( $_POST['change_sd'] == "activate for next boot" )
@@ -465,6 +509,75 @@ if( $_POST['fan_control'] )
   $CHANGE_TXT=$CHANGE_TXT."<li>Press Button delay set to ".$_POST['pressDelay']. " seconds</li>";
   $change=2;
   }
+ $playtime_changed = false;
+ if( $_POST['playtime_save'] )
+  {
+  if( !isset($data["playtimeLimit"]) || !is_array($data["playtimeLimit"]) )
+   {
+   $data["playtimeLimit"] = array(
+    "enabled" => false,
+    "resetHour" => 0,
+    "maxOverrunMinutes" => 10,
+    "limitsMinutes" => array("mon"=>60,"tue"=>60,"wed"=>60,"thu"=>60,"fri"=>60,"sat"=>60,"sun"=>60),
+   );
+   }
+  if( !isset($data["playtimeLimit"]["limitsMinutes"]) || !is_array($data["playtimeLimit"]["limitsMinutes"]) )
+   {
+   $data["playtimeLimit"]["limitsMinutes"] = array("mon"=>60,"tue"=>60,"wed"=>60,"thu"=>60,"fri"=>60,"sat"=>60,"sun"=>60);
+   }
+  $data["playtimeLimit"]["enabled"] = (isset($_POST['playtime_enabled']) && $_POST['playtime_enabled'] === '1');
+  $data["playtimeLimit"]["resetHour"] = max(0, min(23, intval($_POST['playtime_resetHour'])));
+  $data["playtimeLimit"]["maxOverrunMinutes"] = max(0, min(60, intval($_POST['playtime_maxOverrunMinutes'])));
+  $playtime_days = array('mon','tue','wed','thu','fri','sat','sun');
+  foreach( $playtime_days as $d )
+   {
+   $field = 'playtime_limit_' . $d;
+   $val = isset($_POST[$field]) ? intval($_POST[$field]) : 60;
+   $data["playtimeLimit"]["limitsMinutes"][$d] = max(0, min(1440, $val));
+   }
+  $playtime_changed = true;
+  $CHANGE_TXT = $CHANGE_TXT."<li>Playtime limit settings saved (live, no restart needed)</li>";
+  $change = 2;
+  }
+ if( $_POST['quiethours_save'] )
+  {
+  if( !isset($data["quietHours"]) || !is_array($data["quietHours"]) )
+   {
+   $data["quietHours"] = array(
+    "enabled" => false,
+    "maxOverrunMinutes" => 10,
+    "schedule" => array("mon"=>array(),"tue"=>array(),"wed"=>array(),"thu"=>array(),"fri"=>array(),"sat"=>array(),"sun"=>array()),
+   );
+   }
+  $data["quietHours"]["enabled"] = (isset($_POST['quiethours_enabled']) && $_POST['quiethours_enabled'] === '1');
+  $data["quietHours"]["maxOverrunMinutes"] = max(0, min(60, intval($_POST['quiethours_maxOverrunMinutes'])));
+  $quiethours_days = array('mon','tue','wed','thu','fri','sat','sun');
+  $quiethours_window_count = 0;
+  foreach( $quiethours_days as $d )
+   {
+   $rawWindows = isset($_POST['quiet_windows'][$d]) && is_array($_POST['quiet_windows'][$d]) ? $_POST['quiet_windows'][$d] : array();
+   $cleaned = array();
+   foreach( $rawWindows as $w )
+    {
+    if( !is_array($w) ) continue;
+    $from = isset($w['from']) ? trim($w['from']) : '';
+    $to = isset($w['to']) ? trim($w['to']) : '';
+    // Skip incomplete rows (so add-row-then-don't-fill doesn't pollute config).
+    if( $from === '' || $to === '' ) continue;
+    if( !preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $from) ) continue;
+    if( !preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $to) ) continue;
+    $entry = array('from' => $from, 'to' => $to);
+    $label = isset($w['label']) ? trim($w['label']) : '';
+    if( $label !== '' ) $entry['label'] = $label;
+    $cleaned[] = $entry;
+    $quiethours_window_count++;
+    }
+   $data["quietHours"]["schedule"][$d] = array_values($cleaned);
+   }
+  $playtime_changed = true;
+  $CHANGE_TXT = $CHANGE_TXT."<li>Quiet hours saved (".$quiethours_window_count." window(s), live, no restart needed)</li>";
+  $change = 2;
+  }
  if( $data["shim"]["ledPin"]!=$_POST['ledPin'] && $_POST['ledPin'])
   {
   $data["shim"]["ledPin"]=$_POST['ledPin'];
@@ -578,22 +691,22 @@ if( $_POST['fan_control'] )
 		}  
  if( $change == 1 )
   {
-   $json_object = json_encode($data);
-   $save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
    exec("sudo rm -R " . $data["chromium"]["cachepath"]);
-   exec("sudo chmod 755 /etc/mupibox/mupiboxconfig.json");
-   exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+   save_mupiboxconfig($data);
    exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
    exec("sudo -i -u dietpi /usr/local/bin/mupibox/./restart_kiosk.sh");
   }
  if( $change == 2 )
   {
-   $json_object = json_encode($data);
-   $save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-   exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+   save_mupiboxconfig($data);
    exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
   }
-  
+ // Note: playtime/quiet-hours saves used to trigger `pm2 restart spotify-control` here
+ // because the player cached mupiboxconfig.json at startup via require(). The player
+ // now does live-reload via fs.watch, so the restart is no longer needed for those
+ // sub-blocks — the changes take effect within ~50ms without an audio gap.
+ // $playtime_changed stays as a flag in case future code wants to react to it.
+
 $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 ?>
 
@@ -718,6 +831,177 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 			</li>
 		</ul>
 	</details>
+
+	<details id="playtimelimit">
+		<summary><i class="fa-solid fa-hourglass-half"></i> Daily playtime limit</summary>
+		<ul>
+			<li id="li_1">
+				<h2>About</h2>
+				<p>Caps the total daily listening time on the box. When the limit is reached, playback stops and new playback is refused until the next day. Set a day to <b>0</b> to block playback completely on that day. Settings take effect after saving (the player is restarted automatically).</p>
+			</li>
+			<li id="li_1">
+				<h2>Status</h2>
+				<?php
+				$playtime_enabled_state = ( isset($data["playtimeLimit"]["enabled"]) && $data["playtimeLimit"]["enabled"] ) ? true : false;
+				$playtime_resetHour = isset($data["playtimeLimit"]["resetHour"]) ? intval($data["playtimeLimit"]["resetHour"]) : 0;
+				$playtime_limits = isset($data["playtimeLimit"]["limitsMinutes"]) && is_array($data["playtimeLimit"]["limitsMinutes"]) ? $data["playtimeLimit"]["limitsMinutes"] : array();
+				echo '<p>Currently: <b>'.($playtime_enabled_state ? 'ENABLED' : 'DISABLED').'</b></p>';
+				?>
+				<p>Enable / disable the daily limit:</p>
+				<select name="playtime_enabled">
+					<option value="1" <?php echo $playtime_enabled_state ? 'selected' : ''; ?>>Enabled</option>
+					<option value="0" <?php echo !$playtime_enabled_state ? 'selected' : ''; ?>>Disabled</option>
+				</select>
+			</li>
+			<li id="li_1">
+				<h2>Reset hour (0 - 23)</h2>
+				<p>Hour of day at which the counter resets to 0. <b>0</b> = midnight. Use e.g. <b>4</b> if you don't want a reset to interrupt late evening listening.</p>
+				<input type="number" name="playtime_resetHour" min="0" max="23" step="1" value="<?php echo $playtime_resetHour; ?>">
+			</li>
+			<li id="li_1">
+				<h2>Grace period (minutes)</h2>
+				<p>When the daily limit is reached, allow playback to continue for up to this many additional minutes so the current track can finish naturally. The player stops at the next track boundary (for local files / radio / RSS) or at the latest when this grace runs out. <b>0</b> = stop immediately at the limit. Default: <b>10</b>. Maximum: 60.</p>
+				<?php $playtime_maxOverrunMinutes = isset($data["playtimeLimit"]["maxOverrunMinutes"]) ? intval($data["playtimeLimit"]["maxOverrunMinutes"]) : 10; ?>
+				<input type="number" name="playtime_maxOverrunMinutes" min="0" max="60" step="1" value="<?php echo $playtime_maxOverrunMinutes; ?>"> min
+			</li>
+			<li id="li_1">
+				<h2>Daily limit per weekday (minutes)</h2>
+				<p>Set <b>0</b> to block playback entirely on that day. Maximum 1440 (= 24 h).</p>
+				<table class="version">
+					<tr><th>Day</th><th>Minutes per day</th></tr>
+					<?php
+					$playtime_day_labels = array(
+						'mon' => 'Monday',
+						'tue' => 'Tuesday',
+						'wed' => 'Wednesday',
+						'thu' => 'Thursday',
+						'fri' => 'Friday',
+						'sat' => 'Saturday',
+						'sun' => 'Sunday',
+					);
+					foreach( $playtime_day_labels as $key => $label )
+						{
+						$val = isset($playtime_limits[$key]) ? intval($playtime_limits[$key]) : 60;
+						echo '<tr><td>'.$label.'</td><td><input type="number" name="playtime_limit_'.$key.'" min="0" max="1440" step="1" value="'.$val.'"> min</td></tr>';
+						}
+					?>
+				</table>
+			</li>
+			<li class="buttons">
+				<input type="hidden" name="form_id" value="37271" />
+				<input id="saveForm" class="button_text" type="submit" name="playtime_save" value="Save playtime settings" />
+			</li>
+		</ul>
+	</details>
+
+	<details id="quiethours">
+		<summary><i class="fa-solid fa-moon"></i> Quiet hours</summary>
+		<ul>
+			<li id="li_1">
+				<h2>About</h2>
+				<p>Define time windows per weekday during which playback is automatically blocked (e.g. homework, mealtimes, bedtime). Multiple windows per day are supported.</p>
+				<p><b>How a window is interpreted:</b></p>
+				<ul style="margin-left:1.2em;list-style:disc;">
+					<li>A window <b>belongs to the day it starts on</b>.</li>
+					<li>If <b>from</b> is later than <b>to</b>, the window automatically continues into the next morning.</li>
+					<li><b>Example:</b> a single entry on <i>Monday</i> with <code>from 20:00 → to 08:00</code> blocks playback Monday evening <i>and</i> Tuesday morning until 08:00. You do <b>not</b> need a separate Tuesday entry for the same night.</li>
+					<li>Multiple windows on the same day combine — e.g. add a <code>14:00 → 16:00 (Homework)</code> alongside <code>20:00 → 08:00 (Bedtime)</code> to block both periods.</li>
+					<li>The optional <b>label</b> is shown to the kid on the block screen (e.g. „Homework", „Bedtime").</li>
+				</ul>
+				<p>Settings take effect after saving (the player is restarted automatically).</p>
+			</li>
+			<li id="li_1">
+				<h2>Status</h2>
+				<?php
+				$qh_enabled_state = ( isset($data["quietHours"]["enabled"]) && $data["quietHours"]["enabled"] ) ? true : false;
+				$qh_maxOverrunMinutes = isset($data["quietHours"]["maxOverrunMinutes"]) ? intval($data["quietHours"]["maxOverrunMinutes"]) : 10;
+				$qh_schedule = isset($data["quietHours"]["schedule"]) && is_array($data["quietHours"]["schedule"]) ? $data["quietHours"]["schedule"] : array();
+				echo '<p>Currently: <b>'.($qh_enabled_state ? 'ENABLED' : 'DISABLED').'</b></p>';
+				?>
+				<p>Enable / disable quiet hours:</p>
+				<select name="quiethours_enabled">
+					<option value="1" <?php echo $qh_enabled_state ? 'selected' : ''; ?>>Enabled</option>
+					<option value="0" <?php echo !$qh_enabled_state ? 'selected' : ''; ?>>Disabled</option>
+				</select>
+			</li>
+			<li id="li_1">
+				<h2>Grace period (minutes)</h2>
+				<p>When a quiet window starts, allow up to this many additional minutes for the current track to finish naturally. <b>0</b> = stop immediately at the window boundary. Default: <b>10</b>. Maximum: 60.</p>
+				<input type="number" name="quiethours_maxOverrunMinutes" min="0" max="60" step="1" value="<?php echo $qh_maxOverrunMinutes; ?>"> min
+			</li>
+			<li id="li_1">
+				<h2>Windows per weekday</h2>
+				<p>Use „+ Add window" to add another row to a day. Empty rows are ignored on save.</p>
+				<?php
+				$qh_day_labels = array(
+					'mon' => 'Monday',
+					'tue' => 'Tuesday',
+					'wed' => 'Wednesday',
+					'thu' => 'Thursday',
+					'fri' => 'Friday',
+					'sat' => 'Saturday',
+					'sun' => 'Sunday',
+				);
+				foreach( $qh_day_labels as $key => $label ) {
+					$windows = isset($qh_schedule[$key]) && is_array($qh_schedule[$key]) ? $qh_schedule[$key] : array();
+					echo '<div class="quiet-day-block" style="margin-top:1em;padding:0.5em;border:1px solid #ddd;border-radius:4px;">';
+					echo '<b>'.$label.'</b>';
+					echo '<table class="quiet-windows-table" id="quiet-windows-'.$key.'" style="width:100%;margin-top:0.4em;">';
+					echo '<tr><th>From</th><th>To</th><th>Label (optional)</th><th></th></tr>';
+					$idx = 0;
+					foreach( $windows as $w ) {
+						if( !is_array($w) ) continue;
+						$wFrom = htmlspecialchars(isset($w['from']) ? $w['from'] : '');
+						$wTo = htmlspecialchars(isset($w['to']) ? $w['to'] : '');
+						$wLabel = htmlspecialchars(isset($w['label']) ? $w['label'] : '');
+						echo '<tr class="quiet-window-row">';
+						echo '<td><input type="time" name="quiet_windows['.$key.']['.$idx.'][from]" value="'.$wFrom.'"></td>';
+						echo '<td><input type="time" name="quiet_windows['.$key.']['.$idx.'][to]" value="'.$wTo.'"></td>';
+						echo '<td><input type="text" name="quiet_windows['.$key.']['.$idx.'][label]" value="'.$wLabel.'" placeholder="e.g. Bedtime"></td>';
+						echo '<td><button type="button" class="button_text_red" onclick="removeQuietWindow(this)">×</button></td>';
+						echo '</tr>';
+						$idx++;
+					}
+					echo '</table>';
+					echo '<button type="button" class="button_text" onclick="addQuietWindow(\''.$key.'\')" style="margin-top:0.4em;">+ Add window</button>';
+					echo '</div>';
+				}
+				?>
+			</li>
+			<li class="buttons">
+				<input type="hidden" name="form_id" value="37271" />
+				<input id="saveForm" class="button_text" type="submit" name="quiethours_save" value="Save quiet hours" />
+			</li>
+		</ul>
+	</details>
+
+	<script>
+	function addQuietWindow(day) {
+		var table = document.getElementById('quiet-windows-' + day);
+		// Determine next index by counting existing rows (excluding header).
+		var existingRows = table.querySelectorAll('tr.quiet-window-row');
+		var nextIdx = 0;
+		existingRows.forEach(function(r){
+			var input = r.querySelector('input[name^="quiet_windows[' + day + ']["]');
+			if (input) {
+				var m = input.name.match(/\[(\d+)\]/);
+				if (m) nextIdx = Math.max(nextIdx, parseInt(m[1]) + 1);
+			}
+		});
+		var row = document.createElement('tr');
+		row.className = 'quiet-window-row';
+		row.innerHTML =
+			'<td><input type="time" name="quiet_windows[' + day + '][' + nextIdx + '][from]"></td>' +
+			'<td><input type="time" name="quiet_windows[' + day + '][' + nextIdx + '][to]"></td>' +
+			'<td><input type="text" name="quiet_windows[' + day + '][' + nextIdx + '][label]" placeholder="e.g. Bedtime"></td>' +
+			'<td><button type="button" class="button_text_red" onclick="removeQuietWindow(this)">×</button></td>';
+		table.appendChild(row);
+	}
+	function removeQuietWindow(btn) {
+		var row = btn.closest('tr.quiet-window-row');
+		if (row && row.parentNode) row.parentNode.removeChild(row);
+	}
+	</script>
 
 	<details id="systemsettings">
 		<summary><i class="fa-solid fa-screwdriver-wrench"></i> System settings</summary>
@@ -1500,8 +1784,16 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 ?>
 
 <?php
-        //$time2sleep=readfile("/tmp/.time2sleep");
-        $time2sleep=fgets(fopen("/tmp/.time2sleep", 'r'));
+        // M11: /tmp/.time2sleep only exists while a sleep timer is active.
+        // Without an active timer fopen() returned false and fgets(false)
+        // raised an uncaught TypeError on PHP 8+. Guard the resource open
+        // and default to empty string so the page renders cleanly either
+        // way (the JS side already handles an empty value).
+        $time2sleep = '';
+        if ($fh = @fopen("/tmp/.time2sleep", 'r')) {
+            $time2sleep = fgets($fh);
+            fclose($fh);
+        }
 ?>
 
 

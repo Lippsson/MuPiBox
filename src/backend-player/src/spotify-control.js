@@ -20,7 +20,135 @@ if (process.env.NODE_ENV === 'development') {
   //networkConfigBasePath = '../../backend-api/config'
 }
 
-const muPiBoxConfig = require(`${configBasePath}/mupiboxconfig.json`)
+// mupiboxconfig.json supports live reload — admin saves take effect within ~50ms
+// without a pm2 restart. config.json (Spotify creds, log level, port) is read once
+// at startup because spotifyApi/log/server.listen() seal those values; changing those
+// still requires a pm2 restart.
+const MUPIBOX_CONFIG_PATH = `${configBasePath}/mupiboxconfig.json`
+
+function readMupiBoxConfigFromDisk() {
+  try {
+    return JSON.parse(fs.readFileSync(MUPIBOX_CONFIG_PATH, 'utf8'))
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [Config] Failed to read ${MUPIBOX_CONFIG_PATH}:`, err)
+    return null
+  }
+}
+
+let muPiBoxConfig = readMupiBoxConfigFromDisk()
+if (!muPiBoxConfig) {
+  console.error(
+    `${new Date().toLocaleString()}: [Config] mupiboxconfig.json missing or unparseable on startup, exiting.`,
+  )
+  process.exit(1)
+}
+
+// Watch the directory containing the resolved file (the local path is typically a symlink
+// to /etc/mupibox/mupiboxconfig.json on the box). Watching the directory rather than the
+// symlinked file is what makes atomic-rename writes (admin uses `mv tmp dest`) trigger.
+//
+// History: an earlier version of this watcher had no 'error' listener, no debounce, and
+// blindly read mid-write. On an admin save (`sudo mv` from /tmp into /etc/mupibox/) the
+// rename briefly produced EACCES (file owned by www-data while move was in flight) and/or
+// ENOENT (cross-fs mv = unlink + create, with a window where the path didn't exist). The
+// readFileSync errors were caught — but the FSWatcher itself emitted three rapid-fire
+// 'change' events for the same atomic save, and on box restarts where the symlink target
+// got rebuilt, the FSWatcher emitted an 'error' event with no listener attached, which
+// Node turns into an uncaught exception → process exit. pm2 saw 5 crash-restarts per
+// 30 minutes, manifesting as audio glitches every few minutes.
+function setupMupiBoxConfigWatch() {
+  let watchDir
+  let watchFile
+  try {
+    const realPath = fs.realpathSync(MUPIBOX_CONFIG_PATH)
+    watchDir = path.dirname(realPath)
+    watchFile = path.basename(realPath)
+  } catch (err) {
+    console.warn(
+      `${new Date().toLocaleString()}: [Config] Cannot resolve ${MUPIBOX_CONFIG_PATH} for watch (live-reload disabled):`,
+      err,
+    )
+    return
+  }
+  // Re-watch on watcher failure (e.g. directory replaced during update). Capped at one
+  // reattach per 5s so a permanently broken setup just disables live-reload silently.
+  let lastReattach = 0
+  const startWatch = () => {
+    let watcher
+    try {
+      watcher = fs.watch(watchDir, { persistent: false }, (_event, filename) => {
+        if (!filename || filename.toString() !== watchFile) return
+        scheduleReload()
+      })
+    } catch (err) {
+      console.warn(`${new Date().toLocaleString()}: [Config] fs.watch failed (live-reload disabled):`, err)
+      return
+    }
+    watcher.on('error', (err) => {
+      console.warn(`${new Date().toLocaleString()}: [Config] Watcher error, attempting reattach:`, err)
+      try {
+        watcher.close()
+      } catch {
+        // best-effort
+      }
+      const now = Date.now()
+      if (now - lastReattach > 5000) {
+        lastReattach = now
+        setTimeout(startWatch, 250)
+      } else {
+        console.warn(`${new Date().toLocaleString()}: [Config] Watcher reattach skipped (rate-limited), live-reload disabled until next pm2 restart`)
+      }
+    })
+    console.log(`${new Date().toLocaleString()}: [Config] Watching ${watchDir}/${watchFile} for live-reload`)
+  }
+
+  // Debounce: a single `sudo mv` from PHP fires three FSWatcher events in quick
+  // succession (rename, attribute change, possibly chmod). Coalesce them into one
+  // re-read so the log isn't spammed with three "Reloaded" lines per save, and the
+  // mid-write race window narrows (we wait until everyone's done writing before reading).
+  let reloadTimer = null
+  const scheduleReload = () => {
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => {
+      reloadTimer = null
+      const fresh = readMupiBoxConfigFromDisk()
+      if (fresh) {
+        muPiBoxConfig = fresh
+        console.log(`${new Date().toLocaleString()}: [Config] Reloaded mupiboxconfig.json (live)`)
+      }
+      // On parse failure we keep the old in-memory copy. fs.watch can still fire
+      // mid-write occasionally even with debounce, so a parse error here is normal
+      // and silently ignored — the next event will pick up the final state.
+    }, 100)
+  }
+
+  startWatch()
+}
+setupMupiBoxConfigWatch()
+
+// Returns true iff the Telegram integration is fully configured (active flag,
+// non-empty token, at least one chat id). Replaces the chatId.length > 1 +
+// token.length > 1 + active checks scattered throughout the file. Necessary
+// because chatId can now be a single string (legacy), or an array of strings,
+// or an array of {id, label?} objects (new admin-UI format).
+function hasConfiguredTelegram() {
+  const t = muPiBoxConfig?.telegram
+  if (!t || t.active !== true) return false
+  if (!t.token || String(t.token).length <= 1) return false
+  const chats = t.chatId
+  if (typeof chats === 'string') return chats.length > 1
+  if (typeof chats === 'number') return true
+  if (Array.isArray(chats)) {
+    return chats.some((c) => {
+      if (typeof c === 'string') return c.length > 1
+      if (typeof c === 'number') return true
+      if (c && typeof c === 'object') return c.id != null && String(c.id).length > 1
+      return false
+    })
+  }
+  return false
+}
+
 const config = require(`${configBasePath}/config.json`)
 
 const log = require('console-log-level')({ level: config.server.logLevel })
@@ -57,22 +185,24 @@ player.on('percent_pos', (val) => {
   //console.log('track progress is', val);
   currentMeta.progressTime = val
 })
-setInterval(() => {
-  player.getProps(['percent_pos'])
-}, 1000)
-
 player.on('pause', (val) => {
   currentMeta.playing = !val
 })
+// Phase 13 B2: a single per-second timer fetches both props. getProps()
+// iterates and sends one `get_property` per item (see mplayer-wrapper.js), so
+// this is behaviour-identical to the two separate setIntervals it replaces —
+// one JS timer instead of two. The audit's idle-gate half is intentionally
+// NOT done: marginal benefit, with a real risk of stale percent_pos/pause
+// across play/stop transitions (the resume-tracking area Phase 7.5 fixed).
 setInterval(() => {
-  player.getProps(['pause'])
+  player.getProps(['percent_pos', 'pause'])
 }, 1000)
 
 player.on('metadata', (val) => {
   console.log('track metadata is', val)
   //currentMeta.currentTracknr = parseInt(val.Comment?.split(',').pop(), 10);
   currentMeta.currentTracknr = currentMeta.currentTracknr + 1
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Current Tracknr: ${currentMeta.currentTracknr}`)
+  log.debug(`${now()}: [Spotify Control] Current Tracknr: ${currentMeta.currentTracknr}`)
   if (currentMeta.currentType === 'nas') {
     // Mplayer would report the stream-proxy URL as "filename"/"path" for NAS
     // tracks, so use the track name already known from the live NAS tracklist
@@ -142,28 +272,89 @@ player.on('path', (val) => {
 player.on('track-change', () => player.getProps(['path']))
 
 player.on('track-change', () => {
-  if (
-    muPiBoxConfig.telegram.active &&
-    //network.onlinestate === 'online' &&
-    muPiBoxConfig.telegram.token.length > 1 &&
-    muPiBoxConfig.telegram.chatId.length > 1 &&
-    (currentMeta.currentType === 'rss' || currentMeta.currentType === 'radio')
-  )
+  if (hasConfiguredTelegram() && (currentMeta.currentType === 'rss' || currentMeta.currentType === 'radio'))
     cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_RSS_Radio.py')
-  if (
-    muPiBoxConfig.telegram.active &&
-    //network.onlinestate === 'online' &&
-    muPiBoxConfig.telegram.token.length > 1 &&
-    muPiBoxConfig.telegram.chatId.length > 1 &&
-    currentMeta.currentType === 'local'
-  )
+  if (hasConfiguredTelegram() && currentMeta.currentType === 'local')
     cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Local.py')
 })
 
+// Playtime + Quiet-Hours grace: stop at the next natural mplayer break point
+// (start of next track, or end of playlist). Spotify doesn't surface these
+// events, so for Spotify the grace timeout in the tick is the only stop trigger.
+// Both sub-systems are checked independently — a single track-change can
+// finalize either or both if both happen to be in grace simultaneously.
+player.on('track-change', () => {
+  if (playtimeState.state === 'grace') {
+    finalizePlaytimeBlock('next track would start during grace period')
+  }
+  if (quietHoursState.state === 'grace') {
+    finalizeQuietHoursBlock('next track would start during grace period')
+  }
+})
+player.on('playlist-finish', () => {
+  if (playtimeState.state === 'grace') {
+    finalizePlaytimeBlock('playlist finished during grace period')
+  }
+  if (quietHoursState.state === 'grace') {
+    finalizeQuietHoursBlock('playlist finished during grace period')
+  }
+  // Library album finished naturally — drop its resume entry so the user
+  // isn't offered "weiterhören" at the very end next time. Spotify and RSS
+  // are skipped: Spotify gives no clean end-of-album signal via the
+  // mplayer wrapper anyway, and RSS isn't tracked with enough metadata in
+  // currentMeta to build a composite key.
+  deleteResumeForFinishedLibraryAlbum()
+})
+
+// POSTs a minimal Media-shape body to /api/deleteresume so the backend-api
+// removes the matching resume.json entry by composite key. Best-effort: a
+// failure here just leaves a stale resume entry, no playback impact.
+function deleteResumeForFinishedLibraryAlbum() {
+  if (currentMeta.currentPlayer !== 'mplayer') return
+  if (currentMeta.currentType !== 'local') return
+  const rawPath = currentMeta.path
+  if (!rawPath) return
+  const parts = String(rawPath).split('/')
+  if (parts.length < 3) return
+  const body = JSON.stringify({
+    type: 'library',
+    artist: decodeURIComponent(parts[1]),
+    title: decodeURIComponent(parts[2]),
+  })
+  const req = http.request(
+    {
+      host: '127.0.0.1',
+      port: 8200,
+      path: '/api/deleteresume',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    },
+    (response) => {
+      response.resume() // drain
+      log.debug(
+        `${now()}: [Spotify Control] deleteresume status=${response.statusCode} for ${rawPath}`,
+      )
+    },
+  )
+  req.on('error', (err) => {
+    log.debug(`${now()}: [Spotify Control] deleteresume failed: ${err.message}`)
+  })
+  req.write(body)
+  req.end()
+}
+
+// H1: amixer was forked once per second to mirror the system volume into
+// currentMeta.volume. setVolume() already pushes the new value into
+// currentMeta.volume directly when the user changes it; the periodic poll
+// is only there to catch external changes (e.g. someone running amixer
+// over SSH). 5s is plenty for that — fewer fork+exec syscalls is worth
+// far more than 5s of staleness on a value the kid never touches.
 setInterval(() => {
   const cmdVolume = "/usr/bin/amixer sget Master | grep 'Right:'"
-  const exec = require('node:child_process').exec
-  exec(cmdVolume, (e, stdout, _stderr) => {
+  childProcess.exec(cmdVolume, (e, stdout, _stderr) => {
     if (e instanceof Error) {
       // TODO: Get this to run in development.
       if (process.env.NODE_ENV === 'development') {
@@ -173,10 +364,14 @@ setInterval(() => {
     }
     currentMeta.volume = Number.parseInt(stdout.split('[')[1].split('%')[0], 10)
   })
-}, 1000)
+}, 5000)
 
 let activeDevice = null
-const nowDate = new Date()
+// AR5-4: was `const nowDate = new Date()` evaluated once at module-load.
+// All 86 log templates that used `${now()}` printed
+// the boot timestamp on every line, making production debugging useless.
+// Use a fresh Date per call so timestamps reflect the actual event.
+const now = () => new Date().toLocaleString()
 const volumeStart = 99
 let playerstate
 let spotifyRunning = false
@@ -219,11 +414,508 @@ const currentMeta = {
   // Radio streams and podcasts are buffered before they start: how far along that is.
   loading: false,
   loadProgress: 0,
+  // Phase 19 Stufe B: wer hat den letzten Command geschickt? Werte:
+  // 'box' (Default — Display-Frontend), 'eltern' (WebApp-Proxy),
+  // 'telegram' (Bot), 'unknown' (alles andere). triggerAt = ms-Epoch.
+  // Display pollt /local und navigiert zur Player-View, wenn neuer
+  // triggerSource !== 'box' kommt.
+  triggerSource: 'box',
+  triggerAt: 0,
 }
 // Live tracklist (with real names) of the currently playing NAS folder, fetched
 // once in playNasList() - used to name each track as it plays, since mplayer
 // only ever sees the stream-proxy URL, not the real filename.
 let currentNasTracks = []
+
+// === Playtime Limit (daily listening cap) ===
+// Per-weekday limit on active playback time. Configured in mupiboxconfig.json
+// under "playtimeLimit". Working state lives in /tmp (tmpfs, no SD wear);
+// a checkpoint on the SD card persists across reboots, written at most every 60s.
+// Config changes require a player restart (consistent with other config in this file).
+const PLAYTIME_DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+const PLAYTIME_DEFAULT_LIMITS = { mon: 60, tue: 60, wed: 60, thu: 60, fri: 60, sat: 60, sun: 60 }
+const PLAYTIME_WORKING_PATH = '/tmp/playtime.json'
+const PLAYTIME_CHECKPOINT_PATH = path.join(configBasePath, 'playtime-checkpoint.json')
+const PLAYTIME_CHECKPOINT_INTERVAL_MS = 60_000
+
+function readPlaytimeConfig() {
+  const raw = muPiBoxConfig?.playtimeLimit || {}
+  const resetHour = Number.isInteger(raw.resetHour) && raw.resetHour >= 0 && raw.resetHour < 24 ? raw.resetHour : 0
+  // Grace period in minutes after the limit is reached during which playback may
+  // continue (current track allowed to finish). 0 = stop immediately at the limit.
+  const maxOverrunMinutes =
+    Number.isInteger(raw.maxOverrunMinutes) && raw.maxOverrunMinutes >= 0 && raw.maxOverrunMinutes <= 60
+      ? raw.maxOverrunMinutes
+      : 10
+  return {
+    enabled: raw.enabled === true,
+    resetHour,
+    maxOverrunMinutes,
+    limitsMinutes: { ...PLAYTIME_DEFAULT_LIMITS, ...(raw.limitsMinutes || {}) },
+    todayBonus: raw.todayBonus || null,
+  }
+}
+
+// Bonus minutes awarded by parent (via Telegram /extend or Admin) for today only.
+// If the stored date doesn't match the current logical day, the bonus is treated
+// as 0 — auto-resets at day rollover without needing to clear it explicitly.
+function getTodayBonusMinutes(cfg, todayDateStr) {
+  const b = cfg.todayBonus
+  if (!b || typeof b !== 'object') return 0
+  if (b.date !== todayDateStr) return 0
+  const m = Number(b.minutes)
+  if (!Number.isFinite(m) || m <= 0) return 0
+  return Math.min(m, 1440)
+}
+
+// Parent overrides via Telegram or admin endpoints.
+// allowUntil   → bypass all blocks (state stays 'normal', no finalize calls)
+// forceBlockUntil → force playback off (state forced to 'blocked', stop() called)
+function readPlaybackOverrides() {
+  const raw = muPiBoxConfig?.playbackOverride || {}
+  const allowUntil = Number(raw.allowUntil) || 0
+  const forceBlockUntil = Number(raw.forceBlockUntil) || 0
+  return { allowUntil, forceBlockUntil }
+}
+
+function isAllowOverrideActive() {
+  return Date.now() < readPlaybackOverrides().allowUntil
+}
+
+function isForceBlockActive() {
+  return Date.now() < readPlaybackOverrides().forceBlockUntil
+}
+
+// === Quiet Hours ===
+const QUIET_DEFAULT_SCHEDULE = { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] }
+
+function readQuietHoursConfig() {
+  const raw = muPiBoxConfig?.quietHours || {}
+  const maxOverrunMinutes =
+    Number.isInteger(raw.maxOverrunMinutes) && raw.maxOverrunMinutes >= 0 && raw.maxOverrunMinutes <= 60
+      ? raw.maxOverrunMinutes
+      : 10
+  return {
+    enabled: raw.enabled === true,
+    maxOverrunMinutes,
+    schedule: { ...QUIET_DEFAULT_SCHEDULE, ...(raw.schedule || {}) },
+  }
+}
+
+// 'HH:MM' → minutes since midnight, or null if invalid.
+function parseHHMMToMinutes(hhmm) {
+  if (typeof hhmm !== 'string') return null
+  const m = hhmm.match(/^(\d{1,2}):(\d{2})$/)
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null
+  return h * 60 + min
+}
+
+// Returns the active quiet window object {from, to, label?} that contains "now",
+// or null if no window applies. Windows belong to the day they start on; a
+// midnight-spanning window (from > to) covers from `from` of its day until `to`
+// of the next day.
+function findActiveQuietWindow(now, schedule) {
+  const todayKey = PLAYTIME_DAY_KEYS[now.getDay()]
+  const yesterdayKey = PLAYTIME_DAY_KEYS[(now.getDay() + 6) % 7]
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+
+  for (const w of schedule[todayKey] || []) {
+    const fromMin = parseHHMMToMinutes(w.from)
+    const toMin = parseHHMMToMinutes(w.to)
+    if (fromMin === null || toMin === null) continue
+    if (fromMin < toMin) {
+      if (nowMinutes >= fromMin && nowMinutes < toMin) return w
+    } else if (fromMin > toMin) {
+      // Same-day half of a midnight-spanning window
+      if (nowMinutes >= fromMin) return w
+    }
+    // fromMin === toMin: zero-length, skip
+  }
+  // Yesterday's wrapping windows (the to-half lands in today's early hours)
+  for (const w of schedule[yesterdayKey] || []) {
+    const fromMin = parseHHMMToMinutes(w.from)
+    const toMin = parseHHMMToMinutes(w.to)
+    if (fromMin === null || toMin === null) continue
+    if (fromMin > toMin && nowMinutes < toMin) return w
+  }
+  return null
+}
+
+// Reset-hour shifts when "today" begins. With resetHour=4, Sunday 02:00 still counts as Saturday.
+function getLogicalDay(now, resetHour) {
+  const shifted = new Date(now.getTime() - resetHour * 3600 * 1000)
+  const y = shifted.getFullYear()
+  const m = String(shifted.getMonth() + 1).padStart(2, '0')
+  const d = String(shifted.getDate()).padStart(2, '0')
+  return { dateStr: `${y}-${m}-${d}`, dayKey: PLAYTIME_DAY_KEYS[shifted.getDay()] }
+}
+
+function isActuallyPlaying() {
+  if (!currentMeta.currentPlayer) return false
+  if (currentMeta.currentPlayer === 'spotify') return currentMeta.pause === false
+  if (currentMeta.currentPlayer === 'mplayer') return currentMeta.playing === true
+  return false
+}
+
+// state machine: 'normal' (under limit) → 'grace' (over limit, current track finishing) → 'blocked' (stopped)
+const playtimeState = {
+  date: '',
+  dayKey: 'mon',
+  usedSeconds: 0,
+  state: 'normal',
+  graceEndsAt: null,
+}
+let playtimeLastCheckpointAt = 0
+let playtimeLastCheckpointSeconds = -1
+
+// Quiet hours uses the same state machine but is purely time-window-driven (no counter).
+const quietHoursState = {
+  state: 'normal',
+  graceEndsAt: null,
+  activeWindow: null, // current window object {from, to, label?} when in_window
+}
+
+function loadPlaytimeCheckpoint() {
+  try {
+    if (!fs.existsSync(PLAYTIME_CHECKPOINT_PATH)) return
+    const data = JSON.parse(fs.readFileSync(PLAYTIME_CHECKPOINT_PATH, 'utf8'))
+    const today = getLogicalDay(new Date(), readPlaytimeConfig().resetHour)
+    if (data && data.date === today.dateStr) {
+      playtimeState.date = data.date
+      playtimeState.dayKey = data.dayKey || today.dayKey
+      playtimeState.usedSeconds = Number(data.usedSeconds) || 0
+      // console.log so it shows even when logLevel='error' (the default)
+      console.log(
+        `${new Date().toLocaleString()}: [Playtime] Resumed counter: ${playtimeState.usedSeconds}s for ${playtimeState.date}`,
+      )
+    }
+  } catch (e) {
+    console.error(`${new Date().toLocaleString()}: [Playtime] Failed to load checkpoint:`, e)
+  }
+}
+
+function writeCombinedWorking() {
+  const ptCfg = readPlaytimeConfig()
+  const qhCfg = readQuietHoursConfig()
+  const ovr = readPlaybackOverrides()
+  const now = Date.now()
+  const inForceBlock = now < ovr.forceBlockUntil
+  const inAllowOverride = now < ovr.allowUntil
+
+  if (!ptCfg.enabled && !qhCfg.enabled && !inForceBlock && !inAllowOverride) {
+    fs.writeFile(PLAYTIME_WORKING_PATH, JSON.stringify({ enabled: false }), () => {})
+    return
+  }
+
+  // Effective state: forceBlock wins, then allowOverride forces normal,
+  // otherwise combine the two sub-systems naturally.
+  let state = 'normal'
+  let blockSource = null
+  if (inForceBlock) {
+    state = 'blocked'
+    blockSource = 'override'
+  } else if (!inAllowOverride) {
+    if (playtimeState.state === 'blocked' || quietHoursState.state === 'blocked') state = 'blocked'
+    else if (playtimeState.state === 'grace' || quietHoursState.state === 'grace') state = 'grace'
+    if (state !== 'normal') {
+      // Prefer 'quiet' over 'playtime' if both restrict — more explainable
+      if (quietHoursState.state !== 'normal') blockSource = 'quiet'
+      else if (playtimeState.state !== 'normal') blockSource = 'playtime'
+    }
+  }
+  // else: allowUntil-override active → state stays 'normal'
+
+  const baseLimit = ptCfg.enabled ? (ptCfg.limitsMinutes[playtimeState.dayKey] ?? 60) : 0
+  const bonus = ptCfg.enabled ? getTodayBonusMinutes(ptCfg, playtimeState.date) : 0
+  const ptLimit = baseLimit + bonus
+  const ptGraceEndsInSeconds =
+    playtimeState.graceEndsAt !== null ? Math.max(0, Math.ceil((playtimeState.graceEndsAt - Date.now()) / 1000)) : 0
+  const qhGraceEndsInSeconds =
+    quietHoursState.graceEndsAt !== null ? Math.max(0, Math.ceil((quietHoursState.graceEndsAt - Date.now()) / 1000)) : 0
+
+  const payload = {
+    enabled: true,
+    state,
+    blockSource,
+    playtime: {
+      enabled: ptCfg.enabled,
+      state: playtimeState.state,
+      date: playtimeState.date,
+      dayKey: playtimeState.dayKey,
+      limitMinutes: ptLimit,
+      usedSeconds: playtimeState.usedSeconds,
+      remainingSeconds: ptCfg.enabled ? Math.max(0, ptLimit * 60 - playtimeState.usedSeconds) : 0,
+      graceEndsInSeconds: ptGraceEndsInSeconds,
+      resetHour: ptCfg.resetHour,
+    },
+    quiet: {
+      enabled: qhCfg.enabled,
+      state: quietHoursState.state,
+      inWindow: quietHoursState.activeWindow !== null,
+      ...(quietHoursState.activeWindow?.label ? { label: quietHoursState.activeWindow.label } : {}),
+      graceEndsInSeconds: qhGraceEndsInSeconds,
+    },
+    override: {
+      allowUntil: ovr.allowUntil,
+      forceBlockUntil: ovr.forceBlockUntil,
+    },
+  }
+  fs.writeFile(PLAYTIME_WORKING_PATH, JSON.stringify(payload), () => {})
+}
+
+function writePlaytimeCheckpoint() {
+  const payload = {
+    date: playtimeState.date,
+    dayKey: playtimeState.dayKey,
+    usedSeconds: playtimeState.usedSeconds,
+  }
+  fs.writeFile(PLAYTIME_CHECKPOINT_PATH, JSON.stringify(payload), (err) => {
+    if (err) log.error(`${new Date().toLocaleString()}: [Playtime] Failed to write checkpoint:`, err)
+  })
+  playtimeLastCheckpointAt = Date.now()
+  playtimeLastCheckpointSeconds = playtimeState.usedSeconds
+}
+
+// Used by the catch-all to decide whether to refuse new play/resume/skip commands.
+// Combines the natural state of both sub-systems with parent overrides:
+//  - forceBlockUntil active → always blocked (highest priority)
+//  - allowUntil active     → never blocked  (parent gave the green light)
+//  - otherwise: blocked if playtime OR quiet hours says so
+function isPlaybackBlocked() {
+  if (isForceBlockActive()) return true
+  if (isAllowOverrideActive()) return false
+  return (
+    playtimeState.state === 'grace' ||
+    playtimeState.state === 'blocked' ||
+    quietHoursState.state === 'grace' ||
+    quietHoursState.state === 'blocked'
+  )
+}
+
+// Transition to fully-stopped state. Called from the tick on grace timeout, from the
+// mplayer track-change/playlist-finish handlers, or directly when grace=0.
+// While allowUntil-override is active, transitions are suppressed — the parent has
+// explicitly green-lit playback for this window, so neither grace nor stop fire.
+function finalizePlaytimeBlock(reason) {
+  if (isAllowOverrideActive()) return
+  console.log(`${new Date().toLocaleString()}: [Playtime] Finalizing block (${reason})`)
+  playtimeState.state = 'blocked'
+  playtimeState.graceEndsAt = null
+  try {
+    stop()
+  } catch (e) {
+    console.error(`${new Date().toLocaleString()}: [Playtime] Error stopping playback:`, e)
+  }
+  writePlaytimeCheckpoint()
+  // Notify parents that today's listening time is up. telegram_send_message.py
+  // loops over all configured chatIds, so both Family group and individual DMs
+  // receive the message.
+  if (hasConfiguredTelegram()) {
+    cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Hörzeit aufgebraucht heute"')
+  }
+}
+
+function finalizeQuietHoursBlock(reason) {
+  if (isAllowOverrideActive()) return
+  console.log(`${new Date().toLocaleString()}: [QuietHours] Finalizing block (${reason})`)
+  const label = quietHoursState.activeWindow?.label
+  quietHoursState.state = 'blocked'
+  quietHoursState.graceEndsAt = null
+  if (hasConfiguredTelegram()) {
+    const msg = label ? `Ruhezeit gestartet: ${label}` : 'Ruhezeit gestartet'
+    cmdCall(`/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "${msg.replace(/"/g, '\\"')}"`)
+  }
+  try {
+    stop()
+  } catch (e) {
+    console.error(`${new Date().toLocaleString()}: [QuietHours] Error stopping playback:`, e)
+  }
+}
+
+// Commands that *start or resume* playback. These get blocked when the daily cap is hit.
+// Pause/stop/volume/system commands are NOT blocked — those should always work.
+function isPlayInitiatingCommand(command) {
+  if (command.name?.includes('spotify:')) return true
+  if (
+    command.dir &&
+    (command.dir.includes('library') ||
+      command.dir.includes('radio') ||
+      command.dir.includes('rss') ||
+      command.dir.includes('say/'))
+  ) {
+    return true
+  }
+  if (['play', 'next', 'previous', 'seek+30', 'seek-30'].includes(command.name)) return true
+  if (command.name?.startsWith('seekpos:')) return true
+  return false
+}
+
+// Updates playtimeState only (counter, day rollover, state transitions, SD checkpoint).
+// Working-state file is written separately by writeCombinedWorking once both
+// sub-systems have ticked, so the payload is consistent.
+function playtimeTickStep() {
+  const cfg = readPlaytimeConfig()
+  if (!cfg.enabled) {
+    if (playtimeState.state !== 'normal' || playtimeState.graceEndsAt !== null) {
+      playtimeState.state = 'normal'
+      playtimeState.graceEndsAt = null
+    }
+    return
+  }
+  const now = new Date()
+  const today = getLogicalDay(now, cfg.resetHour)
+  // Day rollover: reset counter and state
+  if (today.dateStr !== playtimeState.date) {
+    playtimeState.date = today.dateStr
+    playtimeState.dayKey = today.dayKey
+    playtimeState.usedSeconds = 0
+    playtimeState.state = 'normal'
+    playtimeState.graceEndsAt = null
+    writePlaytimeCheckpoint()
+    console.log(`${now.toLocaleString()}: [Playtime] New day: ${today.dateStr} (${today.dayKey})`)
+  }
+  // Increment counter only when actually playing
+  if (isActuallyPlaying()) {
+    playtimeState.usedSeconds++
+  }
+  // Effective limit = base + bonus (bonus auto-zeroes when its date doesn't match today)
+  const baseLimit = cfg.limitsMinutes[today.dayKey] ?? 60
+  const bonus = getTodayBonusMinutes(cfg, today.dateStr)
+  const limit = baseLimit + bonus
+  const limitSeconds = limit * 60
+  const limitReached = playtimeState.usedSeconds >= limitSeconds
+  if (limitReached) {
+    if (playtimeState.state === 'normal') {
+      const overrunMs = cfg.maxOverrunMinutes * 60 * 1000
+      if (overrunMs > 0) {
+        playtimeState.state = 'grace'
+        playtimeState.graceEndsAt = Date.now() + overrunMs
+        console.log(
+          `${now.toLocaleString()}: [Playtime] Daily limit reached (${limit} min for ${today.dayKey}${bonus > 0 ? `, +${bonus} bonus` : ''}). Entering grace period (max ${cfg.maxOverrunMinutes} min until current track ends).`,
+        )
+        writePlaytimeCheckpoint()
+      } else {
+        finalizePlaytimeBlock(`limit reached (${limit} min, no grace configured)`)
+      }
+    } else if (playtimeState.state === 'grace') {
+      if (playtimeState.graceEndsAt !== null && Date.now() >= playtimeState.graceEndsAt) {
+        finalizePlaytimeBlock(`grace period expired (${cfg.maxOverrunMinutes} min)`)
+      }
+    } else if (playtimeState.state === 'blocked') {
+      // Still blocked, but parent might have just added bonus — re-evaluate
+      if (playtimeState.usedSeconds < limitSeconds) {
+        playtimeState.state = 'normal'
+        console.log(
+          `${now.toLocaleString()}: [Playtime] Bonus applied (${bonus} min) — releasing block, ${Math.ceil((limitSeconds - playtimeState.usedSeconds) / 60)} min remaining.`,
+        )
+      }
+    }
+  } else if (playtimeState.state !== 'normal') {
+    // Counter is below the limit (e.g. parent extended the limit) — release.
+    playtimeState.state = 'normal'
+    playtimeState.graceEndsAt = null
+    console.log(
+      `${now.toLocaleString()}: [Playtime] Released — usedSeconds (${playtimeState.usedSeconds}) below new limit (${limitSeconds})`,
+    )
+  }
+  if (
+    Date.now() - playtimeLastCheckpointAt >= PLAYTIME_CHECKPOINT_INTERVAL_MS &&
+    playtimeState.usedSeconds !== playtimeLastCheckpointSeconds
+  ) {
+    writePlaytimeCheckpoint()
+  }
+}
+
+// Updates quietHoursState based on whether "now" falls inside any configured window.
+// Mirror of playtimeTickStep but purely time-window-driven (no counter).
+function quietHoursTickStep() {
+  // AR5-14: parent's allowUntil override suppresses ALL state transitions —
+  // not just blocked-entry. Without this, a quiet window that starts mid-
+  // override would silently mutate state to 'grace' or 'blocked'; the
+  // moment the override ended, the kid would be hit with no grace at all
+  // (state already 'blocked'). Skipping the tick keeps state at 'normal'
+  // throughout the override, so the post-override tick walks the proper
+  // normal -> grace -> blocked path again.
+  if (isAllowOverrideActive()) return
+  const cfg = readQuietHoursConfig()
+  if (!cfg.enabled) {
+    if (quietHoursState.state !== 'normal' || quietHoursState.activeWindow !== null) {
+      // User just disabled mid-window: instantly release. Playback isn't auto-started
+      // (it was stopped by the previous block) — kid taps play to resume.
+      quietHoursState.state = 'normal'
+      quietHoursState.graceEndsAt = null
+      quietHoursState.activeWindow = null
+    }
+    return
+  }
+  const now = new Date()
+  const window = findActiveQuietWindow(now, cfg.schedule)
+  if (window) {
+    if (quietHoursState.state === 'normal') {
+      // Just entered a window
+      quietHoursState.activeWindow = window
+      const overrunMs = cfg.maxOverrunMinutes * 60 * 1000
+      if (overrunMs > 0) {
+        quietHoursState.state = 'grace'
+        quietHoursState.graceEndsAt = Date.now() + overrunMs
+        console.log(
+          `${now.toLocaleString()}: [QuietHours] Entered window ${window.from}-${window.to}${window.label ? ` (${window.label})` : ''}. Entering grace period (max ${cfg.maxOverrunMinutes} min).`,
+        )
+      } else {
+        finalizeQuietHoursBlock(`entered window ${window.from}-${window.to} (no grace configured)`)
+      }
+    } else if (quietHoursState.state === 'grace') {
+      if (quietHoursState.graceEndsAt !== null && Date.now() >= quietHoursState.graceEndsAt) {
+        finalizeQuietHoursBlock(`grace period expired (${cfg.maxOverrunMinutes} min)`)
+      }
+    }
+    // 'blocked': stay blocked
+  } else if (quietHoursState.state !== 'normal') {
+    // Just exited a window — release without auto-starting playback
+    console.log(`${now.toLocaleString()}: [QuietHours] Window ended. Playback can resume on user action.`)
+    quietHoursState.state = 'normal'
+    quietHoursState.graceEndsAt = null
+    quietHoursState.activeWindow = null
+  }
+}
+
+// Tracks whether forceBlock was active on the previous tick so we only call stop()
+// once on entry (not every second while it's still in effect).
+let forceBlockWasActive = false
+
+function combinedTick() {
+  if (isForceBlockActive()) {
+    if (!forceBlockWasActive) {
+      const until = readPlaybackOverrides().forceBlockUntil
+      console.log(
+        `${new Date().toLocaleString()}: [Override] Force-block engaged until ${new Date(until).toLocaleString()}`,
+      )
+      try {
+        stop()
+      } catch (e) {
+        console.error(`${new Date().toLocaleString()}: [Override] Error stopping playback:`, e)
+      }
+    }
+    forceBlockWasActive = true
+    // Skip natural ticks: we don't want playtimeState/quietHoursState mutating
+    // while force-block is in effect (it would mask the actual reason in /status).
+    writeCombinedWorking()
+    return
+  }
+  if (forceBlockWasActive) {
+    console.log(`${new Date().toLocaleString()}: [Override] Force-block ended.`)
+    forceBlockWasActive = false
+  }
+  playtimeTickStep()
+  quietHoursTickStep()
+  writeCombinedWorking()
+}
+
+loadPlaytimeCheckpoint()
+setInterval(combinedTick, 1000)
 
 function writeplayerstatePlay() {
   playerstate = 'play'
@@ -232,7 +924,7 @@ function writeplayerstatePlay() {
       console.error(err)
       return
     }
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Write play to /tmp/playerstate`)
+    log.debug(`${now()}: [Spotify Control] Write play to /tmp/playerstate`)
   })
 }
 
@@ -243,7 +935,7 @@ function writeplayerstatePause() {
       console.error(err)
       return
     }
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Write play to /tmp/playerstate`)
+    log.debug(`${now()}: [Spotify Control] Write play to /tmp/playerstate`)
   })
 }
 
@@ -281,14 +973,14 @@ async function refreshTokenApi() {
       return apiAccessToken.accessToken
     },
     (err) => {
-      log.debug(`${nowDate.toLocaleString()}: Could not refresh access token`, err)
+      log.debug(`${now()}: Could not refresh access token`, err)
       throw err
     },
   )
 }
 
 function setAccessToken(token) {
-  log.debug(`${nowDate.toLocaleString()}: The access token has been refreshed!`)
+  log.debug(`${now()}: The access token has been refreshed!`)
   counter.countfreshAccessToken++
   if (config.server.logLevel === 'debug') {
     writeCounter()
@@ -306,9 +998,9 @@ function setAccessToken(token) {
 /*called in all error cases*/
 /*token expired and no_device error are handled explicitly*/
 function handleSpotifyError(err, from) {
-  if (err.body.error?.status === 401) {
-    log.debug(`${nowDate.toLocaleString()}: access token expired, refreshing...`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
+  if (err?.body?.error?.status === 401) {
+    log.debug(`${now()}: access token expired, refreshing...`)
+    log.debug(`${now()}: Error from: ${from}`)
     counter.counterrorAccessToken++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -316,10 +1008,10 @@ function handleSpotifyError(err, from) {
     if (currentMeta.activeSpotifyId !== '0') {
       refreshToken()
     }
-  } else if (err.body.error?.status === 400) {
-    log.debug(`${nowDate.toLocaleString()}: invalid id`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
-    log.debug(`${nowDate.toLocaleString()}: ${err}`)
+  } else if (err?.body?.error?.status === 400) {
+    log.debug(`${now()}: invalid id`)
+    log.debug(`${now()}: Error from: ${from}`)
+    log.debug(`${now()}: ${err}`)
     counter.counterrorInvalidID++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -327,10 +1019,10 @@ function handleSpotifyError(err, from) {
     if (currentMeta.activeSpotifyId !== '0') {
       setActiveDevice()
     }
-  } else if (err.body.error?.status === 429) {
-    log.debug(`${nowDate.toLocaleString()}: To many requests on th spotify web api`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
-    log.debug(`${nowDate.toLocaleString()}: ${err}`)
+  } else if (err?.body?.error?.status === 429) {
+    log.debug(`${now()}: To many requests on th spotify web api`)
+    log.debug(`${now()}: Error from: ${from}`)
+    log.debug(`${now()}: ${err}`)
     counter.counterrorToManyRequest++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -339,9 +1031,9 @@ function handleSpotifyError(err, from) {
     //
     //},2000)
   } else if (err.toString().includes('NO_ACTIVE_DEVICE')) {
-    log.debug(`${nowDate.toLocaleString()}: no active device, setting the first one found to active`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
-    log.debug(`${nowDate.toLocaleString()}: playID: ${currentMeta.activeSpotifyId}`)
+    log.debug(`${now()}: no active device, setting the first one found to active`)
+    log.debug(`${now()}: Error from: ${from}`)
+    log.debug(`${now()}: playID: ${currentMeta.activeSpotifyId}`)
     counter.counterrorNoActivDevice++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -350,9 +1042,9 @@ function handleSpotifyError(err, from) {
       setActiveDevice()
     }
   } else if (err.toString().includes('Device not found')) {
-    log.debug(`${nowDate.toLocaleString()}: Device not found: ${err}`)
-    log.debug(`${nowDate.toLocaleString()}: ${err}`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
+    log.debug(`${now()}: Device not found: ${err}`)
+    log.debug(`${now()}: ${err}`)
+    log.debug(`${now()}: Error from: ${from}`)
     counter.counterror++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -363,18 +1055,18 @@ function handleSpotifyError(err, from) {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Transfering playback play deviceID`)
+        log.debug(`${now()}: [Spotify Control] Transfering playback play deviceID`)
         writeplayerstatePlay()
       },
       (err) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback error${err}`)
+        log.debug(`${now()}: [Spotify Control] Playback error${err}`)
         handleSpotifyError(err, 'ack')
       },
     )
   } else {
-    log.debug(`${nowDate.toLocaleString()}: an error occured: ${err}`)
-    log.debug(`${nowDate.toLocaleString()}: ${err}`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
+    log.debug(`${now()}: an error occured: ${err}`)
+    log.debug(`${now()}: ${err}`)
+    log.debug(`${now()}: Error from: ${from}`)
     counter.counterror++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -395,15 +1087,15 @@ function setActiveDevice() {
         const availableDevices = data.body.devices
         if (availableDevices && availableDevices.length > 0) {
           activeDevice = availableDevices[0].id
-          log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Auto-selected device: ${activeDevice}`)
+          log.debug(`${now()}: [Spotify Control] Auto-selected device: ${activeDevice}`)
           // Now transfer playback to the selected device
           transferPlaybackToActiveDevice()
         } else {
-          log.debug(`${nowDate.toLocaleString()}: [Spotify Control] No available devices found`)
+          log.debug(`${now()}: [Spotify Control] No available devices found`)
         }
       },
       (err) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Error getting devices: ${err}`)
+        log.debug(`${now()}: [Spotify Control] Error getting devices: ${err}`)
         handleSpotifyError(err, 'getMyDevices')
       },
     )
@@ -420,7 +1112,7 @@ function transferPlaybackToActiveDevice() {
       if (config.server.logLevel === 'debug') {
         writeCounter()
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Transfering playback to ${activeDevice}`)
+      log.debug(`${now()}: [Spotify Control] Transfering playback to ${activeDevice}`)
       if (currentMeta.activeSpotifyId.includes('spotify:')) {
         if (currentMeta.pause) {
           play()
@@ -436,12 +1128,7 @@ function transferPlaybackToActiveDevice() {
 }
 
 function pause() {
-  if (
-    muPiBoxConfig.telegram.active &&
-    //network.onlinestate === 'online' &&
-    muPiBoxConfig.telegram.token.length > 1 &&
-    muPiBoxConfig.telegram.chatId.length > 1
-  )
+  if (hasConfiguredTelegram())
     cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Pause"')
   currentMeta.pause = true
   if (currentMeta.currentPlayer === 'spotify') {
@@ -451,7 +1138,7 @@ function pause() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback paused`)
+        log.debug(`${now()}: [Spotify Control] Playback paused`)
         writeplayerstatePause()
       },
       (err) => {
@@ -468,12 +1155,7 @@ function pause() {
 }
 
 function stop() {
-  if (
-    muPiBoxConfig.telegram.active &&
-    //network.onlinestate === 'online' &&
-    muPiBoxConfig.telegram.token.length > 1 &&
-    muPiBoxConfig.telegram.chatId.length > 1
-  )
+  if (hasConfiguredTelegram())
     cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Stop"')
   if (currentMeta.currentPlayer === 'spotify') {
     spotifyApi.pause().then(
@@ -482,7 +1164,7 @@ function stop() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback stopped`)
+        log.debug(`${now()}: [Spotify Control] Playback stopped`)
         writeplayerstatePause()
       },
       (err) => {
@@ -508,7 +1190,7 @@ function stop() {
     currentMeta.currentPlayer = ''
     currentMeta.pause = false
     spotifyRunning = false
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback stopped`)
+    log.debug(`${now()}: [Spotify Control] Playback stopped`)
   }
 }
 
@@ -520,7 +1202,7 @@ function play() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback started`)
+        log.debug(`${now()}: [Spotify Control] Playback started`)
         currentMeta.pause = false
         writeplayerstatePlay()
       },
@@ -528,26 +1210,16 @@ function play() {
         handleSpotifyError(err, 'play')
       },
     )
-    if (
-      muPiBoxConfig.telegram.active &&
-      //network.onlinestate === 'online' &&
-      muPiBoxConfig.telegram.token.length > 1 &&
-      muPiBoxConfig.telegram.chatId.length > 1
-    )
+    if (hasConfiguredTelegram())
       cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Continue playing"')
-    //if (muPiBoxConfig.telegram.active && muPiBoxConfig.telegram.token.length > 1 && muPiBoxConfig.telegram.chatId.length > 1) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Spotify.py');
+    //if (hasConfiguredTelegram()) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Spotify.py');
   } else if (currentMeta.currentPlayer === 'mplayer') {
     if (!currentMeta.playing) {
       player.playPause()
       currentMeta.pause = false
       //currentMeta.playing = true;
       writeplayerstatePlay()
-      if (
-        muPiBoxConfig.telegram.active &&
-        //network.onlinestate === 'online' &&
-        muPiBoxConfig.telegram.token.length > 1 &&
-        muPiBoxConfig.telegram.chatId.length > 1
-      )
+      if (hasConfiguredTelegram())
         cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Continue playing"')
       // if (muPiBoxConfig.telegram.active && muPiBoxConfig.telegram.token.length > 1 && muPiBoxConfig.telegram.chatId.length > 1 && (currentMeta.currentType === 'rss' || currentMeta.currentType === 'radio')) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Local.py');
       // if (muPiBoxConfig.telegram.active && muPiBoxConfig.telegram.token.length > 1 && muPiBoxConfig.telegram.chatId.length > 1 && currentMeta.currentType === 'local') cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_RSS_Radio.py');
@@ -563,7 +1235,7 @@ function next() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Skip to next`)
+        log.debug(`${now()}: [Spotify Control] Skip to next`)
       },
       (err) => {
         handleSpotifyError(err, 'next')
@@ -584,7 +1256,7 @@ function previous() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Skip to previous`)
+        log.debug(`${now()}: [Spotify Control] Skip to previous`)
       },
       (err) => {
         handleSpotifyError(err, 'previous')
@@ -594,7 +1266,7 @@ function previous() {
     if (currentMeta.currentTracknr > 1) {
       currentMeta.currentTracknr = currentMeta.currentTracknr - 2
     }
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Current Tracknr: ${currentMeta.currentTracknr}`)
+    log.debug(`${now()}: [Spotify Control] Current Tracknr: ${currentMeta.currentTracknr}`)
     player.previous()
   }
 }
@@ -603,7 +1275,7 @@ function jumpToTrack(targetPosition) {
   if (currentMeta.currentPlayer === 'mplayer') {
     const offset = targetPosition - currentMeta.currentTracknr
     if (offset !== 0) {
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Jumping ${offset} track(s) to position ${targetPosition}`)
+      log.debug(`${now()}: [Spotify Control] Jumping ${offset} track(s) to position ${targetPosition}`)
       // The player's 'metadata' event always bumps currentTracknr by exactly 1 per
       // track-change, regardless of how many tracks pt_step actually skipped. Pre-set
       // it here so that upcoming +1 lands exactly on targetPosition, no matter the offset.
@@ -620,7 +1292,7 @@ function shuffleon() {
       if (config.server.logLevel === 'debug') {
         writeCounter()
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Toggle Shuffle`)
+      log.debug(`${now()}: [Spotify Control] Toggle Shuffle`)
     },
     (err) => {
       handleSpotifyError(err, 'shuffleon')
@@ -635,7 +1307,7 @@ function shuffleoff() {
       if (config.server.logLevel === 'debug') {
         writeCounter()
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Toggle Shuffle`)
+      log.debug(`${now()}: [Spotify Control] Toggle Shuffle`)
     },
     (err) => {
       handleSpotifyError(err, 'shuffleoff')
@@ -644,11 +1316,11 @@ function shuffleoff() {
 }
 
 function playMe() {
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Spotify play ${currentMeta.activeSpotifyId}`)
+  log.debug(`${now()}: [Spotify Control] Spotify play ${currentMeta.activeSpotifyId}`)
   resumeOffset = currentMeta.activeSpotifyId.split(':')[3]
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Spotify resume ${resumeOffset}`)
+  log.debug(`${now()}: [Spotify Control] Spotify resume ${resumeOffset}`)
   if (resumeOffset > 0) resumeOffset--
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Spotify offset ${resumeOffset}`)
+  log.debug(`${now()}: [Spotify Control] Spotify offset ${resumeOffset}`)
   resumeProgess = currentMeta.activeSpotifyId.split(':')[4]
   tmp = currentMeta.activeSpotifyId.split(':')
   contextUri = `${tmp[0]}:${tmp[1]}:${tmp[2]}`
@@ -662,7 +1334,7 @@ function playMe() {
   // Add device_id if we have an active device
   if (activeDevice) {
     playOptions.device_id = activeDevice
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playing on device: ${activeDevice}`)
+    log.debug(`${now()}: [Spotify Control] Playing on device: ${activeDevice}`)
   }
 
   if (contextUri.split(':')[1] === 'episode') {
@@ -673,20 +1345,15 @@ function playMe() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback started`)
+        log.debug(`${now()}: [Spotify Control] Playback started`)
         writeplayerstatePlay()
         spotifyRunning = true
-        if (
-          muPiBoxConfig.telegram.active &&
-          //network.onlinestate === 'online' &&
-          muPiBoxConfig.telegram.token.length > 1 &&
-          muPiBoxConfig.telegram.chatId.length > 1
-        )
+        if (hasConfiguredTelegram())
           cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Start playing spotify"')
-        //if (muPiBoxConfig.telegram.active && muPiBoxConfig.telegram.token.length > 1 && muPiBoxConfig.telegram.chatId.length > 1) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Spotify.py');
+        //if (hasConfiguredTelegram()) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Spotify.py');
       },
       (err) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback error${err}`)
+        log.debug(`${now()}: [Spotify Control] Playback error${err}`)
         handleSpotifyError(err, 'playMe')
       },
     )
@@ -701,24 +1368,19 @@ function playMe() {
     playOptions.context_uri = contextUri
     spotifyApi.play(playOptions).then(
       (_data) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback started`)
+        log.debug(`${now()}: [Spotify Control] Playback started`)
         counter.countplay++
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
         writeplayerstatePlay()
         spotifyRunning = true
-        if (
-          muPiBoxConfig.telegram.active &&
-          //network.onlinestate === 'online' &&
-          muPiBoxConfig.telegram.token.length > 1 &&
-          muPiBoxConfig.telegram.chatId.length > 1
-        )
+        if (hasConfiguredTelegram())
           cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Start playing spotify"')
-        //if (muPiBoxConfig.telegram.active && muPiBoxConfig.telegram.token.length > 1 && muPiBoxConfig.telegram.chatId.length > 1) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Spotify.py');
+        //if (hasConfiguredTelegram()) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Spotify.py');
       },
       (err) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback error${err}`)
+        log.debug(`${now()}: [Spotify Control] Playback error${err}`)
         handleSpotifyError(err, 'playMe')
       },
     )
@@ -748,7 +1410,30 @@ function refreshLocalPlaylist(albumDir) {
     const files = listLocalAudioFiles(albumDir)
     fs.writeFileSync(`${albumDir}/playlist.m3u`, `${files.join('\n')}\n`)
   } catch (error) {
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Could not refresh playlist.m3u for ${albumDir}: ${error}`)
+    log.debug(`${now()}: [Spotify Control] Could not refresh playlist.m3u for ${albumDir}: ${error}`)
+  }
+}
+
+// Library resume: jump straight to track N (1-indexed) and seek to its
+// position percentage. The previous frontend approach fired N skipNext
+// commands in close succession, which made mplayer play short fragments
+// of every intermediate track ("tick-tick-tick…" when resuming a long
+// audiobook). A single mplayer `pt_step (N-1)` is atomic — no audible
+// fragments. The two setTimeouts here cover the fact that mplayer doesn't
+// emit a "playlist loaded" event we can hook; empirically ~1.2s is enough
+// for the m3u parse plus the first track to start.
+function playListAtTrack(playedList, trackNr, progressPct) {
+  log.debug(
+    `${now()}: [Spotify Control] Library resume — track ${trackNr}, pct ${progressPct}, list ${playedList}`,
+  )
+  playList(playedList)
+  if (trackNr > 1) {
+    setTimeout(() => {
+      player.exec('pt_step', [trackNr - 1])
+    }, 1200)
+  }
+  if (progressPct > 1) {
+    setTimeout(() => player.seekPercent(progressPct), trackNr > 1 ? 2400 : 1200)
   }
 }
 
@@ -757,29 +1442,24 @@ function playList(playedList) {
   playedTitelmod = decodeURI(playedList).replace(/:/g, '/')
   refreshLocalPlaylist(`/home/dietpi/MuPiBox/media/${playedTitelmod}`)
   //playedTitelmod = playedTitel.replace(/%20/g," ");
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Starting currentMeta.playing:${playedTitelmod}`)
+  log.debug(`${now()}: [Spotify Control] Starting currentMeta.playing:${playedTitelmod}`)
   //currentMeta.playing = true;
   writeplayerstatePlay()
   player.playList(`/home/dietpi/MuPiBox/media/${playedTitelmod}/playlist.m3u`)
   player.setVolume(volumeStart)
-  log.debug(`${nowDate.toLocaleString()}: /home/dietpi/MuPiBox/media/${playedTitelmod}/playlist.m3u`)
+  log.debug(`${now()}: /home/dietpi/MuPiBox/media/${playedTitelmod}/playlist.m3u`)
   currentMeta.currentTracknr = 0
   currentMeta.path = playedTitelmod
 
-  if (
-    muPiBoxConfig.telegram.active &&
-    //network.onlinestate === 'online' &&
-    muPiBoxConfig.telegram.token.length > 1 &&
-    muPiBoxConfig.telegram.chatId.length > 1
-  )
+  if (hasConfiguredTelegram())
     cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Start playing local"')
-  //if (muPiBoxConfig.telegram.active && muPiBoxConfig.telegram.token.length > 1 && muPiBoxConfig.telegram.chatId.length > 1) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Local.py');
+  //if (hasConfiguredTelegram()) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Local.py');
 
   // Same list as the playlist.m3u that was just written (also counts upper-case extensions).
   try {
     currentMeta.totalTracks = listLocalAudioFiles(`/home/dietpi/MuPiBox/media/${playedTitelmod}`).length
   } catch (error) {
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Could not count tracks: ${error}`)
+    log.debug(`${now()}: [Spotify Control] Could not count tracks: ${error}`)
   }
 }
 
@@ -791,7 +1471,7 @@ function playList(playedList) {
 // player.playList() path (and with it, track-jump/track-count handling).
 async function playNasList(nasPath) {
   const decodedPath = decodeURIComponent(nasPath)
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Starting NAS playback: ${decodedPath}`)
+  log.debug(`${now()}: [Spotify Control] Starting NAS playback: ${decodedPath}`)
 
   try {
     const response = await fetch(`http://localhost:8200/api/synology/tracklist?path=${encodeURIComponent(decodedPath)}`)
@@ -819,43 +1499,38 @@ async function playNasList(nasPath) {
     currentMeta.currentTracknr = 0
     currentMeta.totalTracks = tracks.length
   } catch (error) {
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Error starting NAS playback: ${error}`)
+    log.debug(`${now()}: [Spotify Control] Error starting NAS playback: ${error}`)
   }
 }
 
 function playFile(playedFile) {
   const playedTitel = `${playedFile}.mp3`
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Starting currentMeta.playing:${playedTitel}`)
+  log.debug(`${now()}: [Spotify Control] Starting currentMeta.playing:${playedTitel}`)
   //currentMeta.playing = true;
   writeplayerstatePlay()
   player.play(`/home/dietpi/MuPiBox/tts_files/${playedTitel}`)
   player.setVolume(volumeStart)
-  log.debug(`${nowDate.toLocaleString()}: /home/dietpi/MuPiBox/tts_files/${playedTitel}`)
+  log.debug(`${now()}: /home/dietpi/MuPiBox/tts_files/${playedTitel}`)
 }
 
 function playURL(playedURL) {
   startLoading()
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Starting currentMeta.playing:${playedURL}`)
+  log.debug(`${now()}: [Spotify Control] Starting currentMeta.playing:${playedURL}`)
   //currentMeta.playing = true;
   writeplayerstatePlay()
   player.play(playedURL)
   player.setVolume(volumeStart)
-  log.debug(`${nowDate.toLocaleString()}: ${playedURL}`)
-  if (
-    muPiBoxConfig.telegram.active &&
-    //network.onlinestate === 'online' &&
-    muPiBoxConfig.telegram.token.length > 1 &&
-    muPiBoxConfig.telegram.chatId.length > 1
-  )
+  log.debug(`${now()}: ${playedURL}`)
+  if (hasConfiguredTelegram())
     cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Start playing stream"')
-  //if (muPiBoxConfig.telegram.active && muPiBoxConfig.telegram.token.length > 1 && muPiBoxConfig.telegram.chatId.length > 1) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_RSS_Radio.py');
+  //if (hasConfiguredTelegram()) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_RSS_Radio.py');
 }
 
 /*seek 30 secends back or forward*/
 function seek(progress) {
   let currentProgress = 0
   let targetProgress = 0
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Setting progress to ${progress}`)
+  log.debug(`${now()}: [Spotify Control] Setting progress to ${progress}`)
   if (currentMeta.currentPlayer === 'spotify') {
     if (progress > 1) {
       spotifyApi.seek(progress).then(
@@ -864,7 +1539,7 @@ function seek(progress) {
           if (config.server.logLevel === 'debug') {
             writeCounter()
           }
-          log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Progress is ${progress}`)
+          log.debug(`${now()}: [Spotify Control] Progress is ${progress}`)
         },
         (err) => {
           handleSpotifyError(err, 'seek')
@@ -880,7 +1555,7 @@ function seek(progress) {
           }
           currentProgress = data.body.progress_ms
           log.debug(
-            `${nowDate.toLocaleString()}: [Spotify Control]Current progress for active device is ${currentProgress}`,
+            `${now()}: [Spotify Control]Current progress for active device is ${currentProgress}`,
           )
           if (progress) targetProgress = currentProgress + 30000
           else targetProgress = currentProgress - 30000
@@ -893,7 +1568,7 @@ function seek(progress) {
                 if (config.server.logLevel === 'debug') {
                   writeCounter()
                 }
-                log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Setting progress to ${targetProgress}`)
+                log.debug(`${now()}: [Spotify Control] Setting progress to ${targetProgress}`)
               },
               (err) => {
                 handleSpotifyError(err, 'seek')
@@ -915,41 +1590,99 @@ function seek(progress) {
   }
 }
 
+// HIGH-1: previously this spliced caller-controlled `deleteFile` into a
+// shell `rm -r "…"` command, then ran it through `exec()`. The two
+// `decodeURIComponent` passes meant any %-encoded backtick / quote /
+// semicolon in the path was decoded back to its literal form before
+// reaching the shell — a frontend WebSocket call with deleteFile of
+// `foo"; touch /tmp/PWN; "` broke out of the quoted argument and ran
+// arbitrary commands as the dietpi user. Auth-protected (frontend
+// only), but defence-in-depth matters here because the same
+// surface picks up RSS-fed strings from the resume-list path.
+//
+// Fix:
+//   1. Use execFile so arguments don't reach a shell at all.
+//   2. Resolve the requested path under the media root and refuse
+//      anything that escapes (`..`, absolute paths, symlink games).
+//   3. Reject the request entirely if the validated path doesn't
+//      already exist — silent no-op rather than exec'ing rm against
+//      something dubious.
 function deleteLocal(deleteFile) {
-  const deleteFilePath = decodeURI(deleteFile).replace(/:/g, '/')
-  const deleteCMD = `rm -r "/home/dietpi/MuPiBox/media/${decodeURIComponent(deleteFilePath)}"`
-  //cmdCall(deleteCMD);
-  log.debug(`${nowDate.toLocaleString()}: rm -r "/home/dietpi/MuPiBox/media/${decodeURIComponent(deleteFilePath)}"`)
-  const exec = require('node:child_process').exec
-  exec(deleteCMD, (e, stdout, stderr) => {
+  const MEDIA_ROOT = '/home/dietpi/MuPiBox/media/'
+  let decoded
+  try {
+    // Single decode — `decodeURI` then `decodeURIComponent` is a footgun
+    // (chains can re-introduce escapes). decodeURIComponent handles the
+    // standard %xx-encoding the frontend produces.
+    decoded = decodeURIComponent(deleteFile)
+  } catch (err) {
+    log.warn(`${now()}: [deleteLocal] decode failed for ${deleteFile}: ${err?.message || err}`)
+    return
+  }
+  // Frontend uses ':' as a path-segment separator (e.g. "audiobook:Foo:Bar")
+  // — translate to '/' before resolving.
+  const relPath = decoded.replace(/:/g, '/')
+  const fullPath = path.resolve(MEDIA_ROOT, relPath)
+  // path.resolve normalises `..` segments, so any traversal collapses
+  // to an absolute path that's no longer under MEDIA_ROOT — we just
+  // reject anything that doesn't end up inside the root.
+  if (!fullPath.startsWith(MEDIA_ROOT)) {
+    log.warn(`${now()}: [deleteLocal] path-traversal attempt rejected: ${relPath} → ${fullPath}`)
+    return
+  }
+  // Don't shell out to a non-existent target — that's the symptom of
+  // either a glitched frontend call or an active probe.
+  if (!fs.existsSync(fullPath)) {
+    log.warn(`${now()}: [deleteLocal] target does not exist, refusing: ${fullPath}`)
+    return
+  }
+  log.debug(`${now()}: rm -r ${fullPath}`)
+  const execFile = require('node:child_process').execFile
+  execFile('rm', ['-r', fullPath], (e, stdout, stderr) => {
     if (e instanceof Error) {
-      console.error(e)
-      throw e
+      log.warn(`${now()}: [deleteLocal] rm failed: ${e.message}`)
+      return
     }
-    console.log('stdout', stdout)
-    console.log('stderr', stderr)
+    if (stdout) console.log('stdout', stdout)
+    if (stderr) console.log('stderr', stderr)
   })
 }
 
 function cmdCall(cmd) {
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control]Cmd  ${cmd}`)
+  log.debug(`${now()}: [Spotify Control]Cmd  ${cmd}`)
   return new Promise((resolve, reject) => {
     childProcess.exec(cmd, (error, standardOutput, standardError) => {
       if (error) {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control]error ${error}`)
+        log.debug(`${now()}: [Spotify Control]error ${error}`)
         reject()
         return
       }
       if (standardError) {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control]StandardError ${standardError}`)
+        log.debug(`${now()}: [Spotify Control]StandardError ${standardError}`)
         reject(standardError)
         return
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control]StandardOutput ${standardOutput}`)
+      log.debug(`${now()}: [Spotify Control]StandardOutput ${standardOutput}`)
       resolve(standardOutput)
     })
   })
 }
+
+// Serialise setVolume calls so two rapid taps from the touchscreen
+// can't both read the same stale currentMeta.volume and double-increment
+// past maxVolume. The previous code fired exec(cmdVolume) WITHOUT
+// awaiting the callback and then immediately compared against the
+// not-yet-updated currentMeta.volume — for fast taps the comparison
+// always saw the value from before any of the in-flight operations,
+// so the maxVolume cap (Hörschutz) was bypassable. Bug class: TOCTOU.
+let _volumeOpQueue = Promise.resolve()
+const _execAsync = (cmd) =>
+  new Promise((resolve, reject) => {
+    require('node:child_process').exec(cmd, (e, stdout, stderr) => {
+      if (e) reject(e)
+      else resolve({ stdout, stderr })
+    })
+  })
 
 /*gets available devices, searches for the active one and returns its volume*/
 async function setVolume(volume) {
@@ -958,33 +1691,42 @@ async function setVolume(volume) {
   const volumeMax = `/usr/bin/amixer sset Master ${muPiBoxConfig.mupibox.maxVolume}%`
   const cmdVolume = "/usr/bin/amixer sget Master | grep 'Right:'"
 
-  const exec = require('node:child_process').exec
-  exec(cmdVolume, (e, stdout, _stderr) => {
-    if (e instanceof Error) {
-      console.error(nowDate.toLocaleString() + e)
-      throw e
+  // Chain onto the queue so concurrent invocations run strictly serially.
+  // Each invocation reads the ACTUAL current volume from amixer first,
+  // checks the cap, then writes — no stale-comparison window.
+  _volumeOpQueue = _volumeOpQueue.then(async () => {
+    let actualVolume
+    try {
+      const { stdout } = await _execAsync(cmdVolume)
+      actualVolume = Number.parseInt(stdout.split('[')[1].split('%')[0], 10)
+    } catch (e) {
+      log.warn(`${now()}: [setVolume] amixer read failed, skipping op:`, e?.message || e)
+      return
     }
-    currentMeta.volume = Number.parseInt(stdout.split('[')[1].split('%')[0], 10)
-    //console.log('stdout', stdout);
-    //console.log('stderr', stderr);
+    if (Number.isNaN(actualVolume)) {
+      log.warn(`${now()}: [setVolume] amixer returned unparseable volume, skipping op`)
+      return
+    }
+    currentMeta.volume = actualVolume
+
+    if (volume) {
+      if (actualVolume < muPiBoxConfig.mupibox.maxVolume) {
+        await cmdCall(volumeUp)
+        currentMeta.volume = Math.min(actualVolume + 5, muPiBoxConfig.mupibox.maxVolume)
+      } else {
+        currentMeta.volume = muPiBoxConfig.mupibox.maxVolume
+        await cmdCall(volumeMax)
+      }
+    } else {
+      await cmdCall(volumeDown)
+      currentMeta.volume = Math.max(actualVolume - 5, 0)
+    }
+  }).catch((err) => {
+    // Don't let one failed op poison the queue for subsequent ops.
+    log.warn(`${now()}: [setVolume] op failed:`, err?.message || err)
   })
 
-  if (volume) {
-    if (currentMeta.volume < muPiBoxConfig.mupibox.maxVolume) {
-      await cmdCall(volumeUp)
-      currentMeta.volume = Number.parseInt(currentMeta.volume, 10) + 5
-    } else {
-      currentMeta.volume = muPiBoxConfig.mupibox.maxVolume
-      await cmdCall(volumeMax)
-    }
-  } else {
-    await cmdCall(volumeDown)
-    if (currentMeta.volume > 0) {
-      currentMeta.volume = Number.parseInt(currentMeta.volume, 10) - 5
-    } else {
-      currentMeta.volume = 0
-    }
-  }
+  return _volumeOpQueue
 }
 
 async function transferPlayback(id) {
@@ -994,10 +1736,10 @@ async function transferPlayback(id) {
       if (config.server.logLevel === 'debug') {
         writeCounter()
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Transfering playback to ${id}`)
+      log.debug(`${now()}: [Spotify Control] Transfering playback to ${id}`)
     },
     (err) => {
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Transfering playback error.`)
+      log.debug(`${now()}: [Spotify Control] Transfering playback error.`)
       handleSpotifyError(err, id, 'transferPlayback')
     },
   )
@@ -1005,14 +1747,14 @@ async function transferPlayback(id) {
 
 function downloadTTS(name) {
   const namedl = name
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] TTS Name: ${namedl} in ${config.ttsLanguage}`)
+  log.debug(`${now()}: [Spotify Control] TTS Name: ${namedl} in ${config.ttsLanguage}`)
   googleTTS
     .getAudioBase64(namedl, { lang: config.ttsLanguage, slow: false })
     .then((base64) => {
       console.log({ base64 })
       const buffer = Buffer.from(base64, 'base64')
       const filename = `/home/dietpi/MuPiBox/tts_files/${namedl}.mp3`
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] TTS Filename: ${filename}`)
+      log.debug(`${now()}: [Spotify Control] TTS Filename: ${filename}`)
       fs.writeFileSync(filename, buffer, { encoding: 'base64' })
       playFile(namedl)
     })
@@ -1025,17 +1767,17 @@ async function useSpotify(command) {
   const dir = command.dir
   const newdevice = dir.split('/')[1]
 
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Stored device: ${activeDevice}, Requested: ${newdevice}`)
+  log.debug(`${now()}: [Spotify Control] Stored device: ${activeDevice}, Requested: ${newdevice}`)
 
   // Update active device (will be used in playMe() via device_id parameter)
   if (newdevice !== 'current') {
     activeDevice = newdevice
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Device set to: ${activeDevice}`)
+    log.debug(`${now()}: [Spotify Control] Device set to: ${activeDevice}`)
   } else {
     // Reset device to let Spotify use the currently active device
     activeDevice = null
     log.debug(
-      `${nowDate.toLocaleString()}: [Spotify Control] Using current active Spotify device (no device_id specified)`,
+      `${now()}: [Spotify Control] Using current active Spotify device (no device_id specified)`,
     )
   }
 
@@ -1053,7 +1795,7 @@ app.get('/getDevices', (_req, res) => {
         writeCounter()
       }
       const availableDevices = data.body.devices
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Getting available devices...`)
+      log.debug(`${now()}: [Spotify Control] Getting available devices...`)
       res.send(availableDevices)
     },
     (err) => {
@@ -1121,7 +1863,12 @@ app.get('/state', (_req, res) => {
 /*endpoint to return all local metainformation*/
 /*only used if sonos-kids-player is modified*/
 app.get('/local', (_req, res) => {
-  res.send(currentMeta)
+  // Frische Object-Komposition statt res.send(currentMeta) — Express
+  // setzt sonst einen ETag/Content-Length aus dem initialen Object-Shape
+  // und neue Felder (triggerSource/triggerAt aus Phase 19 Stufe B)
+  // landen nicht in der Response, obwohl die Mutationen am Objekt
+  // ankommen.
+  res.json({ ...currentMeta })
 })
 
 app.get('/spotify/token', (_req, res) => {
@@ -1171,7 +1918,7 @@ app.get('/nas/tracklist/:encoded', async (req, res) => {
     const tracks = await response.json()
     res.json((tracks ?? []).map((track) => ({ position: track.position, name: track.name.replace(/\.[^./]+$/, '') })))
   } catch (error) {
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Error fetching NAS tracklist for ${nasPath}: ${error}`)
+    log.debug(`${now()}: [Spotify Control] Error fetching NAS tracklist for ${nasPath}: ${error}`)
     res.status(502).json({ error: 'tracklist not available' })
   }
 })
@@ -1179,9 +1926,39 @@ app.get('/nas/tracklist/:encoded', async (req, res) => {
 /*sonos-kids-controller sends commands via http get and uses path names for encoding*/
 /*commands are as defined in sonos-kids-controller and mapped spotify calls*/
 app.use((req, res) => {
-  const command = path.parse(req.url)
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control]name: ${command.name}`)
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control]dir: ${command.dir}`)
+  // Phase 19 Stufe B: Quelle aus optionalem ?src=... Query lesen.
+  // path.parse() ignoriert Query nicht — parsen wir vorher mit URL().
+  // Base-URL ist irrelevant, sie wird nur vom URL-Constructor verlangt.
+  let pathname = req.url
+  let triggerSource = 'box'
+  try {
+    const u = new URL(req.url, 'http://localhost')
+    pathname = u.pathname
+    const src = u.searchParams.get('src')
+    if (src && /^[a-z0-9_-]{1,20}$/i.test(src)) triggerSource = src
+  } catch {
+    /* malformed — bleibt 'box', pathname bleibt req.url */
+  }
+  currentMeta.triggerSource = triggerSource
+  currentMeta.triggerAt = Date.now()
+
+  const command = path.parse(pathname)
+  log.debug(`${now()}: [Spotify Control]name: ${command.name}`)
+  log.debug(`${now()}: [Spotify Control]dir: ${command.dir}`)
+
+  // Playtime / Quiet-Hours: refuse new playback when either is restricting.
+  // Pause/stop/volume/system commands fall through normally.
+  if (isPlaybackBlocked() && isPlayInitiatingCommand(command)) {
+    const inQuiet = quietHoursState.state !== 'normal'
+    const reason = inQuiet ? 'quiet_hours_active' : 'playtime_limit_reached'
+    const tag = inQuiet ? 'QuietHours' : 'Playtime'
+    console.log(
+      `${new Date().toLocaleString()}: [${tag}] Rejected command (${reason}): name=${command.name} dir=${command.dir}`,
+    )
+    res.status(423).send({ status: 'blocked', error: reason })
+    return
+  }
+
   /*this is the first command to be received. It always includes the device id encoded in between two /*/
   /*check this if we need to transfer the playback to a new device*/
   if (command.name.includes('spotify:')) {
@@ -1191,7 +1968,25 @@ app.use((req, res) => {
   if (command.dir.includes('library')) {
     currentMeta.currentPlayer = 'mplayer'
     currentMeta.currentType = 'local'
-    playList(command.base)
+    // /musicsearch/library/resume/<cat:artist:title:trackNr:progressPct>
+    // Falls back to plain playList() if the suffix doesn't parse — this
+    // keeps the route forward-safe if the frontend ever sends a malformed
+    // resume URL, and isn't a regression because the only writer of this
+    // path is player.service.resumeLibraryMedia.
+    // playList() takes command.base since 5.0.0; only the resume suffix is
+    // parsed out of command.name.
+    if (command.dir.includes('library/resume')) {
+      const parts = command.name.split(':')
+      const progressPct = Number.parseFloat(parts[parts.length - 1])
+      const trackNr = Number.parseInt(parts[parts.length - 2], 10)
+      if (parts.length >= 5 && Number.isFinite(progressPct) && Number.isFinite(trackNr) && trackNr >= 1) {
+        playListAtTrack(parts.slice(0, parts.length - 2).join(':'), trackNr, progressPct)
+      } else {
+        playList(command.base)
+      }
+    } else {
+      playList(command.base)
+    }
   }
 
   if (command.dir.includes('nas')) {
@@ -1229,7 +2024,7 @@ app.use((req, res) => {
     let nameTTS = dir.split('say/').pop()
     nameTTS = decodeURIComponent(nameTTS)
     nameTTS = nameTTS.replace(/\//g, ' ')
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Say: ${nameTTS}`)
+    log.debug(`${now()}: [Spotify Control] Say: ${nameTTS}`)
     const filename = `/home/dietpi/MuPiBox/tts_files/${nameTTS}.mp3`
     try {
       if (fs.existsSync(filename)) {
@@ -1286,5 +2081,5 @@ app.use((req, res) => {
 
 server.listen(config.server.port)
 console.log(
-  `${nowDate.toLocaleString()}: [mupibox-backend-player] Server started at http://localhost:${config.server.port}`,
+  `${now()}: [mupibox-backend-player] Server started at http://localhost:${config.server.port}`,
 )

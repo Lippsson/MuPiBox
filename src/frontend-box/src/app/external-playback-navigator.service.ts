@@ -1,6 +1,10 @@
+import { HttpClient } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import { NavigationExtras, Router } from '@angular/router'
+import { catchError, interval, of, switchMap, timeout } from 'rxjs'
 import { filter, map } from 'rxjs/operators'
+import { environment } from 'src/environments/environment'
+import type { CurrentMPlayer } from './current.mplayer'
 import type { Media } from './media'
 import { SpotifyService } from './spotify.service'
 
@@ -9,12 +13,28 @@ import { SpotifyService } from './spotify.service'
 })
 export class ExternalPlaybackNavigatorService {
   private isNavigatingToPlayer = false
+  /** Phase 19 Stufe B: höchster triggerAt-Wert, den wir aus /local schon
+   *  gesehen haben. Beim Start initialisiert auf aktuellen Wert (kein
+   *  Navigieren auf Baseline), danach hochgezählt sobald ein neuer
+   *  externer Trigger (src !== 'box') erkannt wird.
+   *
+   *  `null` heißt "Baseline noch nicht gesetzt" und ist bewusst NICHT 0:
+   *  spotify-control.js initialisiert triggerAt selbst mit 0 und setzt es
+   *  erst beim ersten Wiedergabebefehl auf Date.now(). Mit 0 als Sentinel
+   *  blieb die Baseline nach jedem Player-Neustart auf 0 stehen, und der
+   *  erste echte externe Trigger lief in den Baseline-Zweig statt in die
+   *  Navigation — das Display folgte erst beim zweiten Tippen. */
+  private lastSeenTriggerAt: number | null = null
+  /** Tick-Zähler für die gedrosselte Abfrage auf der Player-Page. */
+  private pollTick = 0
 
   constructor(
     private router: Router,
     private spotifyService: SpotifyService,
+    private http: HttpClient,
   ) {
     this.initializeExternalPlaybackDetection()
+    this.initializeTriggerSourcePolling()
   }
 
   private initializeExternalPlaybackDetection(): void {
@@ -33,6 +53,102 @@ export class ExternalPlaybackNavigatorService {
         },
         error: (error) => console.error('Error in external playback detection:', error),
       })
+  }
+
+  /** Polling-basierter Watcher auf den triggerSource-Flag aus /local.
+   *  Greift für ALLE Player-Typen (mplayer/Library/Radio/RSS — der
+   *  Spotify-Pfad ist eh schon von trackChangeDetected$ abgedeckt) und
+   *  reagiert auf Eltern-WebApp- bzw. Telegram-Bot-Trigger.
+   *
+   *  Bewusst KEIN Subscribe auf mediaService.local$ — das würde via B11-
+   *  Anti-Pattern das Spotify-SDK-Polling 24/7 hot halten und Connect-
+   *  Device-Aktivierung stören. Eigener HttpClient.get reicht: /local ist
+   *  ein billiger statischer State-Dump im spotify-control.js. */
+  private initializeTriggerSourcePolling(): void {
+    // 2s ist ein guter Kompromiss: spürbar genug für "ich tipp in WebApp,
+    // Display switcht in <3s", ohne unnötiges Load auf den Player.
+    interval(2000)
+      .pipe(
+        // Auf der Player-Page wird grundsätzlich nicht navigiert (siehe
+        // isCurrentlyOnPlayerPage()-Guard unten) — dort hält der Poll nur
+        // noch lastSeenTriggerAt aktuell, und dafür reicht ein Fünftel der
+        // Frequenz. Das ist genau der Zustand, in dem die Box am längsten
+        // steht (Kind hört etwas) und auf Akku läuft: 43.200 Requests/Tag
+        // sinken damit auf rund 9.000, ohne dass die Reaktionszeit ausserhalb
+        // der Player-Page leidet.
+        filter(() => !this.isCurrentlyOnPlayerPage() || this.pollTick++ % 5 === 0),
+        switchMap(() =>
+          this.http
+            .get<CurrentMPlayer>(`${environment.backend.playerUrl}/local`)
+            .pipe(
+              timeout(1500),
+              catchError(() => of({} as CurrentMPlayer)),
+            ),
+        ),
+      )
+      .subscribe((data) => {
+        const at = data.triggerAt ?? 0
+        const src = data.triggerSource ?? 'box'
+        // Baseline-Tick: erstes Polling-Ergebnis nur lastSeen setzen, nicht
+        // auf einen historischen Trigger reagieren.
+        if (this.lastSeenTriggerAt === null) {
+          this.lastSeenTriggerAt = at
+          return
+        }
+        if (at > this.lastSeenTriggerAt && src !== 'box' && data.playing === true) {
+          this.lastSeenTriggerAt = at
+          if (!this.isCurrentlyOnPlayerPage() && !this.isNavigatingToPlayer) {
+            console.log(`🎵 External playback trigger from "${src}" — navigating to /player`)
+            this.navigateToPlayerExternal(data)
+          }
+          return
+        }
+        if (at > this.lastSeenTriggerAt) this.lastSeenTriggerAt = at
+      })
+  }
+
+  /** Navigation aus dem Polling-Pfad: baut bei mplayer-Tracks (Library/RSS/
+   *  Radio) ein Media-Objekt aus den /local-Daten und gibt es als
+   *  navigationExtras.state mit. Player-Page erkennt am `externalPlayback:
+   *  true` Flag dass Track schon läuft und ruft NICHT playMedia() doppelt. */
+  private navigateToPlayerExternal(data: CurrentMPlayer): void {
+    const media = this.buildMediaFromLocal(data)
+    this.isNavigatingToPlayer = true
+    const extras: NavigationExtras = { state: { externalPlayback: true } }
+    if (media) (extras.state as Record<string, unknown>).media = media
+    this.router
+      .navigate(['/player'], extras)
+      .then((success) => {
+        if (success) {
+          console.log('✅ Navigated to /player after external trigger', media ? `(media: ${media.type})` : '(no media)')
+        } else {
+          console.warn('⚠️ External-trigger navigation to /player returned false')
+        }
+        setTimeout(() => {
+          this.isNavigatingToPlayer = false
+        }, 3000)
+      })
+      .catch((error) => {
+        console.error('❌ External-trigger navigation failed:', error)
+        this.isNavigatingToPlayer = false
+      })
+  }
+
+  /** Baut ein Media-Object aus /local-Daten. Spotify-Tracks lassen wir
+   *  null und delegieren an handleExternalPlayback (das nutzt schon
+   *  spotifyService.currentTrack$ für ein vollständiges Media-Objekt). */
+  private buildMediaFromLocal(data: CurrentMPlayer): Media | null {
+    if (data.currentPlayer !== 'mplayer') return null
+    const path = String((data as { path?: string }).path ?? '')
+    const pathParts = path.split('/').filter(Boolean)
+    const category = pathParts[0] || 'music'
+    const artist = pathParts[1] || ''
+    const title = String(data.album ?? pathParts[2] ?? '')
+    // currentType aus /local mappt direkt auf media.type
+    const ctype = String((data as { currentType?: string }).currentType ?? 'local')
+    const type: Media['type'] =
+      ctype === 'rss' ? 'rss' : ctype === 'radio' ? 'radio' : 'library'
+    return { type, category, artist, title } as Media
   }
 
   private isCurrentlyOnPlayerPage(): boolean {

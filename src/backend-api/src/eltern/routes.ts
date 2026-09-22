@@ -1,0 +1,1776 @@
+// Phase 14c — Eltern-WebApp REST routes.
+//
+// Mounted at /api/eltern/* and /eltern (Magic-Link landing + WebApp
+// static assets) by server.ts. Three logical groups:
+//   - auth (magic-link redeem, session info, logout)
+//   - oauth (Spotify connect/callback/disconnect)
+//   - generation helpers (magic-link issuance for Telegram/Box-Tap)
+//
+// All handlers below the localNetworkOnly + requireSession layer can
+// trust the session; the magic-link endpoints are exposed without
+// session (that's how you get one in the first place) but rate-limited
+// per-IP.
+
+import { execFile, spawn } from 'node:child_process'
+import { promises as fsp, readFileSync } from 'node:fs'
+import * as os from 'node:os'
+import { Router } from 'express'
+import QRCode from 'qrcode'
+import type { MupiboxConfig } from '../models/mupibox-config.model'
+import {
+  CSRF_HEADER,
+  ELTERN_PASSWORD_MIN_LENGTH,
+  SESSION_COOKIE,
+  destroySession,
+  generateMagicLink,
+  hasElternPassword,
+  issueSession,
+  redeemMagicLink,
+  setElternPassword,
+  verifyElternPassword,
+} from './auth'
+import { ipRateLimit, localNetworkOnly, requireCsrf, requireSession } from './middleware'
+import {
+  REQUESTED_SCOPES,
+  buildAuthorizeUrl,
+  buildRedirectUri,
+  clearSpotifyTokens,
+  consumeOauthState,
+  exchangeCodeForTokens,
+} from './oauth'
+
+export interface ElternRouterDeps {
+  getMupiboxConfig: () => MupiboxConfig | undefined
+  updateMupiboxConfig: (mutate: (cfg: Record<string, unknown>) => void) => Promise<void>
+  activeDataPath: string
+}
+
+/** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
+ *  flag because the box serves over plain HTTP on LAN. */
+function buildSessionCookie(sessionId: string, maxAgeSeconds: number): string {
+  return `${SESSION_COOKIE}=${sessionId}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}`
+}
+
+/** Clear-cookie helper for logout. */
+function buildClearCookie(): string {
+  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`
+}
+
+/** Canonical BT MAC (AA:BB:CC:DD:EE:FF). */
+const BT_MAC_RE = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/
+
+/** Run a command (no shell — execFile is injection-safe) and capture stdout.
+ *  Never rejects: failures resolve with ok:false so handlers stay simple. */
+function execCapture(cmd: string, args: string[], timeoutMs = 8000): Promise<{ ok: boolean; stdout: string }> {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+      resolve({ ok: !err, stdout: stdout ?? '' })
+    })
+  })
+}
+
+/**
+ * Creates the API router for /api/eltern/*. The /eltern landing page
+ * (magic-link redemption) is a separate route in server.ts because it
+ * needs to redirect to the WebApp, not return JSON.
+ */
+export function createElternApiRouter(deps: ElternRouterDeps): Router {
+  const router = Router()
+
+  // Every API route requires LAN + session; magic-link generation
+  // (the bootstrap path) requires LAN + rate-limit but no session.
+  router.use(localNetworkOnly)
+
+  /**
+   * POST /api/eltern/magic-link/generate
+   * Issues a single-use magic-link token. Caller is expected to be the
+   * Telegram bot OR the Cloud+Batterie-Tap handler — both intermediate
+   * a physical access proof (chatId-whitelist or device-touch sequence).
+   * This endpoint itself is just rate-limited; the caller is the
+   * security boundary.
+   *
+   * Body: { source?: 'telegram' | 'cloud-batterie-tap' | 'admin' }.
+   */
+  router.post('/magic-link/generate', ipRateLimit(10), (req, res) => {
+    const body = (req.body ?? {}) as { source?: unknown }
+    const source = typeof body.source === 'string' ? body.source : 'unknown'
+    const link = generateMagicLink(source)
+    res.status(201).json({
+      token: link.token,
+      expires_in: link.expiresIn,
+      url_path: `/eltern?token=${encodeURIComponent(link.token)}`,
+    })
+  })
+
+  /**
+   * GET /api/eltern/magic-link/qr?token=<token>
+   * Renders a QR-Code SVG for the magic-link URL. Used by the Box-Frontend
+   * Cloud+Batterie-Tap overlay (Phase 15b): box-frontend POSTs to
+   * /magic-link/generate, receives the token, then loads this endpoint
+   * as <img> to display the QR. No auth — the QR carries the single-use
+   * token in its URL; rendering it on a public endpoint is no risk
+   * (the token is already client-visible via the POST response).
+   */
+  router.get('/magic-link/qr', async (req, res) => {
+    const token = typeof req.query.token === 'string' ? req.query.token : ''
+    if (!token || !/^[a-f0-9]{32,128}$/i.test(token)) {
+      res.status(400).send('invalid token')
+      return
+    }
+    const host = req.headers.host
+    if (typeof host !== 'string') {
+      res.status(400).send('no host header')
+      return
+    }
+    const url = `http://${host}/eltern?token=${encodeURIComponent(token)}`
+    try {
+      // SVG output — scales without pixel-blur on the box's 7" display.
+      // errorCorrectionLevel=M is the sweet spot for 64-128-char URLs.
+      const svg = await QRCode.toString(url, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        color: { dark: '#1a1c20', light: '#ffffff' },
+      })
+      res.setHeader('Content-Type', 'image/svg+xml')
+      res.setHeader('Cache-Control', 'no-store')
+      res.send(svg)
+    } catch (err) {
+      res.status(500).send(`QR-Code generation failed: ${(err as Error).message}`)
+    }
+  })
+
+  /** GET /api/eltern/session  — does the current request carry a valid
+   *  session? Used by the WebApp on load to decide login vs. dashboard.
+   *  Also tells the System screen whether a parent password is configured. */
+  router.get('/session', requireSession, (req, res) => {
+    res.json({
+      authenticated: true,
+      csrf_header: CSRF_HEADER,
+      csrf_token: req.elternSessionCsrf,
+      passwordConfigured: hasElternPassword(deps.getMupiboxConfig()),
+    })
+  })
+
+  /** GET /api/eltern/auth-info  — unauthenticated probe so the no-session
+   *  screen can decide whether to offer a password-login form. Returns only
+   *  a boolean; never the hash. */
+  router.get('/auth-info', (_req, res) => {
+    res.json({ passwordConfigured: hasElternPassword(deps.getMupiboxConfig()) })
+  })
+
+  /** POST /api/eltern/login  {password}  (Phase 17h)
+   *  Alternative to magic-link redemption: when the parent has set a password,
+   *  they can log back in after a session timeout without re-issuing a token.
+   *  Rate-limited; the magic-link flow remains the passwordless entry path. */
+  router.post('/login', ipRateLimit(5), async (req, res) => {
+    const body = (req.body as { password?: unknown } | undefined) ?? {}
+    const pw = typeof body.password === 'string' ? body.password : ''
+    const mupibox = deps.getMupiboxConfig()
+    if (!hasElternPassword(mupibox)) {
+      res.status(401).json({ error: 'password login not enabled' })
+      return
+    }
+    const ok = await verifyElternPassword(pw, mupibox)
+    if (!ok) {
+      res.status(401).json({ error: 'invalid password' })
+      return
+    }
+    const ip = req.ip ?? req.socket.remoteAddress ?? ''
+    const session = issueSession(ip)
+    res.setHeader('Set-Cookie', buildSessionCookie(session.sessionId, 24 * 60 * 60))
+    res.json({ ok: true, csrf_header: CSRF_HEADER, csrf_token: session.csrf })
+  })
+
+  /** POST /api/eltern/password  {password}  (Phase 17h)
+   *  Set or clear the parent login password. Empty string clears it. The
+   *  magic-link path is unaffected either way. */
+  router.post('/password', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { password?: unknown } | undefined) ?? {}
+    const pw = typeof body.password === 'string' ? body.password : ''
+    if (pw.trim() && pw.trim().length < ELTERN_PASSWORD_MIN_LENGTH) {
+      res.status(400).json({ error: `password too short (min ${ELTERN_PASSWORD_MIN_LENGTH} chars)` })
+      return
+    }
+    await setElternPassword(pw, deps.updateMupiboxConfig)
+    res.json({ ok: true, configured: hasElternPassword(deps.getMupiboxConfig()) })
+  })
+
+  /** POST /api/eltern/logout  — destroys the session, clears the cookie. */
+  router.post('/logout', requireSession, requireCsrf, (req, res) => {
+    destroySession(req.elternSessionId)
+    res.setHeader('Set-Cookie', buildClearCookie())
+    res.json({ ok: true })
+  })
+
+  /**
+   * GET /api/eltern/spotify-oauth/init
+   * Starts the Authorize-flow. Returns the Spotify URL the WebApp should
+   * window.location.href to. Caller's redirect-target after callback is
+   * optionally provided as ?return=/eltern/sync (defaults to /eltern).
+   */
+  router.get('/spotify-oauth/init', requireSession, (req, res) => {
+    const host = req.headers.host
+    if (typeof host !== 'string') {
+      res.status(400).json({ error: 'no host header' })
+      return
+    }
+    const ret = typeof req.query.return === 'string' ? req.query.return : '/eltern'
+    const result = buildAuthorizeUrl({
+      getMupiboxConfig: deps.getMupiboxConfig,
+      sessionId: req.elternSessionId ?? '',
+      host,
+      protocol: 'http',
+      redirectAfter: ret,
+    })
+    if ('error' in result) {
+      res.status(400).json({ error: 'no_client_id', redirect_to: '/eltern/wizard' })
+      return
+    }
+    res.json({
+      authorize_url: result.url,
+      redirect_uri: result.redirectUri,
+      scopes: REQUESTED_SCOPES,
+    })
+  })
+
+  /**
+   * GET /api/eltern/spotify-oauth/callback
+   * Spotify redirects here after the user authorises. We swap code for
+   * tokens, persist them, then redirect back to the WebApp. Uses the
+   * exchange result to reset the box's tokenScopes so Smart-Sync picks
+   * up the new permissions immediately.
+   *
+   * NOTE: This route accepts a session cookie (the user is bouncing back
+   * from Spotify within the same browser session); a hostile bouncer
+   * without the session cookie can't poison state because we additionally
+   * gate on the OAuth state token issued in /init.
+   */
+  router.get('/spotify-oauth/callback', requireSession, async (req, res) => {
+    const state = typeof req.query.state === 'string' ? req.query.state : ''
+    const code = typeof req.query.code === 'string' ? req.query.code : ''
+    const error = typeof req.query.error === 'string' ? req.query.error : ''
+    if (error) {
+      res.redirect(`/eltern?spotify_error=${encodeURIComponent(error)}`)
+      return
+    }
+    if (!state || !code) {
+      res.status(400).send('missing code or state')
+      return
+    }
+    const original = consumeOauthState(state)
+    if (!original || original.sessionId !== req.elternSessionId) {
+      res.status(403).send('invalid or replayed state')
+      return
+    }
+    const host = req.headers.host
+    if (typeof host !== 'string') {
+      res.status(400).send('no host header')
+      return
+    }
+    const redirectUri = buildRedirectUri('http', host)
+    const exchange = await exchangeCodeForTokens({
+      code,
+      redirectUri,
+      getMupiboxConfig: deps.getMupiboxConfig,
+      updateMupiboxConfig: deps.updateMupiboxConfig,
+    })
+    if (!exchange.ok) {
+      res.redirect(`/eltern?spotify_error=${encodeURIComponent(exchange.reason)}`)
+      return
+    }
+    res.redirect(`${original.redirectAfter}?spotify_connected=1`)
+  })
+
+  /** POST /api/eltern/spotify-oauth/disconnect  — clears stored tokens. */
+  router.post('/spotify-oauth/disconnect', requireSession, requireCsrf, async (_req, res) => {
+    await clearSpotifyTokens(deps.updateMupiboxConfig)
+    res.json({ ok: true })
+  })
+
+  /**
+   * GET /api/eltern/caps-config
+   * Returns playtimeLimit + quietHours configuration (per-weekday limits
+   * and schedules) so the WebApp can render the editor. Live status
+   * (today's used/remaining minutes) comes from the existing
+   * /api/playtime endpoint — this one is just the static configuration
+   * side. Phase 15h.
+   */
+  router.get('/caps-config', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    const playtime = (cfg?.playtimeLimit as Record<string, unknown> | undefined) ?? {}
+    const quiet = (cfg?.quietHours as Record<string, unknown> | undefined) ?? {}
+    res.json({
+      playtimeLimit: {
+        enabled: playtime.enabled ?? false,
+        maxOverrunMinutes: playtime.maxOverrunMinutes ?? 10,
+        resetHour: playtime.resetHour ?? 0,
+        limitsMinutes: playtime.limitsMinutes ?? {
+          mon: 60, tue: 60, wed: 60, thu: 60, fri: 60, sat: 60, sun: 60,
+        },
+      },
+      quietHours: {
+        enabled: quiet.enabled ?? false,
+        maxOverrunMinutes: quiet.maxOverrunMinutes ?? 10,
+        schedule: quiet.schedule ?? { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] },
+      },
+    })
+  })
+
+  /**
+   * POST /api/eltern/caps-config
+   * Update the playtimeLimit and quietHours config blocks. Validates the
+   * shape (numeric day-limits 0-1440, schedule windows as {start, end}
+   * HH:MM-strings). Existing /api/playtime/limit endpoint sets one day
+   * at a time; this one is bulk-write for the WebApp's day-grid editor.
+   * Phase 15h.
+   */
+  router.post('/caps-config', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as {
+      playtimeLimit?: {
+        enabled?: unknown
+        limitsMinutes?: Record<string, unknown>
+        maxOverrunMinutes?: unknown
+      }
+      quietHours?: {
+        enabled?: unknown
+        schedule?: Record<string, unknown>
+        maxOverrunMinutes?: unknown
+      }
+    }
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+    // Validate playtimeLimit.limitsMinutes if provided.
+    const validatedLimits: Record<string, number> = {}
+    if (body.playtimeLimit?.limitsMinutes) {
+      for (const day of days) {
+        const v = body.playtimeLimit.limitsMinutes[day]
+        if (v === undefined) continue
+        if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1440) {
+          res.status(400).json({ error: `invalid limitsMinutes.${day}` })
+          return
+        }
+        validatedLimits[day] = Math.floor(v)
+      }
+    }
+    // Validate quietHours.schedule if provided. Shape is {from,to,label?} —
+    // matching the player (spotify-control.js) and the AdminInterface PHP
+    // (mupi.php writes from/to/label too). A WebApp save in the old {start,end}
+    // shape would have silently corrupted the config: the player would no
+    // longer find any windows. Fixed in 17j.
+    const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+    type QuietWindow = { from: string; to: string; label?: string }
+    const validatedSchedule: Record<string, QuietWindow[]> = {}
+    if (body.quietHours?.schedule) {
+      for (const day of days) {
+        const windows = body.quietHours.schedule[day]
+        if (windows === undefined) continue
+        if (!Array.isArray(windows)) {
+          res.status(400).json({ error: `schedule.${day} must be an array` })
+          return
+        }
+        const accepted: QuietWindow[] = []
+        for (const w of windows) {
+          if (!w || typeof w !== 'object') {
+            res.status(400).json({ error: `schedule.${day} entry must be {from,to,label?}` })
+            return
+          }
+          const rec = w as Record<string, unknown>
+          const from = rec.from
+          const to = rec.to
+          if (typeof from !== 'string' || typeof to !== 'string' || !HHMM.test(from) || !HHMM.test(to)) {
+            res.status(400).json({ error: `schedule.${day} times must be HH:MM strings (fields: from, to)` })
+            return
+          }
+          const entry: QuietWindow = { from, to }
+          if (typeof rec.label === 'string' && rec.label.trim()) entry.label = rec.label.trim().slice(0, 80)
+          accepted.push(entry)
+        }
+        validatedSchedule[day] = accepted
+      }
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      if (body.playtimeLimit) {
+        const block = ((cfg.playtimeLimit as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+        if (typeof body.playtimeLimit.enabled === 'boolean') block.enabled = body.playtimeLimit.enabled
+        if (typeof body.playtimeLimit.maxOverrunMinutes === 'number') block.maxOverrunMinutes = Math.max(0, Math.min(120, Math.floor(body.playtimeLimit.maxOverrunMinutes)))
+        if (Object.keys(validatedLimits).length > 0) {
+          const lm = ((block.limitsMinutes as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+          Object.assign(lm, validatedLimits)
+          block.limitsMinutes = lm
+        }
+        cfg.playtimeLimit = block
+      }
+      if (body.quietHours) {
+        const block = ((cfg.quietHours as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+        if (typeof body.quietHours.enabled === 'boolean') block.enabled = body.quietHours.enabled
+        if (typeof body.quietHours.maxOverrunMinutes === 'number') block.maxOverrunMinutes = Math.max(0, Math.min(120, Math.floor(body.quietHours.maxOverrunMinutes)))
+        if (Object.keys(validatedSchedule).length > 0) {
+          const sched = ((block.schedule as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+          Object.assign(sched, validatedSchedule)
+          block.schedule = sched
+        }
+        cfg.quietHours = block
+      }
+    })
+    res.json({ ok: true })
+  })
+
+  /**
+   * GET /api/eltern/power-config
+   * Returns idle-shutdown + display-timeout fields from mupiboxconfig.timeout.
+   * Plus the active battery profile name so the WebApp can display it
+   * alongside live mupihat readings. Phase 15i.
+   */
+  router.get('/power-config', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    const timeout = (cfg?.timeout as Record<string, unknown> | undefined) ?? {}
+    const mupihat = (cfg?.mupihat as Record<string, unknown> | undefined) ?? {}
+    const selectedBattery = typeof mupihat.selected_battery === 'string' ? mupihat.selected_battery : ''
+    // Find the active profile's config for the read-only display side
+    const types = Array.isArray(mupihat.battery_types) ? (mupihat.battery_types as Array<Record<string, unknown>>) : []
+    const profile = types.find((p) => p?.name === selectedBattery)
+    res.json({
+      timeout: {
+        // Existing fields are numbers-stored-as-strings in the JSON;
+        // normalise to numbers for the UI side, fall back to defaults
+        // from config/templates/mupiboxconfig.json.
+        idlePiShutdown: Number(timeout.idlePiShutdown ?? 0),
+        idleDisplayOff: Number(timeout.idleDisplayOff ?? 10),
+        pressDelay: Number(timeout.pressDelay ?? 2),
+      },
+      battery: {
+        selected: selectedBattery,
+        profile: (profile?.config as Record<string, unknown> | undefined) ?? null,
+      },
+    })
+  })
+
+  /**
+   * POST /api/eltern/power-config
+   * Updates idlePiShutdown / idleDisplayOff. Values arrive as numbers,
+   * persisted as strings (matches the existing JSON convention from
+   * Phase 1's config). Phase 15i.
+   */
+  router.post('/power-config', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as {
+      idlePiShutdown?: unknown
+      idleDisplayOff?: unknown
+      batteryProfile?: Record<string, unknown>
+    }
+    const timeoutMutations: Record<string, string> = {}
+    if (typeof body.idlePiShutdown === 'number' && Number.isFinite(body.idlePiShutdown)) {
+      const v = Math.max(0, Math.min(1440, Math.floor(body.idlePiShutdown)))
+      timeoutMutations.idlePiShutdown = String(v)
+    }
+    if (typeof body.idleDisplayOff === 'number' && Number.isFinite(body.idleDisplayOff)) {
+      const v = Math.max(0, Math.min(1440, Math.floor(body.idleDisplayOff)))
+      timeoutMutations.idleDisplayOff = String(v)
+    }
+
+    // Phase 18 Item 7: edit the ACTIVE battery profile (selected_battery).
+    // VREG-in-mV especially safety-critical — too high cooks the cells.
+    // Validation pro-Feld + Cross-Field (th_shutdown < th_warning).
+    let profileMutations: Record<string, string> | null = null
+    if (body.batteryProfile && typeof body.batteryProfile === 'object') {
+      const ranges: Record<string, [number, number]> = {
+        v_100: [5000, 9000],
+        v_75: [5000, 9000],
+        v_50: [5000, 9000],
+        v_25: [5000, 9000],
+        v_0: [5000, 9000],
+        th_warning: [5500, 8000],
+        th_shutdown: [5000, 7500],
+        vreg: [6000, 8500],
+      }
+      const candidates: Record<string, string> = {}
+      for (const [field, [lo, hi]] of Object.entries(ranges)) {
+        const raw = body.batteryProfile[field]
+        if (raw === undefined || raw === null || raw === '') continue
+        const n = Math.floor(Number(raw))
+        if (!Number.isFinite(n) || n < lo || n > hi) {
+          res.status(400).json({ error: `${field} must be ${lo}-${hi} mV` })
+          return
+        }
+        candidates[field] = String(n)
+      }
+      // Sanity: th_shutdown should be strictly below th_warning. Read existing
+      // profile values for fields the caller didn't update so the cross-check
+      // covers partial updates too.
+      const cfgRead = deps.getMupiboxConfig()
+      const mupihatRead = (cfgRead?.mupihat as Record<string, unknown> | undefined) ?? {}
+      const selectedRead = String(mupihatRead.selected_battery ?? '')
+      const typesRead = Array.isArray(mupihatRead.battery_types)
+        ? (mupihatRead.battery_types as Array<Record<string, unknown>>)
+        : []
+      const profileRead = typesRead.find((p) => p?.name === selectedRead)
+      const profConfigRead = (profileRead?.config as Record<string, unknown> | undefined) ?? {}
+      const finalShutdown = Number(candidates.th_shutdown ?? profConfigRead.th_shutdown ?? 0)
+      const finalWarning = Number(candidates.th_warning ?? profConfigRead.th_warning ?? 0)
+      if (finalShutdown && finalWarning && finalShutdown >= finalWarning) {
+        res.status(400).json({ error: `th_shutdown (${finalShutdown}) must be < th_warning (${finalWarning})` })
+        return
+      }
+      if (Object.keys(candidates).length > 0) profileMutations = candidates
+    }
+
+    if (Object.keys(timeoutMutations).length === 0 && !profileMutations) {
+      res.status(400).json({ error: 'no recognised fields in body' })
+      return
+    }
+
+    await deps.updateMupiboxConfig((cfg) => {
+      if (Object.keys(timeoutMutations).length > 0) {
+        const timeout = ((cfg.timeout as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+        Object.assign(timeout, timeoutMutations)
+        cfg.timeout = timeout
+      }
+      if (profileMutations) {
+        const mupihat = ((cfg.mupihat as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+        const selected = String(mupihat.selected_battery ?? '')
+        const types = Array.isArray(mupihat.battery_types)
+          ? (mupihat.battery_types as Array<Record<string, unknown>>)
+          : []
+        const profile = types.find((p) => p?.name === selected)
+        if (profile) {
+          const pConfig = ((profile.config as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+          Object.assign(pConfig, profileMutations)
+          profile.config = pConfig
+          mupihat.battery_types = types
+          cfg.mupihat = mupihat
+        }
+      }
+    })
+    res.json({ ok: true, applied: { timeout: timeoutMutations, batteryProfile: profileMutations } })
+  })
+
+  /**
+   * GET /api/eltern/sleeptimer  (Phase 17i)
+   * Read the runtime state of the poweroff-countdown timer. The countdown
+   * itself is the existing `sleep_timer.sh` background process (started by
+   * AdminInterface/mupi.php today) which writes the remaining seconds to
+   * `/tmp/.time2sleep` once per second and runs `poweroff` when it hits zero.
+   * The file only exists while a timer is active.
+   */
+  router.get('/sleeptimer', requireSession, (_req, res) => {
+    try {
+      const raw = readFileSync('/tmp/.time2sleep', 'utf8').trim()
+      const remaining = Number.parseInt(raw, 10)
+      if (Number.isFinite(remaining) && remaining > 0) {
+        const until = new Date(Date.now() + remaining * 1000)
+        res.json({ active: true, remaining_seconds: remaining, until_iso: until.toISOString() })
+        return
+      }
+    } catch {
+      // file missing — no timer running, fall through
+    }
+    res.json({ active: false })
+  })
+
+  /**
+   * POST /api/eltern/sleeptimer/start  {minutes}  (Phase 17i)
+   * Mirrors the mupi.php behaviour: spawn `sleep_timer.sh <seconds>` detached
+   * via sudo. Accepts 1..1440 minutes (same cap the admin UI uses). The shell
+   * script writes the remaining time to /tmp/.time2sleep and runs `poweroff`
+   * when it hits zero; everything else is just observation.
+   */
+  router.post('/sleeptimer/start', requireSession, requireCsrf, (req, res) => {
+    const body = (req.body as { minutes?: unknown } | undefined) ?? {}
+    const minutes = Math.floor(Number(body.minutes))
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) {
+      res.status(400).json({ error: 'minutes must be an integer between 1 and 1440' })
+      return
+    }
+    const seconds = minutes * 60
+    try {
+      const child = spawn('sudo', ['/usr/local/bin/mupibox/sleep_timer.sh', String(seconds)], {
+        detached: true,
+        stdio: 'ignore',
+      })
+      child.unref()
+    } catch (err) {
+      res.status(500).json({ error: `spawn failed: ${(err as Error).message}` })
+      return
+    }
+    res.json({ ok: true, minutes, seconds })
+  })
+
+  /**
+   * POST /api/eltern/sleeptimer/stop  (Phase 17i)
+   * Mirrors mupi.php's "Stop running timer" button: `pkill -f sleep_timer.sh`
+   * then remove `/tmp/.time2sleep`. Both are idempotent — calling stop when
+   * no timer runs returns ok without erroring.
+   */
+  router.post('/sleeptimer/stop', requireSession, requireCsrf, (_req, res) => {
+    execFile('sudo', ['pkill', '-f', 'sleep_timer.sh'], { timeout: 5000 }, () => {
+      execFile('sudo', ['rm', '-f', '/tmp/.time2sleep'], { timeout: 5000 }, () => {
+        res.json({ ok: true })
+      })
+    })
+  })
+
+  /**
+   * GET /api/eltern/audio  (Phase 18 Item 1)
+   * Returns the live ALSA Master volume, the configured hearing-protection
+   * cap (`mupibox.maxVolume`), and the optional startup default
+   * (`mupibox.startupVolume`, null if disabled). Live value comes from amixer
+   * and may be off by a tick when the kid spins the touchscreen dial.
+   */
+  router.get('/audio', requireSession, (_req, res) => {
+    // Defensive: getMupiboxConfig() can briefly return undefined right after
+    // pm2 restart or while updateMupiboxConfig is mid-cp (cache cleared, file
+    // potentially partially written so the readFileSync fallback also fails).
+    // Returning fallback values from here would lie about the cap — the cap
+    // check below would think the limit is 100 % and let any volume through.
+    // 503 so the caller retries instead.
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      res.status(503).json({ error: 'config not yet loaded, please retry' })
+      return
+    }
+    execFile('/usr/bin/amixer', ['sget', 'Master'], { timeout: 3000 }, (err, stdout) => {
+      let current: number | null = null
+      if (!err && stdout) {
+        // Output varies by sound card: `Right:`, `Front Right:`, or `Mono:`.
+        // Match the bracketed percent anywhere in the output instead.
+        const m = stdout.match(/\[(\d+)%\]/)
+        if (m) current = Number.parseInt(m[1], 10)
+      }
+      const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+      const maxVolume = typeof mb.maxVolume === 'number' ? mb.maxVolume : 100
+      const startupVolume = typeof mb.startupVolume === 'number' ? mb.startupVolume : null
+      res.json({ current, maxVolume, startupVolume })
+    })
+  })
+
+  /**
+   * POST /api/eltern/audio/volume  {volume}  (Phase 18 Item 1)
+   * Live volume control. Server-side clamps to the configured maxVolume cap
+   * so a parent in the WebApp can't go above the hearing-protection limit
+   * (matches the player's own cap enforcement for touchscreen volume-up).
+   */
+  router.post('/audio/volume', requireSession, requireCsrf, (req, res) => {
+    const body = (req.body as { volume?: unknown } | undefined) ?? {}
+    const raw = Number(body.volume)
+    if (!Number.isFinite(raw) || raw < 0 || raw > 100) {
+      res.status(400).json({ error: 'volume must be a number between 0 and 100' })
+      return
+    }
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      // Same defence as GET /audio: without a loaded config we don't know the
+      // cap, so refuse rather than silently let any volume through.
+      res.status(503).json({ error: 'config not yet loaded, please retry' })
+      return
+    }
+    const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+    const cap = typeof mb.maxVolume === 'number' ? mb.maxVolume : 100
+    const requested = Math.floor(raw)
+    const applied = Math.min(requested, cap)
+    execFile('/usr/bin/amixer', ['sset', 'Master', `${applied}%`], { timeout: 3000 }, (err) => {
+      if (err) {
+        res.status(500).json({ error: `amixer failed: ${err.message}` })
+        return
+      }
+      res.json({ ok: true, applied, capped: applied < requested })
+    })
+  })
+
+  /**
+   * POST /api/eltern/audio/config  {maxVolume?, startupVolume?}  (Phase 18 Item 1)
+   * Persist the hearing-protection cap and/or the startup-default volume.
+   * `startupVolume: null` removes the startup default (so the box keeps
+   * wherever the last session left off). Cap is min 10 % to avoid an
+   * accidentally-muted box that looks broken.
+   */
+  router.post('/audio/config', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { maxVolume?: unknown; startupVolume?: unknown } | undefined) ?? {}
+    const mutations: { maxVolume?: number; startupVolume?: number | null } = {}
+    if (body.maxVolume !== undefined) {
+      const v = Number(body.maxVolume)
+      if (!Number.isFinite(v) || v < 10 || v > 100) {
+        res.status(400).json({ error: 'maxVolume must be a number between 10 and 100' })
+        return
+      }
+      mutations.maxVolume = Math.floor(v)
+    }
+    if (body.startupVolume !== undefined) {
+      if (body.startupVolume === null) {
+        mutations.startupVolume = null
+      } else {
+        const v = Number(body.startupVolume)
+        if (!Number.isFinite(v) || v < 0 || v > 100) {
+          res.status(400).json({ error: 'startupVolume must be a number between 0 and 100, or null' })
+          return
+        }
+        mutations.startupVolume = Math.floor(v)
+      }
+    }
+    if (Object.keys(mutations).length === 0) {
+      res.status(400).json({ error: 'no recognised fields in body' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const mb = ((cfg.mupibox as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      if (mutations.maxVolume !== undefined) mb.maxVolume = mutations.maxVolume
+      if (mutations.startupVolume !== undefined) {
+        if (mutations.startupVolume === null) delete mb.startupVolume
+        else mb.startupVolume = mutations.startupVolume
+      }
+      cfg.mupibox = mb
+    })
+    res.json({ ok: true, applied: mutations })
+  })
+
+  /**
+   * GET /api/eltern/wlan/scan  (Phase 18 Item 2)
+   * Returns visible Wi-Fi networks, parsed from `iwlist wlan0 scanning`. We
+   * dedup by SSID (keep the strongest signal) and drop hidden networks
+   * (empty SSID). Slow — iwlist takes ~3-5 s.
+   */
+  router.get('/wlan/scan', requireSession, (_req, res) => {
+    execFile('sudo', ['/usr/sbin/iwlist', 'wlan0', 'scanning'], { timeout: 12000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
+      if (err) {
+        res.status(500).json({ error: `iwlist failed: ${err.message}` })
+        return
+      }
+      const blocks = stdout.split(/Cell \d+ -/)
+      const byBest = new Map<string, { ssid: string; signal_dbm: number; encrypted: boolean }>()
+      for (const blk of blocks) {
+        const ssidMatch = blk.match(/ESSID:"([^"]*)"/)
+        if (!ssidMatch) continue
+        const ssid = ssidMatch[1]
+        if (!ssid) continue // hidden network
+        const sigMatch = blk.match(/Signal level=(-?\d+)\s*dBm/)
+        const signal_dbm = sigMatch ? Number.parseInt(sigMatch[1], 10) : -100
+        const encrypted = /Encryption key:on/.test(blk)
+        const prev = byBest.get(ssid)
+        if (!prev || signal_dbm > prev.signal_dbm) {
+          byBest.set(ssid, { ssid, signal_dbm, encrypted })
+        }
+      }
+      const networks = [...byBest.values()].sort((a, b) => b.signal_dbm - a.signal_dbm)
+      res.json({ networks })
+    })
+  })
+
+  /**
+   * GET /api/eltern/wlan/saved  (Phase 18 Item 2)
+   * Lists wpa_supplicant's saved networks via `wpa_cli list_networks`. The
+   * `[CURRENT]` flag marks which one is connected — the WebApp disables
+   * "remove" on that row so the box can't be locked out via this UI.
+   */
+  router.get('/wlan/saved', requireSession, (_req, res) => {
+    execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'list_networks'], { timeout: 5000 }, (err, stdout) => {
+      if (err) {
+        res.status(500).json({ error: `wpa_cli failed: ${err.message}` })
+        return
+      }
+      const lines = stdout.split('\n')
+      const networks: Array<{ id: number; ssid: string; active: boolean }> = []
+      for (const ln of lines) {
+        // Header line: "network id / ssid / bssid / flags" — skip
+        if (!ln || ln.startsWith('network id')) continue
+        const parts = ln.split('\t')
+        if (parts.length < 2) continue
+        const id = Number.parseInt(parts[0], 10)
+        if (!Number.isFinite(id)) continue
+        const ssid = parts[1] ?? ''
+        const flags = parts[3] ?? ''
+        networks.push({ id, ssid, active: flags.includes('[CURRENT]') })
+      }
+      res.json({ networks })
+    })
+  })
+
+  /**
+   * POST /api/eltern/wlan/add  {ssid, password?}  (Phase 18 Item 2)
+   * Queues a new Wi-Fi entry by writing to wlan.json — same mechanism that
+   * AdminInterface/network.php has used for ages. The add_wifi.sh daemon
+   * polls the file every 2 s, runs `wpa_passphrase` (or appends an open
+   * network if password is empty) and `wpa_cli reconfigure`. The current
+   * connection is NOT touched: wpa_supplicant only switches if the new SSID
+   * is reachable.
+   */
+  router.post('/wlan/add', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { ssid?: unknown; password?: unknown } | undefined) ?? {}
+    const ssid = typeof body.ssid === 'string' ? body.ssid : ''
+    const password = typeof body.password === 'string' ? body.password : ''
+    if (!ssid || ssid.length > 32 || /[\r\n\0]/.test(ssid)) {
+      res.status(400).json({ error: 'ssid must be 1-32 chars, no line breaks or NUL' })
+      return
+    }
+    // WPA/WPA2-PSK: 8-63 chars. Empty = treat as open network.
+    if (password && (password.length < 8 || password.length > 63)) {
+      res.status(400).json({ error: 'password must be empty (open network) or 8-63 chars' })
+      return
+    }
+    const WLAN_FILE = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json'
+    let existing: unknown
+    try {
+      const raw = await fsp.readFile(WLAN_FILE, 'utf8')
+      existing = JSON.parse(raw)
+    } catch {
+      existing = []
+    }
+    const queue = Array.isArray(existing) ? existing : []
+    queue.push({ ssid, pw: password })
+    try {
+      await fsp.writeFile(WLAN_FILE, JSON.stringify(queue, null, 4), 'utf8')
+    } catch (writeErr) {
+      res.status(500).json({ error: `failed to queue wlan: ${(writeErr as Error).message}` })
+      return
+    }
+    res.json({ ok: true, queued_position: queue.length })
+  })
+
+  /**
+   * POST /api/eltern/wlan/remove  {ssid}  (Phase 18 Item 2)
+   * Removes a saved Wi-Fi network via wpa_cli, then persists the config. The
+   * currently-connected network is refused (409) — the no-lockout safeguard
+   * that the user explicitly asked for over a more elaborate test-connect
+   * mechanism (which can't work when the WebApp lives on a separate device).
+   */
+  router.post('/wlan/remove', requireSession, requireCsrf, (req, res) => {
+    const body = (req.body as { ssid?: unknown } | undefined) ?? {}
+    const ssid = typeof body.ssid === 'string' ? body.ssid : ''
+    if (!ssid) {
+      res.status(400).json({ error: 'ssid required' })
+      return
+    }
+    execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'list_networks'], { timeout: 5000 }, (err, stdout) => {
+      if (err) {
+        res.status(500).json({ error: `wpa_cli failed: ${err.message}` })
+        return
+      }
+      let targetId: number | null = null
+      let targetActive = false
+      for (const ln of stdout.split('\n')) {
+        if (!ln || ln.startsWith('network id')) continue
+        const parts = ln.split('\t')
+        if (parts.length < 2) continue
+        if (parts[1] !== ssid) continue
+        targetId = Number.parseInt(parts[0], 10)
+        targetActive = (parts[3] ?? '').includes('[CURRENT]')
+        break
+      }
+      if (targetId === null) {
+        res.status(404).json({ error: 'ssid not in saved networks' })
+        return
+      }
+      if (targetActive) {
+        res.status(409).json({ error: 'refusing to remove the currently-connected network — would lock the box out' })
+        return
+      }
+      execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'remove_network', String(targetId)], { timeout: 5000 }, (rmErr, rmOut) => {
+        if (rmErr || !/OK/.test(rmOut)) {
+          res.status(500).json({ error: `remove_network failed: ${rmErr?.message ?? rmOut.trim()}` })
+          return
+        }
+        execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'save_config'], { timeout: 5000 }, (saveErr, saveOut) => {
+          if (saveErr || !/OK/.test(saveOut)) {
+            res.status(500).json({ error: `save_config failed: ${saveErr?.message ?? saveOut.trim()}` })
+            return
+          }
+          res.json({ ok: true })
+        })
+      })
+    })
+  })
+
+  /**
+   * GET /api/eltern/battery-history?hours=24  (Phase 18 Item 6)
+   * Reads /home/dietpi/.mupibox/battery_log.jsonl that the server.ts poller
+   * writes once a minute. Filtered to the last `hours` (default 24, max
+   * 168 = 7 days). Sampled down to ~120 points so the SVG chart in the
+   * WebApp stays smooth even after a few days of history.
+   */
+  router.get('/battery-history', requireSession, (req, res) => {
+    const hours = Math.max(1, Math.min(168, Math.floor(Number(req.query.hours) || 24)))
+    let raw = ''
+    try {
+      raw = readFileSync('/home/dietpi/.mupibox/battery_log.jsonl', 'utf8')
+    } catch {
+      res.json({ hours, samples: [] })
+      return
+    }
+    const cutoffMs = Date.now() - hours * 3600 * 1000
+    type Sample = { ts: string; vbat: number | null; percent: number | null; vbus: number | null; ibat: number | null }
+    const all: Sample[] = []
+    for (const ln of raw.split('\n')) {
+      if (!ln) continue
+      try {
+        const e = JSON.parse(ln) as Sample
+        if (e.ts && Date.parse(e.ts) >= cutoffMs) all.push(e)
+      } catch {
+        /* skip malformed */
+      }
+    }
+    // Downsample to roughly 120 points so the chart stays light.
+    const TARGET = 120
+    const samples = all.length <= TARGET ? all : all.filter((_, i) => i % Math.ceil(all.length / TARGET) === 0)
+    res.json({ hours, samples })
+  })
+
+  /**
+   * GET /api/eltern/playback  (Phase 18 Item 5)
+   * Snapshot of what's playing on the box (current track + paused/playing
+   * state). Just proxies the player's own /local — same data the box's
+   * frontend already gets from it.
+   */
+  router.get('/playback', requireSession, async (_req, res) => {
+    try {
+      const localRes = await fetch('http://127.0.0.1:5005/local', { signal: AbortSignal.timeout(3000) })
+      if (!localRes.ok) {
+        res.status(502).json({ error: 'player unreachable' })
+        return
+      }
+      const local = (await localRes.json()) as Record<string, unknown>
+      const player = String(local.currentPlayer ?? '')
+
+      // The /local fields (playing, currentTrackname, album) are mplayer-side
+      // and stay empty during Spotify playback. For Spotify the canonical
+      // truth is /state.is_playing + /state.item.* — that's the
+      // getMyCurrentPlaybackState response from the Spotify API.
+      let playing = false
+      let title = ''
+      let artist = ''
+      let album = ''
+      let coverUrl: string | null = null
+      let progressMs: number | null = null
+      let durationMs: number | null = null
+      if (player === 'mplayer') {
+        playing = local.playing === true
+        title = String(local.currentTrackname ?? '')
+        album = String(local.album ?? '')
+      } else if (player === 'spotify') {
+        try {
+          const stateRes = await fetch('http://127.0.0.1:5005/state', { signal: AbortSignal.timeout(3000) })
+          if (stateRes.ok) {
+            const state = (await stateRes.json()) as {
+              is_playing?: boolean
+              progress_ms?: number
+              item?: {
+                name?: string
+                duration_ms?: number
+                artists?: Array<{ name?: string }>
+                album?: { name?: string; images?: Array<{ url?: string }> }
+                show?: { name?: string; publisher?: string; images?: Array<{ url?: string }> }
+                images?: Array<{ url?: string }>
+              }
+            }
+            playing = state.is_playing === true
+            if (typeof state.progress_ms === 'number') progressMs = state.progress_ms
+            if (typeof state.item?.duration_ms === 'number') durationMs = state.item.duration_ms
+            if (state.item?.name) title = String(state.item.name)
+            if (state.item?.album?.name) album = String(state.item.album.name)
+            if (state.item?.show?.name) {
+              artist = String(state.item.show.name)
+              if (!album && state.item.show.publisher) album = String(state.item.show.publisher)
+            } else if (Array.isArray(state.item?.artists) && state.item.artists[0]?.name) {
+              artist = String(state.item.artists[0].name)
+            }
+            // Cover art priority: episode-own > show > album. Spotify orders
+            // images largest-first, so [0] is the highest-res available.
+            const candidates = [
+              state.item?.images?.[0]?.url,
+              state.item?.show?.images?.[0]?.url,
+              state.item?.album?.images?.[0]?.url,
+            ].filter((u): u is string => typeof u === 'string' && u.length > 0)
+            if (candidates.length > 0) coverUrl = candidates[0]
+          }
+        } catch {
+          /* state fetch failed → stays not-playing */
+        }
+      }
+      res.json({
+        playing,
+        player,
+        source: String(local.currentType ?? ''),
+        title,
+        artist,
+        album,
+        coverUrl,
+        progressMs,
+        durationMs,
+        volume: typeof local.volume === 'number' ? local.volume : null,
+      })
+    } catch (err) {
+      res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
+    }
+  })
+
+  /** POST /api/eltern/playback/pause|play|stop  (Phase 18 Item 5)
+   *  Quick-Pause / Quick-Play / Quick-Stop. Just forwards to the player's
+   *  HTTP API on localhost:5005, where the corresponding command handler
+   *  already exists (used by the box display + Telegram bot). No state
+   *  duplicated on the backend-api side. */
+  for (const action of ['pause', 'play', 'stop', 'next', 'previous'] as const) {
+    router.post(`/playback/${action}`, requireSession, requireCsrf, async (_req, res) => {
+      try {
+        const r = await fetch(`http://127.0.0.1:5005/${action}?src=eltern`, { signal: AbortSignal.timeout(3000) })
+        if (!r.ok) {
+          // Player liefert bei Cap/Quiet einen 423 mit {error:'playtime_limit_reached'} etc.
+          // Reichen wir 1:1 durch, damit die friendly-error-Mapping im Frontend greift.
+          const body = await r.json().catch(() => ({ error: `player rejected ${action} (HTTP ${r.status})` }))
+          res.status(r.status).json(body)
+          return
+        }
+        res.json({ ok: true, action })
+      } catch (err) {
+        res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
+      }
+    })
+  }
+
+  /**
+   * POST /api/eltern/library/play  { index }
+   * Startet ein Library-Item auf der Box. Liest active_data.json, mapped den
+   * Type auf den passenden Player-Command-Pfad (mirror PlayerService.playMedia
+   * aus frontend-box) und proxied an localhost:5005. Nutzt /current/ als
+   * Device-Prefix — Player setzt damit activeDevice=null und Spotify nimmt
+   * das zuletzt aktive Connect-Device (typisch die Box).
+   */
+  router.post('/library/play', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { index?: unknown } | undefined) ?? {}
+    const idx = Number(body.index)
+    if (!Number.isInteger(idx) || idx < 0) {
+      res.status(400).json({ error: 'invalid_index' })
+      return
+    }
+    let library: unknown
+    try {
+      library = JSON.parse(await fsp.readFile(deps.activeDataPath, 'utf8'))
+    } catch {
+      res.status(500).json({ error: 'library_unavailable' })
+      return
+    }
+    if (!Array.isArray(library)) {
+      res.status(500).json({ error: 'library_malformed' })
+      return
+    }
+    const item = library[idx] as Record<string, unknown> | undefined
+    if (!item || typeof item !== 'object') {
+      res.status(404).json({ error: 'item_not_found' })
+      return
+    }
+    if (item.isResume === true || item.category === 'resume') {
+      res.status(400).json({ error: 'resume_entry_not_playable' })
+      return
+    }
+    const enc = encodeURIComponent
+    const type = String(item.type ?? '')
+    let url = ''
+    switch (type) {
+      case 'library': {
+        const cat = String(item.category ?? '')
+        const artist = String(item.artist ?? '')
+        const title = String(item.title ?? item.id ?? '')
+        url = `musicsearch/library/album/${enc(cat)}:${enc(artist)}:${enc(title)}`
+        break
+      }
+      case 'spotify': {
+        if (item.playlistid) url = `spotify/now/spotify:playlist:${enc(String(item.playlistid))}:0:0`
+        else if (item.id) url = `spotify/now/spotify:album:${enc(String(item.id))}:0:0`
+        else if (item.showid) url = `spotify/now/spotify:episode:${enc(String(item.showid))}:0:0`
+        else if (item.audiobookid) url = `spotify/now/spotify:show:${enc(String(item.audiobookid))}:0:0`
+        else {
+          res.status(400).json({ error: 'spotify_id_missing' })
+          return
+        }
+        break
+      }
+      case 'radio': {
+        const id = String(item.id ?? '')
+        const title = String(item.title ?? 'Radio')
+        const artist = String(item.artist ?? '')
+        url = `radio/${enc(id)}/${enc(title)}:title:artist:${enc(artist)}`
+        break
+      }
+      case 'rss': {
+        const id = String(item.id ?? '')
+        const title = String(item.title ?? 'Episode')
+        const artist = String(item.artist ?? '')
+        url = `rss/${enc(id)}/${enc(title)}:title:artist:${enc(artist)}`
+        break
+      }
+      default:
+        res.status(400).json({ error: `unsupported_type: ${type}` })
+        return
+    }
+    try {
+      const r = await fetch(`http://127.0.0.1:5005/current/${url}?src=eltern`, { signal: AbortSignal.timeout(5000) })
+      if (!r.ok) {
+        const errBody = await r.json().catch(() => ({ error: `player rejected play (HTTP ${r.status})` }))
+        res.status(r.status).json(errBody)
+        return
+      }
+      res.json({
+        ok: true,
+        item: {
+          type,
+          artist: typeof item.artist === 'string' ? item.artist : null,
+          title: typeof item.title === 'string' ? item.title : null,
+        },
+      })
+    } catch (err) {
+      res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
+    }
+  })
+
+  /**
+   * GET /api/eltern/playlog?range=today|week  (Phase 18 Item 4)
+   * Reads the play_log.jsonl that the backend-api's own poller writes and
+   * aggregates by track / artist / day. No DB — just walking the file once
+   * per request, which is fine until the daughter listens to a few thousand
+   * tracks (~MB-range jsonl). Pairs start/stop entries; an unpaired tail
+   * "start" is the currently-playing track (we extrapolate its duration to
+   * "now" so the Heute-Karte shows recent minutes immediately).
+   */
+  router.get('/playlog', requireSession, async (req, res) => {
+    const range = String(req.query.range ?? 'today')
+    if (range !== 'today' && range !== 'week') {
+      res.status(400).json({ error: 'range must be today or week' })
+      return
+    }
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const cutoffMs = range === 'today' ? todayStart.getTime() : now.getTime() - 7 * 24 * 3600 * 1000
+
+    let raw = ''
+    try {
+      // Bewusst asynchron: die Datei liegt im MB-Bereich, und readFileSync
+      // hätte den einzigen Thread des Backends blockiert -- also auch
+      // Wiedergabesteuerung und Display-Sync, während jemand den
+      // Hör-Verlauf öffnet.
+      raw = await fsp.readFile('/home/dietpi/.mupibox/play_log.jsonl', 'utf8')
+    } catch {
+      // file may not exist yet — return empty result
+    }
+    type Entry = {
+      ts: string
+      event: 'start' | 'stop'
+      source?: string
+      title?: string
+      artist?: string
+      album?: string
+      duration_seconds?: number
+    }
+    const entries: Entry[] = []
+    for (const ln of raw.split('\n')) {
+      if (!ln) continue
+      try {
+        const e = JSON.parse(ln) as Entry
+        if (Date.parse(e.ts) >= cutoffMs) entries.push(e)
+      } catch {
+        /* skip malformed line */
+      }
+    }
+
+    type Play = { tsMs: number; source: string; title: string; artist: string; album: string; duration: number }
+    const plays: Play[] = []
+    let pending: { tsMs: number; source: string; title: string; artist: string; album: string } | null = null
+    for (const e of entries) {
+      if (e.event === 'start') {
+        if (pending !== null) {
+          // orphan start (no stop recorded — e.g. backend-api restarted mid-track).
+          // Extrapolate up to the new start's ts so the gap is attributed to it.
+          plays.push({ ...pending, duration: Math.max(0, Math.round((Date.parse(e.ts) - pending.tsMs) / 1000)) })
+        }
+        pending = {
+          tsMs: Date.parse(e.ts),
+          source: e.source ?? '',
+          title: e.title ?? '',
+          artist: e.artist ?? '',
+          album: e.album ?? '',
+        }
+      } else if (e.event === 'stop' && pending !== null) {
+        plays.push({ ...pending, duration: e.duration_seconds ?? 0 })
+        pending = null
+      }
+    }
+    if (pending !== null) {
+      // Currently still playing — extrapolate to now so today's number reflects reality.
+      plays.push({ ...pending, duration: Math.max(0, Math.round((Date.now() - pending.tsMs) / 1000)) })
+    }
+
+    const totalSeconds = plays.reduce((s, p) => s + p.duration, 0)
+    const totalMinutes = Math.round(totalSeconds / 60)
+    const trackCount = plays.length
+
+    const artistMap = new Map<string, { name: string; seconds: number; count: number }>()
+    for (const p of plays) {
+      const key = p.artist || '(unbekannt)'
+      const cur = artistMap.get(key) ?? { name: key, seconds: 0, count: 0 }
+      cur.seconds += p.duration
+      cur.count += 1
+      artistMap.set(key, cur)
+    }
+    const topArtists = [...artistMap.values()]
+      .sort((a, b) => b.seconds - a.seconds)
+      .slice(0, 5)
+      .map((a) => ({ name: a.name, minutes: Math.round(a.seconds / 60), count: a.count }))
+
+    const titleMap = new Map<string, { title: string; artist: string; seconds: number; count: number }>()
+    for (const p of plays) {
+      const key = `${p.artist}|${p.title}`
+      const cur = titleMap.get(key) ?? { title: p.title, artist: p.artist, seconds: 0, count: 0 }
+      cur.seconds += p.duration
+      cur.count += 1
+      titleMap.set(key, cur)
+    }
+    const topTitles = [...titleMap.values()]
+      .sort((a, b) => b.seconds - a.seconds)
+      .slice(0, 5)
+      .map((t) => ({ title: t.title, artist: t.artist, minutes: Math.round(t.seconds / 60), count: t.count }))
+
+    const dateKey = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const timeline: Array<{ date: string; minutes: number }> = []
+    if (range === 'today') {
+      timeline.push({ date: dateKey(todayStart), minutes: totalMinutes })
+    } else {
+      const dayBuckets = new Map<string, number>()
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(todayStart.getTime() - i * 24 * 3600 * 1000)
+        dayBuckets.set(dateKey(d), 0)
+      }
+      for (const p of plays) {
+        const d = new Date(p.tsMs)
+        const key = dateKey(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+        if (dayBuckets.has(key)) dayBuckets.set(key, (dayBuckets.get(key) ?? 0) + p.duration / 60)
+      }
+      for (const [date, mins] of dayBuckets) {
+        timeline.push({ date, minutes: Math.round(mins) })
+      }
+    }
+
+    res.json({ range, totalMinutes, trackCount, topArtists, topTitles, timeline })
+  })
+
+  /**
+   * GET /api/eltern/theme  (Phase 18 Item 3)
+   * Returns the current theme + the whitelist of installed themes from
+   * mupibox.installedThemes (35+ themes registered by conf_update.sh on box
+   * provisioning). The installed-themes list IS the security boundary —
+   * only those names are accepted by POST and by the preview endpoint.
+   */
+  router.get('/theme', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      res.status(503).json({ error: 'config not yet loaded, please retry' })
+      return
+    }
+    const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+    const current = typeof mb.theme === 'string' ? mb.theme : ''
+    const available = Array.isArray(mb.installedThemes)
+      ? (mb.installedThemes as unknown[]).filter((x): x is string => typeof x === 'string').sort()
+      : []
+    res.json({ current, available })
+  })
+
+  /**
+   * POST /api/eltern/theme  {theme}  (Phase 18 Item 3)
+   * Updates mupibox.theme AND swaps the active_theme.css symlink so the
+   * change is visible after the next display reload — without running the
+   * full setting_update.sh (which on shutdown also rewrites Spotify, Sonos,
+   * spotifyd, display, NTP configs and would be far too broad a side-effect
+   * for a colour change). Theme name is validated against installedThemes
+   * to prevent symlink-target injection.
+   */
+  router.post('/theme', requireSession, requireCsrf, async (req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      res.status(503).json({ error: 'config not yet loaded, please retry' })
+      return
+    }
+    const body = (req.body as { theme?: unknown } | undefined) ?? {}
+    const theme = typeof body.theme === 'string' ? body.theme.trim() : ''
+    const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+    const installed = Array.isArray(mb.installedThemes)
+      ? (mb.installedThemes as unknown[]).filter((x): x is string => typeof x === 'string')
+      : []
+    if (!theme || !installed.includes(theme)) {
+      res.status(400).json({ error: 'theme not in installed-themes whitelist' })
+      return
+    }
+    await deps.updateMupiboxConfig((c) => {
+      const m = ((c.mupibox as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      m.theme = theme
+      c.mupibox = m
+    })
+    const symlinkPath = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/active_theme.css'
+    const target = `/home/dietpi/MuPiBox/themes/${theme}.css`
+    try {
+      await fsp.rm(symlinkPath, { force: true })
+      await fsp.symlink(target, symlinkPath)
+    } catch (err) {
+      res.status(500).json({ error: `symlink update failed: ${(err as Error).message}` })
+      return
+    }
+    res.json({ ok: true, theme })
+  })
+
+  /**
+   * GET /api/eltern/theme-preview/:name  (Phase 18 Item 3)
+   * Serves the theme preview PNG that AdminInterface ships under
+   * /var/www/images/<name>.png. Name MUST be in the installed-themes
+   * whitelist — without that check this would be a /var/www/images path
+   * traversal sink. Cache-friendly so the WebApp grid doesn't refetch on
+   * every render.
+   */
+  router.get('/theme-preview/:name', requireSession, (req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    if (!cfg) {
+      res.status(503).end()
+      return
+    }
+    const mb = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
+    const installed = Array.isArray(mb.installedThemes)
+      ? (mb.installedThemes as unknown[]).filter((x): x is string => typeof x === 'string')
+      : []
+    const name = String(req.params.name ?? '').replace(/\.png$/, '')
+    if (!installed.includes(name)) {
+      res.status(404).end()
+      return
+    }
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    res.sendFile(`/var/www/images/${name}.png`, (err) => {
+      if (err && !res.headersSent) res.status(404).end()
+    })
+  })
+
+  /**
+   * POST /api/eltern/spotify-credentials
+   * Persists the user-provided clientId (and optional clientSecret) into
+   * mupiboxconfig.json.spotify. This is the wizard-step-3 endpoint that
+   * was deferred in Phase 14c.
+   *
+   * Validation: clientId must be base64url-style alphanumeric (Spotify's
+   * format), at least 16 characters. clientSecret optional — when blank
+   * the box flips to PKCE-style refresh in src/spotify-sync/auth.ts.
+   */
+  router.post('/spotify-credentials', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as { clientId?: unknown; clientSecret?: unknown }
+    const clientId = typeof body.clientId === 'string' ? body.clientId.trim() : ''
+    const clientSecret = typeof body.clientSecret === 'string' ? body.clientSecret.trim() : ''
+    if (clientId.length < 16 || clientId.length > 64 || !/^[A-Za-z0-9]+$/.test(clientId)) {
+      res.status(400).json({ error: 'clientId must be 16-64 alphanumeric characters' })
+      return
+    }
+    if (clientSecret && (clientSecret.length < 16 || clientSecret.length > 64 || !/^[A-Za-z0-9]+$/.test(clientSecret))) {
+      res.status(400).json({ error: 'clientSecret must be 16-64 alphanumeric characters when provided' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const spotify = ((cfg.spotify as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      spotify.clientId = clientId
+      // Empty secret deliberately persisted as '' so the PKCE branch in
+      // src/spotify-sync/auth.ts picks it up; don't write `undefined`,
+      // because jsonfile collapses that into a missing key and existing
+      // code reads via typeof === 'string'.
+      spotify.clientSecret = clientSecret
+      cfg.spotify = spotify
+    })
+    res.json({ ok: true, mode: clientSecret ? 'classic' : 'pkce' })
+  })
+
+  /**
+   * GET /api/eltern/bluetooth  (Phase 15d)
+   * Power state + paired devices (with connected flag) + autoconnect-service
+   * state. Mirrors the admin bluetooth.php read path; runs as dietpi via sudo
+   * like the PHP does. Empty/off → just {powered:false}.
+   */
+  router.get('/bluetooth', requireSession, async (_req, res) => {
+    const show = await execCapture('sudo', ['-u', 'dietpi', 'bluetoothctl', 'show'])
+    const powered = /Powered:\s*yes/i.test(show.stdout)
+    const devices: Array<{ mac: string; name: string; connected: boolean }> = []
+    if (powered) {
+      const dev = await execCapture('sudo', ['-u', 'dietpi', 'bluetoothctl', 'devices'])
+      const parsed: Array<{ mac: string; name: string }> = []
+      for (const line of dev.stdout.split('\n')) {
+        const m = line.match(/^Device\s+([0-9A-Fa-f:]{17})\s+(.*)$/)
+        if (m && BT_MAC_RE.test(m[1])) parsed.push({ mac: m[1], name: m[2].trim() || m[1] })
+      }
+      for (const d of parsed) {
+        const info = await execCapture('sudo', ['-u', 'dietpi', 'bluetoothctl', 'info', d.mac])
+        devices.push({ ...d, connected: /Connected:\s*yes/i.test(info.stdout) })
+      }
+    }
+    const ac = await execCapture('systemctl', ['is-active', 'mupi_autoconnect_bt'])
+    res.json({ powered, devices, autoconnect: ac.stdout.trim() === 'active' })
+  })
+
+  /** POST /api/eltern/bluetooth/power  — {on:boolean} → start_bt.sh|stop_bt.sh. */
+  router.post('/bluetooth/power', requireSession, requireCsrf, async (req, res) => {
+    const on = (req.body as { on?: unknown } | undefined)?.on === true
+    const script = on ? 'start_bt.sh' : 'stop_bt.sh'
+    const r = await execCapture('sudo', ['-u', 'dietpi', `/usr/local/bin/mupibox/${script}`], 15000)
+    res.json({ ok: r.ok })
+  })
+
+  /** POST /api/eltern/bluetooth/scan  — runs scan_bt.sh, returns discovered
+   *  devices parsed from /tmp/bt_scan (tab-sep; col[1]=MAC, col[2]=name). */
+  router.post('/bluetooth/scan', requireSession, requireCsrf, async (_req, res) => {
+    await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/scan_bt.sh'], 30000)
+    const found: Array<{ mac: string; name: string }> = []
+    try {
+      const raw = readFileSync('/tmp/bt_scan', 'utf8')
+      for (const line of raw.split('\n')) {
+        const cols = line.split('\t')
+        const mac = (cols[1] ?? '').trim()
+        if (BT_MAC_RE.test(mac)) found.push({ mac, name: (cols[2] ?? '').trim() || mac })
+      }
+    } catch {
+      /* no scan file — return empty */
+    }
+    res.json({ ok: true, found })
+  })
+
+  /** POST /api/eltern/bluetooth/pair  — {mac} → pair_bt.sh. */
+  router.post('/bluetooth/pair', requireSession, requireCsrf, async (req, res) => {
+    const mac = String((req.body as { mac?: unknown } | undefined)?.mac ?? '').trim()
+    if (!BT_MAC_RE.test(mac)) {
+      res.status(400).json({ error: 'invalid MAC' })
+      return
+    }
+    const r = await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/pair_bt.sh', mac], 30000)
+    res.json({ ok: r.ok })
+  })
+
+  /** POST /api/eltern/bluetooth/remove  — {mac} → remove_bt.sh + bt restart. */
+  router.post('/bluetooth/remove', requireSession, requireCsrf, async (req, res) => {
+    const mac = String((req.body as { mac?: unknown } | undefined)?.mac ?? '').trim()
+    if (!BT_MAC_RE.test(mac)) {
+      res.status(400).json({ error: 'invalid MAC' })
+      return
+    }
+    await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/remove_bt.sh', mac], 15000)
+    await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/stop_bt.sh'], 15000)
+    await execCapture('sudo', ['-u', 'dietpi', '/usr/local/bin/mupibox/start_bt.sh'], 15000)
+    res.json({ ok: true })
+  })
+
+  /** POST /api/eltern/bluetooth/autoconnect  — {enable:boolean}. */
+  router.post('/bluetooth/autoconnect', requireSession, requireCsrf, async (req, res) => {
+    const enable = (req.body as { enable?: unknown } | undefined)?.enable === true
+    if (enable) {
+      await execCapture('sudo', ['systemctl', 'enable', 'mupi_autoconnect_bt'])
+      await execCapture('sudo', ['systemctl', 'start', 'mupi_autoconnect_bt'])
+    } else {
+      await execCapture('sudo', ['systemctl', 'stop', 'mupi_autoconnect_bt'])
+      await execCapture('sudo', ['systemctl', 'disable', 'mupi_autoconnect_bt'])
+    }
+    res.json({ ok: true })
+  })
+
+  /**
+   * GET /api/eltern/telegram-config  (Phase 15f)
+   * Returns the Telegram bot config for editing — but NOT the raw token
+   * (write-only secret); only whether one is configured. chatId list is
+   * normalised to {id,label} objects.
+   */
+  router.get('/telegram-config', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    const tg = (cfg?.telegram as Record<string, unknown> | undefined) ?? {}
+    const rawChats = Array.isArray(tg.chatId) ? (tg.chatId as unknown[]) : []
+    const chatIds = rawChats
+      .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
+      .map((c) => ({ id: String(c.id ?? ''), label: String(c.label ?? '') }))
+      .filter((c) => c.id)
+    res.json({
+      active: tg.active === true,
+      token_configured: typeof tg.token === 'string' && tg.token.length > 0,
+      chatIds,
+    })
+  })
+
+  /**
+   * POST /api/eltern/telegram-config  (Phase 15f)
+   * Update active flag, chatId whitelist, and optionally the bot token
+   * (only when a non-empty value is sent — blank keeps the existing one).
+   * telegram_receiver.py reads the config only at startup, so the service
+   * is restarted afterwards to apply changes immediately.
+   */
+  router.post('/telegram-config', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as { active?: unknown; token?: unknown; chatIds?: unknown }
+    let validatedChats: Array<{ id: string; label: string }> | undefined
+    if (body.chatIds !== undefined) {
+      if (!Array.isArray(body.chatIds)) {
+        res.status(400).json({ error: 'chatIds must be an array' })
+        return
+      }
+      validatedChats = []
+      for (const c of body.chatIds) {
+        if (!c || typeof c !== 'object') {
+          res.status(400).json({ error: 'each chatId must be an object {id,label}' })
+          return
+        }
+        const id = String((c as Record<string, unknown>).id ?? '').trim()
+        const label = String((c as Record<string, unknown>).label ?? '').trim()
+        // Telegram chat IDs are integers; groups/channels are negative (-100…).
+        if (!/^-?\d{1,20}$/.test(id)) {
+          res.status(400).json({ error: `invalid chat id: ${id}` })
+          return
+        }
+        validatedChats.push({ id, label: label.slice(0, 60) })
+      }
+    }
+    let newToken: string | undefined
+    if (typeof body.token === 'string' && body.token.trim().length > 0) {
+      const t = body.token.trim()
+      if (!/^\d{6,12}:[A-Za-z0-9_-]{30,50}$/.test(t)) {
+        res.status(400).json({ error: 'Bot-Token-Format sieht ungültig aus' })
+        return
+      }
+      newToken = t
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const tg = ((cfg.telegram as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      if (typeof body.active === 'boolean') tg.active = body.active
+      if (validatedChats !== undefined) tg.chatId = validatedChats
+      if (newToken !== undefined) tg.token = newToken
+      cfg.telegram = tg
+    })
+    // Apply immediately — fire-and-forget; the HTTP response shouldn't block
+    // on systemd. NOPASSWD sudo is configured for the box user.
+    execFile('sudo', ['systemctl', 'restart', 'mupi_telegram'], { timeout: 15000 }, (err) => {
+      if (err) console.warn(`${new Date().toLocaleString()}: [eltern] mupi_telegram restart failed: ${err.message}`)
+    })
+    res.json({ ok: true })
+  })
+
+  /**
+   * GET /api/eltern/system
+   * Read-only box system overview (Phase 15g): hostname, uptime, CPU load +
+   * count + temperature, RAM, root-disk usage. Uses Node built-ins only
+   * (os + fs.statfs + the thermal sysfs node) — no shell-out. Reboot/Shutdown
+   * actions reuse the existing /api/reboot|/api/shutdown endpoints.
+   */
+  router.get('/system', requireSession, async (_req, res) => {
+    let cpuTempC: number | null = null
+    try {
+      const milli = Number.parseInt(readFileSync('/sys/class/thermal/thermal_zone0/temp', 'utf8').trim(), 10)
+      if (Number.isFinite(milli)) cpuTempC = Math.round(milli / 100) / 10
+    } catch {
+      /* no thermal node — leave null */
+    }
+    let disk: { total: number; free: number } | null = null
+    try {
+      const st = await fsp.statfs('/')
+      disk = { total: st.blocks * st.bsize, free: st.bavail * st.bsize }
+    } catch {
+      /* statfs unavailable — leave null */
+    }
+    res.json({
+      hostname: os.hostname(),
+      uptime_seconds: Math.floor(os.uptime()),
+      load_1: Math.round(os.loadavg()[0] * 100) / 100,
+      cpu_count: os.cpus().length,
+      mem_total: os.totalmem(),
+      mem_free: os.freemem(),
+      cpu_temp_c: cpuTempC,
+      disk,
+    })
+  })
+
+  /**
+   * POST /api/eltern/library/add-album  (Phase 17b)
+   * Pin a single Spotify album (from the WebApp search) into the Smart-Sync
+   * config (spotify_sync.explicit_albums). The next sync resolves it into the
+   * library as source='spotify-sync'. Idempotent — re-adding the same id is a
+   * no-op. The WebApp triggers a sync afterwards so it lands promptly.
+   */
+  router.post('/library/add-album', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { albumId?: unknown; category?: unknown; name?: unknown } | undefined) ?? {}
+    const albumId = String(body.albumId ?? '').trim()
+    if (!/^[A-Za-z0-9]{22}$/.test(albumId)) {
+      res.status(400).json({ error: 'invalid albumId (expected 22-char Spotify id)' })
+      return
+    }
+    const allowed = ['audiobook', 'music', 'other']
+    const catRaw = String(body.category ?? '').trim()
+    const category = allowed.includes(catRaw) ? catRaw : undefined
+    const name = String(body.name ?? '').trim().slice(0, 120)
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      const list = Array.isArray(ss.explicit_albums) ? (ss.explicit_albums as Array<Record<string, unknown>>) : []
+      if (!list.some((a) => a?.id === albumId)) {
+        const entry: Record<string, unknown> = { id: albumId }
+        if (name) entry.name = name
+        if (category) entry.category = category
+        list.push(entry)
+      }
+      ss.explicit_albums = list
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
+  /**
+   * POST /api/eltern/library/subscribe-artist  (Phase 17c/17d)
+   * Upsert a whole-artist subscription: all of the artist's albums get synced,
+   * optionally narrowed to [range_from..range_to] (1-indexed by release date).
+   * Re-subscribing the same id replaces the prior settings (so clearing the
+   * range = re-subscribe without it).
+   */
+  router.post('/library/subscribe-artist', requireSession, requireCsrf, async (req, res) => {
+    const body =
+      (req.body as
+        | { artistId?: unknown; name?: unknown; category?: unknown; range_from?: unknown; range_to?: unknown }
+        | undefined) ?? {}
+    const artistId = String(body.artistId ?? '').trim()
+    if (!/^[A-Za-z0-9]{22}$/.test(artistId)) {
+      res.status(400).json({ error: 'invalid artistId (expected 22-char Spotify id)' })
+      return
+    }
+    const name = String(body.name ?? '').trim().slice(0, 80)
+    const allowed = ['audiobook', 'music', 'other']
+    const catRaw = String(body.category ?? '').trim()
+    const category = allowed.includes(catRaw) ? catRaw : undefined
+    const toNum = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : undefined)
+    const rangeFrom = toNum(body.range_from)
+    const rangeTo = toNum(body.range_to)
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      const list = Array.isArray(ss.artists) ? (ss.artists as Array<Record<string, unknown>>) : []
+      const existing = list.find((a) => a?.id === artistId)
+      // A range edit must not wipe per-album exclusions (Phase 17e).
+      const preservedExclude = Array.isArray(existing?.exclude_album_ids)
+        ? (existing!.exclude_album_ids as unknown[]).filter((x): x is string => typeof x === 'string')
+        : []
+      const entry: Record<string, unknown> = { id: artistId }
+      if (name) entry.name = name
+      if (category) entry.category = category
+      if (rangeFrom !== undefined) entry.range_from = rangeFrom
+      if (rangeTo !== undefined) entry.range_to = rangeTo
+      if (preservedExclude.length) entry.exclude_album_ids = preservedExclude
+      if (existing) {
+        for (const k of Object.keys(existing)) if (k !== 'id') delete existing[k]
+        Object.assign(existing, entry)
+      } else {
+        list.push(entry)
+      }
+      ss.artists = list
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
+  /** GET /api/eltern/library/subscriptions  (Phase 17d) — current artist subs
+   *  + explicit albums, for the management list. */
+  router.get('/library/subscriptions', requireSession, (_req, res) => {
+    const ss = (deps.getMupiboxConfig()?.spotify_sync as Record<string, unknown> | undefined) ?? {}
+    res.json({
+      artists: Array.isArray(ss.artists) ? ss.artists : [],
+      explicit_albums: Array.isArray(ss.explicit_albums) ? ss.explicit_albums : [],
+    })
+  })
+
+  /** POST /api/eltern/library/unsubscribe-artist  {artistId}  (Phase 17d).
+   *  The artist's albums become orphans and the next sync removes them. */
+  router.post('/library/unsubscribe-artist', requireSession, requireCsrf, async (req, res) => {
+    const artistId = String((req.body as { artistId?: unknown } | undefined)?.artistId ?? '').trim()
+    if (!artistId) {
+      res.status(400).json({ error: 'artistId required' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      ss.artists = (Array.isArray(ss.artists) ? (ss.artists as Array<Record<string, unknown>>) : []).filter(
+        (a) => a?.id !== artistId,
+      )
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
+  /** POST /api/eltern/library/remove-album  {albumId}  (Phase 17d). */
+  router.post('/library/remove-album', requireSession, requireCsrf, async (req, res) => {
+    const albumId = String((req.body as { albumId?: unknown } | undefined)?.albumId ?? '').trim()
+    if (!albumId) {
+      res.status(400).json({ error: 'albumId required' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      ss.explicit_albums = (
+        Array.isArray(ss.explicit_albums) ? (ss.explicit_albums as Array<Record<string, unknown>>) : []
+      ).filter((a) => a?.id !== albumId)
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
+  /**
+   * POST /api/eltern/library/artist-exclude  {artistId, albumId, excluded}
+   * (Phase 17e) Toggle a single album of a subscribed artist on/off the
+   * subscription's exclude list. Excluded albums are skipped on the next sync
+   * (and removed as orphans). Re-including (excluded:false) drops it from the
+   * list so the sync re-adds it. No-op if the artist isn't subscribed.
+   */
+  router.post('/library/artist-exclude', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { artistId?: unknown; albumId?: unknown; excluded?: unknown } | undefined) ?? {}
+    const artistId = String(body.artistId ?? '').trim()
+    const albumId = String(body.albumId ?? '').trim()
+    if (!/^[A-Za-z0-9]{22}$/.test(artistId) || !/^[A-Za-z0-9]{22}$/.test(albumId)) {
+      res.status(400).json({ error: 'invalid artistId/albumId (expected 22-char Spotify ids)' })
+      return
+    }
+    const excluded = body.excluded === true || body.excluded === 'true'
+    const cur = (deps.getMupiboxConfig()?.spotify_sync as Record<string, unknown> | undefined) ?? {}
+    const curArtists = Array.isArray(cur.artists) ? (cur.artists as Array<Record<string, unknown>>) : []
+    if (!curArtists.some((a) => a?.id === artistId)) {
+      res.status(404).json({ error: 'artist not subscribed' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const ss = ((cfg.spotify_sync as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      const list = Array.isArray(ss.artists) ? (ss.artists as Array<Record<string, unknown>>) : []
+      const sub = list.find((a) => a?.id === artistId)
+      if (!sub) return
+      const ex = new Set(
+        Array.isArray(sub.exclude_album_ids)
+          ? (sub.exclude_album_ids as unknown[]).filter((x): x is string => typeof x === 'string')
+          : [],
+      )
+      if (excluded) ex.add(albumId)
+      else ex.delete(albumId)
+      if (ex.size) sub.exclude_album_ids = [...ex]
+      else delete sub.exclude_album_ids
+      ss.artists = list
+      cfg.spotify_sync = ss
+    })
+    res.json({ ok: true })
+  })
+
+  return router
+}
+
+/**
+ * Creates the /eltern landing-page route — separate from the API router
+ * because it handles the magic-link query param and either issues a
+ * session cookie + redirect or serves the WebApp shell.
+ *
+ * Returns a one-off RequestHandler intended for server.ts to register.
+ */
+export function buildElternLandingHandler(): import('express').RequestHandler {
+  return (req, res, next) => {
+    const token = typeof req.query.token === 'string' ? req.query.token : ''
+    if (!token) {
+      // No token — let the static-file handler serve index.html for the
+      // WebApp shell. Browser-side code does its own session check via
+      // GET /api/eltern/session.
+      next()
+      return
+    }
+    const ip = req.ip ?? req.socket.remoteAddress ?? ''
+    const session = redeemMagicLink(token, ip)
+    if (!session) {
+      res.status(401).send('Magic-Link ungültig oder abgelaufen')
+      return
+    }
+    // Set cookie, strip the token from URL by redirecting to /eltern
+    res.setHeader('Set-Cookie', buildSessionCookie(session.sessionId, 24 * 60 * 60))
+    res.redirect('/eltern')
+  }
+}

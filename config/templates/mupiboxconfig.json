@@ -276,6 +276,37 @@
 		"idleDisplayOff": "10",
 		"pressDelay": "2"
 	    },
+	"playtimeLimit": {
+		"enabled": false,
+		"resetHour": 0,
+		"maxOverrunMinutes": 10,
+		"limitsMinutes": {
+			"mon": 60,
+			"tue": 60,
+			"wed": 60,
+			"thu": 60,
+			"fri": 60,
+			"sat": 60,
+			"sun": 60
+		}
+	},
+	"quietHours": {
+		"enabled": false,
+		"maxOverrunMinutes": 10,
+		"schedule": {
+			"mon": [],
+			"tue": [],
+			"wed": [],
+			"thu": [],
+			"fri": [],
+			"sat": [],
+			"sun": []
+		}
+	},
+	"playbackOverride": {
+		"allowUntil": 0,
+		"forceBlockUntil": 0
+	},
 	"shim": {
 		"poweroffPin": "4",
 		"triggerPin": "17",
@@ -346,13 +377,27 @@
 			{
 				"name": "ENERpower 2S2P 10.000mAh",
 				"config": {
-						"v_100": "8000",
+						"v_100": "8200",
 						"v_75": "7700",
-						"v_50": "7300",
-						"v_25": "6900",
-						"v_0": "6000",
-						"th_warning": "6500",
-						"th_shutdown": "6150"
+						"v_50": "7400",
+						"v_25": "7000",
+						"v_0": "6400",
+						"th_warning": "6700",
+						"th_shutdown": "6600",
+						"vreg": "8300"
+				}
+			},
+			{
+				"name": "ENERpower 2S3P 15.000mAh",
+				"config": {
+						"v_100": "8200",
+						"v_75": "7700",
+						"v_50": "7400",
+						"v_25": "7000",
+						"v_0": "6400",
+						"th_warning": "6700",
+						"th_shutdown": "6600",
+						"vreg": "8300"
 				}
 			},
 			{

@@ -1,3 +1,5 @@
+import type { PlaybackOverrideConfig, PlaytimeLimitConfig, QuietHoursConfig } from './playtime.model'
+
 export interface MupiboxConfig {
   spotify?: {
     disableScraperForPlaylists?: boolean
@@ -13,5 +15,8 @@ export interface MupiboxConfig {
     downloadFolders?: string[]
     [key: string]: unknown
   }
+  playtimeLimit?: PlaytimeLimitConfig
+  quietHours?: QuietHoursConfig
+  playbackOverride?: PlaybackOverrideConfig
   [key: string]: unknown
 }

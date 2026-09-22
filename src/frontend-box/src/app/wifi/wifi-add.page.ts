@@ -156,7 +156,7 @@ export class WifiAddPage implements OnInit, AfterViewInit {
     this.validate()
   }
 
-  handleLayoutChange(button) {
+  handleLayoutChange(button: string) {
     const currentLayout = this.keyboard.options.layoutName
     let layout: string
 

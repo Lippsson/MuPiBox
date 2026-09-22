@@ -2,7 +2,10 @@
 
 include('includes/header.php');
 $REDIRECT_URI = "https://" . $_SERVER['HTTP_HOST'] . "/spotify.php";
-$SCOPELIST = "streaming user-read-currently-playing user-modify-playback-state user-read-playback-state user-read-private user-read-email";
+// playlist-read-private/-collaborative added for Phase-14 Smart-Sync, which
+// discovers the parent's prefixed playlists. Re-running this login grants the
+// existing playback token the extra scopes in one consent step.
+$SCOPELIST = "streaming user-read-currently-playing user-modify-playback-state user-read-playback-state user-read-private user-read-email playlist-read-private playlist-read-collaborative";
 $SCOPE = urlencode($SCOPELIST);
 
 
@@ -18,14 +21,38 @@ if ( $_POST['spotifyget'] ) {
 }
 
 if ($_GET['code']) {
-	$command = "curl -d client_id=" . $data["spotify"]["clientId"] . " -d client_secret=" . $data["spotify"]["clientSecret"] . " -d grant_type=authorization_code -d code=" . $_GET['code'] . " -d redirect_uri=" . $REDIRECT_URI . " https://accounts.spotify.com/api/token";
+	// All four interpolated values reach the shell. clientId / clientSecret
+	// come from mupiboxconfig.json (admin-controlled) but $_GET['code'] is
+	// echoed back from Spotify's redirect — an attacker could craft a
+	// redirect URL with `code=$(rm -rf /)` or backticks. escapeshellarg()
+	// each value so the shell sees them as a single quoted token.
+	$command = "curl -d client_id=" . escapeshellarg($data["spotify"]["clientId"])
+	         . " -d client_secret=" . escapeshellarg($data["spotify"]["clientSecret"])
+	         . " -d grant_type=authorization_code"
+	         . " -d code=" . escapeshellarg($_GET['code'])
+	         . " -d redirect_uri=" . escapeshellarg($REDIRECT_URI)
+	         . " https://accounts.spotify.com/api/token";
 	exec($command, $Tokenoutput, $result);
 	$tokendata = json_decode($Tokenoutput[0], true);
 	$data["spotify"]["accessToken"] = $tokendata["access_token"];
 	$data["spotify"]["refreshToken"] = $tokendata["refresh_token"];
-	$json_object = json_encode($data);
-	$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-	exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+	// Re-authorising via OAuth implies the user wants Spotify ON. Without this
+	// flip, an admin who turned `active` off (e.g. while debugging) and then
+	// re-ran the Connect-Spotify flow would still have Spotify hidden in the
+	// frontend — and might assume the new tokens are also broken. Only flip if
+	// we actually got both tokens back; the OAuth call could have failed and
+	// returned an error blob, in which case enabling Spotify would resurrect
+	// the loading-spinner-stuck state.
+	if (!empty($tokendata["access_token"]) && !empty($tokendata["refresh_token"])) {
+		$data["spotify"]["active"] = true;
+			// Phase-14 Smart-Sync checks the granted scopes (hasRequiredSyncScopes)
+			// to decide whether playlist access is available. The token response
+			// carries them as a space-separated `scope` string; persist as array.
+			if (!empty($tokendata["scope"])) {
+				$data["spotify"]["tokenScopes"] = explode(" ", $tokendata["scope"]);
+			}
+	}
+	save_mupiboxconfig($data);
 	exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
     exec("sudo rm {$data['spotify']['cachepath']}/credentials.json");
 	exec("sudo /usr/local/bin/mupibox/./spotify_restart.sh");
@@ -75,9 +102,7 @@ if ($_POST['resetData']) {
 }
 
 if ($change) {
-	$json_object = json_encode($data);
-	$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-	exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+	save_mupiboxconfig($data);
 	exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
 }
 
