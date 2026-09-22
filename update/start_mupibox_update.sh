@@ -392,14 +392,20 @@ rm -f /tmp/mupibox-update-failed
 
 	echo -e "XXX\n${STEP}\nBackup Userdata... \nXXX" >&3 2>&3
 	before=$(date +%s)
-	mv /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json /tmp/data.json >&3 2>&3
-	mv /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover /tmp/cover >&3 2>&3
-	#mv /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/config.json /tmp/config.json >&3 2>&3
-	mv /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/active_theme.css /tmp/active_theme.css >&3 2>&3
-	# H5: data.json holds resume/library state — non-recoverable. cover
-	# and active_theme.css can be restored from defaults if missing,
-	# so only the data.json backup is fail-fast.
-	[ -f /tmp/data.json ] || fail_update "data.json backup failed (resume/library state would be lost)"
+	# User data is copied (not moved) to a directory on the SD card, not to /tmp: /tmp is a RAM disk,
+	# and an update that stopped after the old install was moved aside used to leave the library and
+	# the covers only there - gone after the next reboot. The whole server/config directory is kept:
+	# besides data.json it holds resume.json, albumstop.json, wlan.json, the offline lists and the
+	# RSS cache, which were all lost on every update before.
+	USERDATA_BAK="/home/dietpi/.mupibox/userdata.upd-bak"
+	rm -rf "${USERDATA_BAK}" >&3 2>&3
+	mkdir -p "${USERDATA_BAK}/www" >&3 2>&3
+	cp -a /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config "${USERDATA_BAK}/config" >&3 2>&3
+	cp -a /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover "${USERDATA_BAK}/www/cover" >&3 2>&3
+	cp -a /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/active_theme.css "${USERDATA_BAK}/www/active_theme.css" >&3 2>&3
+	# H5: data.json holds the library - non-recoverable. cover and active_theme.css can be restored
+	# from defaults if missing, so only the data.json backup is fail-fast.
+	[ -f "${USERDATA_BAK}/config/data.json" ] || fail_update "data.json backup failed (library state would be lost)"
 	after=$(date +%s)
 	echo -e "## Backup Data  ##  finished after $((after - $before)) seconds" >&3 2>&3
 
@@ -813,11 +819,24 @@ rm -f /tmp/mupibox-update-failed
 
 	echo -e "XXX\n${STEP}\nRestore Userdata... \nXXX"
 	before=$(date +%s)
-	mv /tmp/data.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json  >&3 2>&3
-	mv /tmp/cover /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover  >&3 2>&3
-	#mv /tmp/config.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/config.json  >&3 2>&3
-	mv /tmp/active_theme.css /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/active_theme.css >&3 2>&3
-	chown dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json >&3 2>&3
+	# Everything from the backup except what the update installs fresh (config.json, monitor.json)
+	# and the links check_network.sh / get_network.sh recreate (active_*.json, network.json).
+	for item in "${USERDATA_BAK}"/config/* "${USERDATA_BAK}"/config/.[!.]*; do
+		[ -e "${item}" ] || continue
+		name=$(basename "${item}")
+		case "${name}" in
+			config.json|monitor.json|active_data.json|active_resume.json|network.json) continue ;;
+		esac
+		[ -L "${item}" ] && continue
+		rm -rf "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/${name}" >&3 2>&3
+		cp -a "${item}" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/${name}" >&3 2>&3
+	done
+	rm -rf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover >&3 2>&3
+	cp -a "${USERDATA_BAK}/www/cover" /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover >&3 2>&3
+	cp -a "${USERDATA_BAK}/www/active_theme.css" /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/active_theme.css >&3 2>&3
+	chown -R dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config >&3 2>&3
+	# only now that everything is back
+	[ -f /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json ] && rm -rf "${USERDATA_BAK}" >&3 2>&3
 	chown dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/config.json >&3 2>&3
 	sleep 1 >&3 2>&3
 	after=$(date +%s)

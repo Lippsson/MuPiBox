@@ -1015,23 +1015,56 @@ app.get('/api/playtime', (_req, res) => {
 // Atomically apply a mutation to /etc/mupibox/mupiboxconfig.json.
 // Used by the parent-control endpoints below (extend / release / quietnow).
 // The player picks up the change ~50 ms later via fs.watch (see spotify-control.js).
-async function updateMupiboxConfig(mutate: (cfg: Record<string, unknown>) => void): Promise<void> {
-  const current = (await readJsonFile(mupiboxConfigPath)) as Record<string, unknown>
-  mutate(current)
-  const tmpPath = '/tmp/.mupiboxconfig.update.json'
-  await new Promise<void>((resolve, reject) => {
-    jsonfile.writeFile(tmpPath, current, { spaces: 2 }, (err) => (err ? reject(err) : resolve()))
+// All config writes of this process run one after the other: two overlapping read-modify-write
+// cycles (e.g. the sync scheduler's token refresh and a caps save from the parents' app) used to
+// share one fixed tmp file - one could copy the other's half-written file into place, or delete
+// it under the other's feet, and one change was lost either way.
+let mupiboxConfigWriteChain: Promise<unknown> = Promise.resolve()
+// Same lock file as the admin interface's save_mupiboxconfig() (includes/save_config.php).
+const MUPIBOX_CONFIG_LOCK = '/tmp/.mupiboxconfig.lock'
+
+async function replaceMupiboxConfigFile(content: Record<string, unknown>): Promise<void> {
+  const tmpPath = `/tmp/.mupiboxconfig.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.json`
+  await writeFile(tmpPath, `${JSON.stringify(content, null, 2)}\n`, { mode: 0o644 })
+  try {
+    // The PHP side opens the lock file for writing: if this process creates it, make it writable
+    // for everyone. If PHP created it (not writable for us), flock still works on a read-only fd.
+    if (!fs.existsSync(MUPIBOX_CONFIG_LOCK)) {
+      await fs.promises.writeFile(MUPIBOX_CONFIG_LOCK, '', { flag: 'a', mode: 0o666 }).catch(() => {})
+      await fs.promises.chmod(MUPIBOX_CONFIG_LOCK, 0o666).catch(() => {})
+    }
+    // /tmp is a RAM disk and /etc is on the SD card, so a plain mv would copy into the target in
+    // place. Copy next to it first, then rename on the same filesystem: a reader never sees half a
+    // file. flock keeps this apart from the admin interface's writes.
+    await execFileAsync('flock', [
+      MUPIBOX_CONFIG_LOCK,
+      'sh',
+      '-c',
+      'sudo cp "$1" "$2.new" && sudo mv -f "$2.new" "$2"',
+      'replace-config',
+      tmpPath,
+      mupiboxConfigPath,
+    ])
+    await fs.promises.rm(tmpPath, { force: true })
+  } catch (error) {
+    await fs.promises.rm(tmpPath, { force: true })
+    throw error
+  }
+}
+
+function updateMupiboxConfig(mutate: (cfg: Record<string, unknown>) => void): Promise<void> {
+  const run = mupiboxConfigWriteChain.then(async () => {
+    const current = (await readJsonFile(mupiboxConfigPath)) as Record<string, unknown>
+    mutate(current)
+    await replaceMupiboxConfigFile(current)
+    // Local cache invalidation (server's own mupiboxConfigCache) — fs.watch on the
+    // dir already does this, but be explicit so /api/config returns the new value
+    // immediately on the next call.
+    mupiboxConfigCache = undefined
   })
-  await new Promise<void>((resolve, reject) => {
-    // sudo cp is allowed for the dietpi user on the box (same pattern as
-    // /api/shutdown / /api/reboot below). Atomic: write to a tmp on the same
-    // filesystem region, then cp into place; player's fs.watch fires once.
-    exec(`sudo cp ${tmpPath} ${mupiboxConfigPath} && sudo rm -f ${tmpPath}`, (err) => (err ? reject(err) : resolve()))
-  })
-  // Local cache invalidation (server's own mupiboxConfigCache) — fs.watch on the
-  // dir already does this, but be explicit so /api/config returns the new value
-  // immediately on the next call.
-  mupiboxConfigCache = undefined
+  // the chain continues after a failed write too
+  mupiboxConfigWriteChain = run.catch(() => {})
+  return run
 }
 
 // === Phase 18 Item 4: Play-Log poller =========================================
@@ -1501,6 +1534,12 @@ app.get('/api/wlan', (_req, res) => {
 })
 
 app.post('/api/addwlan', (req, res) => {
+  // Same rule as add_wifi.sh (and WPA itself): no password = open network, else 8..63 characters.
+  const pw = req.body?.pw
+  if (pw !== undefined && pw !== '' && (typeof pw !== 'string' || pw.length < 8 || pw.length > 63)) {
+    res.status(400).send('WiFi password must be 8 to 63 characters')
+    return
+  }
   jsonfile.readFile(wlanFile, (error, data) => {
     let out = data
 
@@ -3219,15 +3258,11 @@ async function synologyBuildMediaEntry(
 }
 
 async function updateSynologyConfig(partial: Record<string, unknown>): Promise<void> {
-  const current = await getMupiboxConfig()
-  if (!current) {
-    throw new Error('Cannot update config: current mupibox config could not be read.')
-  }
-  const updated = { ...current, synology: { ...(current.synology ?? {}), ...partial } }
-  const tmpPath = '/tmp/.mupiboxconfig-synology.json'
-  await writeFile(tmpPath, JSON.stringify(updated))
-  await execFileAsync('sudo', ['mv', tmpPath, mupiboxConfigPath])
-  mupiboxConfigCache = updated as MupiboxConfig
+  // Through the shared writer: it reads the file fresh (this used the possibly stale cache) and is
+  // serialised with every other config write.
+  await updateMupiboxConfig((cfg) => {
+    cfg.synology = { ...((cfg.synology as Record<string, unknown> | undefined) ?? {}), ...partial }
+  })
 }
 
 app.post('/api/synology/login', async (req, res) => {

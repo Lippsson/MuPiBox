@@ -42,10 +42,15 @@ function mupibox_config(bool $forceReread = false): array {
 function save_mupiboxconfig(array $data, ?string &$errorOut = null): bool {
     $errorOut = '';
     $lockPath = '/tmp/.mupiboxconfig.lock';
-    $lockFh = @fopen($lockPath, 'c');
+    $lockCreated = !file_exists($lockPath);
+    // 'r' is enough for flock if the backend (user dietpi) created the file
+    $lockFh = @fopen($lockPath, 'c') ?: @fopen($lockPath, 'r');
     if (!$lockFh) {
         $errorOut = 'could not open lock file';
         return false;
+    }
+    if ($lockCreated) {
+        @chmod($lockPath, 0666); // the backend (user dietpi) takes the same lock
     }
     if (!flock($lockFh, LOCK_EX)) {
         fclose($lockFh);
@@ -68,10 +73,15 @@ function save_mupiboxconfig(array $data, ?string &$errorOut = null): bool {
             $errorOut = 'tmp write failed';
             return false;
         }
-        $cmd = 'sudo mv ' . escapeshellarg($tmp) . ' /etc/mupibox/mupiboxconfig.json 2>&1';
+        // /tmp is a RAM disk and /etc on the SD card: a plain mv would copy into the target in
+        // place and a reader could see half a file. Copy next to it, then rename on the same
+        // filesystem.
+        $cmd = 'sudo cp ' . escapeshellarg($tmp) . ' /etc/mupibox/mupiboxconfig.json.new'
+             . ' && sudo mv -f /etc/mupibox/mupiboxconfig.json.new /etc/mupibox/mupiboxconfig.json 2>&1';
         $output = [];
         $rc = 0;
         exec($cmd, $output, $rc);
+        @unlink($tmp);
         if ($rc !== 0) {
             @unlink($tmp);
             $errorOut = 'sudo mv failed (rc=' . $rc . '): ' . implode("\n", $output);
@@ -82,4 +92,24 @@ function save_mupiboxconfig(array $data, ?string &$errorOut = null): bool {
         flock($lockFh, LOCK_UN);
         fclose($lockFh);
     }
+}
+
+/**
+ * Removes a cache directory (or only its contents) from the config - but only when the path
+ * really is a directory below /home/dietpi/. The callers used to run `sudo rm -R <path>` on the
+ * raw config value: an empty value made that `rm -R /*`, and the value is editable in the JSON
+ * editor, so it was also a way into a root shell.
+ */
+function remove_config_cache_dir(string $path, bool $contentsOnly = false): bool {
+	$real = realpath($path);
+	if ($real === false || !is_dir($real) || strpos($real, '/home/dietpi/') !== 0 || substr_count($real, '/') < 3) {
+		error_log("MuPiBox admin: refusing to delete cache path '" . $path . "'");
+		return false;
+	}
+	if ($contentsOnly) {
+		exec("sudo find " . escapeshellarg($real) . " -mindepth 1 -delete");
+	} else {
+		exec("sudo rm -R " . escapeshellarg($real));
+	}
+	return true;
 }

@@ -174,7 +174,7 @@ export async function runSync(trigger: SyncTrigger, deps: RunSyncDeps): Promise<
     try {
       playlistsDiscovered = await discoverPlaylists(accessToken, config)
     } catch (err) {
-      return mapSpotifyError(err, failureCounters, finalise)
+      return mapSpotifyError(err, (kind) => { failureCounters = bumpFailureCounter(failureCounters, kind) }, finalise)
     }
 
     // 5. Resolve tracks
@@ -182,7 +182,7 @@ export async function runSync(trigger: SyncTrigger, deps: RunSyncDeps): Promise<
     try {
       resolved = await resolveSyncItems(playlistsDiscovered, accessToken, config)
     } catch (err) {
-      return mapSpotifyError(err, failureCounters, finalise)
+      return mapSpotifyError(err, (kind) => { failureCounters = bumpFailureCounter(failureCounters, kind) }, finalise)
     }
 
     // 6. Read library + diff + apply — all under the data lock. Holding the
@@ -277,13 +277,15 @@ function bumpFailureCounter(
 /** Map SpotifyApiException to a finalise() call. */
 function mapSpotifyError(
   err: unknown,
-  counters: Partial<Record<SyncFailureKind, number>>,
+  // bumps the caller's counters: bumpFailureCounter() returns a new object, and the result used
+  // to be dropped here, so discovery/resolve failures never reached the Telegram thresholds
+  bump: (kind: SyncFailureKind) => void,
   finalise: (state: SyncState, c?: { additions: number; updates: number; removals: number; conflictsCount: number }, e?: { reason?: string; retryAfterSeconds?: number }) => RunSyncResult,
 ): RunSyncResult {
   if (err instanceof SpotifyApiException) {
     const k = err.detail.kind
     const kind: SyncFailureKind = k === 'auth' ? 'auth' : k === 'rate-limit' ? 'rate-limit' : k === 'network' ? 'network' : 'internal'
-    bumpFailureCounter(counters, kind)
+    bump(kind)
     const mappedState: SyncState =
       kind === 'auth' ? 'AUTH_FAILED' : kind === 'rate-limit' ? 'RATE_LIMITED' : kind === 'network' ? 'NETWORK_ERROR' : 'INTERNAL_ERROR'
     return finalise(mappedState, undefined, {

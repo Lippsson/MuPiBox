@@ -171,8 +171,12 @@ const spotifyApi = new SpotifyWebApi({
 })
 
 /* sets and refreshes access token every hour */
-refreshToken()
-setInterval(refreshToken, 1000 * 60 * 60)
+// .catch: without network (e.g. right after boot) the refresh fails, and an unhandled rejection
+// ends the process under Node 22 - the player then crash-looped until the WiFi was up.
+const refreshTokenLogged = () =>
+  refreshToken().catch(() => console.warn(`${now()}: [Spotify Control] Access token refresh failed (offline?), will retry`))
+refreshTokenLogged()
+setInterval(refreshTokenLogged, 1000 * 60 * 60)
 
 const apiAccessToken = {
   accessToken: null,
@@ -353,14 +357,18 @@ function deleteResumeForFinishedLibraryAlbum() {
 setInterval(() => {
   const cmdVolume = "/usr/bin/amixer sget Master | grep 'Right:'"
   childProcess.exec(cmdVolume, (e, stdout, _stderr) => {
+    // A failed amixer call (sound card busy or not there yet) used to be thrown inside this
+    // callback - an uncaught exception that ended the whole player. Keep the last value instead.
     if (e instanceof Error) {
-      // TODO: Get this to run in development.
-      if (process.env.NODE_ENV === 'development') {
-        return
+      if (process.env.NODE_ENV !== 'development') {
+        log.debug(`${now()}: [Spotify Control] amixer volume poll failed: ${e.message}`)
       }
-      throw e
+      return
     }
-    currentMeta.volume = Number.parseInt(stdout.split('[')[1].split('%')[0], 10)
+    const match = /\[(\d+)%\]/.exec(stdout)
+    if (match) {
+      currentMeta.volume = Number.parseInt(match[1], 10)
+    }
   })
 }, 5000)
 
@@ -741,15 +749,18 @@ function finalizeQuietHoursBlock(reason) {
 
 // Commands that *start or resume* playback. These get blocked when the daily cap is hit.
 // Pause/stop/volume/system commands are NOT blocked — those should always work.
+// True when `segment` is one whole path segment of the command's directory. The URLs look like
+// /<device>/radio/<encoded stream url>/..., and a substring test matched inside the encoded
+// URL: an RSS feed from deutschlandradio.de also ran the radio branch, a URL containing "nas"
+// the NAS branch.
+function hasDirSegment(command, segment) {
+  return typeof command.dir === 'string' && command.dir.split('/').includes(segment)
+}
+
 function isPlayInitiatingCommand(command) {
   if (command.name?.includes('spotify:')) return true
-  if (
-    command.dir &&
-    (command.dir.includes('library') ||
-      command.dir.includes('radio') ||
-      command.dir.includes('rss') ||
-      command.dir.includes('say/'))
-  ) {
+  // 'nas' was missing: NAS playback ignored the playtime limit and quiet hours
+  if (['library', 'nas', 'radio', 'rss', 'say'].some((segment) => hasDirSegment(command, segment))) {
     return true
   }
   if (['play', 'next', 'previous', 'seek+30', 'seek-30'].includes(command.name)) return true
@@ -1010,7 +1021,7 @@ function handleSpotifyError(err, from) {
       writeCounter()
     }
     if (currentMeta.activeSpotifyId !== '0') {
-      refreshToken()
+      refreshTokenLogged()
     }
   } else if (err?.body?.error?.status === 400) {
     log.debug(`${now()}: invalid id`)
@@ -1159,6 +1170,7 @@ function pause() {
 }
 
 function stop() {
+  clearLibraryResumeTimers()
   if (hasConfiguredTelegram())
     cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Stop"')
   if (currentMeta.currentPlayer === 'spotify') {
@@ -1426,22 +1438,38 @@ function refreshLocalPlaylist(albumDir) {
 // fragments. The two setTimeouts here cover the fact that mplayer doesn't
 // emit a "playlist loaded" event we can hook; empirically ~1.2s is enough
 // for the m3u parse plus the first track to start.
+// Delayed steps of a library resume. Cleared when another album starts: a child who picks the
+// next album within these 1-2 seconds used to get the old album's track jump and seek applied
+// to the new one.
+let libraryResumeTimers = []
+function clearLibraryResumeTimers() {
+  for (const timer of libraryResumeTimers) clearTimeout(timer)
+  libraryResumeTimers = []
+}
+
 function playListAtTrack(playedList, trackNr, progressPct) {
   log.debug(
     `${now()}: [Spotify Control] Library resume — track ${trackNr}, pct ${progressPct}, list ${playedList}`,
   )
   playList(playedList)
   if (trackNr > 1) {
-    setTimeout(() => {
-      player.exec('pt_step', [trackNr - 1])
-    }, 1200)
+    libraryResumeTimers.push(
+      setTimeout(() => {
+        // The 'metadata' handler adds exactly 1 per track change, however far pt_step jumps (see
+        // jumpToTrack). Without this the counter stood at 2 after the jump, the player page saved
+        // track 2 as the resume position, and every further resume lost more of the progress.
+        currentMeta.currentTracknr = trackNr - 1
+        player.exec('pt_step', [trackNr - 1])
+      }, 1200),
+    )
   }
   if (progressPct > 1) {
-    setTimeout(() => player.seekPercent(progressPct), trackNr > 1 ? 2400 : 1200)
+    libraryResumeTimers.push(setTimeout(() => player.seekPercent(progressPct), trackNr > 1 ? 2400 : 1200))
   }
 }
 
 function playList(playedList) {
+  clearLibraryResumeTimers()
   //let playedTitel = playedList.split('album:').pop();
   playedTitelmod = decodeURI(playedList).replace(/:/g, '/')
   refreshLocalPlaylist(`/home/dietpi/MuPiBox/media/${playedTitelmod}`)
@@ -1654,7 +1682,7 @@ function deleteLocal(deleteFile) {
 
 function cmdCall(cmd) {
   log.debug(`${now()}: [Spotify Control]Cmd  ${cmd}`)
-  return new Promise((resolve, reject) => {
+  const call = new Promise((resolve, reject) => {
     childProcess.exec(cmd, (error, standardOutput, standardError) => {
       if (error) {
         log.debug(`${now()}: [Spotify Control]error ${error}`)
@@ -1670,6 +1698,11 @@ function cmdCall(cmd) {
       resolve(standardOutput)
     })
   })
+  // Most callers fire and forget. Any output on stderr (a sudo warning, a Python traceback of a
+  // Telegram script) rejects, and without a handler that rejection ended the whole process under
+  // Node 22. Callers that chain their own .catch still get the error.
+  call.catch(() => {})
+  return call
 }
 
 // Serialise setVolume calls so two rapid taps from the touchscreen
@@ -1969,7 +2002,7 @@ app.use((req, res) => {
     useSpotify(command)
   }
 
-  if (command.dir.includes('library')) {
+  if (hasDirSegment(command, 'library')) {
     currentMeta.currentPlayer = 'mplayer'
     currentMeta.currentType = 'local'
     // /musicsearch/library/resume/<cat:artist:title:trackNr:progressPct>
@@ -1979,11 +2012,15 @@ app.use((req, res) => {
     // path is player.service.resumeLibraryMedia.
     // playList() takes command.base since 5.0.0; only the resume suffix is
     // parsed out of command.name.
-    if (command.dir.includes('library/resume')) {
-      const parts = command.name.split(':')
+    if (hasDirSegment(command, 'resume')) {
+      // command.base, not command.name: path.parse() takes everything after the last dot as an
+      // extension, so a title like "Vol. 2" lost its end and the resume fell back to playing
+      // "<folder>:<track>:<pct>" as a folder name - nothing played. The folder has at least two
+      // segments (category + album of a live library entry; older entries are cat:artist:title).
+      const parts = command.base.split(':')
       const progressPct = Number.parseFloat(parts[parts.length - 1])
       const trackNr = Number.parseInt(parts[parts.length - 2], 10)
-      if (parts.length >= 5 && Number.isFinite(progressPct) && Number.isFinite(trackNr) && trackNr >= 1) {
+      if (parts.length >= 4 && Number.isFinite(progressPct) && Number.isFinite(trackNr) && trackNr >= 1) {
         playListAtTrack(parts.slice(0, parts.length - 2).join(':'), trackNr, progressPct)
       } else {
         playList(command.base)
@@ -1993,13 +2030,13 @@ app.use((req, res) => {
     }
   }
 
-  if (command.dir.includes('nas')) {
+  if (hasDirSegment(command, 'nas')) {
     currentMeta.currentPlayer = 'mplayer'
     currentMeta.currentType = 'nas'
     playNasList(command.base)
   }
 
-  if (command.dir.includes('radio')) {
+  if (hasDirSegment(command, 'radio')) {
     currentMeta.currentPlayer = 'mplayer'
     currentMeta.currentType = 'radio'
     const parts = decodeURIComponent(command.name).split(':title:artist:')
@@ -2011,7 +2048,7 @@ app.use((req, res) => {
     playURL(radioURL)
   }
 
-  if (command.dir.includes('rss')) {
+  if (hasDirSegment(command, 'rss')) {
     currentMeta.currentPlayer = 'mplayer'
     currentMeta.currentType = 'rss'
     const parts = decodeURIComponent(command.name).split(':title:artist:')
@@ -2023,7 +2060,7 @@ app.use((req, res) => {
     playURL(rssURL)
   }
 
-  if (command.dir.includes('say/')) {
+  if (hasDirSegment(command, 'say')) {
     const dir = command.dir
     let nameTTS = dir.split('say/').pop()
     nameTTS = decodeURIComponent(nameTTS)
@@ -2043,7 +2080,7 @@ app.use((req, res) => {
     }
   }
 
-  if (command.dir.includes('deletelocal')) {
+  if (hasDirSegment(command, 'deletelocal')) {
     deleteLocal(command.name)
   } else if (command.name === 'pause') pause()
   else if (command.name === 'play') play()
@@ -2081,6 +2118,13 @@ app.use((req, res) => {
 
   const resp = { status: 'ok', error: 'none' }
   res.send(resp)
+})
+
+// Safety net like backend-api's: an unhandled rejection somewhere in the Spotify/mplayer code
+// used to end the process (Node 22 default) - pm2 restarted it, but the running playback and all
+// state in memory (grace periods, current album) were gone. Log it and keep playing.
+process.on('unhandledRejection', (reason) => {
+  console.error(`${now()}: [Spotify Control] Unhandled promise rejection:`, reason)
 })
 
 server.listen(config.server.port)

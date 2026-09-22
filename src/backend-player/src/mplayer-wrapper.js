@@ -96,14 +96,27 @@ const createPlayer = () => {
     exec('quit')
   }
 
+  // Set by 'Starting playback...', cleared by the first "nothing loaded" answer after it.
+  let playbackActive = false
+
   // mplayer -> wrapper
   const onLine = (line) => {
     debug(`line: ${line}`)
-    if (line === 'Starting playback...') return out.emit('track-change')
+    if (line === 'Starting playback...') {
+      playbackActive = true
+      return out.emit('track-change')
+    }
 
-    //Callback when playlist finishes
-    if (line === 'ANS_ERROR=PROPERTY_UNAVAILABLE') return out.emit('playlist-finish')
-    // todo: `ANS_ERROR=PROPERTY_UNAVAILABLE`
+    // Callback when playlist finishes. The player polls percent_pos every second, and an idle
+    // mplayer answers every poll with PROPERTY_UNAVAILABLE - so this used to fire once a second
+    // the whole time nothing was playing: a playtime/quiet-hours grace period ended after at most
+    // a second during Spotify (mplayer idle), and a finished album sent a deleteresume request
+    // every second until the next STOP. Only the first answer after a playback counts.
+    if (line === 'ANS_ERROR=PROPERTY_UNAVAILABLE') {
+      if (!playbackActive) return null
+      playbackActive = false
+      return out.emit('playlist-finish')
+    }
 
     const parts = /^ANS_([\w]+)=/g.exec(line)
     if (!parts || !parts[1]) return null

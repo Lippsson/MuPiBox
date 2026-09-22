@@ -26,10 +26,9 @@ do
 		# emits N newline-separated SSIDs when the array has N entries.
 		# wpa_passphrase / the "network={ ssid=…" emit below then receive
 		# a multi-line string and write garbage into wpa_supplicant.conf.
-		# The frontend always queues exactly one entry per save event, so
-		# pin to index 0; if there are leftover entries they're picked up
-		# on the next loop iteration after `sudo rm ${MUPIWIFI}` clears
-		# the file.
+		# Handle index 0 per loop iteration; further queued entries stay in
+		# the file and are handled in the next iterations (see the end of
+		# the loop body).
 		SSID="$(/usr/bin/jq -r '.[0].ssid // empty' ${MUPIWIFI})"
 		PSK="$(/usr/bin/jq -r '.[0].pw // empty' ${MUPIWIFI})"
 		if [ "${SSID}" = "" ]
@@ -70,24 +69,31 @@ do
 				restart_network
 			fi
 		else
-			WIFI_RESULT=$(sudo -i wpa_passphrase "${SSID}" "${PSK}") 
-			IFS=$'\n'
-			i=0
-			new_line='scan_ssid=1'
-			# Ersetze mit sed und füge die Zeile hinzu
-			WIFI_RESULT=$(echo "$WIFI_RESULT" | sed '/#psk=.*$/a\'$'\n'"\t$new_line")
-			#echo $WIFI_RESULT
-			for LINES in ${WIFI_RESULT}
-			do
-					i=$((i+1))
-					if [ "${i}" = "1" ] || [ "${i}" = "2" ] || [ "${i}" = "4" ] || [ "${i}" = "5" ] || [ "${i}" = "6" ]; then
-						echo $LINES | sudo tee -a ${WPACONF}
-					fi
-			done
-			unset IFS
-			restart_network
+			# wpa_passphrase prints its error ("Passphrase must be 8..63 characters") on stdout and
+			# exits 1. That text used to be appended as the first line of wpa_supplicant.conf, which
+			# then could not be parsed any more: no WiFi on any adapter until the SD card was fixed
+			# by hand. So: check the length first, then the exit code and the shape of the output.
+			if [ ${#PSK} -lt 8 ] || [ ${#PSK} -gt 63 ]; then
+				echo "add_wifi.sh: password for '${SSID}' rejected (must be 8..63 characters)" >&2
+			elif ! WIFI_RESULT=$(sudo wpa_passphrase "${SSID}" "${PSK}") || ! grep -q '^network={' <<< "${WIFI_RESULT}"; then
+				echo "add_wifi.sh: wpa_passphrase failed for '${SSID}', nothing written" >&2
+			else
+				# drop the plain-text "#psk=" comment, add scan_ssid=1 after the ssid line
+				grep -v '^[[:space:]]*#psk=' <<< "${WIFI_RESULT}" \
+					| sed '/^[[:space:]]*ssid=/a\	scan_ssid=1' \
+					| sudo tee -a ${WPACONF} > /dev/null
+				restart_network
+			fi
 		fi
-		sudo rm ${MUPIWIFI}
+		# Only the entry just handled leaves the queue (the parents' app can queue several; the
+		# old `rm` of the whole file dropped the rest).
+		_REST=$(/usr/bin/jq -c '.[1:]' ${MUPIWIFI} 2>/dev/null)
+		if [ -n "${_REST}" ] && [ "${_REST}" != "[]" ]; then
+			_TMP="${MUPIWIFI}.tmp.$$"
+			printf '%s' "${_REST}" | sudo tee "${_TMP}" > /dev/null && sudo chown dietpi:dietpi "${_TMP}" && sudo mv -f "${_TMP}" ${MUPIWIFI}
+		else
+			sudo rm -f ${MUPIWIFI}
+		fi
 	fi
 	sleep 2
 done

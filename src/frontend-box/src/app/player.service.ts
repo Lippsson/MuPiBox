@@ -178,7 +178,9 @@ export class PlayerService {
   async resumeLibraryMedia(media: Media): Promise<boolean> {
     const trackNr = media.resumelocalcurrentTracknr || 1
     const progressPct = Math.round(media.resumelocalprogressTime || 0)
-    const url = `musicsearch/library/resume/${encodeURIComponent(media.category)}:${encodeURIComponent(media.artist)}:${encodeURIComponent(media.title)}:${trackNr}:${progressPct}`
+    // the same folder as playMedia() uses: live library entries carry their real path, and
+    // category:artist:title pointed at a folder that does not exist for them
+    const url = `musicsearch/library/resume/${this.libraryFolderParam(media)}:${trackNr}:${progressPct}`
     this.currentMediaService.set(media)
     this.sendRequest(url)
     return true

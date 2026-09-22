@@ -11,7 +11,7 @@
 // session (that's how you get one in the first place) but rate-limited
 // per-IP.
 
-import { execFile, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promises as fsp, readFileSync } from 'node:fs'
 import * as os from 'node:os'
 import { Router } from 'express'
@@ -68,6 +68,27 @@ function execCapture(cmd: string, args: string[], timeoutMs = 8000): Promise<{ o
       resolve({ ok: !err, stdout: stdout ?? '' })
     })
   })
+}
+
+// The WiFi adapter in use (a USB adapter if there is one, else the onboard one - see
+// mupi_wifi_iface.sh). These routes had wlan0 hard-coded: with a USB adapter the scan, the list
+// of saved networks and "remove" looked at the wrong adapter. Asked at most every 3 s.
+let wifiIfaceCache: { name: string; at: number } | undefined
+function wifiIface(): string {
+  if (wifiIfaceCache && Date.now() - wifiIfaceCache.at < 3000) {
+    return wifiIfaceCache.name
+  }
+  let name = 'wlan0'
+  try {
+    const out = execFileSync('/usr/local/bin/mupibox/mupi_wifi_iface.sh', [], { timeout: 3000 }).toString().trim()
+    if (/^wl[\w.-]+$/.test(out)) {
+      name = out
+    }
+  } catch {
+    // without the script: the onboard adapter, as before
+  }
+  wifiIfaceCache = { name, at: Date.now() }
+  return name
 }
 
 /**
@@ -577,7 +598,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * script writes the remaining time to /tmp/.time2sleep and runs `poweroff`
    * when it hits zero; everything else is just observation.
    */
-  router.post('/sleeptimer/start', requireSession, requireCsrf, (req, res) => {
+  router.post('/sleeptimer/start', requireSession, requireCsrf, async (req, res) => {
     const body = (req.body as { minutes?: unknown } | undefined) ?? {}
     const minutes = Math.floor(Number(body.minutes))
     if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) {
@@ -586,6 +607,11 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     }
     const seconds = minutes * 60
     try {
+      // A timer that is already running is replaced, not joined by a second one: correcting
+      // 30 to 90 minutes used to leave the 30-minute timer running, and it shut the box down.
+      await new Promise<void>((resolve) => {
+        execFile('sudo', ['pkill', '-f', 'sleep_timer.sh'], { timeout: 5000 }, () => resolve())
+      })
       const child = spawn('sudo', ['/usr/local/bin/mupibox/sleep_timer.sh', String(seconds)], {
         detached: true,
         stdio: 'ignore',
@@ -732,7 +758,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * (empty SSID). Slow — iwlist takes ~3-5 s.
    */
   router.get('/wlan/scan', requireSession, (_req, res) => {
-    execFile('sudo', ['/usr/sbin/iwlist', 'wlan0', 'scanning'], { timeout: 12000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
+    execFile('sudo', ['/usr/sbin/iwlist', wifiIface(), 'scanning'], { timeout: 12000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
       if (err) {
         res.status(500).json({ error: `iwlist failed: ${err.message}` })
         return
@@ -764,7 +790,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * "remove" on that row so the box can't be locked out via this UI.
    */
   router.get('/wlan/saved', requireSession, (_req, res) => {
-    execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'list_networks'], { timeout: 5000 }, (err, stdout) => {
+    execFile('sudo', ['/usr/sbin/wpa_cli', '-i', wifiIface(), 'list_networks'], { timeout: 5000 }, (err, stdout) => {
       if (err) {
         res.status(500).json({ error: `wpa_cli failed: ${err.message}` })
         return
@@ -841,7 +867,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       res.status(400).json({ error: 'ssid required' })
       return
     }
-    execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'list_networks'], { timeout: 5000 }, (err, stdout) => {
+    execFile('sudo', ['/usr/sbin/wpa_cli', '-i', wifiIface(), 'list_networks'], { timeout: 5000 }, (err, stdout) => {
       if (err) {
         res.status(500).json({ error: `wpa_cli failed: ${err.message}` })
         return
@@ -865,12 +891,12 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         res.status(409).json({ error: 'refusing to remove the currently-connected network — would lock the box out' })
         return
       }
-      execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'remove_network', String(targetId)], { timeout: 5000 }, (rmErr, rmOut) => {
+      execFile('sudo', ['/usr/sbin/wpa_cli', '-i', wifiIface(), 'remove_network', String(targetId)], { timeout: 5000 }, (rmErr, rmOut) => {
         if (rmErr || !/OK/.test(rmOut)) {
           res.status(500).json({ error: `remove_network failed: ${rmErr?.message ?? rmOut.trim()}` })
           return
         }
-        execFile('sudo', ['/usr/sbin/wpa_cli', '-i', 'wlan0', 'save_config'], { timeout: 5000 }, (saveErr, saveOut) => {
+        execFile('sudo', ['/usr/sbin/wpa_cli', '-i', wifiIface(), 'save_config'], { timeout: 5000 }, (saveErr, saveOut) => {
           if (saveErr || !/OK/.test(saveOut)) {
             res.status(500).json({ error: `save_config failed: ${saveErr?.message ?? saveOut.trim()}` })
             return
