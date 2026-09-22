@@ -1,4 +1,7 @@
 [Unit]
+# systemd only reads the StartLimit keys in [Unit]; in [Service] they were ignored.
+StartLimitBurst=5
+StartLimitIntervalSec=600
 Description=Checks Blank Monitor
 
 [Service]
@@ -8,8 +11,6 @@ ExecStart=/usr/local/bin/mupibox/./get_monitor.sh
 # kid-interface could freeze in a touch-blocked state until reboot.
 Restart=on-failure
 RestartSec=10
-StartLimitBurst=5
-StartLimitIntervalSec=600
 
 [Install]
 WantedBy=default.target

@@ -719,6 +719,7 @@ if( $_POST['fan_control'] )
  if( $change == 1 )
   {
    remove_config_cache_dir((string)($data["chromium"]["cachepath"] ?? ""));
+   remove_config_cache_dir('/tmp/chromium_cache'); // where the kiosk keeps it now (in RAM)
    save_mupiboxconfig($data);
    exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
    exec("sudo -i -u dietpi /usr/local/bin/mupibox/./restart_kiosk.sh");

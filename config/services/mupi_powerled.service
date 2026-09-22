@@ -1,4 +1,7 @@
 [Unit]
+# systemd only reads the StartLimit keys in [Unit]; in [Service] they were ignored.
+StartLimitBurst=5
+StartLimitIntervalSec=600
 Description=Power LED Control
 Before=basic.target
 After=local-fs.target sysinit.target
@@ -15,8 +18,6 @@ KillMode=process
 # bounded restart limit (5 restarts per 10 min) is the Phase-8 pattern.
 Restart=on-failure
 RestartSec=10
-StartLimitBurst=5
-StartLimitIntervalSec=600
 
 [Install]
 WantedBy=basic.target

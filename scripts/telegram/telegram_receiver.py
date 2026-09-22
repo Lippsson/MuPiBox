@@ -270,11 +270,11 @@ def on_chat_message(msg):
     elif command == '/pause':
         bot.sendMessage(chat_id, "Pause")
         url = 'http://' + config['mupibox']['host'] + ':5005//pause'
-        requests.get(url)
+        requests.get(url, timeout=5)
     elif command == '/play':
         bot.sendMessage(chat_id, "Play")
         url = 'http://' + config['mupibox']['host'] + ':5005//play'
-        requests.get(url)
+        requests.get(url, timeout=5)
     # ── Phase 14d — Spotify Smart-Sync controls ────────────────────────
     elif command == '/resync':
         status_code, body = call_api_post('/spotify-sync/trigger?source=telegram', {})
@@ -461,11 +461,11 @@ def on_callback_query(msg):
     elif query_data == 'play':
         url = 'http://' + config['mupibox']['host'] + ':5005//play'
         bot.answerCallbackQuery(query_id, text='Play', show_alert=True)
-        requests.get(url)
+        requests.get(url, timeout=5)
     elif query_data == 'pause':
         url = 'http://' + config['mupibox']['host'] + ':5005//pause'
         bot.answerCallbackQuery(query_id, text='Pause', show_alert=True)
-        requests.get(url)
+        requests.get(url, timeout=5)
     elif query_data == 'back':
         markup = InlineKeyboardMarkup(inline_keyboard=[
                         [InlineKeyboardButton(text="Status",callback_data='status'), InlineKeyboardButton(text="Current Screen",callback_data='screen')],

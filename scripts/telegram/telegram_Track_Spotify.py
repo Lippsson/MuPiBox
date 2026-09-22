@@ -18,7 +18,7 @@ chat_ids = normalize_chat_ids(config['telegram'].get('chatId'))
 if not chat_ids:
     quit()
 
-state = requests.get('http://127.0.0.1:5005/state').json()
+state = requests.get('http://127.0.0.1:5005/state', timeout=5).json()
 
 bot = telepot.Bot(config['telegram']['token'])
 
@@ -27,7 +27,7 @@ POSITION_MS = os.environ.get('POSITION_MS')
 
 if player_event == "playing" and POSITION_MS == "0":
     if state['currently_playing_type'] == 'episode':
-        episode = requests.get('http://127.0.0.1:5005/episode').json()
+        episode = requests.get('http://127.0.0.1:5005/episode', timeout=5).json()
         msg = episode['show']['name'] + "\n" + episode['name']
         send_to_all(bot, msg, chat_ids)
         subprocess.run(["sudo", "rm", "/tmp/telegram_screen.png"])

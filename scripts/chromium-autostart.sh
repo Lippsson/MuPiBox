@@ -46,6 +46,15 @@ if ${KIOSK} ; then
 	CHROMIUM_OPTS="${CHROMIUM_OPTS} --kiosk --start-fullscreen --start-maximized"
 fi
 # CACHE Parameters
+# The disk cache lives in RAM (/tmp is a tmpfs): on the SD card it was by far the biggest writer on
+# an idle box, about 0.5 MB per minute, while it only holds copies of what the box serves itself.
+# Emptied at every boot, which costs one slower first load. Set chromium.cacheInRam to false to
+# keep it at chromium.cachepath.
+CACHE_IN_RAM=$(/usr/bin/jq -r '.chromium.cacheInRam // true' ${CONFIG})
+if [ "${CACHE_IN_RAM}" != "false" ]; then
+	CACHE_PATH="/tmp/chromium_cache"
+	mkdir -p "${CACHE_PATH}"
+fi
 CHROMIUM_OPTS="${CHROMIUM_OPTS} --disk-cache-dir=${CACHE_PATH:-/home/dietpi/.mupibox/chromium_cache} --disk-cache-size=${CACHE_SIZE:-33554432}"
 # DEBUG MODE
 if [ "${DEBUG}" = "1" ]; then

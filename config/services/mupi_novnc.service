@@ -1,4 +1,7 @@
 [Unit]
+# systemd only reads the StartLimit keys in [Unit]; in [Service] they were ignored.
+StartLimitBurst=5
+StartLimitIntervalSec=300
 Description=MuPiBox noVNC Service
 After=syslog.target network.target
 
@@ -17,7 +20,5 @@ Restart=always
 # it's going to come up, but stops the loop in the typical case where
 # VNC simply isn't wired up.
 RestartSec=10
-StartLimitBurst=5
-StartLimitIntervalSec=300
 ExecStart=/usr/bin/python3 /usr/bin/websockify --web=/usr/share/novnc 6080 localhost:5900
 ExecStop=/usr/bin/kill $(/usr/bin/pgrep websockify)

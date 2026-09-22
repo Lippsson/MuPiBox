@@ -1,4 +1,7 @@
 [Unit]
+# systemd only reads the StartLimit keys in [Unit]; in [Service] they were ignored.
+StartLimitBurst=5
+StartLimitIntervalSec=600
 Description=MuPiBox MQTT Service
 Wants=network-online.target
 After=network-online.target
@@ -14,8 +17,6 @@ ExecStart=/usr/bin/python3 -B /usr/local/bin/mupibox/mqtt.py
 # Phase 13b (B4): same on-abort -> on-failure switch as mupi_hat_control.
 Restart=on-failure
 RestartSec=10
-StartLimitBurst=5
-StartLimitIntervalSec=600
 
 [Install]
 WantedBy=basic.target

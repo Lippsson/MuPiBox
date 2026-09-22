@@ -17,7 +17,7 @@ chat_ids = normalize_chat_ids(config['telegram'].get('chatId'))
 if not chat_ids:
     quit()
 
-requests.get('http://127.0.0.1:5005/local')
+requests.get('http://127.0.0.1:5005/local', timeout=5)
 
 bot = telepot.Bot(config['telegram']['token'])
 send_to_all(bot, config['mupibox']['host'] + " is playing", chat_ids)

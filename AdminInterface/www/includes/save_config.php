@@ -102,7 +102,12 @@ function save_mupiboxconfig(array $data, ?string &$errorOut = null): bool {
  */
 function remove_config_cache_dir(string $path, bool $contentsOnly = false): bool {
 	$real = realpath($path);
-	if ($real === false || !is_dir($real) || strpos($real, '/home/dietpi/') !== 0 || substr_count($real, '/') < 3) {
+	// /tmp/chromium_cache: the kiosk's disk cache in RAM (see chromium-autostart.sh)
+	$allowed = $real !== false && (
+		(strpos($real, '/home/dietpi/') === 0 && substr_count($real, '/') >= 3)
+		|| $real === '/tmp/chromium_cache'
+	);
+	if (!$allowed || !is_dir($real)) {
 		error_log("MuPiBox admin: refusing to delete cache path '" . $path . "'");
 		return false;
 	}

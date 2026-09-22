@@ -205,7 +205,9 @@ export class MediaService {
             .get<AlbumStop>(`${this.getApiBackendUrl()}/albumstop`)
             .pipe(catchError(() => of({} as AlbumStop))),
       ),
-      shareReplay({ bufferSize: 1, refCount: false }),
+      // refCount=true like mupihat$ (M2): only the player page listens, and with refCount=false
+      // the poll kept hitting /api/albumstop once a second forever after its first visit.
+      shareReplay({ bufferSize: 1, refCount: true }),
     )
     // Every 2 seconds should be enough for timely charging update.
     // M2: refCount=true so the polling stops when no UI is subscribed.

@@ -16,7 +16,7 @@ chat_ids = normalize_chat_ids(config['telegram'].get('chatId'))
 if not chat_ids:
     quit()
 
-local = requests.get('http://127.0.0.1:5005/local').json()
+local = requests.get('http://127.0.0.1:5005/local', timeout=5).json()
 
 bot = telepot.Bot(config['telegram']['token'])
 

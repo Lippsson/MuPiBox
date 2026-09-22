@@ -1,6 +1,9 @@
 # DEPRECATED 2026-09-20: spotifyd was replaced by librespot; the update script only stops and disables this unit, nothing installs it.
 # Kept for reference; nothing in MuPiBox calls it. Safe to delete.
 [Unit]
+# systemd only reads the StartLimit keys in [Unit]; in [Service] they were ignored.
+StartLimitBurst=5
+StartLimitIntervalSec=600
 Description=A spotify playing daemon
 Documentation=https://github.com/Spotifyd/spotifyd
 Wants=sound.target
@@ -13,8 +16,6 @@ ExecStart=/usr/bin/spotifyd --no-daemon --config-path /etc/spotifyd/spotifyd.con
 Restart=always
 RestartSec=12
 # Phase 13b (B4): bound restart attempts, see librespot.service notes.
-StartLimitBurst=5
-StartLimitIntervalSec=600
 
 [Install]
 WantedBy=default.target

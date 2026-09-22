@@ -20,7 +20,7 @@ if not chat_ids:
 # Touching /local just to keep the existing "is the player alive" probe — the
 # response value isn't used here, the side effect is that we fail fast if the
 # backend-player isn't reachable.
-requests.get('http://127.0.0.1:5005/local')
+requests.get('http://127.0.0.1:5005/local', timeout=5)
 
 bot = telepot.Bot(config['telegram']['token'])
 send_to_all(bot, config['mupibox']['host'] + " stop playing", chat_ids)

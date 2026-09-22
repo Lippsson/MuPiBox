@@ -153,7 +153,10 @@ def parse_arguments():
         "-l", "--logfile",
         type=str,
         help="Enable logging and specify the log file path",
-        default="/tmp/mupihat.log"
+        # No default: with "/tmp/mupihat.log" as default the register dump (13 lines) ran every
+        # cycle and, since the driver module configures a stdout handler at import, went to the
+        # journal - about 250,000 lines a day that buried real I2C errors. Pass -l to get it.
+        default=None
     )
     parser.add_argument(
         "-j", "--json",

@@ -5732,7 +5732,7 @@ class bq25792:
             reg = self.REG10_Charger_Control_1
             reg.set_WD_RST(1)  # Reset watchdog
             self.write_register(reg)
-            logging.info("watchdog_reset done.")
+            logging.debug("watchdog_reset done.")  # every few seconds - not for the journal
             return 0
         except I2CError:
             logging.error("watchdog_reset failed.")
@@ -5896,8 +5896,14 @@ class bq25792:
             # BQ25792 REG00 spec: 2500-16000 mV range, 250 mV step
             if 2500 <= vsysmin_mv <= 16000:
                 value = (vsysmin_mv - 2500) // 250
-                self.safe_execute(self.bq.write_byte_data, self.i2c_addr, 0x00, value)
-                self._verify_register(0x00, value, f"VSYSMIN ({value * 250 + 2500} mV)")
+                # Caught here like the CELL write: an I2C error used to abort write_defaults(), so
+                # the input current limit and the interrupt mask were never set and the service
+                # exited - with the chip watchdog then resetting everything to POR defaults.
+                try:
+                    self.safe_execute(self.bq.write_byte_data, self.i2c_addr, 0x00, value)
+                    self._verify_register(0x00, value, f"VSYSMIN ({value * 250 + 2500} mV)")
+                except I2CError:
+                    logging.error("VSYSMIN write failed, keeping the current value.")
             else:
                 logging.warning(f"VSYSMIN value {vsysmin_mv} mV out of range (2500-16000), keeping POR default")
 
@@ -5914,9 +5920,12 @@ class bq25792:
                 vreg_mv_aligned = (vreg_mv // 10) * 10
                 reg = self.REG01_Charge_Voltage_Limit
                 reg.set(vreg_mv_aligned // 10)
-                self.write_register_word(reg)
-                logging.info(f"VREG (Charge Voltage Limit) set to {vreg_mv_aligned} mV from battery profile")
-                self._verify_register(0x01, vreg_mv_aligned // 10, f"VREG ({vreg_mv_aligned} mV)", width=2)
+                try:
+                    self.write_register_word(reg)
+                    logging.info(f"VREG (Charge Voltage Limit) set to {vreg_mv_aligned} mV from battery profile")
+                    self._verify_register(0x01, vreg_mv_aligned // 10, f"VREG ({vreg_mv_aligned} mV)", width=2)
+                except I2CError:
+                    logging.error("VREG write failed, keeping the current value.")
             else:
                 logging.warning(f"VREG value {vreg_mv} mV out of range (3000-18800), keeping POR default")
 

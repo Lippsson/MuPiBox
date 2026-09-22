@@ -1,4 +1,7 @@
 [Unit]
+# systemd only reads the StartLimit keys in [Unit]; in [Service] they were ignored.
+StartLimitBurst=5
+StartLimitIntervalSec=600
 Description=A spotify connect device
 Documentation=https://github.com/librespot-org/librespot/wiki/Options
 Wants=sound.target
@@ -16,8 +19,6 @@ RestartSec=12
 # repeatedly-failing token (revoked, network outage) caused journal-log
 # spam and SD-wear. 5 attempts per 10 min is enough to recover from a
 # transient connection blip without hammering systemd / journald.
-StartLimitBurst=5
-StartLimitIntervalSec=600
 
 [Install]
 WantedBy=default.target
