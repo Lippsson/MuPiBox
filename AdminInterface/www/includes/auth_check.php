@@ -16,12 +16,24 @@
 //
 // Auth logic mirrors header.php's gate at line ~100 verbatim.
 
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax']);
+    session_start();
+}
 
 $__cfgRaw = file_get_contents('/etc/mupibox/mupiboxconfig.json');
 $__cfg    = json_decode($__cfgRaw, true);
 $__loginRequired = !empty($__cfg['interfacelogin']['state']);
 $__loggedIn      = isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true;
+
+// Same idle timeout as header.php (60 min), checked BEFORE last_activity is bumped below: this
+// gate used to accept an expired session and refresh it, so a session header.php had already
+// timed out came back to life through any download or XHR endpoint.
+if ($__loggedIn && isset($_SESSION['last_activity']) && time() - $_SESSION['last_activity'] > 60 * 60) {
+    session_unset();
+    session_destroy();
+    $__loggedIn = false;
+}
 
 if ($__loginRequired && !$__loggedIn) {
     http_response_code(401);

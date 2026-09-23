@@ -144,33 +144,36 @@
 
 			print "<div id='flex-container'>";
 			print "<div class='media_img'>";
-			print "<img width='200' src='";
+			// The cover is collected first and printed escaped below: it went raw into a single-quoted
+			// src attribute, and a cover value like  x' onerror='...  (storable through /api/add or
+			// /api/edit by anyone in the LAN) ran script on the admin page.
+			$coverSrc = '';
 			if( $all_media['type'] == "library" )
 				{
-				 print $all_media['cover'];
+				 $coverSrc = $all_media['cover'];
 				}
 			if( $all_media['type'] == "radio" )
 				{
-				print $all_media['cover'];
+				$coverSrc = $all_media['cover'];
 				}
 			if( $all_media['type'] == "rss" )
 				{
-				print $all_media['cover'];
+				$coverSrc = $all_media['cover'];
 				}
 			if( $all_media['type'] == "spotify" )
 				{
 				if ( $all_media['artistcover'] )
 					{
-					print $all_media['artistcover'];
+					$coverSrc = $all_media['artistcover'];
 					}
 				elseif( $img_http )
 					{
-					print $img_http;
+					$coverSrc = $img_http;
 					$img_http = "";
 					}
 				else
 					{
-					print "./images/empty.png";
+					$coverSrc = './images/empty.png';
 					}
 				}
 			// MED-15: every $all_media[…] field below is rendered raw into
@@ -193,7 +196,9 @@
 				if (preg_match('#^https?://#i', $s)) return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 				return '#';
 			};
-			print "'></div><div class='media_txt'>";
+			// only http(s) or a relative path; anything else (javascript:, data:) becomes the empty image
+			if (!preg_match('#^(https?://|\./|/)#i', (string)$coverSrc)) { $coverSrc = './images/empty.png'; }
+			print "<img width='200' src='" . htmlspecialchars((string)$coverSrc, ENT_QUOTES, 'UTF-8') . "'></div><div class='media_txt'>";
 			print "<table><tr><td width='100px'>Index:</td><td>" . $h($all_media['index']) . "</td></tr>";
 			print "<tr><td>Type:</td><td>" . $h($all_media['type']) . "</td></tr>";
 			print "<tr><td>Category:</td><td>" . $h($all_media['category']) . "</td></tr>";

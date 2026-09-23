@@ -20,7 +20,11 @@
 	// blocks them on unauth, so we explicitly do NOT block other POSTs
 	// here. In particular the login POST (password=...) must flow through
 	// to header.php so the user can authenticate in the first place.
-	session_start();
+	// Same cookie flags as header.php (this page starts the session before header.php does).
+	if (session_status() === PHP_SESSION_NONE) {
+		session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax']);
+		session_start();
+	}
 	// M5: route the pre-header auth gate through the shared reader so
 	// header.php's later read hits the same static cache rather than
 	// doing a second file_get_contents + json_decode round.
@@ -31,6 +35,13 @@
 	if ($__loginRequired && !$__loggedIn && !empty($_POST['submitfile'])) {
 		http_response_code(403);
 		exit('Authentication required');
+	}
+	// The restore below runs before header.php and therefore before its central CSRF check: a
+	// form on a foreign page could post a crafted archive that was extracted to / as root. Check
+	// the token here already (the upload form gets it from header.php's form filter).
+	if (!empty($_POST['submitfile'])) {
+		require_once __DIR__ . '/includes/csrf.php';
+		csrf_check();
 	}
 
 	$shutdown=0;
@@ -67,11 +78,22 @@
 				// fullbackup.php only ever pack files under three roots —
 				// reject any zip entry that escapes them. Without this,
 				// `unzip -o -a -d /` happily writes anywhere on disk.
-				$allowedPrefixes = [
-					'home/dietpi/MuPiBox/media/',
+				// Exact files, and below media/ only folders and media file types: any file was
+				// allowed there before, and media/cover is served as /cover by lighttpd, which runs
+				// .php files - a restored media/cover/x.php was code execution as root (www-data
+				// has sudo). A prefix test also let "mupiboxconfig.json.php" through. Symbolic
+				// links are refused as well (they could point anywhere once extracted).
+				$allowedExactFiles = [
 					'etc/mupibox/mupiboxconfig.json',
 					'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json',
 				];
+				$allowedExactDirs = ['etc/', 'etc/mupibox/', 'home/', 'home/dietpi/', 'home/dietpi/MuPiBox/',
+					'home/dietpi/.mupibox/', 'home/dietpi/.mupibox/Sonos-Kids-Controller-master/',
+					'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/',
+					'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/'];
+				// Types lighttpd executes or a browser runs as a page on the admin origin. Everything
+				// else below media/ is fine (audio, covers, playlists, but also .DS_Store, booklets).
+				$forbiddenMediaTypes = '/(\.(php\d?|phtml|phar|pht|pl|py|cgi|fcgi|sh|shtml|s?html?|xhtml|xht|svgz?|js|mjs|xml|xsl)|\/\.htaccess|\/\.user\.ini)$/i';
 				$zip = new ZipArchive();
 				$zipOk = false;
 				$badEntry = '';
@@ -86,10 +108,17 @@
 							$badEntry = $entry;
 							break;
 						}
-						$matched = false;
-						foreach ($allowedPrefixes as $p) {
-							if (strpos($norm, $p) === 0) { $matched = true; break; }
-						}
+						$isDir = substr($norm, -1) === '/';
+						$stat = $zip->statIndex($i, ZipArchive::FL_UNCHANGED);
+						$opsys = 0; $attr = 0;
+						$zip->getExternalAttributesIndex($i, $opsys, $attr);
+						$isSymlink = $opsys === ZipArchive::OPSYS_UNIX && ((($attr >> 16) & 0170000) === 0120000);
+						$inMedia = strpos($norm, 'home/dietpi/MuPiBox/media/') === 0 || $norm === 'home/dietpi/MuPiBox/media/';
+						$matched = !$isSymlink && $stat !== false && (
+							in_array($norm, $allowedExactFiles, true)
+							|| ($isDir && (in_array($norm, $allowedExactDirs, true) || $inMedia))
+							|| (!$isDir && $inMedia && !preg_match($forbiddenMediaTypes, $norm))
+						);
 						if (!$matched) {
 							$zipOk = false;
 							$badEntry = $entry;
@@ -114,7 +143,9 @@
 				exec("sudo chown dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json");
 				exec("sudo chmod 644 /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json");
 
-				$command = "cd; curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/conf_update.sh | sudo bash";
+				// The installed copy first: piping a script fetched live from the upstream repo into a root
+				// shell ran whatever that repo holds at that moment (and not this fork's version).
+				$command = "cd; if [ -x /usr/local/bin/mupibox/conf_update.sh ]; then sudo /usr/local/bin/mupibox/conf_update.sh; else curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/conf_update.sh | sudo bash; fi";
 				exec($command, $output, $result );
 
 				// M5: external command above just mutated the config -- force fresh re-read.
@@ -252,7 +283,9 @@
 		}
 /*	if( $_POST['config_update'] )
 		{
-		$command = "cd; curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/conf_update.sh | sudo bash";
+		// The installed copy first: piping a script fetched live from the upstream repo into a root
+				// shell ran whatever that repo holds at that moment (and not this fork's version).
+				$command = "cd; if [ -x /usr/local/bin/mupibox/conf_update.sh ]; then sudo /usr/local/bin/mupibox/conf_update.sh; else curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/conf_update.sh | sudo bash; fi";
 		exec($command, $output, $result );
 		$change=3;
 		$CHANGE_TXT=$CHANGE_TXT."<li>Config is up to date.</li>";
