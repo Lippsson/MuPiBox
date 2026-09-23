@@ -5867,6 +5867,11 @@ class bq25792:
         # on hardware: CELL 4S -> 2S moved VSYSMIN 12000 -> 7000 mV and VREG
         # 16800 -> 8400 mV in the same instant.
         cells = self._battery_cell_count()
+        # Returned to the caller: a cell latch that stays wrong (4S on a 2S pack, charge target
+        # 16800 mV) must not be left charging; a VREG that did not stick (POR 8400 mV = 4.2 V/cell)
+        # is within cell spec and only retried.
+        cell_ok = True
+        vreg_ok = True
         if cells:
             try:
                 reg0a = self.read_register(0x0A, 1)[0]
@@ -5876,8 +5881,9 @@ class bq25792:
                         "Charger reports %d cell(s) but the battery profile implies %d -- correcting.",
                         (reg0a >> 6) + 1, cells)
                     self.safe_execute(self.bq.write_byte_data, self.i2c_addr, 0x0A, want)
-                    self._verify_register(0x0A, want, f"CELL ({cells}s)")
+                    cell_ok = self._verify_register(0x0A, want, f"CELL ({cells}s)")
             except I2CError:
+                cell_ok = False
                 logging.error("CELL correction failed, keeping the POR latch.")
 
         # Optional VSYSMIN override from the battery profile. Left alone when
@@ -5923,8 +5929,9 @@ class bq25792:
                 try:
                     self.write_register_word(reg)
                     logging.info(f"VREG (Charge Voltage Limit) set to {vreg_mv_aligned} mV from battery profile")
-                    self._verify_register(0x01, vreg_mv_aligned // 10, f"VREG ({vreg_mv_aligned} mV)", width=2)
+                    vreg_ok = self._verify_register(0x01, vreg_mv_aligned // 10, f"VREG ({vreg_mv_aligned} mV)", width=2)
                 except I2CError:
+                    vreg_ok = False
                     logging.error("VREG write failed, keeping the current value.")
             else:
                 logging.warning(f"VREG value {vreg_mv} mV out of range (3000-18800), keeping POR default")
@@ -5935,17 +5942,28 @@ class bq25792:
         # HAT). Verifying it anyway turns a silent discrepancy into a log line.
         self._verify_register(0x06, 220, "Input current limit (2200 mA)", width=2)
 
-        self.mask_all_INTERRUPTS()  
-        return
+        self.mask_all_INTERRUPTS()
+        return cell_ok, vreg_ok
 
     def MuPiHAT_Default(self):
-        ''' 
-        Write MuPiHAT Default Settings to Charger IC
+        '''
+        Write MuPiHAT Default Settings to Charger IC.
+        Returns (cell_ok, vreg_ok): whether the cell count and the charge voltage limit from the
+        battery profile are verified on the chip (True when the profile does not set them).
         '''
         self.soft_reset()
         self.read_all_register()
-        self.write_defaults()
-        return
+        return self.write_defaults()
+
+    def disable_charging(self):
+        '''
+        Safe state when the cell count cannot be corrected: the system keeps running from the input,
+        only the battery is not charged (EN_CHG = 0).
+        '''
+        reg = self.REG0F_Charger_Control_0
+        reg.set_EN_CHG(0)
+        self.write_register(reg)
+        logging.error("Charging DISABLED: the charger's cell count does not match the battery profile.")
 
     def get_IC_temperature(self):
         '''

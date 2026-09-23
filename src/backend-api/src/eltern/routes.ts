@@ -27,6 +27,7 @@ import {
   issueSession,
   redeemMagicLink,
   setElternPassword,
+  validateSession,
   verifyElternPassword,
 } from './auth'
 import { ipRateLimit, localNetworkOnly, requireCsrf, requireSession } from './middleware'
@@ -240,7 +241,10 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       res.status(400).json({ error: 'no host header' })
       return
     }
-    const ret = typeof req.query.return === 'string' ? req.query.return : '/eltern'
+    // Only a page of the parents' app: the value ends up in res.redirect() after the login, and
+    // "https://elsewhere" or "//elsewhere" made that an open redirect.
+    const ret =
+      typeof req.query.return === 'string' && /^\/eltern(?:[/?#]|$)/.test(req.query.return) ? req.query.return : '/eltern'
     const result = buildAuthorizeUrl({
       getMupiboxConfig: deps.getMupiboxConfig,
       sessionId: req.elternSessionId ?? '',
@@ -271,7 +275,11 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * without the session cookie can't poison state because we additionally
    * gate on the OAuth state token issued in /init.
    */
-  router.get('/spotify-oauth/callback', requireSession, async (req, res) => {
+  // No requireSession here: the session cookie is SameSite=Strict, and the browser does not send it
+  // on Spotify's redirect back to the box (a navigation started on another site) - the callback
+  // always failed with 401. The state proves the origin instead: 48 random hex characters, single
+  // use, bound to the parents' session when the login was started; that session must still be valid.
+  router.get('/spotify-oauth/callback', async (req, res) => {
     const state = typeof req.query.state === 'string' ? req.query.state : ''
     const code = typeof req.query.code === 'string' ? req.query.code : ''
     const error = typeof req.query.error === 'string' ? req.query.error : ''
@@ -284,7 +292,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       return
     }
     const original = consumeOauthState(state)
-    if (!original || original.sessionId !== req.elternSessionId) {
+    if (!original || !validateSession(original.sessionId)) {
       res.status(403).send('invalid or replayed state')
       return
     }

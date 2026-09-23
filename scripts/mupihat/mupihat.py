@@ -191,7 +191,21 @@ def main():
     # Initialize BQ25792
     try:
         hat = bq25792(battery_conf_file=config_file)
-        hat.MuPiHAT_Default()
+        # A write that did not stick used to be only a log line. Retry a few times (a transient
+        # I2C error is the usual cause); a cell count that stays wrong is the dangerous case (a 2S
+        # pack with a 4S latch has a 16800 mV charge target), so charging is switched off then.
+        # A VREG that stays at its POR default (4.2 V/cell) is within cell spec: logged only.
+        cell_ok, vreg_ok = hat.MuPiHAT_Default()
+        for attempt in range(2):
+            if cell_ok and vreg_ok:
+                break
+            logging.warning("Charger settings not verified (cell ok: %s, VREG ok: %s), retrying...", cell_ok, vreg_ok)
+            time.sleep(2)
+            cell_ok, vreg_ok = hat.MuPiHAT_Default()
+        if not cell_ok:
+            hat.disable_charging()
+        elif not vreg_ok:
+            logging.error("VREG from the battery profile could not be set; the chip keeps its default.")
 
     except Exception as e:
         logging.error("MuPiHAT initialization failed: %s", str(e))

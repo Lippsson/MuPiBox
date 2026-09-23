@@ -9,12 +9,41 @@
 // (exec("sudo conf_update.sh"), backup-restore unzip, etc.) -- those need
 // fresh state since the cached snapshot pre-dates the external write.
 function mupibox_config(bool $forceReread = false): array {
-    static $cache = null;
-    if ($cache === null || $forceReread) {
+    // In $GLOBALS rather than a static: save_mupiboxconfig() uses it as the baseline to find out
+    // what a page actually changed, and refreshes it after a save.
+    if (!isset($GLOBALS['__mupibox_config_cache']) || $forceReread) {
         $raw = @file_get_contents('/etc/mupibox/mupiboxconfig.json');
-        $cache = $raw === false ? [] : (json_decode($raw, true) ?? []);
+        $GLOBALS['__mupibox_config_cache'] = $raw === false ? [] : (json_decode($raw, true) ?? []);
     }
-    return $cache;
+    return $GLOBALS['__mupibox_config_cache'];
+}
+
+// Applies what a page changed ($baseline -> $changed) onto the config as it is on disk now
+// ($current). Keys the page did not touch keep their current value - a Spotify token refreshed
+// or a parents' setting saved by the backend since this page read the file is no longer
+// overwritten with the page's old copy. Objects are merged key by key, lists and scalars are
+// replaced as a whole, keys the page removed are removed.
+function mupibox_merge_changes($baseline, $changed, $current) {
+    if (!is_array($changed) || !is_array($baseline) || !is_array($current)
+        || array_is_list($changed) || array_is_list($baseline) || array_is_list($current)) {
+        return $changed;
+    }
+    $result = $current;
+    foreach ($changed as $key => $value) {
+        $had = array_key_exists($key, $baseline);
+        if ($had && $baseline[$key] === $value) {
+            continue;
+        }
+        $result[$key] = ($had && array_key_exists($key, $current))
+            ? mupibox_merge_changes($baseline[$key], $value, $current[$key])
+            : $value;
+    }
+    foreach ($baseline as $key => $value) {
+        if (!array_key_exists($key, $changed)) {
+            unset($result[$key]);
+        }
+    }
+    return $result;
 }
 
 // B8: centralized writer for /etc/mupibox/mupiboxconfig.json with flock
@@ -58,6 +87,14 @@ function save_mupiboxconfig(array $data, ?string &$errorOut = null): bool {
         return false;
     }
     try {
+        // Under the lock: merge this page's changes onto the file as it is now (the backend may
+        // have written it since the page read it), instead of writing the page's whole old copy.
+        $baseline = $GLOBALS['__mupibox_config_cache'] ?? null;
+        $rawNow = @file_get_contents('/etc/mupibox/mupiboxconfig.json');
+        $current = $rawNow === false ? null : json_decode($rawNow, true);
+        if (is_array($baseline) && is_array($current)) {
+            $data = mupibox_merge_changes($baseline, $data, $current);
+        }
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         if ($json === false) {
             $errorOut = 'json_encode failed: ' . json_last_error_msg();
@@ -87,6 +124,8 @@ function save_mupiboxconfig(array $data, ?string &$errorOut = null): bool {
             $errorOut = 'sudo mv failed (rc=' . $rc . '): ' . implode("\n", $output);
             return false;
         }
+        // what is on disk now is the baseline for a further save in this request
+        $GLOBALS['__mupibox_config_cache'] = $data;
         return true;
     } finally {
         flock($lockFh, LOCK_UN);

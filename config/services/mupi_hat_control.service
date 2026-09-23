@@ -1,7 +1,8 @@
 [Unit]
-# systemd only reads the StartLimit keys in [Unit]; in [Service] they were ignored.
-StartLimitBurst=5
-StartLimitIntervalSec=600
+# Never give up (StartLimitIntervalSec=0), but retry slowly (RestartSec 30 here: power button / LED): with a start
+# limit the service stayed dead for good after a few quick failures - e.g. a boot without WiFi -
+# until the next reboot; retrying every 10 s filled the journal (librespot 325x in an hour).
+StartLimitIntervalSec=0
 Description=Control service, to automate warn and shutdown
 After=local-fs.target sysinit.target mupi_hat.service
 DefaultDependencies=no
@@ -21,6 +22,5 @@ ExecStop=/bin/kill -TERM $(cat /run/mupi_hat_control.pid)
 # own cadence — frequent restarts add no value here.
 Restart=on-failure
 RestartSec=30
-
 [Install]
 WantedBy=multi-user.target

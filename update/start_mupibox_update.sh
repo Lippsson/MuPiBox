@@ -821,6 +821,10 @@ rm -f /tmp/mupibox-update-failed
 
 	echo -e "XXX\n${STEP}\nRestore Userdata... \nXXX"
 	before=$(date +%s)
+	# Every step is checked; the backup is only removed when all of them worked and data.json is
+	# valid JSON again (a mere "data.json exists" also passed for a cut-off copy or a failed
+	# resume.json / cover copy on a full card, and the only intact copy was deleted).
+	RESTORE_OK=1
 	# Everything from the backup except what the update installs fresh (config.json, monitor.json)
 	# and the links check_network.sh / get_network.sh recreate (active_*.json, network.json).
 	for item in "${USERDATA_BAK}"/config/* "${USERDATA_BAK}"/config/.[!.]*; do
@@ -831,14 +835,18 @@ rm -f /tmp/mupibox-update-failed
 		esac
 		[ -L "${item}" ] && continue
 		rm -rf "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/${name}" >&3 2>&3
-		cp -a "${item}" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/${name}" >&3 2>&3
+		cp -a "${item}" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/${name}" >&3 2>&3 || RESTORE_OK=0
 	done
 	rm -rf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover >&3 2>&3
-	cp -a "${USERDATA_BAK}/www/cover" /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover >&3 2>&3
-	cp -a "${USERDATA_BAK}/www/active_theme.css" /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/active_theme.css >&3 2>&3
+	cp -a "${USERDATA_BAK}/www/cover" /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover >&3 2>&3 || RESTORE_OK=0
+	cp -a "${USERDATA_BAK}/www/active_theme.css" /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/active_theme.css >&3 2>&3 || RESTORE_OK=0
 	chown -R dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config >&3 2>&3
 	# only now that everything is back
-	[ -f /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json ] && rm -rf "${USERDATA_BAK}" >&3 2>&3
+	if [ "${RESTORE_OK}" = 1 ] && /usr/bin/jq -e . /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json > /dev/null 2>&1; then
+		rm -rf "${USERDATA_BAK}" >&3 2>&3
+	else
+		echo "## Restore incomplete - user data kept in ${USERDATA_BAK}" >&3 2>&3
+	fi
 	chown dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/config.json >&3 2>&3
 	sleep 1 >&3 2>&3
 	after=$(date +%s)

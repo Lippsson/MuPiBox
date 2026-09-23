@@ -1169,7 +1169,12 @@ function pause() {
   }
 }
 
+// Bumped by every stop and every new playback start; an async start (NAS) that finds it changed
+// after its awaits was overtaken and must not play.
+let playbackGeneration = 0
+
 function stop() {
+  playbackGeneration++
   clearLibraryResumeTimers()
   if (hasConfiguredTelegram())
     cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Stop"')
@@ -1469,6 +1474,7 @@ function playListAtTrack(playedList, trackNr, progressPct) {
 }
 
 function playList(playedList) {
+  playbackGeneration++
   clearLibraryResumeTimers()
   //let playedTitel = playedList.split('album:').pop();
   playedTitelmod = decodeURI(playedList).replace(/:/g, '/')
@@ -1504,10 +1510,18 @@ function playList(playedList) {
 async function playNasList(nasPath) {
   const decodedPath = decodeURIComponent(nasPath)
   log.debug(`${now()}: [Spotify Control] Starting NAS playback: ${decodedPath}`)
+  const generation = ++playbackGeneration
 
   try {
     const response = await fetch(`http://localhost:8200/api/synology/tracklist?path=${encodeURIComponent(decodedPath)}`)
     const tracks = await response.json()
+    // The track list can take seconds (NAS over WebDAV). A stop, another album, or a playtime /
+    // quiet-hours block in the meantime used to be overtaken: the late answer started playback
+    // anyway. Such a start is dropped now.
+    if (generation !== playbackGeneration || isPlaybackBlocked()) {
+      log.debug(`${now()}: [Spotify Control] NAS playback of ${decodedPath} dropped (stopped, replaced or blocked meanwhile)`)
+      return
+    }
     currentNasTracks = tracks
     const folderName = decodedPath.split('/').filter(Boolean).pop() || decodedPath
 
@@ -1546,6 +1560,7 @@ function playFile(playedFile) {
 }
 
 function playURL(playedURL) {
+  playbackGeneration++
   startLoading()
   log.debug(`${now()}: [Spotify Control] Starting currentMeta.playing:${playedURL}`)
   //currentMeta.playing = true;
@@ -1799,6 +1814,7 @@ function downloadTTS(name) {
 }
 
 async function useSpotify(command) {
+  playbackGeneration++
   currentMeta.currentPlayer = 'spotify'
   currentMeta.currentType = 'spotify'
   const dir = command.dir

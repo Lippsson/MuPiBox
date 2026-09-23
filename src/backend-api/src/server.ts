@@ -1,4 +1,4 @@
-import { exec, execFile } from 'node:child_process'
+import { exec, execFile, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import dns from 'node:dns'
 import fs from 'node:fs'
@@ -1081,40 +1081,70 @@ let mupiboxConfigWriteChain: Promise<unknown> = Promise.resolve()
 // Same lock file as the admin interface's save_mupiboxconfig() (includes/save_config.php).
 const MUPIBOX_CONFIG_LOCK = '/tmp/.mupiboxconfig.lock'
 
+// Holds the shared config lock (flock on MUPIBOX_CONFIG_LOCK, the same one the admin interface's
+// save_mupiboxconfig() takes) for as long as the returned release function is not called. Node
+// has no flock of its own, so a small `flock ... sh` child holds it: it prints once it has the
+// lock and exits (dropping it) when its stdin is closed.
+function acquireMupiboxConfigLock(): Promise<() => void> {
+  return new Promise((resolve, reject) => {
+    // The PHP side opens the lock file for writing: if this process creates it, make it writable
+    // for everyone. If PHP created it (not writable for us), flock still works on a read-only fd.
+    if (!fs.existsSync(MUPIBOX_CONFIG_LOCK)) {
+      try {
+        fs.writeFileSync(MUPIBOX_CONFIG_LOCK, '', { flag: 'a', mode: 0o666 })
+        fs.chmodSync(MUPIBOX_CONFIG_LOCK, 0o666)
+      } catch {
+        // flock below creates it if needed
+      }
+    }
+    const holder = spawn('flock', [MUPIBOX_CONFIG_LOCK, 'sh', '-c', 'echo locked; read _'], {
+      stdio: ['pipe', 'pipe', 'ignore'],
+    })
+    let settled = false
+    const fail = (error: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      holder.kill()
+      reject(error)
+    }
+    const timer = setTimeout(() => fail(new Error('timed out waiting for the config lock')), 15000)
+    holder.on('error', fail)
+    holder.on('exit', () => fail(new Error('config lock holder exited early')))
+    holder.stdout.once('data', () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(() => holder.stdin.end())
+    })
+  })
+}
+
 async function replaceMupiboxConfigFile(content: Record<string, unknown>): Promise<void> {
   const tmpPath = `/tmp/.mupiboxconfig.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.json`
   await writeFile(tmpPath, `${JSON.stringify(content, null, 2)}\n`, { mode: 0o644 })
   try {
-    // The PHP side opens the lock file for writing: if this process creates it, make it writable
-    // for everyone. If PHP created it (not writable for us), flock still works on a read-only fd.
-    if (!fs.existsSync(MUPIBOX_CONFIG_LOCK)) {
-      await fs.promises.writeFile(MUPIBOX_CONFIG_LOCK, '', { flag: 'a', mode: 0o666 }).catch(() => {})
-      await fs.promises.chmod(MUPIBOX_CONFIG_LOCK, 0o666).catch(() => {})
-    }
     // /tmp is a RAM disk and /etc is on the SD card, so a plain mv would copy into the target in
     // place. Copy next to it first, then rename on the same filesystem: a reader never sees half a
-    // file. flock keeps this apart from the admin interface's writes.
-    await execFileAsync('flock', [
-      MUPIBOX_CONFIG_LOCK,
-      'sh',
-      '-c',
-      'sudo cp "$1" "$2.new" && sudo mv -f "$2.new" "$2"',
-      'replace-config',
-      tmpPath,
-      mupiboxConfigPath,
-    ])
+    // file. The caller holds the config lock.
+    await execFileAsync('sh', ['-c', 'sudo cp "$1" "$2.new" && sudo mv -f "$2.new" "$2"', 'replace-config', tmpPath, mupiboxConfigPath])
+  } finally {
     await fs.promises.rm(tmpPath, { force: true })
-  } catch (error) {
-    await fs.promises.rm(tmpPath, { force: true })
-    throw error
   }
 }
 
 function updateMupiboxConfig(mutate: (cfg: Record<string, unknown>) => void): Promise<void> {
   const run = mupiboxConfigWriteChain.then(async () => {
-    const current = (await readJsonFile(mupiboxConfigPath)) as Record<string, unknown>
-    mutate(current)
-    await replaceMupiboxConfigFile(current)
+    // Read, change and replace all under the shared lock: with only the replace locked, the admin
+    // interface could save between our read and our write, and its change was overwritten.
+    const release = await acquireMupiboxConfigLock()
+    try {
+      const current = (await readJsonFile(mupiboxConfigPath)) as Record<string, unknown>
+      mutate(current)
+      await replaceMupiboxConfigFile(current)
+    } finally {
+      release()
+    }
     // Local cache invalidation (server's own mupiboxConfigCache) — fs.watch on the
     // dir already does this, but be explicit so /api/config returns the new value
     // immediately on the next call.
@@ -1604,7 +1634,7 @@ app.post('/api/addwlan', (req, res) => {
     if (error) out = []
     out.push(req.body)
 
-    jsonfile.writeFile(wlanFile, out, { spaces: 4 }, (writeError) => {
+    writeJsonAtomic(wlanFile, out, (writeError) => {
       // The previous code did `if (writeError) throw error` — async-throw
       // inside a node-style callback isn't catchable by Express, so it
       // crashed the entire backend-api process. Send a 500 instead.
@@ -1902,7 +1932,7 @@ app.post('/api/add', (req, res) => {
       newEntry.source = 'manual'
     }
     data.push(newEntry)
-    jsonfile.writeFile(dataFile, data, { spaces: 4 }, (writeError) => {
+    writeJsonAtomic(dataFile, data, (writeError) => {
       releaseLock(dataLock, '/api/add')
       if (writeError) {
         console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/add write failed:`, writeError)
@@ -1929,6 +1959,26 @@ app.post('/api/add', (req, res) => {
 // the owner almost certainly crashed before releasing — steal it once and try
 // again. A startup pass (see top of file) already does this proactively, but
 // recovery at acquisition time covers crashes that happen after startup.
+// data.json, resume.json and wlan.json were written straight into the target file: a power cut
+// or a crash mid-write left a cut-off JSON (the library or the resume list unreadable). Written
+// next to the target and renamed over it instead, so a reader sees the old or the new file.
+function writeJsonAtomic(file: string, data: unknown, callback: (error: Error | null) => void): void {
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`
+  jsonfile.writeFile(tmp, data, { spaces: 4 }, (writeError) => {
+    if (writeError) {
+      fs.rm(tmp, { force: true }, () => callback(writeError))
+      return
+    }
+    fs.rename(tmp, file, (renameError) => {
+      if (renameError) {
+        fs.rm(tmp, { force: true }, () => callback(renameError))
+        return
+      }
+      callback(null)
+    })
+  })
+}
+
 const acquireLock = (lockPath: string, context: string): 'acquired' | 'locked' | 'error' => {
   const tryOpen = (): 'acquired' | 'exists' | 'error' => {
     try {
@@ -2131,7 +2181,7 @@ app.post('/api/addresume', (req, res) => {
       data.push(incoming)
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry added (key=${incomingKey}).`)
     }
-    jsonfile.writeFile(resumeFile, data, { spaces: 4 }, (writeError) => {
+    writeJsonAtomic(resumeFile, data, (writeError) => {
       releaseLock(resumeLock, '/api/addresume')
       if (writeError) {
         console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/addresume write failed:`, writeError)
@@ -2173,7 +2223,7 @@ app.post('/api/deleteresume', (req, res) => {
       res.status(200).send('ok')
       return
     }
-    jsonfile.writeFile(resumeFile, remaining, { spaces: 4 }, (writeError) => {
+    writeJsonAtomic(resumeFile, remaining, (writeError) => {
       releaseLock(resumeLock, '/api/deleteresume')
       if (writeError) {
         console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/deleteresume write failed:`, writeError)
@@ -2208,7 +2258,7 @@ app.post('/api/delete', (req, res) => {
       return
     }
     data.splice(req.body.index, 1)
-    jsonfile.writeFile(dataFile, data, { spaces: 4 }, (writeError) => {
+    writeJsonAtomic(dataFile, data, (writeError) => {
       releaseLock(dataLock, '/api/delete')
       if (writeError) {
         console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/delete write failed:`, writeError)
@@ -2240,7 +2290,7 @@ app.post('/api/edit', (req, res) => {
       return
     }
     data.splice(req.body.index, 1, req.body.data)
-    jsonfile.writeFile(dataFile, data, { spaces: 4 }, (writeError) => {
+    writeJsonAtomic(dataFile, data, (writeError) => {
       releaseLock(dataLock, '/api/edit')
       if (writeError) {
         console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/edit write failed:`, writeError)
