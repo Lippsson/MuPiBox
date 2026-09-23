@@ -30,7 +30,7 @@ import { startScheduler } from './spotify-sync/scheduler'
 import type { RunSyncDeps } from './spotify-sync/state-machine'
 import { buildElternLandingHandler, createElternApiRouter } from './eltern/routes'
 import { startBucketCleanup } from './eltern/middleware'
-import { browserGuard, corsOptionsFor, localOrElternSession } from './request-guard'
+import { browserGuard, corsOptionsFor, localOnly, localOrElternSession } from './request-guard'
 
 // Force IPv4 for DNS lookups to avoid EAI_AGAIN errors on Raspberry Pi
 // This fixes issues where IPv6 is misconfigured or not supported
@@ -245,14 +245,16 @@ const PRIVATE_IP_REGEXES = [
   /^0\./,
   /^::1$/,
   /^::ffff:127\./i,
-  /^fe80:/i, // IPv6 link-local
-  /^fc00:/i, // IPv6 unique local
-  /^fd00:/i,
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // 100.64.0.0/10 (carrier-grade NAT)
+  /^fe[89ab][0-9a-f]:/i, // IPv6 link-local fe80::/10
+  /^f[cd][0-9a-f]{2}:/i, // IPv6 unique local fc00::/7 (was only the literal prefixes fc00:/fd00:)
 ]
 const isPrivateHost = (host: string): boolean => {
   // Strip brackets from IPv6 literals
-  const h = host.replace(/^\[|\]$/g, '').toLowerCase()
-  if (h === 'localhost' || h === '0.0.0.0' || h === '::') return true
+  let h = host.replace(/^\[|\]$/g, '').toLowerCase()
+  // IPv4-mapped IPv6 (::ffff:10.0.0.1) is checked as the IPv4 address it maps to
+  h = h.replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/, '$1')
+  if (h === 'localhost' || h.endsWith('.localhost') || h === '0.0.0.0' || h === '::') return true
   return PRIVATE_IP_REGEXES.some((r) => r.test(h))
 }
 
@@ -308,6 +310,84 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<Buf
   return Buffer.concat(chunks)
 }
 
+class RemoteFetchError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+  }
+}
+
+// The one way to fetch a URL the box did not choose (RSS feeds, podcast covers, episode images).
+// checkRemoteUrl() alone looked at the host name as written: a DNS name pointing at 127.0.0.1 or
+// a LAN device, or a redirect to one, still reached it - the cached feed path did not even call
+// it, and could hit the player's GET commands on 127.0.0.1:5005. And .text()/.arrayBuffer()
+// read whole bodies before any size check. Here every hop (redirects are followed by hand) is
+// checked after DNS resolution, and the body is capped while it streams in.
+async function fetchRemote(
+  raw: string,
+  opts: { maxBytes: number; timeoutMs: number; contentType?: RegExp },
+): Promise<{ body: Buffer; contentType: string }> {
+  const signal = AbortSignal.timeout(opts.timeoutMs)
+  let current = raw
+  for (let hop = 0; hop <= 5; hop++) {
+    const checked = checkRemoteUrl(current)
+    if ('error' in checked) {
+      throw new RemoteFetchError(checked.error, checked.status)
+    }
+    const hostname = checked.url.hostname.replace(/^\[|\]$/g, '')
+    const addresses = await dns.promises.lookup(hostname, { all: true, verbatim: true })
+    if (addresses.length === 0 || addresses.some((a) => isPrivateHost(a.address))) {
+      throw new RemoteFetchError(`${hostname} resolves to a private / loopback address`, 403)
+    }
+    const response = await fetch(checked.url, { redirect: 'manual', signal })
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location')
+      await response.body?.cancel()
+      if (!location) {
+        throw new RemoteFetchError(`redirect ${response.status} without location`, 502)
+      }
+      current = new URL(location, checked.url).toString()
+      continue
+    }
+    if (!response.ok) {
+      await response.body?.cancel()
+      throw new RemoteFetchError(`remote answered ${response.status}`, 502)
+    }
+    const contentType = response.headers.get('content-type') ?? ''
+    if (opts.contentType && contentType && !opts.contentType.test(contentType)) {
+      await response.body?.cancel()
+      throw new RemoteFetchError(`unsupported content-type: ${contentType}`, 415)
+    }
+    const advertised = Number.parseInt(response.headers.get('content-length') ?? '0', 10)
+    if (advertised > opts.maxBytes) {
+      await response.body?.cancel()
+      throw new RemoteFetchError(`response advertises ${advertised} bytes, cap is ${opts.maxBytes}`, 413)
+    }
+    try {
+      return { body: await readBodyCapped(response, opts.maxBytes), contentType }
+    } catch (error) {
+      throw new RemoteFetchError(String(error), 413)
+    }
+  }
+  throw new RemoteFetchError('too many redirects', 502)
+}
+
+// File extension from the image's first bytes - not from the URL. A "cover" whose URL ended
+// in .html was stored and served as .html from the box's own origin.
+function imageExtensionOf(buffer: Buffer): string | undefined {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return '.jpg'
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return '.png'
+  }
+  if (buffer.length >= 6 && /^GIF8[79]a$/.test(buffer.subarray(0, 6).toString('latin1'))) return '.gif'
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('latin1') === 'RIFF' && buffer.subarray(8, 12).toString('latin1') === 'WEBP') {
+    return '.webp'
+  }
+  return undefined
+}
+
 // Routes
 app.get('/api/rssfeed', async (req, res) => {
   const rssUrl = req.query.url
@@ -315,54 +395,21 @@ app.get('/api/rssfeed', async (req, res) => {
     res.status(500).send('Given url is not a string.')
     return
   }
-  const checked = checkRemoteUrl(rssUrl)
-  if ('error' in checked) {
-    res.status(checked.status).send(checked.error)
-    return
-  }
-  // Defence-in-depth: probe with HEAD before the full GET.
-  // Without this, calling /api/rssfeed with a non-RSS URL (e.g. a multi-MB
-  // MP3 episode link as the frontend's RSS-resume code briefly did) streamed
-  // the entire binary body into memory before the 5MB body-cap aborted with
-  // 413 — ~4s wasted per request. HEAD lets us reject by content-type or
-  // advertised content-length in <500ms.
-  // Native fetch (not ky) — ky was silently failing on the 301-redirect
-  // chain in this codepath. HEAD is best-effort: some origin servers
-  // reject HEAD with 405/501. On non-2xx or network error during HEAD we
-  // fall through to the existing GET path; the 10s timeout + 5MB body
-  // cap still bound the worst case.
+  // fetchRemote() checks every hop after DNS resolution, rejects non-feed content types before
+  // reading the body and caps it at 5 MB while it streams in. The former HEAD probe followed
+  // redirects unchecked (and Express answers HEAD like GET - one redirect to 127.0.0.1:5005 ran
+  // a player command).
   try {
-    const head = await fetch(rssUrl, {
-      method: 'HEAD',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(5000),
+    const { body } = await fetchRemote(rssUrl, {
+      maxBytes: 5_000_000,
+      timeoutMs: 10000,
+      contentType: /xml|rss|atom|text\/plain|octet-stream/i,
     })
-    const ct = head.headers.get('content-type') || ''
-    if (ct && !/xml|rss/i.test(ct)) {
-      res.status(415).send(`Unsupported content-type: ${ct}`)
-      return
-    }
-    const cl = Number.parseInt(head.headers.get('content-length') || '0', 10)
-    if (cl > 5_000_000) {
-      res.status(413).send('Response too large (per content-length)')
-      return
-    }
-  } catch {
-    // HEAD failed — fall through to GET.
+    res.send(xmlparser.xml2json(body.toString('utf8'), { compact: true, nativeType: true }))
+  } catch (error) {
+    const status = error instanceof RemoteFetchError ? error.status : 500
+    res.status(status).send(status === 500 ? 'External url responded with error code.' : String((error as Error).message))
   }
-  ky.get(rssUrl, { timeout: 10000 })
-    .text()
-    .then((response) => {
-      // Bound the parsed payload size — RSS feeds shouldn't be megabytes.
-      if (response.length > 5_000_000) {
-        res.status(413).send('Response too large')
-        return
-      }
-      res.send(xmlparser.xml2json(response, { compact: true, nativeType: true }))
-    })
-    .catch(() => {
-      res.status(500).send('External url responded with error code.')
-    })
 })
 
 // --------------------------------------------
@@ -489,9 +536,15 @@ function latestEpisodeFingerprint(feed: any): string | undefined {
 
 async function downloadRssCover(coverUrl: string, cacheKey: string): Promise<string | undefined> {
   try {
-    const extension = path.extname(new URL(coverUrl).pathname).split('?')[0] || '.jpg'
+    // Checked fetch, capped like the episode images, and the extension comes from the image
+    // bytes: taking it from the URL stored whatever the server sent (e.g. an .html page) under
+    // that name in the statically served cover folder.
+    const { body: buffer } = await fetchRemote(coverUrl, { maxBytes: RSS_IMAGE_MAX_BYTES, timeoutMs: 15000 })
+    const extension = imageExtensionOf(buffer)
+    if (!extension) {
+      throw new Error('not a JPEG/PNG/GIF/WebP image')
+    }
     const coverFileName = `${cacheKey}${extension}`
-    const buffer = Buffer.from(await ky.get(coverUrl, { timeout: 15000 }).arrayBuffer())
     await mkdir(rssCoverDir, { recursive: true })
     await writeFile(path.join(rssCoverDir, coverFileName), buffer)
     return `${rssCoverPublicBase}/${coverFileName}`
@@ -544,7 +597,8 @@ async function refreshRssCache(rssUrl: string, cacheKey: string): Promise<any> {
     }
   }
 
-  const xml = await ky.get(rssUrl, { timeout: rssFetchTimeoutMs }).text()
+  // Checked on every hop and capped while streaming (this path had no URL check at all, see fetchRemote)
+  const xml = (await fetchRemote(rssUrl, { maxBytes: 5_000_000, timeoutMs: rssFetchTimeoutMs })).body.toString('utf8')
   const feed =
     parseRssFeedFast(xml) ??
     JSON.parse(
@@ -710,7 +764,10 @@ const rssImageJobs = new Map<string, RssImageJob>()
 function rssImageLocalFile(imageUrl: string): { file: string; extension: string } | undefined {
   try {
     const key = rssCacheKeyFor(imageUrl)
-    const extension = path.extname(new URL(imageUrl).pathname).split('?')[0] || '.jpg'
+    // Only image extensions: the folder is served statically, and the URL's extension (.html,
+    // .svg, ...) decided how the stored file was delivered.
+    const urlExtension = path.extname(new URL(imageUrl).pathname).split('?')[0].toLowerCase()
+    const extension = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(urlExtension) ? urlExtension : '.jpg'
     return { file: path.join(rssCoverDir, `${key}${extension}`), extension }
   } catch {
     return undefined
@@ -798,14 +855,15 @@ function ensureRssImage(imageUrl: string, stillWaiting?: () => boolean): Promise
     job.start = () => {
       void (async () => {
         try {
-          const response = await ky.get(imageUrl, { timeout: rssImageTimeoutMs })
-          // Reject on the advertised size first (cheap), then enforce the cap
-          // while reading — servers may understate or omit content-length.
-          const advertised = Number.parseInt(response.headers.get('content-length') ?? '0', 10)
-          if (advertised > RSS_IMAGE_MAX_BYTES) {
-            throw new Error(`image advertises ${advertised} bytes, cap is ${RSS_IMAGE_MAX_BYTES}`)
+          // Checked on every redirect hop after DNS resolution, capped while streaming (the
+          // advertised size is rejected first), and only real images are stored.
+          const { body: buffer } = await fetchRemote(imageUrl, {
+            maxBytes: RSS_IMAGE_MAX_BYTES,
+            timeoutMs: rssImageTimeoutMs,
+          })
+          if (!imageExtensionOf(buffer)) {
+            throw new Error('not a JPEG/PNG/GIF/WebP image')
           }
-          const buffer = await readBodyCapped(response, RSS_IMAGE_MAX_BYTES)
           await mkdir(rssCoverDir, { recursive: true })
           const temp = `${local.file}.${process.pid}.tmp`
           await writeFile(temp, buffer)
@@ -3159,6 +3217,25 @@ function normalizeNasPath(nasPath: string): string {
   return `/${(nasPathParts(nasPath) ?? []).join('/')}`
 }
 
+// The box plays and lists only what the parents selected in the admin interface ("Show in
+// MuPiBox" / "Download local"). These routes proxied ANY path with the box's NAS login - with an
+// account that can read more than music, anyone in the LAN could fetch e.g. /Privat/Steuern.pdf.
+const nasPathWithinSelection: express.RequestHandler = async (req, res, next) => {
+  const raw = typeof req.query.path === 'string' ? req.query.path : ''
+  const parts = nasPathParts(raw)
+  const config = await getMupiboxConfig()
+  const selected = [
+    ...((config?.synology?.artistFolders as string[] | undefined) ?? []),
+    ...((config?.synology?.downloadFolders as string[] | undefined) ?? []),
+  ].map(normalizeNasPath)
+  const wanted = parts ? normalizeNasPath(raw) : ''
+  if (parts && selected.some((folder) => wanted === folder || wanted.startsWith(`${folder}/`))) {
+    next()
+    return
+  }
+  res.status(403).send('path outside the selected NAS folders')
+}
+
 function nasLocalPath(nasPath: string): string | undefined {
   const parts = nasPathParts(nasPath)
   return parts ? path.join(nasLocalRoot, ...parts) : undefined
@@ -3267,7 +3344,10 @@ async function updateSynologyConfig(partial: Record<string, unknown>): Promise<v
   })
 }
 
-app.post('/api/synology/login', async (req, res) => {
+// NAS administration (login, browsing the whole NAS, selecting folders, downloads) is done by
+// the admin interface, which calls these routes server-side through localhost (synology.php).
+// From the LAN they exposed the box's NAS login to anyone.
+app.post('/api/synology/login', localOnly, async (req, res) => {
   const { address, https: useHttps, account, password, rememberMe } = req.body ?? {}
   if (typeof address !== 'string' || !address || typeof account !== 'string' || typeof password !== 'string') {
     res.status(400).json({ success: false, error: 'address, account and password are required.' })
@@ -3296,7 +3376,7 @@ app.post('/api/synology/login', async (req, res) => {
   res.json({ success: true })
 })
 
-app.get('/api/synology/browse', async (req, res) => {
+app.get('/api/synology/browse', localOnly, async (req, res) => {
   const folderPath = typeof req.query.path === 'string' ? req.query.path : ''
 
   try {
@@ -3329,7 +3409,7 @@ app.get('/api/synology/browse', async (req, res) => {
 
 // `list` selects which selection is changed: "artist" (Show in MuPiBox, default)
 // or "download" (Download local).
-app.post('/api/synology/mark', async (req, res) => {
+app.post('/api/synology/mark', localOnly, async (req, res) => {
   const { path: folderPath, marked, list } = req.body ?? {}
   if (typeof folderPath !== 'string' || typeof marked !== 'boolean') {
     res.status(400).json({ success: false, error: 'path and marked are required.' })
@@ -3381,7 +3461,7 @@ app.get('/api/synology/artists', async (_req, res) => {
 // Lists the subfolders of one NAS folder as ready-to-use Media entries (one
 // level deeper). Live from the NAS, or from the local copy when downloaded /
 // when the NAS is not reachable. Used by the kids' UI to drill down.
-app.get('/api/synology/children', async (req, res) => {
+app.get('/api/synology/children', nasPathWithinSelection, async (req, res) => {
   const folderPath = typeof req.query.path === 'string' ? req.query.path : ''
   if (!folderPath) {
     res.status(400).json([])
@@ -3414,7 +3494,7 @@ app.get('/api/synology/children', async (req, res) => {
   }
 })
 
-app.get('/api/synology/tracklist', async (req, res) => {
+app.get('/api/synology/tracklist', nasPathWithinSelection, async (req, res) => {
   const folderPath = typeof req.query.path === 'string' ? req.query.path : ''
   if (!folderPath) {
     res.status(400).json({ error: 'path is required' })
@@ -3476,7 +3556,7 @@ function nasServeLocalFile(req: express.Request, res: express.Response, file: st
   fs.createReadStream(file, { start, end }).pipe(res)
 }
 
-app.get('/api/synology/stream', async (req, res) => {
+app.get('/api/synology/stream', nasPathWithinSelection, async (req, res) => {
   const filePath = typeof req.query.path === 'string' ? req.query.path : ''
   if (!filePath) {
     res.status(400).send('path is required')
@@ -3776,7 +3856,7 @@ async function runNasSync(): Promise<void> {
   }
 }
 
-app.post('/api/synology/download/sync', (_req, res) => {
+app.post('/api/synology/download/sync', localOnly, (_req, res) => {
   if (nasDownloadStatus.running) {
     res.status(409).json({ success: false, error: 'A download is already running.' })
     return
@@ -3787,7 +3867,7 @@ app.post('/api/synology/download/sync', (_req, res) => {
   res.json({ success: true })
 })
 
-app.get('/api/synology/download/status', (_req, res) => {
+app.get('/api/synology/download/status', localOnly, (_req, res) => {
   res.json(nasDownloadStatus)
 })
 

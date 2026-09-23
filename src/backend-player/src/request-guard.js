@@ -52,16 +52,39 @@ function reject(req, res, reason) {
   res.status(403).send('forbidden')
 }
 
+function isLoopback(req) {
+  const addr = req.socket.remoteAddress || ''
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1'
+}
+
 function browserGuard(req, res, next) {
   if (!isAllowedHost(req.headers.host)) return reject(req, res, 'host not allowed')
   if (req.headers['sec-fetch-site'] === 'cross-site') return reject(req, res, 'cross-site request')
   if (UNSAFE_METHODS.has(req.method) && req.headers.origin !== undefined && !isSameHostOrigin(req)) {
     return reject(req, res, 'foreign origin')
   }
-  if (isSameHostOrigin(req)) {
+  const sameHostOrigin = isSameHostOrigin(req)
+  if (sameHostOrigin) {
     res.header('Access-Control-Allow-Origin', req.headers.origin)
     res.header('Vary', 'Origin')
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept')
+    res.header('Access-Control-Allow-Methods', 'GET, POST')
+  }
+  // CORS preflight: answered here. The command handler below takes every method and path, so a
+  // preflight for /<device>/play used to run "play" already.
+  if (req.method === 'OPTIONS') {
+    return sameHostOrigin ? res.status(204).end() : reject(req, res, 'foreign preflight')
+  }
+
+  // Every GET here is a command. Browsers send Sec-Fetch-Site only to "potentially trustworthy"
+  // URLs (https, localhost) - not to http://<box-ip>:5005 - and an <img> sends no Origin. So a
+  // foreign page could still trigger commands through a visitor's browser. The box's own pages
+  // send X-Requested-With (a header a foreign page can only set after a CORS preflight, which is
+  // refused above). Requests without it are accepted only from the box itself and only when
+  // nothing marks them as coming from a browser (backend-api, Telegram bot, MQTT, scripts).
+  const fromBoxPage = req.headers['x-requested-with'] === 'XMLHttpRequest'
+  if (!fromBoxPage && !(isLoopback(req) && !req.headers.origin && !req.headers.referer)) {
+    return reject(req, res, 'no X-Requested-With')
   }
   next()
 }
