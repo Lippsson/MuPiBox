@@ -16,6 +16,11 @@
 	require_once __DIR__ . '/includes/csrf.php';
 	csrf_check();
 	include ('includes/header.php');
+	// The Bluetooth commands below can take a while (scan, pairing). Release the session lock
+	// so other admin pages and the header icon polls of the same browser don't wait for them.
+	// csrf_token() first: the form filter needs the token, and it can't be stored afterwards.
+	csrf_token();
+	session_write_close();
 
 	if( $_POST['change_btac'] == "enable & start" )
 		{
@@ -109,15 +114,15 @@
 		$CHANGE_TXT=$CHANGE_TXT."<li>Bluetooth-Chip enabled [restart necessary]</li>";
 		}
 
-	$command = "sudo -u dietpi bluetoothctl show | grep 'Powered: yes'";
+	$command = "timeout 5 sudo -u dietpi bluetoothctl show | grep 'Powered: yes'";
 	exec($command, $btoutput, $btresult );
 	if( $btoutput[0] )
 		{
 		$bt_state = "ON";
 		$change_bt = "turn off";
-		$command = "sudo -u dietpi bluetoothctl devices";
+		$command = "timeout 5 sudo -u dietpi bluetoothctl devices";
 		exec($command, $pairoutput, $pairresult );
-		$command = "sudo -u dietpi bluetoothctl list";
+		$command = "timeout 5 sudo -u dietpi bluetoothctl list";
 		exec($command, $listoutput, $listresult );
 		}
 	else
@@ -205,7 +210,7 @@
                                         print "<input type='hidden' name='remove_mac' value='".$macHtml."'>";
                                         print "<input id='saveForm' class='button_text' type='submit' name='remove_selected' value='Remove' />&ensp;";
                                         print $nameHtml." [".$macHtml."]";
-                                        $command = "sudo -u dietpi bluetoothctl info ".escapeshellarg($mac)." | grep 'Connected: yes'";
+                                        $command = "timeout 5 sudo -u dietpi bluetoothctl info ".escapeshellarg($mac)." | grep 'Connected: yes'";
                                         unset($connoutput);
                                         exec($command, $connoutput, $connresult );
                                         if( $connoutput[0] )
