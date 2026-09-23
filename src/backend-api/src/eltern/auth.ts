@@ -83,6 +83,19 @@ function saveSessions(): void {
   if (sessionsCache) writeMap(SESSIONS_PATH, sessionsCache)
 }
 
+/**
+ * Looks up a magic-link token or session id. The maps are plain objects, and `map[key]` also
+ * finds inherited properties: a token or cookie "constructor" returned Object's constructor
+ * function, which passed as a valid, unused link or session - anyone in the LAN got a parents'
+ * session. Only own entries with the exact shape of an issued id (hex, TOKEN_BYTES long) count.
+ */
+function ownEntry<T>(map: Record<string, T>, key: string | undefined): T | undefined {
+  if (typeof key !== 'string' || key.length !== TOKEN_BYTES * 2 || !/^[0-9a-f]+$/.test(key)) return undefined
+  if (!Object.hasOwn(map, key)) return undefined
+  const entry = map[key]
+  return entry !== null && typeof entry === 'object' ? entry : undefined
+}
+
 /** Strip entries past their TTL. Idempotent, called from generate + validate. */
 function purgeExpiredMagicLinks(now: number = Date.now()): void {
   const links = loadMagicLinks()
@@ -156,7 +169,7 @@ export function issueSession(ip: string): { sessionId: string; csrf: string } {
 export function redeemMagicLink(token: string, ip: string): { sessionId: string; csrf: string } | null {
   purgeExpiredMagicLinks()
   const links = loadMagicLinks()
-  const entry = links[token]
+  const entry = ownEntry(links, token)
   if (!entry || entry.used) return null
   entry.used = true
   saveMagicLinks()
@@ -168,7 +181,7 @@ export function validateSession(sessionId: string | undefined): Session | null {
   if (!sessionId) return null
   purgeExpiredSessions()
   const sessions = loadSessions()
-  const entry = sessions[sessionId]
+  const entry = ownEntry(sessions, sessionId)
   if (!entry) return null
   // Touch lastSeen to extend the active window (within absolute TTL).
   entry.lastSeen = new Date().toISOString()
@@ -183,7 +196,7 @@ export function validateSession(sessionId: string | undefined): Session | null {
 export function destroySession(sessionId: string | undefined): void {
   if (!sessionId) return
   const sessions = loadSessions()
-  if (sessions[sessionId]) {
+  if (ownEntry(sessions, sessionId)) {
     delete sessions[sessionId]
     sessionsCache = sessions
     saveSessions()

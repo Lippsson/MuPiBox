@@ -2199,8 +2199,10 @@ app.get('/api/spotify/config', (_req, res) => {
     res.status(500).send('Could load spotify config.')
     return
   }
+  // Only what the box frontend uses. `...config.spotify` sent the client secret (and whatever
+  // else is in that block) to anyone in the LAN - this endpoint has no login.
   res.status(200).send({
-    ...config.spotify,
+    clientId: config.spotify.clientId,
     deviceName: config['node-sonos-http-api'].server,
   })
 })

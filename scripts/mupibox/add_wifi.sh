@@ -59,9 +59,10 @@ do
 			# which can't be reinterpreted by the shell, then escape any
 			# embedded `"` for the JSON-style ssid field.
 			# Reject SSIDs containing characters wpa_supplicant.conf can't
-			# represent (newlines / NUL) outright.
-			if [[ "${SSID}" == *$'\n'* || "${SSID}" == *$'\0'* ]]; then
-				echo "add_wifi.sh: SSID rejected (newline / NUL in name)" >&2
+			# represent (newlines) outright. A NUL cannot be in a bash variable at all: the former
+			# extra test for one expanded to an empty pattern and rejected EVERY open network.
+			if [[ "${SSID}" == *$'\n'* ]]; then
+				echo "add_wifi.sh: SSID rejected (newline in name)" >&2
 			else
 				_ESCAPED_SSID="${SSID//\\/\\\\}"
 				_ESCAPED_SSID="${_ESCAPED_SSID//\"/\\\"}"
