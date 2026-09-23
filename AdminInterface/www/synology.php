@@ -4,6 +4,11 @@ $backendBase = 'http://localhost:8200/api/synology';
 
 // Progress of a running "Download selected" (polled by the page below). Answers
 // before header.php so that no HTML is sent along with the JSON.
+// Both JSON answers come before header.php, so they need the login gate of their own
+// (auth_check.php sends 401 and exits; before, the NAS tree was listed without login).
+if (isset($_GET["download_status"]) || isset($_GET["browse"])) {
+	require __DIR__ . "/includes/auth_check.php";
+}
 if (isset($_GET['download_status'])) {
 	header('Content-Type: application/json');
 	echo json_encode(synologyApiCall("$backendBase/download/status", 'GET', null, 5));
