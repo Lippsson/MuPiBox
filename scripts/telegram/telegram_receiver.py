@@ -269,11 +269,11 @@ def on_chat_message(msg):
         subprocess.run(["sudo", "/usr/local/bin/mupibox/./albumstop_activator.sh"])
     elif command == '/pause':
         bot.sendMessage(chat_id, "Pause")
-        url = 'http://' + config['mupibox']['host'] + ':5005//pause'
+        url = 'http://127.0.0.1:5005//pause'  # local: the player only takes commands from the box itself or its own pages
         requests.get(url, timeout=5)
     elif command == '/play':
         bot.sendMessage(chat_id, "Play")
-        url = 'http://' + config['mupibox']['host'] + ':5005//play'
+        url = 'http://127.0.0.1:5005//play'  # local: the player only takes commands from the box itself or its own pages
         requests.get(url, timeout=5)
     # ── Phase 14d — Spotify Smart-Sync controls ────────────────────────
     elif command == '/resync':
@@ -459,11 +459,11 @@ def on_callback_query(msg):
             subprocess.Popen(["sudo", "nohup", "/usr/local/bin/mupibox/./sleep_timer.sh", str(mins * 60)])
             bot.sendMessage(from_id, f"Sleep timer set to {mins} minutes")
     elif query_data == 'play':
-        url = 'http://' + config['mupibox']['host'] + ':5005//play'
+        url = 'http://127.0.0.1:5005//play'  # local: the player only takes commands from the box itself or its own pages
         bot.answerCallbackQuery(query_id, text='Play', show_alert=True)
         requests.get(url, timeout=5)
     elif query_data == 'pause':
-        url = 'http://' + config['mupibox']['host'] + ':5005//pause'
+        url = 'http://127.0.0.1:5005//pause'  # local: the player only takes commands from the box itself or its own pages
         bot.answerCallbackQuery(query_id, text='Pause', show_alert=True)
         requests.get(url, timeout=5)
     elif query_data == 'back':

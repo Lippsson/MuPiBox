@@ -100,7 +100,8 @@ export function corsOptionsFor(req: Request, callback: (err: Error | null, optio
 
 export function isLoopback(req: Request): boolean {
   const addr = req.socket.remoteAddress ?? ''
-  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1'
+  // the whole 127.0.0.0/8: a box's own hostname often resolves to 127.0.1.1 (Debian /etc/hosts)
+  return addr === '::1' || /^(::ffff:)?127\./.test(addr)
 }
 
 /** Only processes on the box itself (kiosk, Telegram bot, player). */

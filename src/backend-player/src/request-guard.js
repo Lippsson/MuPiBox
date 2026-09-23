@@ -54,7 +54,8 @@ function reject(req, res, reason) {
 
 function isLoopback(req) {
   const addr = req.socket.remoteAddress || ''
-  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1'
+  // the whole 127.0.0.0/8: a box's own hostname often resolves to 127.0.1.1 (Debian /etc/hosts)
+  return addr === '::1' || /^(::ffff:)?127\./.test(addr)
 }
 
 function browserGuard(req, res, next) {
