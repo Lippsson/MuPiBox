@@ -5771,7 +5771,8 @@ class bq25792:
         field: with the charger latched to 4 cells, VREG could not be set below
         VSYSMIN (12000 mV), so every write of 8300 mV was dropped while the
         driver cheerfully logged "VREG set to 8300 mV". The chip kept 16800 mV,
-        the pack sat in precharge for three months and slowly drained. The
+        the pack stayed in precharge for over a week and drained to 0 % while
+        plugged in - nothing in the log pointed at the cause. The
         input current limit fails the same way (driver logs 2200 mA, register
         holds 1790 mA because the external ILIM_HIZ pin governs).
 
@@ -5859,8 +5860,8 @@ class bq25792:
         # count and rejects a VREG below VSYSMIN, so writing VREG first means
         # writing it into a value the chip immediately overrides (when CELL
         # changes) or refuses outright (when VSYSMIN is still the 4S default).
-        # That ordering bug is exactly what kept an 8300 mV VREG from ever
-        # reaching the register.
+        # With the wrong 4S latch that is exactly what happened: the 8300 mV VREG
+        # was written first and refused, and the chip kept 16800 mV.
 
         # Correct a wrong PROG-pin cell latch. Writing CELL makes the chip
         # re-derive VREG and VSYSMIN for that cell count on its own -- verified
