@@ -3204,6 +3204,78 @@ app.get('/api/nas/children', nasPathWithinSelection, async (req, res) => {
   }
 })
 
+// --- CUE sheets --------------------------------------------------------------------------------------
+// A ripped album is often ONE audio file (e.g. "Album.flac", the whole CD) with a "Album.cue" next to it that
+// lists the tracks by start time. Without reading the cue the folder has one "track" named like the file.
+
+interface NasCueTrack {
+  title: string
+  startSeconds: number
+}
+
+// Cue files are UTF-8 (often with a BOM) or an old single-byte code page.
+function nasDecodeText(buffer: Buffer): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer).replace(/^\uFEFF/, '')
+  } catch {
+    return new TextDecoder('windows-1252').decode(buffer)
+  }
+}
+
+// Returns the tracks of a cue sheet that describes ONE audio file, or undefined (several FILE entries,
+// fewer than two tracks, start times that do not increase: not a layout this can play by seeking).
+function nasParseCue(text: string): NasCueTrack[] | undefined {
+  const tracks: NasCueTrack[] = []
+  let files = 0
+  let current: NasCueTrack | undefined
+  let hasIndex = false
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    const quoted = (): string => line.match(/"([^"]*)"/)?.[1] ?? line.replace(/^\S+\s+/, '').trim()
+    if (/^FILE\s/i.test(line)) {
+      files++
+    } else if (/^TRACK\s+\d+\s+AUDIO/i.test(line)) {
+      current = { title: '', startSeconds: 0 }
+      hasIndex = false
+      tracks.push(current)
+    } else if (/^TITLE\s/i.test(line) && current) {
+      current.title = quoted()
+    } else if (/^INDEX\s+01\s/i.test(line) && current && !hasIndex) {
+      const m = line.match(/(\d+):(\d+):(\d+)\s*$/)
+      if (!m) {
+        return undefined
+      }
+      current.startSeconds = Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 75 // 75 frames per second
+      hasIndex = true
+    }
+  }
+  if (files !== 1 || tracks.length < 2) {
+    return undefined
+  }
+  for (let i = 1; i < tracks.length; i++) {
+    if (!(tracks[i].startSeconds > tracks[i - 1].startSeconds)) {
+      return undefined
+    }
+  }
+  return tracks
+}
+
+// The text of a NAS file: from the local copy if the folder was downloaded, otherwise live from the NAS.
+async function nasReadTextFile(nasPath: string): Promise<string | undefined> {
+  const local = nasLocalPath(nasPath)
+  if (local && fs.existsSync(local)) {
+    return nasDecodeText(await readFile(local))
+  }
+  const buffer = await withNasSession(async (session) => {
+    const response = await fetch(nasUrl(session, nasPath), { headers: { Authorization: session.auth }, signal: AbortSignal.timeout(8000) })
+    if (!response.ok) {
+      throw new NasApiError(`WebDAV error ${response.status}`)
+    }
+    return Buffer.from(await response.arrayBuffer())
+  })
+  return buffer ? nasDecodeText(buffer) : undefined
+}
+
 app.get('/api/nas/tracklist', nasPathWithinSelection, async (req, res) => {
   const folderPath = typeof req.query.path === 'string' ? req.query.path : ''
   if (!folderPath) {
@@ -3213,11 +3285,36 @@ app.get('/api/nas/tracklist', nasPathWithinSelection, async (req, res) => {
 
   try {
     const files = await nasListFiles(folderPath)
-    const tracks = files
+    const audio = files
       .filter((f) => !f.isdir && nasAudioExtensions.some((ext) => f.name.toLowerCase().endsWith(ext)))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-      .map((f, index) => ({ position: index + 1, name: f.name, path: f.path }))
-    res.json(tracks)
+
+    // One audio file plus a cue sheet: the tracks come from the cue (played by seeking in the file).
+    const cues = files.filter((f) => !f.isdir && f.name.toLowerCase().endsWith('.cue'))
+    if (audio.length === 1 && cues.length > 0) {
+      const audioBase = audio[0].name.replace(/\.[^.]+$/, '').toLowerCase()
+      const cue = cues.find((c) => c.name.replace(/\.[^.]+$/, '').toLowerCase() === audioBase) ?? cues[0]
+      try {
+        const text = await nasReadTextFile(cue.path)
+        const cueTracks = text ? nasParseCue(text) : undefined
+        if (cueTracks) {
+          res.json(
+            cueTracks.map((track, index) => ({
+              position: index + 1,
+              name: track.title || `Track ${index + 1}`,
+              path: audio[0].path,
+              startSeconds: track.startSeconds,
+              cue: true,
+            })),
+          )
+          return
+        }
+      } catch (error) {
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Could not read the cue sheet ${cue.path}: ${error}`)
+      }
+    }
+
+    res.json(audio.map((f, index) => ({ position: index + 1, name: f.name, path: f.path })))
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to list NAS tracklist for ${folderPath}: ${error}`)
     res.status(502).json([])
@@ -3351,7 +3448,7 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
 
 // --- Download local ("Download selected") ---------------------------------
 
-const nasDownloadExtensions = [...nasAudioExtensions, '.jpg', '.jpeg', '.png']
+const nasDownloadExtensions = [...nasAudioExtensions, '.cue', '.jpg', '.jpeg', '.png']
 
 interface NasDownloadStatus {
   running: boolean

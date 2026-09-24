@@ -53,8 +53,64 @@ const apiAccessToken = {
 
 player.on('percent_pos', (val) => {
   //console.log('track progress is', val);
-  currentMeta.progressTime = val
+  if (!isCuePlayback()) currentMeta.progressTime = val
 })
+
+// --- CUE albums (one audio file, tracks by start time - see /api/nas/tracklist) ---
+// mplayer only knows the single file, so the current track is worked out from the playing time, and
+// "next", "previous", a track chosen in the list and the progress bar seek inside the file.
+let currentCue = null // { tracks: [{ position, name, startSeconds }], fileLength } while such an album plays
+
+function isCuePlayback() {
+  return currentCue !== null && currentMeta.currentType === 'nas' && currentMeta.currentPlayer === 'mplayer'
+}
+
+function cueTrackEnd(index) {
+  const next = currentCue.tracks[index + 1]
+  return next ? next.startSeconds : currentCue.fileLength
+}
+
+function cueTrackAt(seconds) {
+  let index = 0
+  for (let i = 0; i < currentCue.tracks.length; i++) {
+    if (currentCue.tracks[i].startSeconds <= seconds + 0.25) index = i
+  }
+  return index
+}
+
+player.on('length', (val) => {
+  if (currentCue) currentCue.fileLength = val
+})
+player.on('time_pos', (seconds) => {
+  if (!isCuePlayback()) return
+  const index = cueTrackAt(seconds)
+  const track = currentCue.tracks[index]
+  if (currentMeta.currentTracknr !== index + 1) {
+    currentMeta.currentTracknr = index + 1
+    currentMeta.currentTrackname = track.name
+  }
+  const end = cueTrackEnd(index)
+  if (end > track.startSeconds) {
+    currentMeta.progressTime = Math.max(0, Math.min(100, Math.round(((seconds - track.startSeconds) * 100) / (end - track.startSeconds))))
+  }
+})
+setInterval(() => {
+  if (!isCuePlayback()) return
+  if (!currentCue.fileLength) player.getProps(['length'])
+  player.getProps(['time_pos'])
+}, 1000)
+
+// Seeks to the start of track number `position` (1-based) of the playing CUE album.
+function seekToCueTrack(position) {
+  const target = Math.max(1, Math.min(currentCue.tracks.length, position))
+  const track = currentCue.tracks[target - 1]
+  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] CUE: seeking to track ${target} at ${track.startSeconds}s`)
+  // absolute position in seconds: mplayer "seek <seconds> 2"
+  player.exec('pausing_keep seek', [track.startSeconds, 2])
+  currentMeta.currentTracknr = target
+  currentMeta.currentTrackname = track.name
+  currentMeta.progressTime = 0
+}
 setInterval(() => {
   player.getProps(['percent_pos'])
 }, 1000)
@@ -77,7 +133,7 @@ player.on('metadata', (val) => {
     // instead of trying to parse anything out of mplayer's own metadata.
     const track = currentNasTracks[currentMeta.currentTracknr - 1]
     if (track) {
-      currentMeta.currentTrackname = track.name.replace(/\.[^./]+$/, '')
+      currentMeta.currentTrackname = track.cue ? track.name : track.name.replace(/\.[^./]+$/, '')
     }
   } else if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio') {
     currentMeta.currentTrackname = val.Title
@@ -568,9 +624,13 @@ function next() {
       },
     )
   } else if (currentMeta.currentPlayer === 'mplayer') {
+    if (isCuePlayback() && currentMeta.currentTracknr < currentCue.tracks.length) {
+      seekToCueTrack(currentMeta.currentTracknr + 1)
+      return
+    }
     //currentMeta.currentTracknr = currentMeta.currentTracknr + 1;
     //log.debug(nowDate.toLocaleString() + ': [Spotify Control] Current Tracknr: ' + currentMeta.currentTracknr);
-    player.next()
+    player.next() // (on the last track of a CUE album this ends the playlist, as for any other album)
   }
 }
 
@@ -589,6 +649,10 @@ function previous() {
       },
     )
   } else if (currentMeta.currentPlayer === 'mplayer') {
+    if (isCuePlayback()) {
+      seekToCueTrack(currentMeta.currentTracknr - 1) // on the first track this restarts it
+      return
+    }
     if (currentMeta.currentTracknr > 1) {
       currentMeta.currentTracknr = currentMeta.currentTracknr - 2
     }
@@ -598,6 +662,10 @@ function previous() {
 }
 
 function jumpToTrack(targetPosition) {
+  if (isCuePlayback()) {
+    seekToCueTrack(targetPosition)
+    return
+  }
   if (currentMeta.currentPlayer === 'mplayer') {
     const offset = targetPosition - currentMeta.currentTracknr
     if (offset !== 0) {
@@ -795,6 +863,9 @@ async function playNasList(nasPath) {
     const response = await fetch(`http://localhost:8200/api/nas/tracklist?path=${encodeURIComponent(decodedPath)}`)
     const tracks = await response.json()
     currentNasTracks = tracks
+    // Tracks of a CUE album all point at the same file: it is loaded once and the tracks are found by time.
+    const cueMode = tracks.length > 1 && tracks.every((track) => track.cue === true)
+    currentCue = cueMode ? { tracks, fileLength: 0 } : null
     const folderName = decodedPath.split('/').filter(Boolean).pop() || decodedPath
 
     // Set metadata explicitly up front (like the radio/rss branches do) rather
@@ -805,7 +876,7 @@ async function playNasList(nasPath) {
     currentMeta.album = folderName
     currentMeta.path = decodedPath
 
-    const playlistLines = tracks.map(
+    const playlistLines = (cueMode ? [tracks[0]] : tracks).map(
       (track) => `http://localhost:8200/api/nas/stream?path=${encodeURIComponent(track.path)}`,
     )
     const tmpPlaylistPath = '/tmp/nas_playlist.m3u'
@@ -905,7 +976,14 @@ function seek(progress) {
     }
   } else if (currentMeta.currentPlayer === 'mplayer') {
     if (progress > 1) {
-      player.seekPercent(progress)
+      if (isCuePlayback()) {
+        const index = Math.max(0, currentMeta.currentTracknr - 1)
+        const track = currentCue.tracks[index]
+        const end = cueTrackEnd(index)
+        player.exec('pausing_keep seek', [track.startSeconds + ((end - track.startSeconds) * progress) / 100, 2])
+      } else {
+        player.seekPercent(progress)
+      }
     } else {
       if (progress) player.seek(+30)
       else player.seek(-30)
