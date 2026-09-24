@@ -2,14 +2,36 @@
 
 $backendBase = 'http://localhost:8200/api/nas';
 
+// Login gate (and, for POSTs, CSRF check) of the JSON answers below: they come before header.php, which
+// does both for the HTML page, so without this the NAS tree, the profiles and the download control would
+// be reachable without signing in and from any foreign web page.
+//  - $post: the request changes something -> the token of the page must come in the X-CSRF-Token header
+//  - $poll: background polling -> must not count as activity (else an open tab never times out)
+// auth_check.php also releases the session lock again, so a slow answer does not block other pages.
+function nasAjaxGuard($post = false, $poll = false) {
+	if ($post) {
+		require_once __DIR__ . '/includes/csrf.php';
+		if (!hash_equals(csrf_token(), (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+			http_response_code(403);
+			header('Content-Type: application/json');
+			echo json_encode(array('success' => false, 'error' => 'csrf'));
+			exit;
+		}
+	}
+	$AUTH_CHECK_NO_TOUCH = $poll;
+	require __DIR__ . '/includes/auth_check.php';
+}
+
 // Progress of a running "Download selected" (polled by the page below). Answers
 // before header.php so that no HTML is sent along with the JSON.
 if (isset($_GET['download_cancel']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+	nasAjaxGuard(true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/download/cancel", 'POST', new stdClass(), 10));
 	exit;
 }
 if (isset($_GET['download_status'])) {
+	nasAjaxGuard(false, true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/download/status", 'GET', null, 5));
 	exit;
@@ -17,6 +39,7 @@ if (isset($_GET['download_status'])) {
 
 // Children of one folder for the tree view (loaded when a folder is expanded).
 if (isset($_GET['browse'])) {
+	nasAjaxGuard();
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/browse?path=" . urlencode($_GET['browse']), 'GET', null, 15));
 	exit;
@@ -24,16 +47,19 @@ if (isset($_GET['browse'])) {
 
 // Folder index (built by the backend) behind the "Filter folders" box.
 if (isset($_GET['index_status'])) {
+	nasAjaxGuard(false, true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/index/status", 'GET', null, 10));
 	exit;
 }
 if (isset($_GET['index_search'])) {
+	nasAjaxGuard();
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/index/search?q=" . urlencode((string)$_GET['index_search']), 'GET', null, 10));
 	exit;
 }
 if (isset($_GET['index_refresh']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+	nasAjaxGuard(true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/index/refresh", 'POST', new stdClass(), 10));
 	exit;
@@ -41,6 +67,7 @@ if (isset($_GET['index_refresh']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Profiles of the NAS tab (kept by the backend in the config).
 if (isset($_GET['profile_api'])) {
+	nasAjaxGuard($_SERVER['REQUEST_METHOD'] === 'POST');
 	header('Content-Type: application/json');
 	$profileAction = (string)$_GET['profile_api'];
 	if ($profileAction === 'list') {
@@ -57,6 +84,9 @@ if (isset($_GET['profile_api'])) {
 }
 
 include('includes/header.php');
+// The token must exist before the session is released (the form filter of header.php prints it later).
+csrf_token();
+session_write_close();
 
 function nasApiCall($url, $method = 'GET', $body = null, $timeout = 30) {
 	$ch = curl_init($url);
@@ -585,7 +615,7 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 		if (refreshBtn) {
 			refreshBtn.addEventListener('click', function () {
 				refreshBtn.disabled = true;
-				fetch('nas.php?index_refresh=1', { method: 'POST' }).then(function () { setTimeout(pollIndex, 300); });
+				fetch('nas.php?index_refresh=1', { method: 'POST', headers: { 'X-CSRF-Token': window.NAS_CSRF } }).then(function () { setTimeout(pollIndex, 300); });
 			});
 		}
 		pollIndex();
@@ -800,7 +830,7 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 	window.nasNotice = notice;
 
 	function api(action, body) {
-		var opt = body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+		var opt = body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.NAS_CSRF }, body: JSON.stringify(body) };
 		return fetch('nas.php?profile_api=' + encodeURIComponent(action), opt).then(function (r) { return r.json(); });
 	}
 	var working = false;
@@ -931,6 +961,7 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 </script>
 
 <script>
+window.NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 (function () {
 	var pop = null;
 	function closePop() { if (pop) { document.body.removeChild(pop); pop = null; } }
@@ -1027,7 +1058,7 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 		cancelBtn.addEventListener('click', function () {
 			cancelBtn.disabled = true;
 			cancelBtn.value = 'Cancelling...';
-			fetch('nas.php?download_cancel=1', { method: 'POST' }).catch(function () {});
+			fetch('nas.php?download_cancel=1', { method: 'POST', headers: { 'X-CSRF-Token': window.NAS_CSRF } }).catch(function () {});
 		});
 	}
 	refresh();
