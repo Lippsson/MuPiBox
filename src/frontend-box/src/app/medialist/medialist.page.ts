@@ -19,7 +19,7 @@ import type { Artist } from '../artist'
 import { ArtworkService } from '../artwork.service'
 import { CoverFlipService } from '../cover-flip.service'
 import { LoadingComponent } from '../loading/loading.component'
-import { CategoryType, Media, MediaSorting } from '../media'
+import { CategoryType, isSyncManaged, Media, MediaSorting } from '../media'
 import { MediaService } from '../media.service'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
@@ -59,9 +59,16 @@ export class MedialistPage extends SwiperIonicEventsHelper {
   protected swiperData: Signal<SwiperData<Media>[]> = computed(() => {
     return this.media()?.map((media) => {
       return {
-        name: media.title,
+        // Phase 14e: display title falls back to title_override when the
+        // parent has customised it via the Eltern-WebApp; keeps the
+        // box-frontend consistent with what the override pattern promises.
+        name: media.title_override ?? media.title,
         imgSrc: this.artworkService.getArtwork(media),
         data: media,
+        // Phase 14e: lock-icon badge on items the Spotify Smart-Sync
+        // manages. Helps parents/kids identify auto-synced entries at a
+        // glance. Manual entries (the default) carry no badge.
+        badge: isSyncManaged(media) ? '🔗' : undefined,
       }
     })
   })
@@ -128,21 +135,37 @@ export class MedialistPage extends SwiperIonicEventsHelper {
     })
 
     this.media = toSignal(
-      combineLatest([toObservable(this.category), toObservable(this.artist)]).pipe(
+      combineLatest([
+        toObservable(this.category),
+        toObservable(this.artist),
+        // Phase 17g: re-fetch when the library changes (e.g. a Smart-Sync
+        // excluded an album of this very artist) so the kid's album list
+        // updates without leaving and re-entering the artist.
+        this.mediaService.getLibraryVersion(),
+      ]).pipe(
         tap(() => this.isLoading.set(true)),
-        switchMap(([category, artist]) => {
+        switchMap(([category, artist, _version]) => {
           if (artist === undefined) {
             return of([])
           }
 
-          const sliceMedia = (media: Media[], offsetByOne = false): Media[] => {
-            if (artist.coverMedia?.aPartOfAll) {
-              const min = Math.max(0, (artist.coverMedia?.aPartOfAllMin ?? 0) - (offsetByOne ? 1 : 0))
-              const max =
-                (artist.coverMedia?.aPartOfAllMax ?? Number.parseInt(artist.albumCount, 10)) - (offsetByOne ? 1 : 0)
-              return media.slice(min, max + 1)
-            }
-            return media
+          // MED-18: previously the sort-then-slice ordering produced wrong
+          // ranges for shows/RSS. aPartOfAllMin/Max are user-input 1-indexed
+          // ranges (Eltern enter "episodes 5-10"). For audiobooks (alphabetical
+          // sort) this happened to work because filesystem readdir order
+          // matches alphabetical, so slicing post-sort with `offsetByOne=true`
+          // produced the right items. But for shows/RSS the array was sorted
+          // ReleaseDateDescending FIRST, then sliced with `offsetByOne=false` —
+          // so picking "5-10" gave you items at indices 5-10 of the descending
+          // array, i.e. the 6th-through-11th-newest episodes, not Episodes 5-10.
+          // Slice on the API's native order (chronological for RSS/shows, alpha
+          // for filesystem audiobooks), THEN sort the slice for display. Same
+          // semantics for both categories, no offsetByOne flag needed.
+          const slicePart = (media: Media[]): Media[] => {
+            if (!artist.coverMedia?.aPartOfAll) return media
+            const min = Math.max(0, (artist.coverMedia?.aPartOfAllMin ?? 1) - 1) // 1-indexed → 0-indexed
+            const max = artist.coverMedia?.aPartOfAllMax ?? Number.parseInt(artist.albumCount, 10) // 1-indexed inclusive → exclusive end for slice
+            return media.slice(min, max)
           }
 
           const isShow =
@@ -155,13 +178,10 @@ export class MedialistPage extends SwiperIonicEventsHelper {
               return of([])
             }),
             map((media) => {
-              return sliceMedia(
-                this.sortMedia(
-                  artist.coverMedia,
-                  media,
-                  isShow ? MediaSorting.ReleaseDateDescending : MediaSorting.AlphabeticalAscending,
-                ),
-                !isShow,
+              return this.sortMedia(
+                artist.coverMedia,
+                slicePart(media),
+                isShow ? MediaSorting.ReleaseDateDescending : MediaSorting.AlphabeticalAscending,
               )
             }),
           )

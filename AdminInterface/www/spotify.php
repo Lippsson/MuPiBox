@@ -2,7 +2,10 @@
 
 include('includes/header.php');
 $REDIRECT_URI = "https://" . $_SERVER['HTTP_HOST'] . "/spotify.php";
-$SCOPELIST = "streaming user-read-currently-playing user-modify-playback-state user-read-playback-state user-read-private user-read-email";
+// playlist-read-private/-collaborative added for Phase-14 Smart-Sync, which
+// discovers the parent's prefixed playlists. Re-running this login grants the
+// existing playback token the extra scopes in one consent step.
+$SCOPELIST = "streaming user-read-currently-playing user-modify-playback-state user-read-playback-state user-read-private user-read-email playlist-read-private playlist-read-collaborative";
 $SCOPE = urlencode($SCOPELIST);
 
 
@@ -55,6 +58,12 @@ if ($spotify_state_ok) {
 	// the loading-spinner-stuck state.
 	if (!empty($tokendata["access_token"]) && !empty($tokendata["refresh_token"])) {
 		$data["spotify"]["active"] = true;
+			// Phase-14 Smart-Sync checks the granted scopes (hasRequiredSyncScopes)
+			// to decide whether playlist access is available. The token response
+			// carries them as a space-separated `scope` string; persist as array.
+			if (!empty($tokendata["scope"])) {
+				$data["spotify"]["tokenScopes"] = explode(" ", $tokendata["scope"]);
+			}
 	}
 	save_mupiboxconfig($data);
 	exec("sudo /usr/local/bin/mupibox/./setting_update.sh");

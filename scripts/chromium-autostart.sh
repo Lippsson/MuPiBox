@@ -46,6 +46,15 @@ if ${KIOSK} ; then
 	CHROMIUM_OPTS="${CHROMIUM_OPTS} --kiosk --start-fullscreen --start-maximized"
 fi
 # CACHE Parameters
+# The disk cache lives in RAM (/tmp is a tmpfs): on the SD card it was by far the biggest writer on
+# an idle box, about 0.5 MB per minute, while it only holds copies of what the box serves itself.
+# Emptied at every boot, which costs one slower first load. Set chromium.cacheInRam to false to
+# keep it at chromium.cachepath.
+CACHE_IN_RAM=$(/usr/bin/jq -r '.chromium.cacheInRam // true' ${CONFIG})
+if [ "${CACHE_IN_RAM}" != "false" ]; then
+	CACHE_PATH="/tmp/chromium_cache"
+	mkdir -p "${CACHE_PATH}"
+fi
 CHROMIUM_OPTS="${CHROMIUM_OPTS} --disk-cache-dir=${CACHE_PATH:-/home/dietpi/.mupibox/chromium_cache} --disk-cache-size=${CACHE_SIZE:-33554432}"
 # DEBUG MODE
 if [ "${DEBUG}" = "1" ]; then
@@ -79,6 +88,14 @@ START_SOUND=$(/usr/bin/jq -r .mupibox.startSound ${CONFIG})
 START_VOLUME=$(/usr/bin/jq -r .mupibox.startVolume ${CONFIG})
 AUDIO_DEVICE=$(/usr/bin/jq -r .mupibox.audioDevice ${CONFIG})
 /usr/bin/pactl set-sink-volume @DEFAULT_SINK@ ${START_VOLUME}%
+# Kill any in-flight startup-sound playback before launching a fresh one.
+# chromium-autostart.sh runs from two paths that can fire in quick
+# succession: (1) restart_kiosk.sh after the admin "Restart services"
+# click, and (2) dietpi-login auto-respawn on tty2 once chromium dies.
+# Without this pkill both invocations spawn their own mplayer & overlay
+# the welcome wav. Match by the wav path so the regex never collides
+# with mplayer's slave-mode instance held by the backend-player.
+pkill -f "mplayer.*${START_SOUND}" 2>/dev/null
 /usr/bin/mplayer -volume 100 ${START_SOUND} &
 pgrep -f "chromium-browser" | while read -r pid; do
     # Setze die Priorität für jeden Prozess neu

@@ -739,7 +739,7 @@ def on_disconnect(client, userdata, rc):
 
 def playback_info():
     url = 'http://127.0.0.1:5005/state'
-    state = requests.get(url).json()
+    state = requests.get(url, timeout=5).json()
     return state
 
 def player_active():
@@ -801,11 +801,11 @@ def send_play_information():
     try:
         global previous_content_local, previous_content_state, previous_content_episode
         url = 'http://127.0.0.1:5005/local'
-        local = requests.get(url).json()
+        local = requests.get(url, timeout=5).json()
         url = 'http://127.0.0.1:5005/state'
-        state = requests.get(url).json()
+        state = requests.get(url, timeout=5).json()
         url = 'http://127.0.0.1:5005/episode'
-        episode = requests.get(url).json()
+        episode = requests.get(url, timeout=5).json()
         play_text = ""
 
         if local and state:
@@ -814,7 +814,7 @@ def send_play_information():
                     #currently_playing_type = state['currently_playing_type']
                     if state['currently_playing_type'] == 'episode':
                         url = 'http://127.0.0.1:5005/episode'
-                        episode = requests.get(url).json()
+                        episode = requests.get(url, timeout=5).json()
                         play_text = episode['show']['name'] + "\n" + episode['name']
                     else:
                         play_text = state['item']['album']['name'] + "\n" + state['item']['name'] + "\nTrack: " + str(state['item']['track_number']) + "/" + str(state['item']['album']['total_tracks'])
@@ -875,11 +875,11 @@ def on_message(client, userdata, msg):
     if msg.topic == mqtt_topic + '/' + mqtt_clientId + '/pause/set' and str(msg.payload.decode("utf-8")) == "pause":
         print("Button: pause")
         url = 'http://127.0.0.1:5005/pause'
-        requests.get(url)
+        requests.get(url, timeout=5)
     if msg.topic == mqtt_topic + '/' + mqtt_clientId + '/play/set' and str(msg.payload.decode("utf-8")) == "play":
         print("Button: play")
         url = 'http://127.0.0.1:5005/play'
-        requests.get(url)
+        requests.get(url, timeout=5)
     if msg.topic == mqtt_topic + '/' + mqtt_clientId + '/take_screenshot/set' and str(msg.payload.decode("utf-8")) == "take_screenshot":
         screenshot = get_screenshot()
         client.publish(mqtt_topic + '/' + mqtt_clientId + '/screenshot', screenshot, qos=0)
@@ -896,7 +896,8 @@ def check_server_availability(host, port, retry_interval):
             time.sleep(retry_interval)
 
 def handle_shutdown(signum, frame):
-    print(f"Exception in main loop: {e}. Service will be stopped...")
+    # was "Exception in main loop: {e}" - a signal handler has no e (NameError while shutting down)
+    print(f"Signal {signum} received. Service will be stopped...")
     client.loop_stop()
     client.publish(mqtt_topic + '/' + mqtt_clientId + '/state', "offline", qos=0)
     exit(0)

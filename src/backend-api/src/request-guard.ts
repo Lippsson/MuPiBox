@@ -10,7 +10,7 @@
  *  1. Host header allowlist (anti DNS rebinding): localhost, IP literals, and the box's hostname.
  *  2. Cross-site requests are refused (Sec-Fetch-Site, and Origin for unsafe methods as a fallback
  *     for browsers without Fetch Metadata). Top-level navigations to pages stay possible, e.g. a
- *     link opened from a chat app.
+ *     magic link opened from a chat app or the Spotify OAuth redirect.
  *  3. CORS only answers for the box itself.
  *
  * Requests without these headers (curl, python requests, the player) are not affected: they are
@@ -18,6 +18,7 @@
  */
 import os from 'node:os'
 import type { Request, RequestHandler } from 'express'
+import { requireCsrf, requireSession } from './eltern/middleware'
 
 const LOCAL_SUFFIXES = ['local', 'lan', 'home', 'fritz.box', 'localdomain', 'home.arpa', 'box', 'speedport.ip', 'internal']
 
@@ -59,7 +60,7 @@ function isSameHostOrigin(req: Request): boolean {
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 /** Paths a foreign site may send the browser to as a top-level navigation. */
-const NAVIGATION_ALLOWED_API: string[] = []
+const NAVIGATION_ALLOWED_API = ['/api/eltern/spotify-oauth/callback']
 
 function reject(req: Request, res: Parameters<RequestHandler>[1], reason: string) {
   console.warn(
@@ -112,3 +113,17 @@ export const localOnly: RequestHandler = (req, res, next) => {
   res.status(403).json({ error: 'local only' })
 }
 
+/** On the box: allowed. From elsewhere: a parents' web app session plus its CSRF token. */
+export const localOrElternSession: RequestHandler = (req, res, next) => {
+  if (isLoopback(req)) {
+    next()
+    return
+  }
+  requireSession(req, res, (err?: unknown) => {
+    if (err) {
+      next(err)
+      return
+    }
+    requireCsrf(req, res, next)
+  })
+}

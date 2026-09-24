@@ -1,6 +1,7 @@
 import { AsyncPipe } from '@angular/common'
 import { HttpClient } from '@angular/common/http'
-import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core'
+import { AfterViewInit, Component, DestroyRef, ElementRef, inject, OnInit, ViewChild } from '@angular/core'
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { FormsModule } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
 import {
@@ -39,16 +40,19 @@ import {
 import { firstValueFrom, type Observable } from 'rxjs'
 import { environment } from '../../environments/environment'
 import type { AlbumStop } from '../albumstop'
+import { CurrentMediaService } from '../current-media.service'
 import type { CurrentMPlayer } from '../current.mplayer'
 import type { CurrentSpotify } from '../current.spotify'
 import { ArtworkService } from '../artwork.service'
 import { CoverFlipService } from '../cover-flip.service'
 import { LogService } from '../log.service'
-import type { Media } from '../media'
+import { isResumeEntry, type Media } from '../media'
 import { MediaService } from '../media.service'
 import type { MupiboxConfig } from '../mupibox-config.model'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { PlayerCmds, PlayerService } from '../player.service'
+import type { PlaytimePlayState } from '../playtime.model'
+import { PlaytimeService } from '../playtime.service'
 import { SpotifyService } from '../spotify.service'
 
 export interface TrackListEntry {
@@ -94,7 +98,6 @@ export class PlayerPage implements OnInit, AfterViewInit {
   resumemedia: Media
   albumStop: AlbumStop
   resumePlay = false
-  resumeIndex: number
   resumeTimer = 0
   resumeAdded = false
   cover = ''
@@ -108,6 +111,10 @@ export class PlayerPage implements OnInit, AfterViewInit {
   progress = 0
   shufflechanged = 0
   tmpProgressTime = 0
+  // Tracks the playtime state across ticks so we can detect transitions
+  // (normal -> grace, grace -> blocked, etc.) and persist resume on time.
+  private prevPlaytimeState: PlaytimePlayState | 'unknown' = 'unknown'
+  private destroyRef = inject(DestroyRef)
   public readonly spotify$: Observable<CurrentSpotify>
   public readonly local$: Observable<CurrentMPlayer>
 
@@ -131,20 +138,30 @@ export class PlayerPage implements OnInit, AfterViewInit {
     private spotifyService: SpotifyService,
     private artworkService: ArtworkService,
     protected coverFlip: CoverFlipService,
+    private playtimeService: PlaytimeService,
+    private currentMediaService: CurrentMediaService,
   ) {
     this.spotify$ = this.mediaService.current$
     this.local$ = this.mediaService.local$
 
-    if (this.router.currentNavigation()?.extras.state?.media) {
-      this.media = this.router.currentNavigation().extras.state.media
+    // navState is read once into a local because the external-playback flag
+    // (Phase 19 Stufe B) is read from the same state object further down.
+    const navState = this.router.currentNavigation()?.extras.state ?? {}
+    if (navState.media) {
+      this.media = navState.media
       // Known right away, so the cover is there when the page opens (see CoverFlipService).
       if (this.media.cover && this.media.type !== 'spotify') {
         this.cover = this.artworkService.cachedCoverUrl(this.media, this.media.cover)
       }
-      if (this.media.category === 'resume') {
+      // isResumeEntry() instead of a bare category check: it also recognises
+      // legacy entries written before the isResume flag existed.
+      if (isResumeEntry(this.media)) {
         this.resumePlay = true
       }
-      this.isExternalPlayback = false
+      // Phase 19 Stufe B: extern getriggerter Track (Eltern-WebApp etc.)
+      // läuft schon — Player-Page darf NICHT erneut playMedia() rufen,
+      // sonst doppelter Start oder Konflikt mit dem Trigger-Pfad.
+      this.isExternalPlayback = navState.externalPlayback === true
     } else {
       this.isExternalPlayback = true
     }
@@ -180,14 +197,12 @@ export class PlayerPage implements OnInit, AfterViewInit {
       },
     })
 
-    this.mediaService.current$.subscribe((spotify) => {
+    // Track player state for the lifetime of this component. takeUntilDestroyed
+    // ties the subscription to the page; previously updateProgress() and
+    // saveResumeFiles() each re-subscribed on every call without ever
+    // unsubscribing, so a 60-min listen accrued ~120 lingering subscriptions.
+    this.mediaService.current$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((spotify) => {
       this.currentPlayedSpotify = spotify
-    })
-    this.mediaService.local$.subscribe((local) => {
-      this.currentPlayedLocal = local
-    })
-    // Use cover from CurrentSpotify for Spotify content, fallback to media.cover for other types
-    this.mediaService.current$.subscribe((spotify) => {
       if (this.media?.type === 'spotify' && spotify?.item?.album?.images?.[0]?.url) {
         this.cover = spotify.item.album.images[0].url
       } else if (this.media?.cover) {
@@ -196,7 +211,10 @@ export class PlayerPage implements OnInit, AfterViewInit {
         this.cover = '../assets/images/nocover_mupi.png'
       }
     })
-    this.mediaService.albumStop$.subscribe((albumStop) => {
+    this.mediaService.local$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((local) => {
+      this.currentPlayedLocal = local
+    })
+    this.mediaService.albumStop$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((albumStop) => {
       this.albumStop = albumStop
     })
   }
@@ -233,7 +251,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
       }
 
       // Subscribe to currentTrack$ to update when track info becomes available
-      this.spotifyService.currentTrack$.subscribe((track) => {
+      this.spotifyService.currentTrack$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((track) => {
         if (track && this.media.title === 'External Playback') {
           this.logService.log('[PlayerPage] Updating media object with track info:', track.name)
           this.media = this.spotifyService.createMediaFromSpotifyTrack(track)
@@ -263,20 +281,33 @@ export class PlayerPage implements OnInit, AfterViewInit {
   }
 
   updateProgress() {
-    this.mediaService.current$.subscribe((spotify) => {
-      this.currentPlayedSpotify = spotify
-    })
-    this.mediaService.local$.subscribe((local) => {
-      this.currentPlayedLocal = local
-    })
-
+    // currentPlayedSpotify / currentPlayedLocal are kept fresh by the
+    // takeUntilDestroyed-bound subscriptions in ngOnInit — read them
+    // directly here instead of re-subscribing on every tick.
     this.playing = !this.currentPlayedLocal?.pause
+    // Drive CurrentMediaService's active-listening counter from here —
+    // determined per-tick from the actual SDK state for Spotify or mplayer
+    // state for local content. The service used to subscribe to current$/
+    // local$ itself, but those subscriptions kept the Spotify SDK polling
+    // hot from app bootstrap and broke Connect device activation.
+    const activelyPlaying =
+      this.media?.type === 'spotify'
+        ? this.currentPlayedSpotify?.is_playing === true
+        : this.currentPlayedLocal?.playing === true
+    this.currentMediaService.markPlaying(activelyPlaying)
     if (this.playing) {
       this.resumeTimer++
-      if (this.resumeTimer % 30 === 0) {
+      // Cadence drives SD-card wear: a full resume.json rewrite per save.
+      // 60s gives ±60s position recovery in the worst case (kid pulls power
+      // cord with no clean shutdown), which beats abusing the SD card.
+      // Cap-transition and on-leave saves cover the "we know about to stop"
+      // moments precisely, so the cadence only needs to handle the rare
+      // hard-power-loss case.
+      if (this.resumeTimer % 60 === 0) {
         this.saveResumeFiles()
       }
     }
+    this.checkPlaytimeForResume()
 
     if (this.media.type === 'spotify') {
       const seek = this.currentPlayedSpotify?.progress_ms || 0
@@ -357,9 +388,12 @@ export class PlayerPage implements OnInit, AfterViewInit {
     if (
       (this.media.type === 'spotify' || this.media.type === 'library' || this.media.type === 'nas' || this.media.type === 'rss') &&
       !this.media.shuffle &&
-      this.resumeTimer > 30 &&
       this.playing
     ) {
+      // saveResumeFiles itself enforces the listening-time threshold via
+      // CurrentMediaService.shouldPersistResume(); the local resumeTimer > 30
+      // guard that used to live here is gone — it was page-mount-scoped and
+      // wall-clock-based, both of which the central service handles better.
       this.saveResumeFiles()
     }
     this.updateProgression = false
@@ -390,29 +424,28 @@ export class PlayerPage implements OnInit, AfterViewInit {
         return
       }
     } else if (this.media.type === 'library') {
-      this.media.category = this.media.resumelocalalbum
-      const success = await this.playerService.playMedia(this.media)
+      // Backend handles the track jump (single atomic pt_step) and the seek
+      // internally — see playListAtTrack in spotify-control.js. Replaces the
+      // previous N×setTimeout(skipNext) loop, which was audible.
+      //
+      // Legacy entries (category overwritten with 'resume', original stashed
+      // in resumelocalalbum) need their real category restored before the
+      // backend can build the playlist path. New entries (isResume=true)
+      // already carry the original category — leave it alone.
+      if (this.media.category === 'resume' && this.media.resumelocalalbum) {
+        this.media.category = this.media.resumelocalalbum
+      }
+      const success = await this.playerService.resumeLibraryMedia(this.media)
       if (!success) {
-        this.logService.error('[PlayerPage] Failed to start local library playback')
+        this.logService.error('[PlayerPage] Failed to resume local library playback')
         return
       }
-      let j = 1
-      for (let i = 1; i < this.media.resumelocalcurrentTracknr; i++) {
-        setTimeout(() => {
-          this.skipNext()
-          j = i + 1
-          if (j === this.media.resumelocalcurrentTracknr) {
-            setTimeout(() => {
-              this.playerService.seekPosition(this.media.resumelocalprogressTime)
-            }, 2000)
-          }
-        }, 2000)
-      }
-      if (this.media.resumelocalcurrentTracknr === 1) {
-        setTimeout(() => {
-          this.playerService.seekPosition(this.media.resumelocalprogressTime)
-        }, 2000)
-      }
+      // No client-side skip/seek here on purpose: resumeLibraryMedia() hands
+      // track number and progress to the backend, which does the jump in one
+      // atomic pt_step. The N×setTimeout(skipNext) loop that used to live here
+      // would run a SECOND time on top of that — landing the listener far past
+      // the saved position and playing an audible fragment of every track in
+      // between.
     } else if (this.media.type === 'nas') {
       const success = await this.playerService.playMedia(this.media)
       if (!success) {
@@ -444,14 +477,35 @@ export class PlayerPage implements OnInit, AfterViewInit {
     }
   }
 
+  // Save immediately on the entry transition to grace and to blocked so the
+  // resume entry captures (close to) the actual stop position. The previous
+  // implementation also boosted the cadence to 5s in the last minute before
+  // the cap as a safety net, but the transition save is reliable (player.page
+  // here AND AppComponent's global effect both fire on the same status edge),
+  // and that safety net was costing ~12 extra SD-card rewrites per cap event
+  // for a ±5s position improvement that the kid won't notice.
+  private checkPlaytimeForResume() {
+    const status = this.playtimeService.status()
+    if (!status.enabled) {
+      this.prevPlaytimeState = 'unknown'
+      return
+    }
+    const cur = status.state
+    if (this.prevPlaytimeState !== 'unknown' && cur !== this.prevPlaytimeState) {
+      if (cur === 'grace' || cur === 'blocked') {
+        this.saveResumeFiles()
+      }
+    }
+    this.prevPlaytimeState = cur
+  }
+
   saveResumeFiles() {
+    // Single gate for "is this listen worth persisting?" — covers the 30s
+    // updateProgress cadence, the on-leave save, and the cap-transition save.
+    // Resets on every new playMedia/resumeMedia, counts only active playback.
+    if (!this.currentMediaService.shouldPersistResume()) return
+
     this.resumemedia = Object.assign({}, this.media)
-    this.mediaService.current$.subscribe((spotify) => {
-      this.currentPlayedSpotify = spotify
-    })
-    this.mediaService.local$.subscribe((local) => {
-      this.currentPlayedLocal = local
-    })
     if (this.resumemedia.type === 'spotify' && this.resumemedia?.showid) {
       this.resumemedia.resumespotifytrack_number = this.currentPlayedSpotify?.item?.track_number || 1
       this.resumemedia.resumespotifyprogress_ms = this.currentPlayedSpotify?.progress_ms || 0
@@ -461,6 +515,9 @@ export class PlayerPage implements OnInit, AfterViewInit {
       this.resumemedia.resumespotifyprogress_ms = this.currentPlayedSpotify?.progress_ms || 0
       this.resumemedia.resumespotifyduration_ms = this.currentPlayedSpotify?.item.duration_ms || 0
     } else if (this.resumemedia.type === 'library') {
+      // resumelocalalbum stays for downgrade-safety: an older client still
+      // depends on it to recover the original category from a legacy-style
+      // entry. New readers prefer category directly.
       this.resumemedia.resumelocalalbum = this.resumemedia.category
       this.resumemedia.resumelocalcurrentTracknr = this.currentPlayedLocal?.currentTracknr || 0
       this.resumemedia.resumelocalprogressTime = this.currentPlayedLocal?.progressTime || 0
@@ -472,17 +529,22 @@ export class PlayerPage implements OnInit, AfterViewInit {
     } else if (this.resumemedia.type === 'rss') {
       this.resumemedia.resumerssprogressTime = this.currentPlayedLocal?.progressTime || 0
     }
-    this.resumemedia.category = 'resume'
-    if (this.resumemedia.index !== undefined) {
-      this.resumeIndex = this.resumemedia.index
-      this.resumemedia.index = undefined
+    // If we inherited a legacy category='resume' marker (in-memory artefact
+    // from a clicked-resume-card flow that didn't restore), recover the real
+    // category before persisting the new-format entry.
+    if (this.resumemedia.category === 'resume' && this.resumemedia.resumelocalalbum) {
+      this.resumemedia.category = this.resumemedia.resumelocalalbum
     }
-    if (this.resumePlay || this.resumeAdded) {
-      this.mediaService.editRawResumeAtIndex(this.resumeIndex, this.resumemedia)
-    } else {
-      this.mediaService.addRawResume(this.resumemedia)
+    this.resumemedia.isResume = true
+    this.resumemedia.index = undefined
+    // /api/addresume is a stable upsert via composite key (type +
+    // playlistid|showid|audiobookid|id || artist::title) — no need to
+    // remember an array index or distinguish add vs. edit on the client.
+    this.mediaService.addRawResume(this.resumemedia)
+    if (!this.resumeAdded && !this.resumePlay) {
+      // First save of a fresh listening session — trim the resume list to
+      // its configured cap. Skip when resumePlay because no append happens.
       this.resumeAdded = true
-      this.resumeIndex = 99
       setTimeout(() => {
         this.playerService.sendCmd(PlayerCmds.MAXRESUME)
       }, 2000)
