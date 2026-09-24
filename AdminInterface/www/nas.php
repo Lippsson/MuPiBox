@@ -120,20 +120,23 @@ if (isset($_POST['nas_save_selection']) || isset($_POST['nas_download_selected']
 	$checkedHide = $_POST['hide_folders'] ?? array();
 	$checkedDownload = $_POST['download_folders'] ?? array();
 	$shown = json_decode($_POST['shown_folders'] ?? '[]', true) ?? array();
-	foreach ($shown as $shownPath) {
-		// A folder is either shown or hidden; hidden wins if both were sent.
-		$isHidden = in_array($shownPath, $checkedHide, true);
-		nasApiCall("$backendBase/mark", 'POST', array(
-			'path' => $shownPath, 'marked' => !$isHidden && in_array($shownPath, $checkedShow, true), 'list' => 'artist'), 10);
-		nasApiCall("$backendBase/mark", 'POST', array(
-			'path' => $shownPath, 'marked' => $isHidden, 'list' => 'hidden'), 10);
-		nasApiCall("$backendBase/mark", 'POST', array(
-			'path' => $shownPath, 'marked' => in_array($shownPath, $checkedDownload, true), 'list' => 'download'), 10);
-	}
+	// One request for the whole page (before: three per folder in the tree, each rewriting the config file).
+	// A folder is either shown or hidden; the backend lets hidden win if both were sent.
+	$saveResult = nasApiCall("$backendBase/selection", 'POST', array(
+		'shown' => array_values($shown),
+		'show' => array_values($checkedShow),
+		'hide' => array_values($checkedHide),
+		'download' => array_values($checkedDownload),
+	), 30);
 	// No lightbox of the site-wide change notice here: the save shows a short line, the download its progress bar.
-	$nasFlash = 'Selection saved.';
+	$saveOk = !empty($saveResult['success']);
+	if ($saveOk) {
+		$nasFlash = 'Selection saved.';
+	} else {
+		$nasFlashError = 'The selection could not be saved.';
+	}
 
-	if (isset($_POST['nas_download_selected'])) {
+	if ($saveOk && isset($_POST['nas_download_selected'])) {
 		$syncResult = nasApiCall("$backendBase/download/sync", 'POST', new stdClass(), 10);
 		if (!empty($syncResult['success'])) {
 			$downloadStarted = true;
