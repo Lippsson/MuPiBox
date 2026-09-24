@@ -913,7 +913,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 			</li>
 			<li id="li_1">
 				<h2>When the daily limit is reached</h2>
-				<p>What happens to what is playing when today's time is used up. Nothing new is started after the limit. Letting the song or album finish is capped at 30 minutes / 3 hours as a safety net (endless streams, very long audiobooks).</p>
+				<p>What happens to what is playing when today's time is used up. Nothing new is started after the limit. Letting the song or album finish is capped at 30 minutes / 3 hours as a safety net (very long audiobooks). <b>Whatever you choose: podcasts may always finish the current episode, and radio streams are always stopped at once.</b></p>
 				<?php $playtime_graceMode = grace_mode_of(isset($data["playtimeLimit"]) ? $data["playtimeLimit"] : null); ?>
 				<select name="playtime_graceMode">
 					<option value="stop" <?php echo $playtime_graceMode === 'stop' ? 'selected' : ''; ?>>Stop immediately</option>
@@ -980,7 +980,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 			</li>
 			<li id="li_1">
 				<h2>When a quiet window starts</h2>
-				<p>What happens to what is playing when a quiet window begins. Nothing new is started during the window. Letting the song or album finish is capped at 30 minutes / 3 hours as a safety net.</p>
+				<p>What happens to what is playing when a quiet window begins. Nothing new is started during the window. Letting the song or album finish is capped at 30 minutes / 3 hours as a safety net. <b>Whatever you choose: podcasts may always finish the current episode, and radio streams are always stopped at once.</b></p>
 				<?php $qh_graceMode = grace_mode_of(isset($data["quietHours"]) ? $data["quietHours"] : null); ?>
 				<select name="quiethours_graceMode">
 					<option value="stop" <?php echo $qh_graceMode === 'stop' ? 'selected' : ''; ?>>Stop immediately</option>
