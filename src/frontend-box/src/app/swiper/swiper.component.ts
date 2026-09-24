@@ -124,7 +124,7 @@ export class SwiperComponent<T> {
       // until the full list is in the DOM. structuredClone is 5-10×
       // faster than lodash.cloneDeep on plain-object arrays; Observables
       // on SwiperData.imgSrc aren't cloneable so keep them by reference.
-      const src = this.data()
+      const src = this.data() ?? [] // the list can still be undefined while a tab (e.g. NAS) is loading
       const limit = Math.min(this.renderableLimit(), src.length)
       const cloned = src
         .slice(0, limit)
