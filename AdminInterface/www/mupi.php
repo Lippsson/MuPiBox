@@ -902,11 +902,9 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				$playtime_limits = isset($data["playtimeLimit"]["limitsMinutes"]) && is_array($data["playtimeLimit"]["limitsMinutes"]) ? $data["playtimeLimit"]["limitsMinutes"] : array();
 				echo '<p>Currently: <b>'.($playtime_enabled_state ? 'ENABLED' : 'DISABLED').'</b></p>';
 				?>
-				<p>Enable / disable the daily limit:</p>
-				<select name="playtime_enabled">
-					<option value="1" <?php echo $playtime_enabled_state ? 'selected' : ''; ?>>Enabled</option>
-					<option value="0" <?php echo !$playtime_enabled_state ? 'selected' : ''; ?>>Disabled</option>
-				</select>
+				<?php /* The field keeps the current state for the normal Save; the button below flips it and saves at once. */ ?>
+				<input type="hidden" name="playtime_enabled" id="playtime_enabled_field" value="<?php echo $playtime_enabled_state ? '1' : '0'; ?>">
+				<input type="submit" class="button_text" name="playtime_save" value="<?php echo $playtime_enabled_state ? 'Disable' : 'Enable'; ?>" title="Enable / disable the daily limit" onclick="document.getElementById('playtime_enabled_field').value='<?php echo $playtime_enabled_state ? '0' : '1'; ?>';">
 			</li>
 			<li id="li_1">
 				<h2>Reset hour (0 - 23)</h2>
@@ -976,11 +974,9 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				$qh_schedule = isset($data["quietHours"]["schedule"]) && is_array($data["quietHours"]["schedule"]) ? $data["quietHours"]["schedule"] : array();
 				echo '<p>Currently: <b>'.($qh_enabled_state ? 'ENABLED' : 'DISABLED').'</b></p>';
 				?>
-				<p>Enable / disable quiet hours:</p>
-				<select name="quiethours_enabled">
-					<option value="1" <?php echo $qh_enabled_state ? 'selected' : ''; ?>>Enabled</option>
-					<option value="0" <?php echo !$qh_enabled_state ? 'selected' : ''; ?>>Disabled</option>
-				</select>
+				<?php /* The field keeps the current state for the normal Save; the button below flips it and saves at once. */ ?>
+				<input type="hidden" name="quiethours_enabled" id="quiethours_enabled_field" value="<?php echo $qh_enabled_state ? '1' : '0'; ?>">
+				<input type="submit" class="button_text" name="quiethours_save" value="<?php echo $qh_enabled_state ? 'Disable' : 'Enable'; ?>" title="Enable / disable quiet hours" onclick="document.getElementById('quiethours_enabled_field').value='<?php echo $qh_enabled_state ? '0' : '1'; ?>';">
 			</li>
 			<li id="li_1">
 				<h2>When a quiet window starts</h2>
