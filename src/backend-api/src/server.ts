@@ -3109,6 +3109,44 @@ app.get('/api/nas/browse', localOnly, async (req, res) => {
 // `list` selects which selection is changed: "artist" (Show in MuPiBox, default),
 // "hidden" (Hide in MuPiBox) or "download" (Download local). A folder is either shown or
 // hidden, never both: setting one removes the other.
+// Saves the whole selection of the admin page in ONE config write. The page used to send three /mark
+// requests per folder shown in the tree (Show, Hide, Download), each rewriting the config file: with a few
+// dozen folders in the tree that took a long time on a Pi, whatever was ticked.
+//   shown: the folders that were on the page; show / hide / download: which of them are ticked.
+// Folders that were not on the page keep their state. A folder is either shown or hidden (hidden wins).
+app.post('/api/nas/selection', localOnly, async (req, res) => {
+  const list = (value: unknown): string[] | undefined =>
+    Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? (value as string[]) : undefined
+  const shown = list(req.body?.shown)
+  const show = list(req.body?.show)
+  const hide = list(req.body?.hide)
+  const download = list(req.body?.download)
+  if (!shown || !show || !hide || !download) {
+    res.status(400).json({ success: false, error: 'shown, show, hide and download must be lists of paths.' })
+    return
+  }
+
+  try {
+    const shownSet = new Set(shown)
+    const hideSet = new Set(hide)
+    // what was not on the page stays as it is; what was on the page becomes what is ticked
+    const merge = (existing: string[] | undefined, ticked: string[]): string[] =>
+      Array.from(new Set([...(existing ?? []).filter((p) => !shownSet.has(p)), ...ticked.filter((p) => shownSet.has(p))]))
+    await updateNasConfig((settings) => {
+      const update: Record<string, unknown> = {
+        artistFolders: merge(settings?.artistFolders, show.filter((p) => !hideSet.has(p))),
+        hiddenFolders: merge(settings?.hiddenFolders, hide),
+        downloadFolders: merge(settings?.downloadFolders, download),
+      }
+      return { ...update, ...nasTrackActiveProfile(settings, update) }
+    })
+    res.json({ success: true })
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to save NAS selection: ${error}`)
+    res.status(500).json({ success: false })
+  }
+})
+
 app.post('/api/nas/mark', localOnly, async (req, res) => {
   const { path: folderPath, marked, list } = req.body ?? {}
   if (typeof folderPath !== 'string' || typeof marked !== 'boolean') {
