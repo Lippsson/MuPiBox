@@ -210,16 +210,41 @@ function cueTrackAt(seconds) {
   return index
 }
 
+// mplayer can drop a seek that arrives while it is still buffering after the previous one (a child pressing
+// "next" twice quickly). So a seek is remembered until the playing time really got there, and sent again
+// (twice at most) if it did not.
+let pendingCueSeek = null // { seconds, at, tries }
+function cueSeek(seconds) {
+  // absolute position in seconds: mplayer "seek <seconds> 2"
+  player.exec('pausing_keep seek', [seconds, 2])
+  pendingCueSeek = { seconds, at: Date.now(), tries: 0 }
+}
+
 player.on('length', (val) => {
   if (currentCue) currentCue.fileLength = val
 })
 player.on('time_pos', (seconds) => {
-  if (!isCuePlayback()) return
+  if (!isCuePlayback()) {
+    pendingCueSeek = null
+    return
+  }
+  if (pendingCueSeek) {
+    if (Date.now() - pendingCueSeek.at < 2500) return // keep the number/title the user just chose while mplayer catches up
+    if (Math.abs(seconds - pendingCueSeek.seconds) > 8 && pendingCueSeek.tries < 2) {
+      pendingCueSeek.tries++
+      pendingCueSeek.at = Date.now()
+      player.exec('pausing_keep seek', [pendingCueSeek.seconds, 2])
+      return
+    }
+    pendingCueSeek = null // arrived (or given up)
+  }
   const index = cueTrackAt(seconds)
   const track = currentCue.tracks[index]
   if (currentMeta.currentTracknr !== index + 1) {
+    const before = currentMeta.currentTracknr
     currentMeta.currentTracknr = index + 1
     currentMeta.currentTrackname = track.name
+    if (typeof before === 'number' && before >= 1 && index + 1 > before) graceSongBoundary() // played on into the next song
   }
   const end = cueTrackEnd(index)
   if (end > track.startSeconds) {
@@ -236,9 +261,8 @@ setInterval(() => {
 function seekToCueTrack(position) {
   const target = Math.max(1, Math.min(currentCue.tracks.length, position))
   const track = currentCue.tracks[target - 1]
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] CUE: seeking to track ${target} at ${track.startSeconds}s`)
-  // absolute position in seconds: mplayer "seek <seconds> 2"
-  player.exec('pausing_keep seek', [track.startSeconds, 2])
+  log.debug(`${now()}: [Spotify Control] CUE: seeking to track ${target} at ${track.startSeconds}s`)
+  cueSeek(track.startSeconds)
   currentMeta.currentTracknr = target
   currentMeta.currentTrackname = track.name
   currentMeta.progressTime = 0
@@ -341,14 +365,17 @@ player.on('track-change', () => {
 // events, so for Spotify the grace timeout in the tick is the only stop trigger.
 // Both sub-systems are checked independently — a single track-change can
 // finalize either or both if both happen to be in grace simultaneously.
-player.on('track-change', () => {
-  if (playtimeState.state === 'grace') {
+// The next song is about to start: in "let the song finish" mode this is the moment to stop. In "let the album
+// finish" mode songs simply run on until the playlist is over.
+function graceSongBoundary() {
+  if (playtimeState.state === 'grace' && playtimeState.graceMode === 'track') {
     finalizePlaytimeBlock('next track would start during grace period')
   }
-  if (quietHoursState.state === 'grace') {
+  if (quietHoursState.state === 'grace' && quietHoursState.graceMode === 'track') {
     finalizeQuietHoursBlock('next track would start during grace period')
   }
-})
+}
+player.on('track-change', graceSongBoundary)
 player.on('playlist-finish', () => {
   if (playtimeState.state === 'grace') {
     finalizePlaytimeBlock('playlist finished during grace period')
@@ -500,19 +527,26 @@ const PLAYTIME_WORKING_PATH = '/tmp/playtime.json'
 const PLAYTIME_CHECKPOINT_PATH = path.join(configBasePath, 'playtime-checkpoint.json')
 const PLAYTIME_CHECKPOINT_INTERVAL_MS = 60_000
 
+// What may happen when a limit is reached (play time used up / a quiet window starts):
+//   'stop'  - playback stops at once
+//   'track' - the song that is playing may finish, then it stops
+//   'album' - the album that is playing may finish, then it stops
+// Older configs only have maxOverrunMinutes (0 = stop at once, anything else = let the song finish).
+function readGraceMode(raw) {
+  if (raw.graceMode === 'stop' || raw.graceMode === 'track' || raw.graceMode === 'album') return raw.graceMode
+  return raw.maxOverrunMinutes === 0 ? 'stop' : 'track'
+}
+// Safety net only: something that never ends (radio, a many-hour audiobook chapter or "album") must not play on
+// for ever. Normally the song / album ends long before.
+const GRACE_MAX_MS = { track: 30 * 60 * 1000, album: 3 * 60 * 60 * 1000 }
+
 function readPlaytimeConfig() {
   const raw = muPiBoxConfig?.playtimeLimit || {}
   const resetHour = Number.isInteger(raw.resetHour) && raw.resetHour >= 0 && raw.resetHour < 24 ? raw.resetHour : 0
-  // Grace period in minutes after the limit is reached during which playback may
-  // continue (current track allowed to finish). 0 = stop immediately at the limit.
-  const maxOverrunMinutes =
-    Number.isInteger(raw.maxOverrunMinutes) && raw.maxOverrunMinutes >= 0 && raw.maxOverrunMinutes <= 60
-      ? raw.maxOverrunMinutes
-      : 10
   return {
     enabled: raw.enabled === true,
     resetHour,
-    maxOverrunMinutes,
+    graceMode: readGraceMode(raw),
     limitsMinutes: { ...PLAYTIME_DEFAULT_LIMITS, ...(raw.limitsMinutes || {}) },
     todayBonus: raw.todayBonus || null,
   }
@@ -553,13 +587,9 @@ const QUIET_DEFAULT_SCHEDULE = { mon: [], tue: [], wed: [], thu: [], fri: [], sa
 
 function readQuietHoursConfig() {
   const raw = muPiBoxConfig?.quietHours || {}
-  const maxOverrunMinutes =
-    Number.isInteger(raw.maxOverrunMinutes) && raw.maxOverrunMinutes >= 0 && raw.maxOverrunMinutes <= 60
-      ? raw.maxOverrunMinutes
-      : 10
   return {
     enabled: raw.enabled === true,
-    maxOverrunMinutes,
+    graceMode: readGraceMode(raw),
     schedule: { ...QUIET_DEFAULT_SCHEDULE, ...(raw.schedule || {}) },
   }
 }
@@ -629,6 +659,7 @@ const playtimeState = {
   usedSeconds: 0,
   state: 'normal',
   graceEndsAt: null,
+  graceMode: null, // 'track' | 'album' while in grace
 }
 let playtimeLastCheckpointAt = 0
 let playtimeLastCheckpointSeconds = -1
@@ -637,6 +668,7 @@ let playtimeLastCheckpointSeconds = -1
 const quietHoursState = {
   state: 'normal',
   graceEndsAt: null,
+  graceMode: null, // 'track' | 'album' while in grace
   activeWindow: null, // current window object {from, to, label?} when in_window
 }
 
@@ -711,6 +743,7 @@ function writeCombinedWorking() {
       usedSeconds: playtimeState.usedSeconds,
       remainingSeconds: ptCfg.enabled ? Math.max(0, ptLimit * 60 - playtimeState.usedSeconds) : 0,
       graceEndsInSeconds: ptGraceEndsInSeconds,
+      graceMode: ptCfg.graceMode,
       resetHour: ptCfg.resetHour,
     },
     quiet: {
@@ -719,6 +752,7 @@ function writeCombinedWorking() {
       inWindow: quietHoursState.activeWindow !== null,
       ...(quietHoursState.activeWindow?.label ? { label: quietHoursState.activeWindow.label } : {}),
       graceEndsInSeconds: qhGraceEndsInSeconds,
+      graceMode: qhCfg.graceMode,
     },
     override: {
       allowUntil: ovr.allowUntil,
@@ -803,6 +837,44 @@ function finalizeQuietHoursBlock(reason) {
   }
 }
 
+// Spotify: the player does not get track events from it, so while a limit is in its grace period the playback
+// state is polled and playback stops when the song (or the last song of the album) is about to end.
+let spotifyGraceBusy = false
+let spotifyGraceItemId = null
+async function spotifyGraceCheck() {
+  if (currentMeta.currentPlayer !== 'spotify' || spotifyGraceBusy) return
+  const modes = []
+  if (playtimeState.state === 'grace') modes.push(playtimeState.graceMode)
+  if (quietHoursState.state === 'grace') modes.push(quietHoursState.graceMode)
+  if (modes.length === 0) {
+    spotifyGraceItemId = null
+    return
+  }
+  const mode = modes.includes('track') ? 'track' : 'album' // if both are in grace the stricter one counts
+  spotifyGraceBusy = true
+  try {
+    const { body } = await spotifyApi.getMyCurrentPlaybackState({ additional_types: 'episode,track' })
+    const item = body?.item
+    if (!item) return
+    const remainingMs = (item.duration_ms ?? 0) - (body.progress_ms ?? 0)
+    // "album" only means something inside an album; a playlist, podcast or audiobook counts as its current item
+    const inAlbum = body.context?.type === 'album'
+    const lastOfWhatMayFinish = mode === 'track' || !inAlbum || item.track_number === item.album?.total_tracks
+    const movedOn = spotifyGraceItemId !== null && spotifyGraceItemId !== item.id && (mode === 'track' || !inAlbum)
+    if (spotifyGraceItemId === null) spotifyGraceItemId = item.id
+    if (movedOn || (lastOfWhatMayFinish && remainingMs <= 2500)) {
+      if (playtimeState.state === 'grace') finalizePlaytimeBlock('spotify: song / album finished during grace period')
+      if (quietHoursState.state === 'grace') finalizeQuietHoursBlock('spotify: song / album finished during grace period')
+      spotifyGraceItemId = null
+    }
+  } catch (e) {
+    log.debug(`${now()}: [Spotify Control] Grace check failed: ${e}`)
+  } finally {
+    spotifyGraceBusy = false
+  }
+}
+setInterval(spotifyGraceCheck, 1500)
+
 // Commands that *start or resume* playback. These get blocked when the daily cap is hit.
 // Pause/stop/volume/system commands are NOT blocked — those should always work.
 // True when `segment` is one whole path segment of the command's directory. The URLs look like
@@ -860,20 +932,22 @@ function playtimeTickStep() {
   const limitReached = playtimeState.usedSeconds >= limitSeconds
   if (limitReached) {
     if (playtimeState.state === 'normal') {
-      const overrunMs = cfg.maxOverrunMinutes * 60 * 1000
-      if (overrunMs > 0) {
+      // nothing playing (paused, or the limit was lowered): there is nothing to let finish
+      if (cfg.graceMode !== 'stop' && isActuallyPlaying()) {
         playtimeState.state = 'grace'
-        playtimeState.graceEndsAt = Date.now() + overrunMs
+        playtimeState.graceMode = cfg.graceMode
+        playtimeState.graceEndsAt = Date.now() + GRACE_MAX_MS[cfg.graceMode]
         console.log(
-          `${now.toLocaleString()}: [Playtime] Daily limit reached (${limit} min for ${today.dayKey}${bonus > 0 ? `, +${bonus} bonus` : ''}). Entering grace period (max ${cfg.maxOverrunMinutes} min until current track ends).`,
+          `${now.toLocaleString()}: [Playtime] Daily limit reached (${limit} min for ${today.dayKey}${bonus > 0 ? `, +${bonus} bonus` : ''}). Letting the ${cfg.graceMode} finish.`,
         )
         writePlaytimeCheckpoint()
       } else {
-        finalizePlaytimeBlock(`limit reached (${limit} min, no grace configured)`)
+        finalizePlaytimeBlock(`limit reached (${limit} min, ${cfg.graceMode === 'stop' ? 'no grace configured' : 'nothing playing'})`)
       }
     } else if (playtimeState.state === 'grace') {
+      // (the song / album ending is handled by the player events and the Spotify check below)
       if (playtimeState.graceEndsAt !== null && Date.now() >= playtimeState.graceEndsAt) {
-        finalizePlaytimeBlock(`grace period expired (${cfg.maxOverrunMinutes} min)`)
+        finalizePlaytimeBlock(`grace safety limit reached (${playtimeState.graceMode})`)
       }
     } else if (playtimeState.state === 'blocked') {
       // Still blocked, but parent might have just added bonus — re-evaluate
@@ -928,19 +1002,19 @@ function quietHoursTickStep() {
     if (quietHoursState.state === 'normal') {
       // Just entered a window
       quietHoursState.activeWindow = window
-      const overrunMs = cfg.maxOverrunMinutes * 60 * 1000
-      if (overrunMs > 0) {
+      if (cfg.graceMode !== 'stop' && isActuallyPlaying()) {
         quietHoursState.state = 'grace'
-        quietHoursState.graceEndsAt = Date.now() + overrunMs
+        quietHoursState.graceMode = cfg.graceMode
+        quietHoursState.graceEndsAt = Date.now() + GRACE_MAX_MS[cfg.graceMode]
         console.log(
-          `${now.toLocaleString()}: [QuietHours] Entered window ${window.from}-${window.to}${window.label ? ` (${window.label})` : ''}. Entering grace period (max ${cfg.maxOverrunMinutes} min).`,
+          `${now.toLocaleString()}: [QuietHours] Entered window ${window.from}-${window.to}${window.label ? ` (${window.label})` : ''}. Letting the ${cfg.graceMode} finish.`,
         )
       } else {
-        finalizeQuietHoursBlock(`entered window ${window.from}-${window.to} (no grace configured)`)
+        finalizeQuietHoursBlock(`entered window ${window.from}-${window.to} (${cfg.graceMode === 'stop' ? 'no grace configured' : 'nothing playing'})`)
       }
     } else if (quietHoursState.state === 'grace') {
       if (quietHoursState.graceEndsAt !== null && Date.now() >= quietHoursState.graceEndsAt) {
-        finalizeQuietHoursBlock(`grace period expired (${cfg.maxOverrunMinutes} min)`)
+        finalizeQuietHoursBlock(`grace safety limit reached (${quietHoursState.graceMode})`)
       }
     }
     // 'blocked': stay blocked
@@ -1704,7 +1778,7 @@ function seek(progress) {
         const index = Math.max(0, currentMeta.currentTracknr - 1)
         const track = currentCue.tracks[index]
         const end = cueTrackEnd(index)
-        player.exec('pausing_keep seek', [track.startSeconds + ((end - track.startSeconds) * progress) / 100, 2])
+        cueSeek(track.startSeconds + ((end - track.startSeconds) * progress) / 100)
       } else {
         player.seekPercent(progress)
       }

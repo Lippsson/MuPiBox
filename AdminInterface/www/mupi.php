@@ -545,6 +545,18 @@ if( $_POST['fan_control'] )
   $CHANGE_TXT=$CHANGE_TXT."<li>Press Button delay set to ".$_POST['pressDelay']. " seconds</li>";
   $change=2;
   }
+ // How playback may go on when a limit is reached: stop | track (let the song finish) | album (let the album finish).
+ // Older configs only have maxOverrunMinutes: 0 meant stop at once, anything else let the song finish.
+ function grace_mode_of($block)
+  {
+  if( is_array($block) && isset($block['graceMode']) && in_array($block['graceMode'], array('stop','track','album'), true) ) return $block['graceMode'];
+  if( is_array($block) && isset($block['maxOverrunMinutes']) && intval($block['maxOverrunMinutes']) === 0 ) return 'stop';
+  return 'track';
+  }
+ function grace_mode_posted($name)
+  {
+  return ( isset($_POST[$name]) && in_array($_POST[$name], array('stop','track','album'), true) ) ? $_POST[$name] : 'track';
+  }
  $playtime_changed = false;
  if( $_POST['playtime_save'] )
   {
@@ -553,7 +565,7 @@ if( $_POST['fan_control'] )
    $data["playtimeLimit"] = array(
     "enabled" => false,
     "resetHour" => 0,
-    "maxOverrunMinutes" => 10,
+    "graceMode" => "track",
     "limitsMinutes" => array("mon"=>60,"tue"=>60,"wed"=>60,"thu"=>60,"fri"=>60,"sat"=>60,"sun"=>60),
    );
    }
@@ -563,7 +575,8 @@ if( $_POST['fan_control'] )
    }
   $data["playtimeLimit"]["enabled"] = (isset($_POST['playtime_enabled']) && $_POST['playtime_enabled'] === '1');
   $data["playtimeLimit"]["resetHour"] = max(0, min(23, intval($_POST['playtime_resetHour'])));
-  $data["playtimeLimit"]["maxOverrunMinutes"] = max(0, min(60, intval($_POST['playtime_maxOverrunMinutes'])));
+  $data["playtimeLimit"]["graceMode"] = grace_mode_posted('playtime_graceMode');
+  unset($data["playtimeLimit"]["maxOverrunMinutes"]);
   $playtime_days = array('mon','tue','wed','thu','fri','sat','sun');
   foreach( $playtime_days as $d )
    {
@@ -581,12 +594,13 @@ if( $_POST['fan_control'] )
    {
    $data["quietHours"] = array(
     "enabled" => false,
-    "maxOverrunMinutes" => 10,
+    "graceMode" => "track",
     "schedule" => array("mon"=>array(),"tue"=>array(),"wed"=>array(),"thu"=>array(),"fri"=>array(),"sat"=>array(),"sun"=>array()),
    );
    }
   $data["quietHours"]["enabled"] = (isset($_POST['quiethours_enabled']) && $_POST['quiethours_enabled'] === '1');
-  $data["quietHours"]["maxOverrunMinutes"] = max(0, min(60, intval($_POST['quiethours_maxOverrunMinutes'])));
+  $data["quietHours"]["graceMode"] = grace_mode_posted('quiethours_graceMode');
+  unset($data["quietHours"]["maxOverrunMinutes"]);
   $quiethours_days = array('mon','tue','wed','thu','fri','sat','sun');
   $quiethours_window_count = 0;
   foreach( $quiethours_days as $d )
@@ -900,10 +914,14 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				<input type="number" name="playtime_resetHour" min="0" max="23" step="1" value="<?php echo $playtime_resetHour; ?>">
 			</li>
 			<li id="li_1">
-				<h2>Grace period (minutes)</h2>
-				<p>When the daily limit is reached, allow playback to continue for up to this many additional minutes so the current track can finish naturally. The player stops at the next track boundary (for local files / radio / RSS) or at the latest when this grace runs out. <b>0</b> = stop immediately at the limit. Default: <b>10</b>. Maximum: 60.</p>
-				<?php $playtime_maxOverrunMinutes = isset($data["playtimeLimit"]["maxOverrunMinutes"]) ? intval($data["playtimeLimit"]["maxOverrunMinutes"]) : 10; ?>
-				<input type="number" name="playtime_maxOverrunMinutes" min="0" max="60" step="1" value="<?php echo $playtime_maxOverrunMinutes; ?>"> min
+				<h2>When the daily limit is reached</h2>
+				<p>What happens to what is playing when today's time is used up. Nothing new is started after the limit. Letting the song or album finish is capped at 30 minutes / 3 hours as a safety net (endless streams, very long audiobooks).</p>
+				<?php $playtime_graceMode = grace_mode_of(isset($data["playtimeLimit"]) ? $data["playtimeLimit"] : null); ?>
+				<select name="playtime_graceMode">
+					<option value="stop" <?php echo $playtime_graceMode === 'stop' ? 'selected' : ''; ?>>Stop immediately</option>
+					<option value="track" <?php echo $playtime_graceMode === 'track' ? 'selected' : ''; ?>>Let the current song finish</option>
+					<option value="album" <?php echo $playtime_graceMode === 'album' ? 'selected' : ''; ?>>Let the current album finish</option>
+				</select>
 			</li>
 			<li id="li_1">
 				<h2>Daily limit per weekday (minutes)</h2>
@@ -955,7 +973,6 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				<h2>Status</h2>
 				<?php
 				$qh_enabled_state = ( isset($data["quietHours"]["enabled"]) && $data["quietHours"]["enabled"] ) ? true : false;
-				$qh_maxOverrunMinutes = isset($data["quietHours"]["maxOverrunMinutes"]) ? intval($data["quietHours"]["maxOverrunMinutes"]) : 10;
 				$qh_schedule = isset($data["quietHours"]["schedule"]) && is_array($data["quietHours"]["schedule"]) ? $data["quietHours"]["schedule"] : array();
 				echo '<p>Currently: <b>'.($qh_enabled_state ? 'ENABLED' : 'DISABLED').'</b></p>';
 				?>
@@ -966,9 +983,14 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				</select>
 			</li>
 			<li id="li_1">
-				<h2>Grace period (minutes)</h2>
-				<p>When a quiet window starts, allow up to this many additional minutes for the current track to finish naturally. <b>0</b> = stop immediately at the window boundary. Default: <b>10</b>. Maximum: 60.</p>
-				<input type="number" name="quiethours_maxOverrunMinutes" min="0" max="60" step="1" value="<?php echo $qh_maxOverrunMinutes; ?>"> min
+				<h2>When a quiet window starts</h2>
+				<p>What happens to what is playing when a quiet window begins. Nothing new is started during the window. Letting the song or album finish is capped at 30 minutes / 3 hours as a safety net.</p>
+				<?php $qh_graceMode = grace_mode_of(isset($data["quietHours"]) ? $data["quietHours"] : null); ?>
+				<select name="quiethours_graceMode">
+					<option value="stop" <?php echo $qh_graceMode === 'stop' ? 'selected' : ''; ?>>Stop immediately</option>
+					<option value="track" <?php echo $qh_graceMode === 'track' ? 'selected' : ''; ?>>Let the current song finish</option>
+					<option value="album" <?php echo $qh_graceMode === 'album' ? 'selected' : ''; ?>>Let the current album finish</option>
+				</select>
 			</li>
 			<li id="li_1">
 				<h2>Windows per weekday</h2>
