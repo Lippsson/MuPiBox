@@ -4465,6 +4465,9 @@ async function nasStreamWithResume(req: express.Request, res: express.Response, 
         attempt = 0
         next += (chunk as Buffer).length
         if (!res.write(chunk)) {
+          // Waiting for the player (paused, full buffer) is no NAS stall: without this, every pause longer
+          // than NAS_STALL_MS dropped the NAS connection and reconnected it again every 15 s.
+          clearTimeout(stall)
           await new Promise<void>((resolve) => {
             const done = () => {
               res.off('drain', done)
@@ -4474,6 +4477,8 @@ async function nasStreamWithResume(req: express.Request, res: express.Response, 
             res.on('drain', done)
             res.on('close', done)
           })
+          // the next chunk comes from the NAS again: watch it
+          armStall()
         }
       }
       clearTimeout(stall)
