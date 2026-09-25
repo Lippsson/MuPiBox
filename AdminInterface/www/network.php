@@ -105,6 +105,7 @@
 			$command = 'echo ' . escapeshellarg('options ' . $usb_power_module . ' rtw_power_mgnt=' . $usb_power_new) . ' | sudo tee -a ' . escapeshellarg($usb_power_conf) . ' > /dev/null';
 			}
 		exec($command, $output, $result );
+		$change=1; // shows the notice box
 		if( $result == 0 )
 			{
 			$CHANGE_TXT=$CHANGE_TXT."<li>Power management of the ".$usb_wifi_drivers[$usb_power_key]['label']." driver set to: ".$usb_power_labels[$usb_power_new].". Active after the next reboot.</li>";
