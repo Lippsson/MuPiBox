@@ -762,7 +762,7 @@ function finalizePlaytimeBlock(reason) {
   // loops over all configured chatIds, so both Family group and individual DMs
   // receive the message.
   if (hasConfiguredTelegram()) {
-    cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Hörzeit aufgebraucht heute"')
+    cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py --key n_playtime_used_up')
   }
 }
 
@@ -773,12 +773,13 @@ function finalizeQuietHoursBlock(reason) {
   quietHoursState.state = 'blocked'
   quietHoursState.graceEndsAt = null
   if (hasConfiguredTelegram()) {
-    const msg = label ? `Ruhezeit gestartet: ${label}` : 'Ruhezeit gestartet'
+    // Sent as a text key: telegram_send_message.py puts it into the bot's language (German/English).
+    const msg = label ? ['--key', 'n_quiet_started_label', `label=${label}`] : ['--key', 'n_quiet_started']
     // No shell: the label is free text from the parents' UI, and escaping only `"` left
     // $(...) and backticks inside the double quotes executable.
     require('node:child_process').execFile(
       '/usr/bin/python3',
-      ['/usr/local/bin/mupibox/telegram_send_message.py', msg],
+      ['/usr/local/bin/mupibox/telegram_send_message.py', ...msg],
       (e) => e && console.error(`${new Date().toLocaleString()}: [QuietHours] Telegram message failed: ${e.message}`),
     )
   }
