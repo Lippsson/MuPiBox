@@ -723,6 +723,7 @@ app.get('/api/rssfeed/cached', async (req, res) => {
 const imageContentTypes: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.jfif': 'image/jpeg',
   '.png': 'image/png',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
@@ -3767,7 +3768,7 @@ async function nasListFiles(folderPath: string): Promise<NasFileEntry[]> {
 }
 
 function nasFindCoverImage(files: NasFileEntry[]): string | undefined {
-  const image = files.find((f) => !f.isdir && /\.(jpe?g|png)$/i.test(f.name))
+  const image = files.find((f) => !f.isdir && /\.(jpe?g|jfif|png)$/i.test(f.name))
   return image?.path
 }
 
@@ -4652,6 +4653,7 @@ const nasContentTypes: Record<string, string> = {
   '.m4a': 'audio/mp4',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.jfif': 'image/jpeg',
   '.png': 'image/png',
 }
 
@@ -4900,7 +4902,7 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
 
 // --- Download local ("Download selected") ---------------------------------
 
-const nasDownloadExtensions = [...nasAudioExtensions, '.cue', '.jpg', '.jpeg', '.png']
+const nasDownloadExtensions = [...nasAudioExtensions, '.cue', '.jpg', '.jpeg', '.jfif', '.png']
 
 interface NasDownloadStatus {
   running: boolean
@@ -5052,7 +5054,7 @@ async function nasPruneExcept(nasDir: string, keep: string[]): Promise<void> {
       continue
     }
     // Cover images of parent folders belong to the folders below them.
-    if (!entry.isDirectory() && /\.(jpe?g|png)$/i.test(entry.name)) {
+    if (!entry.isDirectory() && /\.(jpe?g|jfif|png)$/i.test(entry.name)) {
       continue
     }
     if (entry.isDirectory() && keep.some((k) => k.startsWith(`${child}/`))) {
@@ -5066,7 +5068,7 @@ async function nasPruneExcept(nasDir: string, keep: string[]): Promise<void> {
 async function nasLocalHasImage(dir: string): Promise<boolean> {
   try {
     const entries = await readdir(dir, { withFileTypes: true })
-    return entries.some((entry) => entry.isFile() && /\.(jpe?g|png)$/i.test(entry.name))
+    return entries.some((entry) => entry.isFile() && /\.(jpe?g|jfif|png)$/i.test(entry.name))
   } catch {
     return false
   }
@@ -5089,7 +5091,7 @@ async function nasDownloadParentCovers(folder: string, checked: Set<string>): Pr
       continue
     }
     const files = await withNasSession((session) => nasListFilesLive(session, ancestor, true))
-    const cover = files?.find((file) => !file.isdir && /\.(jpe?g|png)$/i.test(file.name))
+    const cover = files?.find((file) => !file.isdir && /\.(jpe?g|jfif|png)$/i.test(file.name))
     if (cover) {
       await nasDownloadFile(cover.path, cover.additional?.size ?? -1)
     }
@@ -5304,7 +5306,7 @@ async function libraryListFiles(relPath: string): Promise<NasFileEntry[]> {
 
 // Prefers a file called "cover.*", otherwise the first image in the folder.
 function libraryFindCover(files: NasFileEntry[]): string | undefined {
-  const images = files.filter((f) => !f.isdir && /\.(jpe?g|png)$/i.test(f.name))
+  const images = files.filter((f) => !f.isdir && /\.(jpe?g|jfif|png)$/i.test(f.name))
   return (images.find((f) => /^cover\./i.test(f.name)) ?? images[0])?.path
 }
 
@@ -5479,7 +5481,7 @@ function parseThumbSize(value: unknown): number | undefined {
 }
 
 function isThumbnailable(file: string): boolean {
-  return /\.(jpe?g|png)$/i.test(file)
+  return /\.(jpe?g|jfif|png)$/i.test(file)
 }
 
 function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
