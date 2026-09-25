@@ -128,10 +128,30 @@ ion-toolbar {
             opacity: 0.6;
         }
 
+        // The band in use, next to "connected" (networks on both bands)
+        .band-in-use {
+            font-size: 16px;
+            font-weight: 400;
+            opacity: 0.7;
+        }
+
+        // Change / Delete and, for a network on both bands, the band choice in front of them. The choice
+        // is stretched to the height of the buttons (align-items), so both are always exactly as high.
+        .row-actions {
+            display: flex;
+            align-items: stretch;
+            gap: 20px;
+
+            ion-button {
+                margin: 0;
+            }
+        }
+
         // Band choice of a saved network on both bands: Auto | 2.4 GHz | 5 GHz
         .band-toggle {
             display: inline-flex;
-            margin-top: 8px;
+            box-sizing: border-box;
+            font-size: 0.8125rem;
             border: 1px solid var(--ion-color-primary, #2dd6c7);
             border-radius: 6px;
             overflow: hidden;
@@ -140,9 +160,8 @@ ion-toolbar {
                 background: transparent;
                 color: var(--ion-color-primary, #2dd6c7);
                 border: 0;
-                padding: 6px 16px;
-                font-size: 14px;
-                min-height: 34px;
+                padding: 0 16px;
+                font-size: inherit;
 
                 & + button {
                     border-left: 1px solid var(--ion-color-primary, #2dd6c7);
