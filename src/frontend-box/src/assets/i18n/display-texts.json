@@ -1,0 +1,215 @@
+{
+  "_comment": "Texts of the overlays on the box display, per language. Used by the box display, the parents' web app and the admin interface. {s} = seconds. To add a language, add a block with all nine keys.",
+  "languages": {
+    "en": {
+      "name": "English",
+      "texts": {
+        "blockedHeading": "That's enough music for today",
+        "blockedSubheading": "More music tomorrow",
+        "quietHeading": "Quiet time",
+        "quietSubheading": "Music will be back soon",
+        "parentsTitle": "Parent setup",
+        "parentsHint": "Scan with your phone or open in a browser:",
+        "parentsCountdown": "Disappears in {s} s",
+        "parentsClose": "Close",
+        "parentsTile": "Parent web app"
+      }
+    },
+    "de": {
+      "name": "Deutsch",
+      "texts": {
+        "blockedHeading": "Heute war genug Musik",
+        "blockedSubheading": "Morgen geht's weiter",
+        "quietHeading": "Ruhezeit",
+        "quietSubheading": "Bald gibt es wieder Musik",
+        "parentsTitle": "Eltern-Setup",
+        "parentsHint": "Mit dem Smartphone scannen oder im Browser öffnen:",
+        "parentsCountdown": "Verschwindet in {s} Sek",
+        "parentsClose": "Schließen",
+        "parentsTile": "Eltern-WebApp"
+      }
+    },
+    "fr": {
+      "name": "Français",
+      "texts": {
+        "blockedHeading": "C'est assez de musique pour aujourd'hui",
+        "blockedSubheading": "On continue demain",
+        "quietHeading": "C'est l'heure du calme",
+        "quietSubheading": "La musique revient bientôt",
+        "parentsTitle": "Espace parents",
+        "parentsHint": "Scannez avec votre téléphone ou ouvrez dans un navigateur :",
+        "parentsCountdown": "Disparaît dans {s} s",
+        "parentsClose": "Fermer",
+        "parentsTile": "Appli parents"
+      }
+    },
+    "es": {
+      "name": "Español",
+      "texts": {
+        "blockedHeading": "Por hoy ya hay suficiente música",
+        "blockedSubheading": "Mañana seguimos",
+        "quietHeading": "Hora de descansar",
+        "quietSubheading": "Pronto volverá la música",
+        "parentsTitle": "Configuración para padres",
+        "parentsHint": "Escanea con el móvil o ábrelo en un navegador:",
+        "parentsCountdown": "Desaparece en {s} s",
+        "parentsClose": "Cerrar",
+        "parentsTile": "App para padres"
+      }
+    },
+    "it": {
+      "name": "Italiano",
+      "texts": {
+        "blockedHeading": "Per oggi basta musica",
+        "blockedSubheading": "Domani si continua",
+        "quietHeading": "Momento di silenzio",
+        "quietSubheading": "La musica torna presto",
+        "parentsTitle": "Area genitori",
+        "parentsHint": "Scansiona con lo smartphone o apri nel browser:",
+        "parentsCountdown": "Scompare tra {s} s",
+        "parentsClose": "Chiudi",
+        "parentsTile": "App genitori"
+      }
+    },
+    "nl": {
+      "name": "Nederlands",
+      "texts": {
+        "blockedHeading": "Genoeg muziek voor vandaag",
+        "blockedSubheading": "Morgen gaan we verder",
+        "quietHeading": "Rusttijd",
+        "quietSubheading": "Straks is er weer muziek",
+        "parentsTitle": "Ouderinstellingen",
+        "parentsHint": "Scan met je telefoon of open in een browser:",
+        "parentsCountdown": "Verdwijnt over {s} s",
+        "parentsClose": "Sluiten",
+        "parentsTile": "Ouder-app"
+      }
+    },
+    "sv": {
+      "name": "Svenska",
+      "texts": {
+        "blockedHeading": "Det räcker med musik för idag",
+        "blockedSubheading": "Imorgon fortsätter vi",
+        "quietHeading": "Vilotid",
+        "quietSubheading": "Snart kommer musiken tillbaka",
+        "parentsTitle": "Föräldrainställningar",
+        "parentsHint": "Skanna med mobilen eller öppna i en webbläsare:",
+        "parentsCountdown": "Försvinner om {s} s",
+        "parentsClose": "Stäng",
+        "parentsTile": "Föräldraapp"
+      }
+    },
+    "da": {
+      "name": "Dansk",
+      "texts": {
+        "blockedHeading": "Det er nok musik for i dag",
+        "blockedSubheading": "I morgen fortsætter vi",
+        "quietHeading": "Hviletid",
+        "quietSubheading": "Musikken kommer snart igen",
+        "parentsTitle": "Forældreopsætning",
+        "parentsHint": "Scan med telefonen eller åbn i en browser:",
+        "parentsCountdown": "Forsvinder om {s} s",
+        "parentsClose": "Luk",
+        "parentsTile": "Forældreapp"
+      }
+    },
+    "nb": {
+      "name": "Norsk",
+      "texts": {
+        "blockedHeading": "Det er nok musikk for i dag",
+        "blockedSubheading": "I morgen fortsetter vi",
+        "quietHeading": "Hviletid",
+        "quietSubheading": "Musikken kommer snart tilbake",
+        "parentsTitle": "Foreldreoppsett",
+        "parentsHint": "Skann med mobilen eller åpne i en nettleser:",
+        "parentsCountdown": "Forsvinner om {s} s",
+        "parentsClose": "Lukk",
+        "parentsTile": "Foreldreapp"
+      }
+    },
+    "fi": {
+      "name": "Suomi",
+      "texts": {
+        "blockedHeading": "Tänään on kuunneltu tarpeeksi musiikkia",
+        "blockedSubheading": "Huomenna jatketaan",
+        "quietHeading": "Hiljainen hetki",
+        "quietSubheading": "Musiikki palaa pian",
+        "parentsTitle": "Vanhempien asetukset",
+        "parentsHint": "Skannaa puhelimella tai avaa selaimessa:",
+        "parentsCountdown": "Katoaa {s} s kuluttua",
+        "parentsClose": "Sulje",
+        "parentsTile": "Vanhempien sovellus"
+      }
+    },
+    "pl": {
+      "name": "Polski",
+      "texts": {
+        "blockedHeading": "Na dziś wystarczy muzyki",
+        "blockedSubheading": "Jutro gramy dalej",
+        "quietHeading": "Czas na odpoczynek",
+        "quietSubheading": "Muzyka wkrótce wróci",
+        "parentsTitle": "Ustawienia dla rodziców",
+        "parentsHint": "Zeskanuj telefonem lub otwórz w przeglądarce:",
+        "parentsCountdown": "Zniknie za {s} s",
+        "parentsClose": "Zamknij",
+        "parentsTile": "Aplikacja dla rodziców"
+      }
+    },
+    "pt": {
+      "name": "Português",
+      "texts": {
+        "blockedHeading": "Por hoje já chega de música",
+        "blockedSubheading": "Amanhã há mais",
+        "quietHeading": "Hora de descansar",
+        "quietSubheading": "A música volta em breve",
+        "parentsTitle": "Configuração para pais",
+        "parentsHint": "Digitalize com o telemóvel ou abra num navegador:",
+        "parentsCountdown": "Desaparece em {s} s",
+        "parentsClose": "Fechar",
+        "parentsTile": "App para pais"
+      }
+    },
+    "tr": {
+      "name": "Türkçe",
+      "texts": {
+        "blockedHeading": "Bugünlük bu kadar müzik yeter",
+        "blockedSubheading": "Yarın devam ederiz",
+        "quietHeading": "Dinlenme zamanı",
+        "quietSubheading": "Müzik yakında geri gelecek",
+        "parentsTitle": "Ebeveyn ayarları",
+        "parentsHint": "Telefonunla tara veya bir tarayıcıda aç:",
+        "parentsCountdown": "{s} sn içinde kaybolur",
+        "parentsClose": "Kapat",
+        "parentsTile": "Ebeveyn uygulaması"
+      }
+    },
+    "uk": {
+      "name": "Українська",
+      "texts": {
+        "blockedHeading": "На сьогодні музики досить",
+        "blockedSubheading": "Завтра продовжимо",
+        "quietHeading": "Час відпочинку",
+        "quietSubheading": "Музика скоро повернеться",
+        "parentsTitle": "Налаштування для батьків",
+        "parentsHint": "Відскануйте телефоном або відкрийте в браузері:",
+        "parentsCountdown": "Зникне через {s} с",
+        "parentsClose": "Закрити",
+        "parentsTile": "Застосунок для батьків"
+      }
+    },
+    "ru": {
+      "name": "Русский",
+      "texts": {
+        "blockedHeading": "На сегодня музыки достаточно",
+        "blockedSubheading": "Завтра продолжим",
+        "quietHeading": "Время отдыха",
+        "quietSubheading": "Музыка скоро вернётся",
+        "parentsTitle": "Настройки для родителей",
+        "parentsHint": "Отсканируйте телефоном или откройте в браузере:",
+        "parentsCountdown": "Исчезнет через {s} с",
+        "parentsClose": "Закрыть",
+        "parentsTile": "Приложение для родителей"
+      }
+    }
+  }
+}

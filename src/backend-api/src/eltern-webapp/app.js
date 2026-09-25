@@ -802,25 +802,66 @@ function renderQuietSchedule() {
   }
 }
 
-// Texts of the overlays on the box display. Keys and English defaults as in the box frontend
-// (display-texts.service.ts); an empty field stores nothing, the box then shows the default.
+// Texts of the overlays on the box display. The box shows per text: own text > chosen language > English.
+// Languages and their texts come from the box frontend's assets/i18n/display-texts.json (same server).
 const DISPLAY_TEXT_FIELDS = [
-  { key: 'blockedHeading', label: 'Spielzeit aufgebraucht – Überschrift', def: "That's enough music for today" },
-  { key: 'blockedSubheading', label: 'Spielzeit aufgebraucht – Unterzeile', def: 'More music tomorrow' },
-  { key: 'quietHeading', label: 'Ruhezeit – Überschrift (nur ohne Namen der Regel)', def: 'Quiet time' },
-  { key: 'quietSubheading', label: 'Ruhezeit – Unterzeile', def: 'Music will be back soon' },
-  { key: 'parentsTitle', label: 'QR-Code – Überschrift', def: 'Parent setup' },
-  { key: 'parentsHint', label: 'QR-Code – Hinweis', def: 'Scan with your phone or open in a browser:' },
-  { key: 'parentsCountdown', label: 'QR-Code – Countdown ({s} = Sekunden)', def: 'Disappears in {s} s' },
-  { key: 'parentsClose', label: 'QR-Code – Schließen-Knopf', def: 'Close' },
+  { key: 'blockedHeading', label: 'Spielzeit aufgebraucht – Überschrift' },
+  { key: 'blockedSubheading', label: 'Spielzeit aufgebraucht – Unterzeile' },
+  { key: 'quietHeading', label: 'Ruhezeit – Überschrift (nur ohne Namen der Regel)' },
+  { key: 'quietSubheading', label: 'Ruhezeit – Unterzeile' },
+  { key: 'parentsTitle', label: 'QR-Code – Überschrift' },
+  { key: 'parentsHint', label: 'QR-Code – Hinweis' },
+  { key: 'parentsCountdown', label: 'QR-Code – Countdown ({s} = Sekunden)' },
+  { key: 'parentsClose', label: 'QR-Code – Schließen-Knopf' },
+  { key: 'parentsTile', label: 'Kachel in den Einstellungen der Box' },
 ]
+let displayLanguages = {}
+
+function applyDisplayPlaceholders() {
+  const code = $('#display-lang')?.value || 'en'
+  const texts = displayLanguages[code]?.texts ?? displayLanguages.en?.texts ?? {}
+  for (const input of document.querySelectorAll('#display-texts-form input[data-key]')) {
+    input.placeholder = texts[input.dataset.key] ?? ''
+  }
+}
 
 async function loadDisplayTexts() {
   const box = $('#display-texts-form')
   if (!box) return
-  const res = await api(`${API}/display-texts`)
+  const [res, file] = await Promise.all([
+    api(`${API}/display-texts`),
+    fetch('/assets/i18n/display-texts.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+  ])
+  displayLanguages = file?.languages ?? {}
   const texts = res.ok ? (res.body?.texts ?? {}) : {}
+  const current = res.ok ? (res.body?.language ?? 'en') : 'en'
   box.textContent = ''
+
+  const langRow = document.createElement('div')
+  langRow.className = 'form-row'
+  const langLabel = document.createElement('label')
+  langLabel.htmlFor = 'display-lang'
+  langLabel.textContent = 'Sprache'
+  const select = document.createElement('select')
+  select.id = 'display-lang'
+  const codes = Object.keys(displayLanguages)
+  if (!codes.includes(current)) codes.unshift(current)
+  for (const code of codes) {
+    const opt = document.createElement('option')
+    opt.value = code
+    opt.textContent = displayLanguages[code]?.name ?? code
+    if (code === current) opt.selected = true
+    select.appendChild(opt)
+  }
+  select.addEventListener('change', applyDisplayPlaceholders)
+  langRow.append(langLabel, select)
+  box.appendChild(langRow)
+
+  const hint = document.createElement('p')
+  hint.className = 'dim'
+  hint.textContent = 'Eigene Texte (optional) ersetzen den Text der Sprache. Leer = Text der Sprache (grau).'
+  box.appendChild(hint)
+
   for (const field of DISPLAY_TEXT_FIELDS) {
     const row = document.createElement('div')
     row.className = 'form-row'
@@ -832,11 +873,11 @@ async function loadDisplayTexts() {
     input.id = `display-text-${field.key}`
     input.dataset.key = field.key
     input.maxLength = 120
-    input.placeholder = field.def
     input.value = texts[field.key] ?? ''
     row.append(label, input)
     box.appendChild(row)
   }
+  applyDisplayPlaceholders()
 }
 
 async function saveDisplayTexts() {
@@ -844,7 +885,8 @@ async function saveDisplayTexts() {
   for (const input of document.querySelectorAll('#display-texts-form input[data-key]')) {
     texts[input.dataset.key] = input.value.trim()
   }
-  const res = await api(`${API}/display-texts`, { method: 'POST', body: { texts } })
+  const language = $('#display-lang')?.value || 'en'
+  const res = await api(`${API}/display-texts`, { method: 'POST', body: { language, texts } })
   if (res.ok) {
     feedback('#display-texts-feedback', 'success', 'Gespeichert. Erscheint beim nächsten Einblenden auf der Box.')
   } else {
