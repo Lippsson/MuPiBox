@@ -327,6 +327,24 @@ async function loadLibrary() {
   }
 }
 
+/** Spotify entries added by hand carry only an id, no cover: the box looks the picture up (cached) and
+ *  serves it from its cover cache. '' for everything else. */
+function spotifyCoverUrl(item) {
+  if (item?.type !== 'spotify') return ''
+  const ref = item.id
+    ? ['album', item.id]
+    : item.artistid
+      ? ['artist', item.artistid]
+      : item.playlistid
+        ? ['playlist', item.playlistid]
+        : item.showid
+          ? ['show', item.showid]
+          : item.audiobookid
+            ? ['audiobook', item.audiobookid]
+            : null
+  return ref ? `/api/spotify/cover-for/${ref[0]}/${encodeURIComponent(String(ref[1]))}` : ''
+}
+
 function renderLibrary() {
   const list = $('#library-list')
   // Filter pipeline
@@ -362,7 +380,9 @@ function renderLibrary() {
     cover.className = 'library-item-cover'
     cover.loading = 'lazy'
     cover.alt = ''
-    const src = item.cover_override ?? item.cover ?? item.artistcover_override ?? item.artistcover ?? ''
+    const src = item.cover_override ?? item.cover ?? item.artistcover_override ?? item.artistcover ?? spotifyCoverUrl(item)
+    // no picture to be had: keep the empty tile instead of a broken-image icon
+    cover.onerror = () => cover.removeAttribute('src')
     if (src) cover.src = src
 
     const meta = document.createElement('div')
@@ -2027,7 +2047,8 @@ function renderPlay() {
   grid.innerHTML = filtered.map(({ item, idx }) => {
     const artist = escapeHtml(String(item.artist_override ?? item.artist ?? ''))
     const title = escapeHtml(String(item.title_override ?? item.title ?? item.artist ?? '—'))
-    const cover = item.cover ? escapeHtml(String(item.cover)) : ''
+    const coverUrl = item.cover_override ?? item.cover ?? spotifyCoverUrl(item)
+    const cover = coverUrl ? escapeHtml(String(coverUrl)) : ''
     const typeLabel = playTypeLabel(item)
     const coverEl = cover
       ? `<img class="play-tile-cover" src="${cover}" alt="" loading="lazy">`
@@ -2042,6 +2063,16 @@ function renderPlay() {
         </div>
       </button>`
   }).join('')
+  // a cover that can't be loaded (no picture on Spotify, box offline) becomes the placeholder
+  for (const img of grid.querySelectorAll('img.play-tile-cover')) {
+    img.addEventListener('error', () => {
+      const idx = Number(img.closest('.play-tile')?.dataset.idx)
+      const ph = document.createElement('div')
+      ph.className = 'play-tile-cover-placeholder'
+      ph.innerHTML = typeIcon(playState.items[idx] ?? {})
+      img.replaceWith(ph)
+    }, { once: true })
+  }
 }
 
 function playTypeLabel(item) {

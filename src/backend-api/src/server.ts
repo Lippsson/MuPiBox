@@ -1031,6 +1031,47 @@ app.get('/api/spotify/cover/:imageId', async (req, res) => {
   res.send(buf)
 })
 
+// Cover of a Spotify entry that has none stored in data.json (added by hand: just an album or artist id), for the
+// parents' web app. The lookup goes through the cached Spotify API calls, then the browser is sent to the cover
+// proxy above, so every image is fetched from Spotify once.
+const SPOTIFY_COVER_KINDS = new Set(['album', 'artist', 'playlist', 'show', 'audiobook'])
+app.get('/api/spotify/cover-for/:kind/:id', async (req, res) => {
+  const { kind, id } = req.params
+  if (!SPOTIFY_COVER_KINDS.has(kind) || !/^[A-Za-z0-9]{10,40}$/.test(id)) {
+    res.status(400).type('text/plain').send('bad request')
+    return
+  }
+  if (!spotifyApiService) {
+    res.status(503).type('text/plain').send('Spotify not available')
+    return
+  }
+  try {
+    const api = spotifyApiService
+    const item =
+      kind === 'album'
+        ? await api.getAlbum(id)
+        : kind === 'artist'
+          ? await api.getArtist(id)
+          : kind === 'playlist'
+            ? await api.getPlaylist(id)
+            : kind === 'show'
+              ? await api.getShow(id)
+              : await api.getAudiobook(id)
+    // the smallest image that is still sharp in a list (>= 300 px), else the biggest there is
+    const images = [...(item?.images ?? [])].sort((a, b) => (a.width ?? 0) - (b.width ?? 0))
+    const image = images.find((i) => (i.width ?? 0) >= 300) ?? images[images.length - 1]
+    const imageId = image?.url?.match(/^https:\/\/i\.scdn\.co\/image\/([A-Za-z0-9]+)$/)?.[1]
+    if (!imageId) {
+      res.status(404).type('text/plain').send('no cover')
+      return
+    }
+    res.set('Cache-Control', 'public, max-age=86400')
+    res.redirect(302, `/api/spotify/cover/${imageId}`)
+  } catch {
+    res.status(404).type('text/plain').send('no cover')
+  }
+})
+
 app.get('/api/mupihat', (_req, res) => {
   // Same hang-without-file as /api/data: a box without a MuPiHAT board
   // simply has no /tmp/mupihat.json — return an empty object rather than
