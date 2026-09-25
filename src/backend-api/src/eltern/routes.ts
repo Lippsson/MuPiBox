@@ -1055,6 +1055,10 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     // Downsample to roughly 120 points so the chart stays light.
     const TARGET = 120
     const samples = all.length <= TARGET ? all : all.filter((_, i) => i % Math.ceil(all.length / TARGET) === 0)
+    // Always end on the newest reading: the web app shows it as "last ... at ...", and the thinning
+    // above usually dropped it.
+    const newest = all[all.length - 1]
+    if (newest && samples[samples.length - 1] !== newest) samples.push(newest)
     res.json({ hours, samples })
   })
 
