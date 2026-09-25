@@ -5329,7 +5329,10 @@ app.post('/api/telegram/screen', (req, res) => {
       const message = typeof req.body?.message === 'string' ? req.body.message : ''
       const args = message ? message.split('\n') : []
 
-      execFile('/usr/bin/python3', ['/usr/local/bin/mupibox/telegram_notify_screen.py', ...args], (error, _stdout, stderr) => {
+      // pm2 starts this process without TERM: a tool below the script then printed "'unknown': unknown terminal
+      // type" to stderr on every call, which counted as a failure although the message had been sent.
+      const childEnv = { ...process.env, TERM: process.env.TERM || 'dumb' }
+      execFile('/usr/bin/python3', ['/usr/local/bin/mupibox/telegram_notify_screen.py', ...args], { env: childEnv }, (error, _stdout, stderr) => {
         if (error) {
           console.error(
             `${new Date().toLocaleString()}: [MuPiBox-Server] Error sending telegram notification: ${error.message}`,
@@ -5338,9 +5341,8 @@ app.post('/api/telegram/screen', (req, res) => {
           return
         }
         if (stderr) {
-          console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Stderr telegram notification: ${stderr}`)
-          res.status(500).send('error')
-          return
+          // exit code 0: sent. Whatever came on stderr is a warning, not a failure.
+          console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] Telegram notification warning: ${stderr.trim()}`)
         }
         res.status(200).send('ok')
       })
