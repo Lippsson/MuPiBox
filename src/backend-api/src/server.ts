@@ -1837,7 +1837,7 @@ const WIFI_BAND_FREQUENCIES: Record<'2.4' | '5', number[]> = {
   '2.4': [2412, 2417, 2422, 2427, 2432, 2437, 2442, 2447, 2452, 2457, 2462, 2467, 2472],
   '5': [
     5180, 5200, 5220, 5240, 5260, 5280, 5300, 5320, 5500, 5520, 5540, 5560, 5580, 5600, 5620, 5640, 5660, 5680, 5700, 5720,
-    5745, 5765, 5785, 5805, 5825,
+    5745, 5765, 5785, 5805, 5825, 5845, 5865, 5885, // incl. U-NII-4 (channels 169-177): a router there was cut off with "5 GHz"
   ],
 }
 
@@ -1863,9 +1863,15 @@ function wifiFrequenciesOf(body: string): string {
   return (list?.[1] ?? list?.[2] ?? '').trim()
 }
 
+// The file is often root:root 600 (add_wifi.sh sets that), so it is read through sudo.
+async function readWpaConf(): Promise<string> {
+  const { stdout } = await execFileAsync('sudo', ['cat', WPA_CONF])
+  return stdout
+}
+
 async function wifiBandEntries(): Promise<WifiBandEntry[]> {
   try {
-    return wifiBlocks(await readFile(WPA_CONF, 'utf8')).map((b) => ({ ssid: b.ssid, frequencies: wifiFrequenciesOf(b.body) }))
+    return wifiBlocks(await readWpaConf()).map((b) => ({ ssid: b.ssid, frequencies: wifiFrequenciesOf(b.body) }))
   } catch {
     return []
   }
@@ -1873,7 +1879,9 @@ async function wifiBandEntries(): Promise<WifiBandEntry[]> {
 
 // Writes the entries' freq_list lines into the config file (block by block, only where the SSID still matches).
 async function wifiWriteBandEntries(entries: WifiBandEntry[]): Promise<void> {
-  const text = await readFile(WPA_CONF, 'utf8')
+  const text = await readWpaConf()
+  // Nothing to put back and nothing to remove: leave the file alone.
+  if (!entries.some((e) => e.frequencies) && !/^s*freq_list=/m.test(text)) return
   let index = 0
   const updated = text.replace(/(network\s*=\s*\{)([\s\S]*?)(\n\s*\})/g, (whole, open: string, body: string, close: string) => {
     const entry = entries[index++]
@@ -1884,21 +1892,40 @@ async function wifiWriteBandEntries(entries: WifiBandEntry[]): Promise<void> {
   })
   if (updated === text) return
   const tmpPath = `/tmp/.wpa_supplicant.${process.pid}.${Date.now()}.conf`
+  const nextPath = `${WPA_CONF}.mupibox-new`
   await writeFile(tmpPath, updated, { mode: 0o600 })
   try {
-    // cp keeps the owner and mode of the existing file
-    await execFileAsync('sudo', ['cp', tmpPath, WPA_CONF])
+    // Replaced atomically (new file next to it, same owner and mode, then rename): a cp truncated the file
+    // first, and a power cut in that moment (box on battery) left the box without any WLAN after reboot.
+    await execFileAsync('sudo', ['cp', tmpPath, nextPath])
+    await execFileAsync('sudo', ['chown', '--reference', WPA_CONF, nextPath])
+    await execFileAsync('sudo', ['chmod', '--reference', WPA_CONF, nextPath])
+    await execFileAsync('sudo', ['mv', '-f', nextPath, WPA_CONF])
   } finally {
     await fs.promises.rm(tmpPath, { force: true })
   }
 }
 
 // wpa_cli save_config, keeping the band choices. adjust() changes the entries first (a network removed, a band set).
-async function wifiSaveConfig(wifi: string, adjust?: (entries: WifiBandEntry[]) => void): Promise<void> {
-  const entries = await wifiBandEntries()
-  adjust?.(entries)
-  await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'save_config'])
-  await wifiWriteBandEntries(entries)
+// One save at a time: two requests at once (a double tap, delete + band) read and wrote the file over each other.
+let wifiSaveChain: Promise<unknown> = Promise.resolve()
+// Returns false if the network change was saved but the band choices could not be put back into the file: the
+// save itself worked, so deleting a network or changing a password must not fail because of that.
+function wifiSaveConfig(wifi: string, adjust?: (entries: WifiBandEntry[]) => void): Promise<boolean> {
+  const run = wifiSaveChain.then(async () => {
+    const entries = await wifiBandEntries()
+    adjust?.(entries)
+    await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'save_config'])
+    try {
+      await wifiWriteBandEntries(entries)
+      return true
+    } catch (error) {
+      console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Could not keep the WLAN band choices: ${error}`)
+      return false
+    }
+  })
+  wifiSaveChain = run.catch(() => undefined)
+  return run
 }
 
 // The band choice of every saved network, in the order of wpa_cli list_networks. A position whose SSID does not
