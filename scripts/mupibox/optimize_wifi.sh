@@ -54,7 +54,8 @@ fi
 # /etc/wpa_supplicant/wpa_supplicant — same idempotency fix (HIGH-13).
 rm -f "$WPACONF.bak"  # idempotent (HIGH-13)
 cp "$WPACONF" "$WPACONF.bak"
-add_config 'bgscan="simple:30:-70:60"'
+# no bgscan (background scan, moves to a better access point / band by itself): the band is chosen by hand
+sed -i '/^[[:space:]]*bgscan=/d' "$WPACONF"
 #add_config 'roam_timeout=5'
 #add_config 'disable_pm=1'
 add_config 'ap_scan=1'

@@ -22,7 +22,9 @@
 	// different driver updates "State: ..." and the button label without reloading the
 	// whole page (that used to also re-scan the embedded WiFi iframe and jump the scroll).
 	if (isset($_GET['check_usb_wifi_driver'])) {
-		$checked_driver = $_GET['check_usb_wifi_driver'];
+		// comes before header.php, so it needs the login gate of its own (sends 401 and exits without a login)
+		require __DIR__ . '/includes/auth_check.php';
+		$checked_driver = (string)$_GET['check_usb_wifi_driver'];
 		$installed = isset($usb_wifi_drivers[$checked_driver]) && is_dir($usb_wifi_drivers[$checked_driver]['path']);
 		header('Content-Type: application/json');
 		echo json_encode(array('installed' => $installed));

@@ -5,6 +5,7 @@ const path = require('node:path')
 const dns = require('node:dns')
 const SpotifyWebApi = require('spotify-web-api-node')
 const createPlayer = require('./mplayer-wrapper.js')
+const { isPlaylistUrl, resolveStreamUrl } = require('./playlist-url.js')
 const googleTTS = require('google-tts-api')
 const fs = require('node:fs')
 const childProcess = require('node:child_process')
@@ -185,8 +186,88 @@ const apiAccessToken = {
 
 player.on('percent_pos', (val) => {
   //console.log('track progress is', val);
-  currentMeta.progressTime = val
+  if (!isCuePlayback()) currentMeta.progressTime = val
 })
+
+// --- CUE albums (one audio file, tracks by start time - see /api/nas/tracklist) ---
+// mplayer only knows the single file, so the current track is worked out from the playing time, and
+// "next", "previous", a track chosen in the list and the progress bar seek inside the file.
+let currentCue = null // { tracks: [{ position, name, startSeconds }], fileLength } while such an album plays
+
+function isCuePlayback() {
+  return currentCue !== null && currentMeta.currentType === 'nas' && currentMeta.currentPlayer === 'mplayer'
+}
+
+function cueTrackEnd(index) {
+  const next = currentCue.tracks[index + 1]
+  return next ? next.startSeconds : currentCue.fileLength
+}
+
+function cueTrackAt(seconds) {
+  let index = 0
+  for (let i = 0; i < currentCue.tracks.length; i++) {
+    if (currentCue.tracks[i].startSeconds <= seconds + 0.25) index = i
+  }
+  return index
+}
+
+// mplayer can drop a seek that arrives while it is still buffering after the previous one (a child pressing
+// "next" twice quickly). So a seek is remembered until the playing time really got there, and sent again
+// (twice at most) if it did not.
+let pendingCueSeek = null // { seconds, at, tries }
+function cueSeek(seconds) {
+  // absolute position in seconds: mplayer "seek <seconds> 2"
+  player.exec('pausing_keep seek', [seconds, 2])
+  pendingCueSeek = { seconds, at: Date.now(), tries: 0 }
+}
+
+player.on('length', (val) => {
+  if (currentCue) currentCue.fileLength = val
+})
+player.on('time_pos', (seconds) => {
+  if (!isCuePlayback()) {
+    pendingCueSeek = null
+    return
+  }
+  if (pendingCueSeek) {
+    if (Date.now() - pendingCueSeek.at < 2500) return // keep the number/title the user just chose while mplayer catches up
+    if (Math.abs(seconds - pendingCueSeek.seconds) > 8 && pendingCueSeek.tries < 2) {
+      pendingCueSeek.tries++
+      pendingCueSeek.at = Date.now()
+      player.exec('pausing_keep seek', [pendingCueSeek.seconds, 2])
+      return
+    }
+    pendingCueSeek = null // arrived (or given up)
+  }
+  const index = cueTrackAt(seconds)
+  const track = currentCue.tracks[index]
+  if (currentMeta.currentTracknr !== index + 1) {
+    const before = currentMeta.currentTracknr
+    currentMeta.currentTracknr = index + 1
+    currentMeta.currentTrackname = track.name
+    if (typeof before === 'number' && before >= 1 && index + 1 > before) graceSongBoundary() // played on into the next song
+  }
+  const end = cueTrackEnd(index)
+  if (end > track.startSeconds) {
+    currentMeta.progressTime = Math.max(0, Math.min(100, Math.round(((seconds - track.startSeconds) * 100) / (end - track.startSeconds))))
+  }
+})
+setInterval(() => {
+  if (!isCuePlayback()) return
+  if (!currentCue.fileLength) player.getProps(['length'])
+  player.getProps(['time_pos'])
+}, 1000)
+
+// Seeks to the start of track number `position` (1-based) of the playing CUE album.
+function seekToCueTrack(position) {
+  const target = Math.max(1, Math.min(currentCue.tracks.length, position))
+  const track = currentCue.tracks[target - 1]
+  log.debug(`${now()}: [Spotify Control] CUE: seeking to track ${target} at ${track.startSeconds}s`)
+  cueSeek(track.startSeconds)
+  currentMeta.currentTracknr = target
+  currentMeta.currentTrackname = track.name
+  currentMeta.progressTime = 0
+}
 player.on('pause', (val) => {
   currentMeta.playing = !val
 })
@@ -211,7 +292,7 @@ player.on('metadata', (val) => {
     // instead of trying to parse anything out of mplayer's own metadata.
     const track = currentNasTracks[currentMeta.currentTracknr - 1]
     if (track) {
-      currentMeta.currentTrackname = track.name.replace(/\.[^./]+$/, '')
+      currentMeta.currentTrackname = track.cue ? track.name : track.name.replace(/\.[^./]+$/, '')
     }
   } else if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio') {
     currentMeta.currentTrackname = val.Title
@@ -1465,9 +1546,13 @@ function next() {
       },
     )
   } else if (currentMeta.currentPlayer === 'mplayer') {
+    if (isCuePlayback() && currentMeta.currentTracknr < currentCue.tracks.length) {
+      seekToCueTrack(currentMeta.currentTracknr + 1)
+      return
+    }
     //currentMeta.currentTracknr = currentMeta.currentTracknr + 1;
     //log.debug(nowDate.toLocaleString() + ': [Spotify Control] Current Tracknr: ' + currentMeta.currentTracknr);
-    player.next()
+    player.next() // (on the last track of a CUE album this ends the playlist, as for any other album)
   }
 }
 
@@ -1486,6 +1571,10 @@ function previous() {
       },
     )
   } else if (currentMeta.currentPlayer === 'mplayer') {
+    if (isCuePlayback()) {
+      seekToCueTrack(currentMeta.currentTracknr - 1) // on the first track this restarts it
+      return
+    }
     if (currentMeta.currentTracknr > 1) {
       currentMeta.currentTracknr = currentMeta.currentTracknr - 2
     }
@@ -1495,6 +1584,10 @@ function previous() {
 }
 
 function jumpToTrack(targetPosition) {
+  if (isCuePlayback()) {
+    seekToCueTrack(targetPosition)
+    return
+  }
   if (currentMeta.currentPlayer === 'mplayer') {
     const offset = targetPosition - currentMeta.currentTracknr
     if (offset !== 0) {
@@ -1746,6 +1839,9 @@ async function playNasList(nasPath) {
       return
     }
     currentNasTracks = tracks
+    // Tracks of a CUE album all point at the same file: it is loaded once and the tracks are found by time.
+    const cueMode = tracks.length > 1 && tracks.every((track) => track.cue === true)
+    currentCue = cueMode ? { tracks, fileLength: 0 } : null
     const folderName = decodedPath.split('/').filter(Boolean).pop() || decodedPath
 
     // Set metadata explicitly up front (like the radio/rss branches do) rather
@@ -1756,7 +1852,7 @@ async function playNasList(nasPath) {
     currentMeta.album = folderName
     currentMeta.path = decodedPath
 
-    const playlistLines = tracks.map(
+    const playlistLines = (cueMode ? [tracks[0]] : tracks).map(
       (track) => `http://localhost:8200/api/nas/stream?path=${encodeURIComponent(track.path)}`,
     )
     const tmpPlaylistPath = '/tmp/nas_playlist.m3u'
@@ -1780,6 +1876,28 @@ function playFile(playedFile) {
   player.play(`/home/dietpi/MuPiBox/tts_files/${playedTitel}`)
   player.setVolume(volumeStart)
   log.debug(`${now()}: /home/dietpi/MuPiBox/tts_files/${playedTitel}`)
+}
+
+// A radio link may be a playlist (m3u / pls) instead of the stream itself: its FIRST stream is played (see
+// playlist-url.js). The playlist is fetched first, so the start waits for it (a few seconds at most, the display shows
+// the loading ring meanwhile); a stop or another start in that time wins. Everything else starts at once, as before.
+function playRadioURL(radioURL) {
+  if (!isPlaylistUrl(radioURL)) {
+    playURL(radioURL)
+    return
+  }
+  const generation = ++playbackGeneration
+  startLoading()
+  resolveStreamUrl(radioURL).then((streamURL) => {
+    if (generation !== playbackGeneration) {
+      log.debug(`${now()}: [Spotify Control] Playlist ${radioURL} dropped (stopped or replaced meanwhile)`)
+      return
+    }
+    if (streamURL !== radioURL) {
+      log.info(`${now()}: [Spotify Control] Opened playlist ${radioURL}: playing its first stream ${streamURL}`)
+    }
+    playURL(streamURL)
+  })
 }
 
 function playURL(playedURL) {
@@ -1852,7 +1970,14 @@ function seek(progress) {
     }
   } else if (currentMeta.currentPlayer === 'mplayer') {
     if (progress > 1) {
-      player.seekPercent(progress)
+      if (isCuePlayback()) {
+        const index = Math.max(0, currentMeta.currentTracknr - 1)
+        const track = currentCue.tracks[index]
+        const end = cueTrackEnd(index)
+        cueSeek(track.startSeconds + ((end - track.startSeconds) * progress) / 100)
+      } else {
+        player.seekPercent(progress)
+      }
     } else {
       if (progress) player.seek(+30)
       else player.seek(-30)
@@ -1960,9 +2085,10 @@ const _execAsync = (cmd) =>
   })
 
 /*gets available devices, searches for the active one and returns its volume*/
-async function setVolume(volume) {
-  const volumeUp = '/usr/bin/amixer sset Master 5%+'
-  const volumeDown = '/usr/bin/amixer sset Master 5%-'
+async function setVolume(volume, step = 5) {
+  // step: percent per change (5 for the +5 / -5 commands, 1..10 for the rotary encoder)
+  const volumeUp = `/usr/bin/amixer sset Master ${step}%+`
+  const volumeDown = `/usr/bin/amixer sset Master ${step}%-`
   const volumeMax = `/usr/bin/amixer sset Master ${muPiBoxConfig.mupibox.maxVolume}%`
   const cmdVolume = "/usr/bin/amixer sget Master | grep 'Right:'"
 
@@ -1986,15 +2112,16 @@ async function setVolume(volume) {
 
     if (volume) {
       if (actualVolume < muPiBoxConfig.mupibox.maxVolume) {
-        await cmdCall(volumeUp)
-        currentMeta.volume = Math.min(actualVolume + 5, muPiBoxConfig.mupibox.maxVolume)
+        // never above the max volume, also when the step does not divide the remaining room
+        await cmdCall(actualVolume + step > muPiBoxConfig.mupibox.maxVolume ? volumeMax : volumeUp)
+        currentMeta.volume = Math.min(actualVolume + step, muPiBoxConfig.mupibox.maxVolume)
       } else {
         currentMeta.volume = muPiBoxConfig.mupibox.maxVolume
         await cmdCall(volumeMax)
       }
     } else {
       await cmdCall(volumeDown)
-      currentMeta.volume = Math.max(actualVolume - 5, 0)
+      currentMeta.volume = Math.max(actualVolume - step, 0)
     }
   }).catch((err) => {
     // Don't let one failed op poison the queue for subsequent ops.
@@ -2294,7 +2421,7 @@ app.use((req, res) => {
     const dir = command.dir
     let radioURL = dir.split('radio/').pop()
     radioURL = decodeURIComponent(radioURL)
-    playURL(radioURL)
+    playRadioURL(radioURL)
   }
 
   if (hasDirSegment(command, 'rss')) {
@@ -2336,8 +2463,11 @@ app.use((req, res) => {
   else if (command.name === 'stop') stop()
   else if (command.name === 'next') next()
   else if (command.name === 'previous') previous()
-  else if (command.name === '+5') setVolume(1)
-  else if (command.name === '-5') setVolume(0)
+  else if (/^[+-]\d{1,2}$/.test(command.name)) {
+    // +5 / -5 as before; other steps (1..10) come from the rotary encoder
+    const step = Math.min(10, Math.max(1, Math.abs(Number.parseInt(command.name, 10))))
+    setVolume(command.name.startsWith('+') ? 1 : 0, step)
+  }
   else if (command.name === 'shuffleon') shuffleon()
   else if (command.name === 'shuffleoff') shuffleoff()
   else if (command.name === 'shutoff') cmdCall('sudo su - -c "/usr/local/bin/mupibox/./shutdown.sh &"')

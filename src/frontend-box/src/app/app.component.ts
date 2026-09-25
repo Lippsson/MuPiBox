@@ -16,6 +16,7 @@ import { ElternMagicLinkOverlayComponent } from './eltern-magic-link/eltern-magi
 import { PlaytimeBlockedOverlayComponent } from './playtime-blocked-overlay/playtime-blocked-overlay.component'
 import { PlaytimeChipComponent } from './playtime-chip/playtime-chip.component'
 import { buildResumeMedia } from './resume-builder'
+import { StalePageReloadService } from './stale-page-reload.service'
 
 @Component({
   selector: 'app-root',
@@ -36,6 +37,7 @@ export class AppComponent {
     private http: HttpClient,
     _externalPlaybackNavigator: ExternalPlaybackNavigatorService,
     _displayManager: DisplayManagerService,
+    _stalePageReload: StalePageReloadService,
     playtimeService: PlaytimeService,
     private mediaService: MediaService,
     private currentMediaService: CurrentMediaService,

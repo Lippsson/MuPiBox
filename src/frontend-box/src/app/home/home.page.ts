@@ -16,8 +16,6 @@ import {
 import { addIcons } from 'ionicons'
 import {
   bookOutline,
-  cloudOfflineOutline,
-  cloudOutline,
   musicalNotesOutline,
   radioOutline,
   serverOutline,
@@ -35,6 +33,7 @@ import { MediaService } from '../media.service'
 import { MediaUnavailableComponent } from '../media-unavailable/media-unavailable.component'
 import type { MupiboxConfig } from '../mupibox-config.model'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
+import { WifiIconComponent } from '../wifi-icon/wifi-icon.component'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
 import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
 
@@ -44,6 +43,7 @@ import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
   styleUrls: ['home.page.scss'],
   imports: [
     MupiHatIconComponent,
+    WifiIconComponent,
     LoadingComponent,
     MediaUnavailableComponent,
     IonHeader,
@@ -95,7 +95,7 @@ export class HomePage extends SwiperIonicEventsHelper {
     private coverFlip: CoverFlipService,
   ) {
     super()
-    addIcons({ timerOutline, bookOutline, musicalNotesOutline, radioOutline, serverOutline, cloudOutline, cloudOfflineOutline })
+    addIcons({ timerOutline, bookOutline, musicalNotesOutline, radioOutline, serverOutline })
 
     this.http.get<MupiboxConfig>(`${environment.backend.apiUrl}/config`).subscribe({
       next: (config) => {

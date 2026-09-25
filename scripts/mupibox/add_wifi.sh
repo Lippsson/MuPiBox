@@ -41,7 +41,7 @@ do
 			echo 'ctrl_interface=DIR=/run/wpa_supplicant GROUP=netdev' | sudo tee -a ${TMP_WPACONF}
 			echo '# Allow wpa_cli/wpa_gui to overwrite this config file' | sudo tee -a ${TMP_WPACONF}
 			echo 'update_config=1' | sudo tee -a ${TMP_WPACONF}
-			echo 'bgscan="simple:30:-70:60"' | sudo tee -a ${TMP_WPACONF}
+			# no bgscan: the band of a network is chosen by hand (WiFi page), not changed in the background
 			#echo 'roam_timeout=5' | sudo tee -a ${TMP_WPACONF}
 			#echo 'disable_pm=1' | sudo tee -a ${TMP_WPACONF}
 			echo 'ap_scan=1' | sudo tee -a ${TMP_WPACONF}

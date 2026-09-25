@@ -2,6 +2,26 @@
 
 $backendBase = 'http://localhost:8200/api/nas';
 
+// Login gate (and, for POSTs, CSRF check) of the JSON answers below: they come before header.php, which
+// does both for the HTML page, so without this the NAS tree, the profiles and the download control would
+// be reachable without signing in and from any foreign web page.
+//  - $post: the request changes something -> the token of the page must come in the X-CSRF-Token header
+//  - $poll: background polling -> must not count as activity (else an open tab never times out)
+// auth_check.php also releases the session lock again, so a slow answer does not block other pages.
+function nasAjaxGuard($post = false, $poll = false) {
+	if ($post) {
+		require_once __DIR__ . '/includes/csrf.php';
+		if (!hash_equals(csrf_token(), (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+			http_response_code(403);
+			header('Content-Type: application/json');
+			echo json_encode(array('success' => false, 'error' => 'csrf'));
+			exit;
+		}
+	}
+	$AUTH_CHECK_NO_TOUCH = $poll;
+	require __DIR__ . '/includes/auth_check.php';
+}
+
 // Progress of a running "Download selected" (polled by the page below). Answers
 // before header.php so that no HTML is sent along with the JSON.
 // These JSON answers come before header.php, so they need a login gate and CSRF check of their
@@ -24,11 +44,13 @@ if (count(array_intersect($nasJsonActions, array_keys($_GET))) > 0) {
 	}
 }
 if (isset($_GET['download_cancel']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+	nasAjaxGuard(true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/download/cancel", 'POST', new stdClass(), 10));
 	exit;
 }
 if (isset($_GET['download_status'])) {
+	nasAjaxGuard(false, true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/download/status", 'GET', null, 5));
 	exit;
@@ -36,6 +58,7 @@ if (isset($_GET['download_status'])) {
 
 // Children of one folder for the tree view (loaded when a folder is expanded).
 if (isset($_GET['browse'])) {
+	nasAjaxGuard();
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/browse?path=" . urlencode($_GET['browse']), 'GET', null, 15));
 	exit;
@@ -43,16 +66,19 @@ if (isset($_GET['browse'])) {
 
 // Folder index (built by the backend) behind the "Filter folders" box.
 if (isset($_GET['index_status'])) {
+	nasAjaxGuard(false, true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/index/status", 'GET', null, 10));
 	exit;
 }
 if (isset($_GET['index_search'])) {
+	nasAjaxGuard();
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/index/search?q=" . urlencode((string)$_GET['index_search']), 'GET', null, 10));
 	exit;
 }
 if (isset($_GET['index_refresh']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+	nasAjaxGuard(true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/index/refresh", 'POST', new stdClass(), 10));
 	exit;
@@ -60,6 +86,7 @@ if (isset($_GET['index_refresh']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Profiles of the NAS tab (kept by the backend in the config).
 if (isset($_GET['profile_api'])) {
+	nasAjaxGuard($_SERVER['REQUEST_METHOD'] === 'POST');
 	header('Content-Type: application/json');
 	$profileAction = (string)$_GET['profile_api'];
 	if ($profileAction === 'list') {
@@ -76,6 +103,9 @@ if (isset($_GET['profile_api'])) {
 }
 
 include('includes/header.php');
+// The token must exist before the session is released (the form filter of header.php prints it later).
+csrf_token();
+session_write_close();
 
 function nasApiCall($url, $method = 'GET', $body = null, $timeout = 30) {
 	$ch = curl_init($url);
@@ -134,30 +164,35 @@ $downloadStarted = false;
 
 $nasFlash = '';
 $nasFlashError = '';
+$nasFlashTitle = 'Selection not saved'; // the popup title: what failed
 if (isset($_POST['nas_save_selection']) || isset($_POST['nas_download_selected'])) {
 	$checkedShow = $_POST['artist_folders'] ?? array();
 	$checkedHide = $_POST['hide_folders'] ?? array();
 	$checkedDownload = $_POST['download_folders'] ?? array();
 	$shown = json_decode($_POST['shown_folders'] ?? '[]', true) ?? array();
-	foreach ($shown as $shownPath) {
-		// A folder is either shown or hidden; hidden wins if both were sent.
-		$isHidden = in_array($shownPath, $checkedHide, true);
-		nasApiCall("$backendBase/mark", 'POST', array(
-			'path' => $shownPath, 'marked' => !$isHidden && in_array($shownPath, $checkedShow, true), 'list' => 'artist'), 10);
-		nasApiCall("$backendBase/mark", 'POST', array(
-			'path' => $shownPath, 'marked' => $isHidden, 'list' => 'hidden'), 10);
-		nasApiCall("$backendBase/mark", 'POST', array(
-			'path' => $shownPath, 'marked' => in_array($shownPath, $checkedDownload, true), 'list' => 'download'), 10);
-	}
+	// One request for the whole page (before: three per folder in the tree, each rewriting the config file).
+	// A folder is either shown or hidden; the backend lets hidden win if both were sent.
+	$saveResult = nasApiCall("$backendBase/selection", 'POST', array(
+		'shown' => array_values($shown),
+		'show' => array_values($checkedShow),
+		'hide' => array_values($checkedHide),
+		'download' => array_values($checkedDownload),
+	), 30);
 	// No lightbox of the site-wide change notice here: the save shows a short line, the download its progress bar.
-	$nasFlash = 'Selection saved.';
+	$saveOk = !empty($saveResult['success']);
+	if ($saveOk) {
+		$nasFlash = 'Selection saved.';
+	} else {
+		$nasFlashError = 'The selection could not be saved.';
+	}
 
-	if (isset($_POST['nas_download_selected'])) {
+	if ($saveOk && isset($_POST['nas_download_selected'])) {
 		$syncResult = nasApiCall("$backendBase/download/sync", 'POST', new stdClass(), 10);
 		if (!empty($syncResult['success'])) {
 			$downloadStarted = true;
 			$nasFlash = '';
 		} else {
+			$nasFlashTitle = 'Download not started';
 			$nasFlashError = (string)($syncResult['error'] ?? 'Could not start the download.');
 		}
 	}
@@ -952,6 +987,7 @@ var NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 </script>
 
 <script>
+window.NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 (function () {
 	var pop = null;
 	function closePop() { if (pop) { document.body.removeChild(pop); pop = null; } }
@@ -996,13 +1032,14 @@ var NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 	var autoStarted = <?= $downloadStarted ? 'true' : 'false' ?>;
 	var flash = <?= json_encode($nasFlash) ?>;
 	var flashError = <?= json_encode($nasFlashError) ?>;
+	var flashTitle = <?= json_encode($nasFlashTitle) ?>;
 	var flashBox = document.getElementById('nas-flash');
 	if (flash && flashBox) {
 		flashBox.textContent = flash;
 		flashBox.style.display = 'block';
 		setTimeout(function () { flashBox.style.display = 'none'; }, 5000);
 	}
-	if (flashError && window.nasNotice) { window.nasNotice('Download not started', flashError); }
+	if (flashError && window.nasNotice) { window.nasNotice(flashTitle, flashError); }
 	var bar = document.getElementById('nas-progress');
 	var fill = document.getElementById('nas-progress-fill');
 	var barText = document.getElementById('nas-progress-text');

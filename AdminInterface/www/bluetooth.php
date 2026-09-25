@@ -15,9 +15,7 @@
 	session_write_close();
 
 	// Without a Bluetooth controller (e.g. the chip is switched off) bluetoothctl, and the scripts built on it,
-	// wait for one forever - while this request holds the PHP session lock. Every other admin page of the same
-	// browser then queues behind it until php-fpm has no free worker left and the whole admin stops answering.
-	// So nothing that talks to Bluetooth is started in that case (and each call is time-limited anyway).
+	// wait for one forever - every call is time-limited (timeout -k), and nothing is started at all in that case.
 	$bt_present = count(glob('/sys/class/bluetooth/hci*')) > 0;
 	if( !$bt_present && ($_POST['remove_selected'] || $_POST['pair_selected'] || $_POST['scan_new'] || $_POST['change_bt']) )
 		{
