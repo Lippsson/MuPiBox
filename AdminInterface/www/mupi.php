@@ -603,7 +603,10 @@ if( $_POST['fan_control'] )
   unset($data["quietHours"]["maxOverrunMinutes"]);
   $quiethours_days = array('mon','tue','wed','thu','fri','sat','sun');
   $quiethours_window_count = 0;
-  foreach( $quiethours_days as $d )
+  // The rule fields are built by the page script. Without its marker (script failed or JS off) the posted
+  // form has no windows at all: keep the stored schedule instead of saving every day as empty.
+  $quiethours_windows_posted = isset($_POST['quiet_windows_present']) && $_POST['quiet_windows_present'] === '1';
+  foreach( ($quiethours_windows_posted ? $quiethours_days : array()) as $d )
    {
    $rawWindows = isset($_POST['quiet_windows'][$d]) && is_array($_POST['quiet_windows'][$d]) ? $_POST['quiet_windows'][$d] : array();
    $cleaned = array();
@@ -625,7 +628,7 @@ if( $_POST['fan_control'] )
    $data["quietHours"]["schedule"][$d] = array_values($cleaned);
    }
   $playtime_changed = true;
-  $CHANGE_TXT = $CHANGE_TXT."<li>Quiet hours saved (".$quiethours_window_count." window(s), live, no restart needed)</li>";
+  $CHANGE_TXT = $CHANGE_TXT."<li>Quiet hours saved (".($quiethours_windows_posted ? $quiethours_window_count." window(s)" : "rules unchanged").", live, no restart needed)</li>";
   $change = 2;
   }
  // Only one of the offered GPIO pins (it went unchecked into a root sed command).
@@ -1101,6 +1104,12 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 			});
 			// the hidden fields the PHP save reads
 			hidden.innerHTML = '';
+			// tells the PHP save that the rule fields below are complete (see quiet_windows_present)
+			var present = document.createElement('input');
+			present.type = 'hidden';
+			present.name = 'quiet_windows_present';
+			present.value = '1';
+			hidden.appendChild(present);
 			var perDay = {};
 			rules.forEach(function (rule) {
 				var n = perDay[rule.day] = (perDay[rule.day] === undefined ? 0 : perDay[rule.day] + 1);
