@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import { Observable } from 'rxjs'
 import { environment } from '../environments/environment'
-import type { WifiConfiguredNetwork, WifiNetwork } from './wifi-network'
+import type { WifiBandChoice, WifiConfiguredNetwork, WifiNetwork } from './wifi-network'
 
 @Injectable({
   providedIn: 'root',
@@ -21,6 +21,11 @@ export class WifiService {
 
   public removeNetwork(id: number): Observable<string> {
     return this.http.delete(`${environment.backend.apiUrl}/wifi/configured/${id}`, { responseType: 'text' })
+  }
+
+  /** Lets the box use only one band for a saved network, or both again ('auto'). */
+  public setNetworkBand(id: number, band: WifiBandChoice): Observable<string> {
+    return this.http.post(`${environment.backend.apiUrl}/wifi/configured/${id}/band`, { band }, { responseType: 'text' })
   }
 
   public updateNetworkPassword(id: number, password: string): Observable<string> {

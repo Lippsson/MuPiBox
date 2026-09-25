@@ -22,7 +22,7 @@ import { addOutline, arrowBackOutline, lockClosedOutline, refresh, scanOutline, 
 import { MediaService } from '../media.service'
 import { PlayerCmds, PlayerService } from '../player.service'
 import { WifiService } from '../wifi.service'
-import type { WifiNetwork } from '../wifi-network'
+import type { WifiBandChoice, WifiNetwork } from '../wifi-network'
 
 @Component({
   selector: 'app-wifi',
@@ -96,6 +96,27 @@ export class WifiPage {
     }
     const text = `${bands.join(' + ')} GHz`
     return network.current && network.connectedBand && bands.length > 1 ? `${text} (connected on ${network.connectedBand} GHz)` : text
+  }
+
+  // The 2.4 / 5 GHz choice is offered for a saved network that is broadcast on both bands. One that is
+  // already limited to a band keeps it, so the limit can always be lifted again.
+  protected canChooseBand(network: WifiNetwork): boolean {
+    if (network.id === undefined) {
+      return false
+    }
+    return (network.bands?.length ?? 0) > 1 || (network.band !== undefined && network.band !== 'auto')
+  }
+
+  protected setBand(network: WifiNetwork, band: WifiBandChoice) {
+    if (network.id === undefined || (network.band ?? 'auto') === band) {
+      return
+    }
+    // The connection is set up again when this is the network in use: give it about ten seconds
+    this.loading.set(true)
+    this.wifiService.setNetworkBand(network.id, band).subscribe({
+      next: () => setTimeout(() => this.loadNetworks(), network.current ? 10000 : 500),
+      error: () => this.loadNetworks(),
+    })
   }
 
   addNetworkButtonPressed() {

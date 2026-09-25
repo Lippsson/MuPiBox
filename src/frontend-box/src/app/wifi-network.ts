@@ -13,7 +13,11 @@ export interface WifiNetwork {
   bands?: string[]
   /** The band in use, for the connected network only. */
   connectedBand?: string
+  /** Saved networks: the band the box may use ('auto' = both). */
+  band?: WifiBandChoice
 }
+
+export type WifiBandChoice = 'auto' | '2.4' | '5'
 
 export interface WifiConfiguredNetwork {
   id: number

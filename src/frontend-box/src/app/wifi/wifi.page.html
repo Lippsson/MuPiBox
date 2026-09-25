@@ -82,6 +82,13 @@
                 Not in range
               }
             </p>
+            @if (canChooseBand(wifi)) {
+              <div class="band-toggle" role="group" aria-label="Band">
+                <button type="button" [class.on]="(wifi.band ?? 'auto') === 'auto'" (click)="setBand(wifi, 'auto')">Auto</button>
+                <button type="button" [class.on]="wifi.band === '2.4'" (click)="setBand(wifi, '2.4')">2.4 GHz</button>
+                <button type="button" [class.on]="wifi.band === '5'" (click)="setBand(wifi, '5')">5 GHz</button>
+              </div>
+            }
           </ion-label>
           @if (wifi.id !== undefined) {
             <ion-button slot="end" fill="outline" size="small" (click)="changeNetworkButtonPressed(wifi)">Change</ion-button>
