@@ -128,13 +128,6 @@ ion-toolbar {
             opacity: 0.6;
         }
 
-        // The band in use, next to "connected" (networks on both bands)
-        .band-in-use {
-            font-size: 16px;
-            font-weight: 400;
-            opacity: 0.7;
-        }
-
         // Change / Delete and, for a network on both bands, the band choice in front of them. The choice
         // is stretched to the height of the buttons (align-items), so both are always exactly as high.
         .row-actions {

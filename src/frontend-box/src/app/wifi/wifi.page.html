@@ -68,10 +68,7 @@
                 <ion-icon class="lock" name="lock-closed-outline"></ion-icon>
               }
               @if (wifi.current) {
-                <span class="current-badge">&check; connected</span>
-                @if (canChooseBand(wifi) && wifi.connectedBand) {
-                  <span class="band-in-use">on {{ wifi.connectedBand }} GHz</span>
-                }
+                <span class="current-badge">&check; connected@if (canChooseBand(wifi) && wifi.connectedBand) { on {{ wifi.connectedBand }} GHz}</span>
               } @else if (wifi.id !== undefined) {
                 <span class="saved-badge">saved</span>
               }
