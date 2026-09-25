@@ -1326,6 +1326,22 @@ function pause() {
 // after its awaits was overtaken and must not play.
 let playbackGeneration = 0
 
+// The two players don't know of each other: Spotify plays in the kiosk browser (Web Playback SDK), local
+// media, radio, podcasts and the NAS in mplayer. The player only knew what was playing from its own state,
+// which is empty after a restart of this process - a stop then stopped nothing, and a local album started
+// while Spotify was still playing ran in parallel. So a switch always silences the other side.
+function pauseSpotifyQuietly(why) {
+  spotifyApi.pause().catch((err) => {
+    // nothing playing on Spotify, no token, offline: fine here
+    log.debug(`${now()}: [Spotify Control] Pause on ${why} not needed/possible: ${err?.statusCode ?? err}`)
+  })
+  spotifyRunning = false
+}
+function switchToMplayer() {
+  if (currentMeta.currentPlayer !== 'mplayer') pauseSpotifyQuietly('switch to mplayer')
+  currentMeta.currentPlayer = 'mplayer'
+}
+
 function stop() {
   playbackGeneration++
   clearLibraryResumeTimers()
@@ -1353,6 +1369,15 @@ function stop() {
   } else if (currentMeta.currentPlayer === 'mplayer') {
     stopLoading()
     player.stop()
+    // mplayer ignores 'stop' while it is still opening a playlist; it then starts playing after all, and
+    // since the player already counts as stopped nothing stopped it any more (seen when leaving the player
+    // page during the silent first seconds of a resume). Say it again unless something new was started.
+    const stopGeneration = playbackGeneration
+    for (const delay of [800, 2000]) {
+      setTimeout(() => {
+        if (stopGeneration === playbackGeneration) player.stop()
+      }, delay)
+    }
     //currentMeta.playing = false;
     writeplayerstatePause()
     currentMeta.currentTrackname = ''
@@ -1365,6 +1390,11 @@ function stop() {
     currentMeta.pause = false
     spotifyRunning = false
     log.debug(`${now()}: [Spotify Control] Playback stopped`)
+  } else {
+    // State unknown (e.g. after a restart of this process while something was playing): silence both.
+    player.stop()
+    pauseSpotifyQuietly('stop with unknown state')
+    writeplayerstatePause()
   }
 }
 
@@ -1989,6 +2019,10 @@ function downloadTTS(name) {
 
 async function useSpotify(command) {
   playbackGeneration++
+  if (currentMeta.currentPlayer !== 'spotify') {
+    clearLibraryResumeTimers()
+    player.stop() // local media, radio or a podcast may still be playing in mplayer
+  }
   currentMeta.currentPlayer = 'spotify'
   currentMeta.currentType = 'spotify'
   const dir = command.dir
@@ -2193,7 +2227,7 @@ app.use((req, res) => {
   }
 
   if (hasDirSegment(command, 'library')) {
-    currentMeta.currentPlayer = 'mplayer'
+    switchToMplayer()
     currentMeta.currentType = 'local'
     // /musicsearch/library/resume/<cat:artist:title:trackNr:progressPct>
     // Falls back to plain playList() if the suffix doesn't parse — this
@@ -2221,13 +2255,13 @@ app.use((req, res) => {
   }
 
   if (hasDirSegment(command, 'nas')) {
-    currentMeta.currentPlayer = 'mplayer'
+    switchToMplayer()
     currentMeta.currentType = 'nas'
     playNasList(command.base)
   }
 
   if (hasDirSegment(command, 'radio')) {
-    currentMeta.currentPlayer = 'mplayer'
+    switchToMplayer()
     currentMeta.currentType = 'radio'
     const parts = decodeURIComponent(command.name).split(':title:artist:')
     currentMeta.currentTrackname = parts[0]
@@ -2239,7 +2273,7 @@ app.use((req, res) => {
   }
 
   if (hasDirSegment(command, 'rss')) {
-    currentMeta.currentPlayer = 'mplayer'
+    switchToMplayer()
     currentMeta.currentType = 'rss'
     const parts = decodeURIComponent(command.name).split(':title:artist:')
     currentMeta.currentTrackname = parts[0]
