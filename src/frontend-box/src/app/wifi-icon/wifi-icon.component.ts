@@ -5,8 +5,8 @@ import { MediaService } from '../media.service'
 import { WifiService } from '../wifi.service'
 
 // The WiFi symbol of the status bar as on a phone: a dot and three arcs, as many lit as the reception is good.
-//   - not connected to a WiFi: all dimmed, crossed out
-//   - connected, but no internet: the arcs as they are, with a "!" badge
+//   - not connected to a WiFi and no internet: all dimmed, with a red "x" badge
+//   - connected, but no internet: the arcs as they are, with a red "!" badge
 // The reception comes from the live link (/api/wifi/status), asked for every 10 seconds.
 const POLL_MS = 10_000
 
@@ -29,13 +29,14 @@ export function wifiLevelOf(signalDbm: number | undefined): number {
       <path class="arc" [class.on]="level() >= 3" d="M 5.28 12.28 A 9.5 9.5 0 0 1 18.72 12.28" />
       <path class="arc" [class.on]="level() >= 2" d="M 8.46 15.46 A 5 5 0 0 1 15.54 15.46" />
       <circle class="dot" [class.on]="level() >= 1" cx="12" cy="19" r="1.9" />
-      @if (!connected() && !online()) {
-        <path class="slash" d="M 3 4 L 21 22" />
-      }
-      @if (connected() && !online()) {
+      @if (!online()) {
         <circle class="badge" cx="19.5" cy="18.5" r="4.4" />
-        <path class="mark" d="M 19.5 16.2 L 19.5 19" />
-        <circle class="mark-dot" cx="19.5" cy="20.9" r="0.7" />
+        @if (connected()) {
+          <path class="mark" d="M 19.5 16.2 L 19.5 19" />
+          <circle class="mark-dot" cx="19.5" cy="20.9" r="0.7" />
+        } @else {
+          <path class="mark" d="M 17.6 16.6 L 21.4 20.4 M 21.4 16.6 L 17.6 20.4" />
+        }
       }
     </svg>
   `,
@@ -63,11 +64,6 @@ export function wifiLevelOf(signalDbm: number | undefined): number {
     }
     .on {
       opacity: 1;
-    }
-    .slash {
-      stroke: currentColor;
-      stroke-width: 2;
-      stroke-linecap: round;
     }
     .badge {
       fill: #ff5252;
