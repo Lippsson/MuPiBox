@@ -2495,6 +2495,23 @@ app.post('/api/deleteresume', (req, res) => {
   })
 })
 
+// Checks for /api/edit and /api/delete. The parents' web app sends the entry as it knew it
+// ("original"); if the library changed in between (Smart-Sync, another edit), the index may point to a
+// different entry by now, and editing or deleting it would hit the wrong one.
+const LIBRARY_ID_KEYS = ['type', 'id', 'artistid', 'playlistid', 'showid', 'audiobookid', 'title', 'artist', 'category']
+function sameLibraryEntry(a: unknown, b: unknown): boolean {
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false
+  const x = a as Record<string, unknown>
+  const y = b as Record<string, unknown>
+  return LIBRARY_ID_KEYS.every((k) => (x[k] ?? null) === (y[k] ?? null))
+}
+function libraryIndexProblem(data: unknown, index: unknown, original: unknown): string | null {
+  if (!Array.isArray(data)) return 'library unreadable'
+  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= data.length) return 'bad index'
+  if (original !== undefined && !sameLibraryEntry(data[index], original)) return 'library changed'
+  return null
+}
+
 app.post('/api/delete', (req, res) => {
   const lockResult = acquireLock(dataLock, '/api/delete')
   if (lockResult === 'locked') {
@@ -2514,6 +2531,12 @@ app.post('/api/delete', (req, res) => {
       res.status(200).send('error')
       return
     }
+    const problem = libraryIndexProblem(data, req.body?.index, req.body?.original)
+    if (problem) {
+      releaseLock(dataLock, '/api/delete')
+      res.status(problem === 'library changed' ? 409 : 400).send(problem)
+      return
+    }
     data.splice(req.body.index, 1)
     writeJsonAtomic(dataFile, data, (writeError) => {
       releaseLock(dataLock, '/api/delete')
@@ -2528,6 +2551,13 @@ app.post('/api/delete', (req, res) => {
 })
 
 app.post('/api/edit', (req, res) => {
+  // The new entry comes as { index, data }. Without data (the web app used to send the fields next to
+  // index) splice() put null into the library, and that entry was gone.
+  const entry = req.body?.data
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    res.status(400).send('data missing')
+    return
+  }
   const lockResult = acquireLock(dataLock, '/api/edit')
   if (lockResult === 'locked') {
     console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/edit data.json is locked`)
@@ -2546,7 +2576,13 @@ app.post('/api/edit', (req, res) => {
       res.status(200).send('error')
       return
     }
-    data.splice(req.body.index, 1, req.body.data)
+    const problem = libraryIndexProblem(data, req.body.index, req.body.original)
+    if (problem) {
+      releaseLock(dataLock, '/api/edit')
+      res.status(problem === 'library changed' ? 409 : 400).send(problem)
+      return
+    }
+    data.splice(req.body.index, 1, entry)
     writeJsonAtomic(dataFile, data, (writeError) => {
       releaseLock(dataLock, '/api/edit')
       if (writeError) {

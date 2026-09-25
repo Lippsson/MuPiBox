@@ -333,7 +333,7 @@ function renderLibrary() {
   const q = libraryState.search.trim().toLowerCase()
   let filtered = libraryState.items.filter((m) => {
     // Skip resume entries — they're internal, not parent-managed.
-    if (m.isResume === true || m.category === 'resume') return false
+    if (!m || m.isResume === true || m.category === 'resume') return false
     if (libraryState.categoryFilter !== 'all' && m.category !== libraryState.categoryFilter) return false
     const source = m.source ?? 'manual'
     if (libraryState.sourceFilter !== 'all' && source !== libraryState.sourceFilter) return false
@@ -489,14 +489,9 @@ function openLibraryEditSheet(item) {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ index: item.index, ...updated }),
+      body: JSON.stringify({ index: item.index, data: updated, original: item }),
     })
-    if (res.ok) {
-      closeLibraryEditSheet()
-      await loadLibrary()
-    } else {
-      toast('error', t('common.saveFailedStatus', { status: res.status }))
-    }
+    await handleLibraryWriteResult(res, 'common.saveFailedStatus')
   })
   actions.appendChild(saveBtn)
   if (!isSync) {
@@ -509,14 +504,9 @@ function openLibraryEditSheet(item) {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index: item.index }),
+        body: JSON.stringify({ index: item.index, original: item }),
       })
-      if (res.ok) {
-        closeLibraryEditSheet()
-        await loadLibrary()
-      } else {
-        toast('error', t('common.deleteFailedStatus', { status: res.status }))
-      }
+      await handleLibraryWriteResult(res, 'common.deleteFailedStatus')
     })
     actions.appendChild(delBtn)
   } else {
@@ -529,6 +519,24 @@ function openLibraryEditSheet(item) {
   body.appendChild(actions)
 
   $('#library-edit-backdrop').hidden = false
+}
+
+// /api/edit and /api/delete answer "ok"; "locked"/"error" come with status 200 too, so the text counts.
+async function handleLibraryWriteResult(res, failKey) {
+  const text = res.ok ? await res.text().catch(() => '') : ''
+  if (res.ok && text.trim() === 'ok') {
+    closeLibraryEditSheet()
+    await loadLibrary()
+    return
+  }
+  if (res.status === 409) {
+    // the library changed since it was loaded: show the current one instead of touching the wrong entry
+    toast('error', t('libedit.changedReload'))
+    closeLibraryEditSheet()
+    await loadLibrary()
+    return
+  }
+  toast('error', t(failKey, { status: res.ok ? text.trim() || res.status : res.status }))
 }
 
 function updated_or_label(item) {
@@ -1994,7 +2002,7 @@ function renderPlay() {
     .map((item, idx) => ({ item, idx }))
     .filter(({ item }) => {
       if (!item || typeof item !== 'object') return false
-      if (item.isResume === true || item.category === 'resume') return false
+      if (!item || item.isResume === true || item.category === 'resume') return false
       // Filter nach Top-Level-Kategorie. 'radio' deckt sowohl category='radio'
       // als auch type='radio' ab (manche Einträge haben nur eines gesetzt).
       if (cat === 'radio') {
