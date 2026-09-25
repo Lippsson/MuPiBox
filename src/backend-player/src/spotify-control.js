@@ -5,6 +5,7 @@ const path = require('node:path')
 const dns = require('node:dns')
 const SpotifyWebApi = require('spotify-web-api-node')
 const createPlayer = require('./mplayer-wrapper.js')
+const { isPlaylistUrl, resolveStreamUrl } = require('./playlist-url.js')
 const googleTTS = require('google-tts-api')
 const fs = require('node:fs')
 const childProcess = require('node:child_process')
@@ -1807,6 +1808,28 @@ function playFile(playedFile) {
   log.debug(`${now()}: /home/dietpi/MuPiBox/tts_files/${playedTitel}`)
 }
 
+// A radio link may be a playlist (m3u / pls) instead of the stream itself: its FIRST stream is played (see
+// playlist-url.js). The playlist is fetched first, so the start waits for it (a few seconds at most, the display shows
+// the loading ring meanwhile); a stop or another start in that time wins. Everything else starts at once, as before.
+function playRadioURL(radioURL) {
+  if (!isPlaylistUrl(radioURL)) {
+    playURL(radioURL)
+    return
+  }
+  const generation = ++playbackGeneration
+  startLoading()
+  resolveStreamUrl(radioURL).then((streamURL) => {
+    if (generation !== playbackGeneration) {
+      log.debug(`${now()}: [Spotify Control] Playlist ${radioURL} dropped (stopped or replaced meanwhile)`)
+      return
+    }
+    if (streamURL !== radioURL) {
+      log.info(`${now()}: [Spotify Control] Opened playlist ${radioURL}: playing its first stream ${streamURL}`)
+    }
+    playURL(streamURL)
+  })
+}
+
 function playURL(playedURL) {
   playbackGeneration++
   startLoading()
@@ -2316,7 +2339,7 @@ app.use((req, res) => {
     const dir = command.dir
     let radioURL = dir.split('radio/').pop()
     radioURL = decodeURIComponent(radioURL)
-    playURL(radioURL)
+    playRadioURL(radioURL)
   }
 
   if (hasDirSegment(command, 'rss')) {
