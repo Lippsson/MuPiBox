@@ -588,6 +588,17 @@ if( $_POST['fan_control'] )
   $CHANGE_TXT = $CHANGE_TXT."<li>Playtime limit settings saved (live, no restart needed)</li>";
   $change = 2;
   }
+ // Overlay texts of the box display: key => (label, English default of the box frontend)
+ $display_text_fields = array(
+  'blockedHeading' => array('Limit reached - heading', "That's enough music for today"),
+  'blockedSubheading' => array('Limit reached - second line', 'More music tomorrow'),
+  'quietHeading' => array('Quiet time - heading (only for rules without a label)', 'Quiet time'),
+  'quietSubheading' => array('Quiet time - second line', 'Music will be back soon'),
+  'parentsTitle' => array('Parents QR code - heading', 'Parent setup'),
+  'parentsHint' => array('Parents QR code - hint', 'Scan with your phone or open in a browser:'),
+  'parentsCountdown' => array('Parents QR code - countdown ({s} = seconds)', 'Disappears in {s} s'),
+  'parentsClose' => array('Parents QR code - close button', 'Close'),
+ );
  if( $_POST['quiethours_save'] )
   {
   if( !isset($data["quietHours"]) || !is_array($data["quietHours"]) )
@@ -629,6 +640,23 @@ if( $_POST['fan_control'] )
    }
   $playtime_changed = true;
   $CHANGE_TXT = $CHANGE_TXT."<li>Quiet hours saved (".($quiethours_windows_posted ? $quiethours_window_count." window(s)" : "rules unchanged").", live, no restart needed)</li>";
+  $change = 2;
+  }
+ // Texts of the overlays on the box display (same keys as the parents' web app). An empty field
+ // removes the text: the box shows its English default then.
+ if( isset($_POST['displaytexts_save']) )
+  {
+  $display_texts = array();
+  foreach( $display_text_fields as $dt_key => $dt_field )
+   {
+   $dt_value = isset($_POST['dt_'.$dt_key]) && is_string($_POST['dt_'.$dt_key]) ? $_POST['dt_'.$dt_key] : '';
+   $dt_value = trim(preg_replace('/[\x00-\x1F\x7F]/u', ' ', $dt_value) ?? '');
+   $dt_value = mb_substr($dt_value, 0, 120);
+   if( $dt_value !== '' ) $display_texts[$dt_key] = $dt_value;
+   }
+  if( count($display_texts) > 0 ) $data["displayTexts"] = $display_texts;
+  else unset($data["displayTexts"]);
+  $CHANGE_TXT = $CHANGE_TXT."<li>Display texts saved (".count($display_texts)." custom, shown the next time an overlay appears)</li>";
   $change = 2;
   }
  // Only one of the offered GPIO pins (it went unchecked into a root sed command).
@@ -1222,6 +1250,30 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 		render();
 	})();
 	</script>
+
+	<details id="displaytexts">
+		<summary><i class="fa-solid fa-font"></i> Display texts</summary>
+		<ul>
+			<li id="li_1">
+				<h2>About</h2>
+				<p>Texts the child sees on the box display when the daily limit is used up, during a quiet time, and on the parents' QR code. Write them in your own language or make them personal. An empty field shows the English default (in grey). A quiet-time rule with a label (e.g. "Bedtime") shows that label as the heading.</p>
+			</li>
+			<li id="li_1">
+				<?php
+				$display_texts_stored = isset($data["displayTexts"]) && is_array($data["displayTexts"]) ? $data["displayTexts"] : array();
+				foreach( $display_text_fields as $dt_key => $dt_field )
+					{
+					$dt_current = isset($display_texts_stored[$dt_key]) && is_string($display_texts_stored[$dt_key]) ? $display_texts_stored[$dt_key] : '';
+					echo '<h2>'.htmlspecialchars($dt_field[0], ENT_QUOTES).'</h2>';
+					echo '<input type="text" class="element text large" name="dt_'.htmlspecialchars($dt_key, ENT_QUOTES).'" maxlength="120" value="'.htmlspecialchars($dt_current, ENT_QUOTES).'" placeholder="'.htmlspecialchars($dt_field[1], ENT_QUOTES).'">';
+					}
+				?>
+			</li>
+			<li class="buttons">
+				<input id="saveForm" class="button_text" type="submit" name="displaytexts_save" value="Save display texts" />
+			</li>
+		</ul>
+	</details>
 
 	<details id="systemsettings">
 		<summary><i class="fa-solid fa-screwdriver-wrench"></i> System settings</summary>

@@ -39,7 +39,7 @@ const SECTIONS = {
   library:   { title: 'Library',             parent: 'hub', loader: () => { loadLibrary(); loadSubscriptions(); loadSyncStatus() } },
   play:      { title: 'Wiedergabe starten',  parent: 'hub', loader: () => loadPlay() },
   search:    { title: 'Spotify-Suche',       parent: 'library', loader: () => resetSearch() },
-  caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
+  caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => { loadCaps(); loadDisplayTexts() } },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => loadWlan() },
   bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => loadBluetooth() },
@@ -799,6 +799,56 @@ function renderQuietSchedule() {
       dayEl.appendChild(row)
     })
     root.appendChild(dayEl)
+  }
+}
+
+// Texts of the overlays on the box display. Keys and English defaults as in the box frontend
+// (display-texts.service.ts); an empty field stores nothing, the box then shows the default.
+const DISPLAY_TEXT_FIELDS = [
+  { key: 'blockedHeading', label: 'Spielzeit aufgebraucht – Überschrift', def: "That's enough music for today" },
+  { key: 'blockedSubheading', label: 'Spielzeit aufgebraucht – Unterzeile', def: 'More music tomorrow' },
+  { key: 'quietHeading', label: 'Ruhezeit – Überschrift (nur ohne Namen der Regel)', def: 'Quiet time' },
+  { key: 'quietSubheading', label: 'Ruhezeit – Unterzeile', def: 'Music will be back soon' },
+  { key: 'parentsTitle', label: 'QR-Code – Überschrift', def: 'Parent setup' },
+  { key: 'parentsHint', label: 'QR-Code – Hinweis', def: 'Scan with your phone or open in a browser:' },
+  { key: 'parentsCountdown', label: 'QR-Code – Countdown ({s} = Sekunden)', def: 'Disappears in {s} s' },
+  { key: 'parentsClose', label: 'QR-Code – Schließen-Knopf', def: 'Close' },
+]
+
+async function loadDisplayTexts() {
+  const box = $('#display-texts-form')
+  if (!box) return
+  const res = await api(`${API}/display-texts`)
+  const texts = res.ok ? (res.body?.texts ?? {}) : {}
+  box.textContent = ''
+  for (const field of DISPLAY_TEXT_FIELDS) {
+    const row = document.createElement('div')
+    row.className = 'form-row'
+    const label = document.createElement('label')
+    label.htmlFor = `display-text-${field.key}`
+    label.textContent = field.label
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.id = `display-text-${field.key}`
+    input.dataset.key = field.key
+    input.maxLength = 120
+    input.placeholder = field.def
+    input.value = texts[field.key] ?? ''
+    row.append(label, input)
+    box.appendChild(row)
+  }
+}
+
+async function saveDisplayTexts() {
+  const texts = {}
+  for (const input of document.querySelectorAll('#display-texts-form input[data-key]')) {
+    texts[input.dataset.key] = input.value.trim()
+  }
+  const res = await api(`${API}/display-texts`, { method: 'POST', body: { texts } })
+  if (res.ok) {
+    feedback('#display-texts-feedback', 'success', 'Gespeichert. Erscheint beim nächsten Einblenden auf der Box.')
+  } else {
+    feedback('#display-texts-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
   }
 }
 
@@ -3277,6 +3327,7 @@ function wire() {
   // Phase 15h — Caps-screen actions.
   $('#caps-back-btn')?.addEventListener('click', () => navigate('hub'))
   $('#caps-save-btn')?.addEventListener('click', saveCapsConfig)
+  $('#display-texts-save-btn')?.addEventListener('click', saveDisplayTexts)
   $('#caps-extend-btn')?.addEventListener('click', capsExtend)
   $('#caps-release-btn')?.addEventListener('click', capsRelease)
   $('#caps-quietnow-btn')?.addEventListener('click', capsQuietNow)

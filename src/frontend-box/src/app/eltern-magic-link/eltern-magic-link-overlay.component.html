@@ -3,11 +3,11 @@
     <div class="ml-card" (click)="$event.stopPropagation()">
       <img [src]="svc.qrUrl()" alt="QR-Code" class="ml-qr">
       <div class="ml-info">
-        <h2>Eltern-Setup</h2>
-        <p>Mit dem Smartphone scannen oder im Browser öffnen:</p>
+        <h2>{{ texts.text('parentsTitle') }}</h2>
+        <p>{{ texts.text('parentsHint') }}</p>
         <code class="ml-url">{{ svc.magicLinkUrl() }}</code>
-        <p class="ml-countdown">Verschwindet in {{ svc.countdownSeconds() }} Sek</p>
-        <button class="ml-close" (click)="svc.close()">Schließen</button>
+        <p class="ml-countdown">{{ texts.text('parentsCountdown', { s: svc.countdownSeconds() }) }}</p>
+        <button class="ml-close" (click)="svc.close()">{{ texts.text('parentsClose') }}</button>
       </div>
     </div>
   </div>

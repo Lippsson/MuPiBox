@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
+import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/core'
+import { DisplayTextsService } from '../display-texts.service'
 import { ElternMagicLinkService } from '../eltern-magic-link.service'
 
 // Full-screen overlay shown when a parent opens the Eltern-WebApp entry in
@@ -13,4 +14,12 @@ import { ElternMagicLinkService } from '../eltern-magic-link.service'
 })
 export class ElternMagicLinkOverlayComponent {
   protected readonly svc = inject(ElternMagicLinkService)
+  protected readonly texts = inject(DisplayTextsService)
+
+  constructor() {
+    // pick up texts changed in the parents' web app since the box started
+    effect(() => {
+      if (this.svc.visible()) this.texts.refresh()
+    })
+  }
 }
