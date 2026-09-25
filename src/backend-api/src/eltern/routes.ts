@@ -45,6 +45,8 @@ export interface ElternRouterDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
   updateMupiboxConfig: (mutate: (cfg: Record<string, unknown>) => void) => Promise<void>
   activeDataPath: string
+  /** Start (ms) of the track the play-log poller is timing right now, null when nothing plays. */
+  currentPlayLogStart?: () => number | null
 }
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
@@ -1285,12 +1287,16 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     type Play = { tsMs: number; source: string; title: string; artist: string; album: string; duration: number }
     const plays: Play[] = []
     let pending: { tsMs: number; source: string; title: string; artist: string; album: string } | null = null
+    // A start without a stop (box switched off, backend killed): how long it really played is unknown.
+    // Counting it up to the next start put hours of a switched-off box on the history, so it counts at
+    // most this long.
+    const ORPHAN_MAX_S = 10 * 60
+    const orphanSeconds = (fromMs: number, toMs: number) =>
+      Math.min(ORPHAN_MAX_S, Math.max(0, Math.round((toMs - fromMs) / 1000)))
     for (const e of entries) {
       if (e.event === 'start') {
         if (pending !== null) {
-          // orphan start (no stop recorded — e.g. backend-api restarted mid-track).
-          // Extrapolate up to the new start's ts so the gap is attributed to it.
-          plays.push({ ...pending, duration: Math.max(0, Math.round((Date.parse(e.ts) - pending.tsMs) / 1000)) })
+          plays.push({ ...pending, duration: orphanSeconds(pending.tsMs, Date.parse(e.ts)) })
         }
         pending = {
           tsMs: Date.parse(e.ts),
@@ -1305,8 +1311,14 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       }
     }
     if (pending !== null) {
-      // Currently still playing — extrapolate to now so today's number reflects reality.
-      plays.push({ ...pending, duration: Math.max(0, Math.round((Date.now() - pending.tsMs) / 1000)) })
+      // Currently still playing (the poller times exactly this start) — count up to now so today's
+      // number reflects reality. Otherwise it's a start left over from before a restart.
+      const running = deps.currentPlayLogStart?.()
+      const isRunning = running != null && Math.abs(running - pending.tsMs) < 2000
+      const duration = isRunning
+        ? Math.max(0, Math.round((Date.now() - pending.tsMs) / 1000))
+        : orphanSeconds(pending.tsMs, Date.now())
+      plays.push({ ...pending, duration })
     }
 
     const totalSeconds = plays.reduce((s, p) => s + p.duration, 0)

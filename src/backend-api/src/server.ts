@@ -1263,20 +1263,55 @@ function trimPlayLog(): void {
   }
 }
 
+// When the player stops answering, the last track is closed at the moment it was last seen playing.
+// Skipping those ticks forever kept the old track "playing": a player that hung for two hours put
+// two hours on the history although nothing was heard.
+const PLAY_LOG_STALE_MS = 60_000
+let lastPlaySeenTs: number | null = null
+
+function closePlayLogEntry(endMs: number, sync = false): void {
+  if (lastPlayFingerprint !== null && lastPlayStartTs !== null && lastPlayMeta !== null) {
+    const line = {
+      ts: new Date(endMs).toISOString(),
+      event: 'stop',
+      duration_seconds: Math.max(0, Math.round((endMs - lastPlayStartTs) / 1000)),
+      ...lastPlayMeta,
+    }
+    if (sync) {
+      try {
+        fs.appendFileSync(PLAY_LOG_PATH, `${JSON.stringify(line)}\n`)
+      } catch {
+        /* shutting down, nothing else to do */
+      }
+    } else {
+      appendPlayLogLine(line)
+    }
+  }
+  lastPlayFingerprint = null
+  lastPlayStartTs = null
+  lastPlayMeta = null
+  lastPlaySeenTs = null
+}
+
+/** Start of the track the history is timing right now (null when nothing plays). */
+function currentPlayLogStart(): number | null {
+  return lastPlayStartTs
+}
+
 async function tickPlayLog(): Promise<void> {
   const state = await fetchCurrentPlayerState()
-  if (state === null) return // transient — skip this tick
   const now = Date.now()
-  if (state.fingerprint === lastPlayFingerprint) return // no change
-
-  if (lastPlayFingerprint !== null && lastPlayStartTs !== null && lastPlayMeta !== null) {
-    appendPlayLogLine({
-      ts: new Date(now).toISOString(),
-      event: 'stop',
-      duration_seconds: Math.max(0, Math.round((now - lastPlayStartTs) / 1000)),
-      ...lastPlayMeta,
-    })
+  if (state === null) {
+    // transient — skip this tick, unless the player has been gone for a while
+    if (lastPlaySeenTs !== null && now - lastPlaySeenTs > PLAY_LOG_STALE_MS) closePlayLogEntry(lastPlaySeenTs)
+    return
   }
+  if (state.fingerprint === lastPlayFingerprint) {
+    if (lastPlayFingerprint !== null) lastPlaySeenTs = now
+    return // no change
+  }
+
+  closePlayLogEntry(now)
   if (state.fingerprint !== null && state.meta !== null) {
     appendPlayLogLine({
       ts: new Date(now).toISOString(),
@@ -1286,10 +1321,7 @@ async function tickPlayLog(): Promise<void> {
     lastPlayFingerprint = state.fingerprint
     lastPlayStartTs = now
     lastPlayMeta = state.meta
-  } else {
-    lastPlayFingerprint = null
-    lastPlayStartTs = null
-    lastPlayMeta = null
+    lastPlaySeenTs = now
   }
 }
 
@@ -1307,6 +1339,13 @@ function startPlayLogPoller(): void {
     }
   }, PLAY_LOG_POLL_MS)
   if (typeof timer.unref === 'function') timer.unref()
+  // pm2 restart / shutdown: close the running track, otherwise the history counts it until the next start.
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(signal, () => {
+      closePlayLogEntry(lastPlaySeenTs ?? Date.now(), true)
+      process.exit(0)
+    })
+  }
 }
 
 // === End Phase 18 Item 4 =======================================================
@@ -5446,6 +5485,7 @@ app.use(
     getMupiboxConfig: getMupiboxConfigSync,
     updateMupiboxConfig,
     activeDataPath: activedataFile,
+    currentPlayLogStart,
   }),
 )
 app.get('/eltern', buildElternLandingHandler())
