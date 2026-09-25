@@ -489,6 +489,36 @@
   $change=2;
   }
 
+if( isset($_POST['rotary_toggle']) || isset($_POST['rotary_save']) )
+	{
+	if( !isset($data["rotary"]) || !is_array($data["rotary"]) ) { $data["rotary"] = array( "active" => false, "button" => "off" ); }
+	if( isset($_POST['rotary_toggle']) )
+		{
+		if( $_POST['rotary_toggle'] == "enable" )
+			{
+			$data["rotary"]["active"] = true;
+			exec("sudo systemctl enable mupi_rotary.service");
+			exec("sudo systemctl restart mupi_rotary.service");
+			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder is active now.</li>";
+			}
+		else
+			{
+			$data["rotary"]["active"] = false;
+			exec("sudo systemctl stop mupi_rotary.service");
+			exec("sudo systemctl disable mupi_rotary.service");
+			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder is deactivated now.</li>";
+			}
+		}
+	if( isset($_POST['rotary_save']) )
+		{
+		// Only the offered functions (the service reads this value on every button press)
+		$rotary_button = in_array($_POST['rotary_button'] ?? '', array('off','playpause','next','ffwd'), true) ? $_POST['rotary_button'] : 'off';
+		$data["rotary"]["button"] = $rotary_button;
+		$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder push button function saved.</li>";
+		}
+	$change = 2;
+	}
+
 if( $_POST['fan_control'] )
 	{
 	$data["fan"]["fan_active"] = $_POST['FanPin'];
@@ -1828,6 +1858,35 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				</div>
 			</li>			
 			
+
+			<li id="li_1" >
+				<h2>Rotary encoder to control volume</h2>
+				<p>Turn the rotary encoder to change the volume in 5% steps (never above the max volume). Wiring: GPIO 24 = encoder A (CLK), GPIO 26 = encoder B (DT), GPIO 10 = push button (to GND).</p>
+				<?php
+				$rotary_active = !empty($data["rotary"]["active"]);
+				$rotary_button = $data["rotary"]["button"] ?? "off";
+				echo "Rotary encoder: <b>" . ($rotary_active ? "active" : "not active") . "</b>";
+				?>
+				<br />
+				<input id="saveForm" class="button_text" type="submit" name="rotary_toggle" value="<?php print $rotary_active ? "disable" : "enable"; ?>" />
+			</li>
+			<?php if( $rotary_active ) { ?>
+			<li id="li_1" >
+				<h2>Rotary encoder pins</h2>
+				<p>GPIO <b>24</b> (A / CLK), GPIO <b>26</b> (B / DT), GPIO <b>10</b> (push button). GPIO 10 is the SPI MOSI pin: it only works when SPI is not in use by another device.</p>
+				<h2>Push button function (GPIO 10)</h2>
+				<div><select id="rotary_button" name="rotary_button" class="element text medium">
+				<?php
+				$rotary_functions = array( "off" => "Inactive", "playpause" => "Toggle pause / play", "next" => "Next song", "ffwd" => "Fast forward (30 sec)" );
+				foreach($rotary_functions as $value => $label) {
+					$selected = ( $value == $rotary_button ) ? " selected=\"selected\"" : "";
+					print "<option value=\"" . $value . "\"" . $selected . ">" . $label . "</option>";
+				}
+				?>
+				</select></div>
+				<input id="saveForm" class="button_text" type="submit" name="rotary_save" value="Save push button function" />
+			</li>
+			<?php } ?>
 
 			<li class="buttons">
 				<input type="hidden" name="form_id" value="37271" />

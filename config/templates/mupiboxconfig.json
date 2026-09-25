@@ -449,6 +449,10 @@
 		"fan_temp_75": "65",
 		"fan_temp_50": "55",
 		"fan_temp_25": "45"
+	},
+	"rotary": {
+		"active": false,
+		"button": "off"
 	}
 }
 
