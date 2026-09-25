@@ -2081,9 +2081,10 @@ const _execAsync = (cmd) =>
   })
 
 /*gets available devices, searches for the active one and returns its volume*/
-async function setVolume(volume) {
-  const volumeUp = '/usr/bin/amixer sset Master 5%+'
-  const volumeDown = '/usr/bin/amixer sset Master 5%-'
+async function setVolume(volume, step = 5) {
+  // step: percent per change (5 for the +5 / -5 commands, 1..10 for the rotary encoder)
+  const volumeUp = `/usr/bin/amixer sset Master ${step}%+`
+  const volumeDown = `/usr/bin/amixer sset Master ${step}%-`
   const volumeMax = `/usr/bin/amixer sset Master ${muPiBoxConfig.mupibox.maxVolume}%`
   const cmdVolume = "/usr/bin/amixer sget Master | grep 'Right:'"
 
@@ -2107,15 +2108,16 @@ async function setVolume(volume) {
 
     if (volume) {
       if (actualVolume < muPiBoxConfig.mupibox.maxVolume) {
-        await cmdCall(volumeUp)
-        currentMeta.volume = Math.min(actualVolume + 5, muPiBoxConfig.mupibox.maxVolume)
+        // never above the max volume, also when the step does not divide the remaining room
+        await cmdCall(actualVolume + step > muPiBoxConfig.mupibox.maxVolume ? volumeMax : volumeUp)
+        currentMeta.volume = Math.min(actualVolume + step, muPiBoxConfig.mupibox.maxVolume)
       } else {
         currentMeta.volume = muPiBoxConfig.mupibox.maxVolume
         await cmdCall(volumeMax)
       }
     } else {
       await cmdCall(volumeDown)
-      currentMeta.volume = Math.max(actualVolume - 5, 0)
+      currentMeta.volume = Math.max(actualVolume - step, 0)
     }
   }).catch((err) => {
     // Don't let one failed op poison the queue for subsequent ops.
@@ -2451,8 +2453,11 @@ app.use((req, res) => {
   else if (command.name === 'stop') stop()
   else if (command.name === 'next') next()
   else if (command.name === 'previous') previous()
-  else if (command.name === '+5') setVolume(1)
-  else if (command.name === '-5') setVolume(0)
+  else if (/^[+-]\d{1,2}$/.test(command.name)) {
+    // +5 / -5 as before; other steps (1..10) come from the rotary encoder
+    const step = Math.min(10, Math.max(1, Math.abs(Number.parseInt(command.name, 10))))
+    setVolume(command.name.startsWith('+') ? 1 : 0, step)
+  }
   else if (command.name === 'shuffleon') shuffleon()
   else if (command.name === 'shuffleoff') shuffleoff()
   else if (command.name === 'shutoff') cmdCall('sudo su - -c "/usr/local/bin/mupibox/./shutdown.sh &"')

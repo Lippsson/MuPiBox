@@ -296,6 +296,9 @@ if [ "$ROTARY_ACTIVE" == "null" ]; then
 	update_config '.rotary.active = false'
 	update_config '.rotary.button = "off"'
 fi
+if [ "$(/usr/bin/jq -r .rotary.step ${CONFIG})" == "null" ]; then
+	update_config '.rotary.step = 5'
+fi
 
 ensure_theme forms
 ensure_theme comic

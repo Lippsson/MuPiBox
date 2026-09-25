@@ -452,7 +452,8 @@
 	},
 	"rotary": {
 		"active": false,
-		"button": "off"
+		"button": "off",
+		"step": 5
 	}
 }
 

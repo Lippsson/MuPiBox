@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # Rotary encoder for the volume, with push button (KY-040 style).
 #   GPIO 24 = encoder A (CLK), GPIO 26 = encoder B (DT), GPIO 10 = push button (to GND)
-# Turning changes the volume in 5 % steps (the player keeps the max volume and the display in sync), the push button
+# Turning changes the volume by rotary.step percent per detent (the player keeps the max volume and the display in sync), the push button
 # does what is chosen in the admin interface (rotary.button in mupiboxconfig.json, read again on every press).
 
 import json
@@ -43,12 +43,24 @@ def worker():
         player(commands.get())
 
 
-def button_function():
+def rotary_config():
     try:
         with open(CONFIG) as file:
-            return json.load(file).get("rotary", {}).get("button", "off")
+            return json.load(file).get("rotary", {})
     except Exception:
-        return "off"
+        return {}
+
+
+def button_function():
+    return rotary_config().get("button", "off")
+
+
+def volume_step():
+    # percent per detent (1..10), read again on every turn so a change in the admin interface takes effect at once
+    try:
+        return min(10, max(1, int(rotary_config().get("step", 5))))
+    except (TypeError, ValueError):
+        return 5
 
 
 def playing():
@@ -88,10 +100,10 @@ def main():
             accumulated += TRANSITIONS.get((state, new_state), 0)
             state = new_state
             if accumulated >= STEPS_PER_DETENT:
-                commands.put("+5")
+                commands.put("+%d" % volume_step())
                 accumulated = 0
             elif accumulated <= -STEPS_PER_DETENT:
-                commands.put("-5")
+                commands.put("-%d" % volume_step())
                 accumulated = 0
             if state == 3 and abs(accumulated) < STEPS_PER_DETENT:
                 accumulated = 0  # resting position without a full detent: it was a bounce

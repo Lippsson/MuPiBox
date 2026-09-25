@@ -514,7 +514,8 @@ if( isset($_POST['rotary_toggle']) || isset($_POST['rotary_save']) )
 		// Only the offered functions (the service reads this value on every button press)
 		$rotary_button = in_array($_POST['rotary_button'] ?? '', array('off','playpause','next','ffwd'), true) ? $_POST['rotary_button'] : 'off';
 		$data["rotary"]["button"] = $rotary_button;
-		$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder push button function saved.</li>";
+		$data["rotary"]["step"] = min(10, max(1, intval($_POST['rotary_step'] ?? 5)));
+		$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder settings saved (volume step ".$data["rotary"]["step"]."%, push button: ".$rotary_button.").</li>";
 		}
 	$change = 2;
 	}
@@ -1861,7 +1862,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 
 			<li id="li_1" >
 				<h2>Rotary encoder to control volume</h2>
-				<p>Turn the rotary encoder to change the volume in 5% steps (never above the max volume). Wiring: GPIO 24 = encoder A (CLK), GPIO 26 = encoder B (DT), GPIO 10 = push button (to GND).</p>
+				<p>Turn the rotary encoder to change the volume (never above the max volume). Wiring: GPIO 24 = encoder A (CLK), GPIO 26 = encoder B (DT), GPIO 10 = push button (to GND).</p>
 				<?php
 				$rotary_active = !empty($data["rotary"]["active"]);
 				$rotary_button = $data["rotary"]["button"] ?? "off";
@@ -1874,6 +1875,12 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 			<li id="li_1" >
 				<h2>Rotary encoder pins</h2>
 				<p>GPIO <b>24</b> (A / CLK), GPIO <b>26</b> (B / DT), GPIO <b>10</b> (push button). GPIO 10 is the SPI MOSI pin: it only works when SPI is not in use by another device.</p>
+				<h2>Volume change per step</h2>
+				<p>How many percent the volume changes with every click of the rotary encoder.</p>
+				<div>
+				<output id="rangeval" class="rangeval"><?php echo intval($data["rotary"]["step"] ?? 5); ?> %</output>
+				<input class="range slider-progress" name="rotary_step" type="range" min="1" max="10" step="1" value="<?php echo intval($data["rotary"]["step"] ?? 5); ?>" oninput="this.previousElementSibling.value = this.value + ' %'">
+				</div>
 				<h2>Push button function (GPIO 10)</h2>
 				<div><select id="rotary_button" name="rotary_button" class="element text medium">
 				<?php
@@ -1884,7 +1891,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				}
 				?>
 				</select></div>
-				<input id="saveForm" class="button_text" type="submit" name="rotary_save" value="Save push button function" />
+				<input id="saveForm" class="button_text" type="submit" name="rotary_save" value="Save rotary encoder settings" />
 			</li>
 			<?php } ?>
 
