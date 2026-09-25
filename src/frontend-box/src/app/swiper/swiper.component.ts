@@ -154,6 +154,27 @@ export class SwiperComponent<T> {
       // The swiper's scrollbar only exists a moment later.
       setTimeout(() => this.applyCoverflow(), 400)
     })
+
+    // Drive progressive expansion. Tracks pageIsShown + data().length.
+    // When the input data grows (typical: empty array → full array once
+    // the parent's HTTP fetch resolves), kick off the chunked render
+    // loop. Without this, the first ionViewDidEnter saw data().length=0,
+    // bailed immediately, and never restarted when the real data arrived
+    // — user saw only the initial 15 slides for the rest of the visit.
+    effect(() => {
+      if (!this.pageIsShown()) {
+        if (this.renderTimer !== undefined) {
+          clearTimeout(this.renderTimer)
+          this.renderTimer = undefined
+        }
+        return
+      }
+      const target = this.data()?.length ?? 0
+      const cur = untracked(() => this.renderableLimit())
+      if (target > cur && this.renderTimer === undefined) {
+        this.scheduleNextChunk()
+      }
+    })
   }
 
   /**
