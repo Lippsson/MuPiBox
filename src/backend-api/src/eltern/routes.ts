@@ -1635,7 +1635,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     if (typeof body.token === 'string' && body.token.trim().length > 0) {
       const t = body.token.trim()
       if (!/^\d{6,12}:[A-Za-z0-9_-]{30,50}$/.test(t)) {
-        res.status(400).json({ error: 'Bot-Token-Format sieht ungültig aus' })
+        res.status(400).json({ error: 'Bot token format looks invalid / Bot-Token-Format sieht ungültig aus' })
         return
       }
       newToken = t
@@ -1882,7 +1882,7 @@ export function buildElternLandingHandler(): import('express').RequestHandler {
     const ip = req.ip ?? req.socket.remoteAddress ?? ''
     const session = redeemMagicLink(token, ip)
     if (!session) {
-      res.status(401).send('Magic-Link ungültig oder abgelaufen')
+      res.status(401).send('Magic link invalid or expired / Magic-Link ungültig oder abgelaufen')
       return
     }
     // Set cookie, strip the token from URL by redirecting to /eltern

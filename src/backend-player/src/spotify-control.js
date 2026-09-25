@@ -673,6 +673,13 @@ function isActuallyPlaying() {
   return false
 }
 
+// Grace period with nothing playing any more (stopped, paused, the player page left): there is nothing left
+// to let finish, so block now. Counted in seconds of the 1 s ticks; a few of them so that the short gap of a
+// track change is not taken for "stopped".
+const GRACE_IDLE_LIMIT_S = 5
+let playtimeGraceIdle = 0
+let quietGraceIdle = 0
+
 // state machine: 'normal' (under limit) → 'grace' (over limit, current track finishing) → 'blocked' (stopped)
 const playtimeState = {
   date: '',
@@ -1048,8 +1055,12 @@ function playtimeTickStep() {
       }
     } else if (playtimeState.state === 'grace') {
       // (the song / album ending is handled by the player events and the Spotify check below)
+      playtimeGraceIdle = isActuallyPlaying() ? 0 : playtimeGraceIdle + 1
       if (playtimeState.graceEndsAt !== null && Date.now() >= playtimeState.graceEndsAt) {
         finalizePlaytimeBlock(`grace safety limit reached (${playtimeState.graceMode})`)
+      } else if (playtimeGraceIdle >= GRACE_IDLE_LIMIT_S) {
+        playtimeGraceIdle = 0
+        finalizePlaytimeBlock('nothing playing any more during the grace period')
       }
     } else if (playtimeState.state === 'blocked') {
       // Still blocked, but parent might have just added bonus — re-evaluate
@@ -1117,8 +1128,12 @@ function quietHoursTickStep() {
         finalizeQuietHoursBlock(`entered window ${window.from}-${window.to} (${!isActuallyPlaying() ? 'nothing playing' : currentMeta.currentType === 'radio' ? 'radio stream' : 'no grace configured'})`)
       }
     } else if (quietHoursState.state === 'grace') {
+      quietGraceIdle = isActuallyPlaying() ? 0 : quietGraceIdle + 1
       if (quietHoursState.graceEndsAt !== null && Date.now() >= quietHoursState.graceEndsAt) {
         finalizeQuietHoursBlock(`grace safety limit reached (${quietHoursState.graceMode})`)
+      } else if (quietGraceIdle >= GRACE_IDLE_LIMIT_S) {
+        quietGraceIdle = 0
+        finalizeQuietHoursBlock('nothing playing any more during the grace period')
       }
     }
     // 'blocked': stay blocked
@@ -1407,6 +1422,22 @@ function pause() {
 // after its awaits was overtaken and must not play.
 let playbackGeneration = 0
 
+// The two players don't know of each other: Spotify plays in the kiosk browser (Web Playback SDK), local
+// media, radio, podcasts and the NAS in mplayer. The player only knew what was playing from its own state,
+// which is empty after a restart of this process - a stop then stopped nothing, and a local album started
+// while Spotify was still playing ran in parallel. So a switch always silences the other side.
+function pauseSpotifyQuietly(why) {
+  spotifyApi.pause().catch((err) => {
+    // nothing playing on Spotify, no token, offline: fine here
+    log.debug(`${now()}: [Spotify Control] Pause on ${why} not needed/possible: ${err?.statusCode ?? err}`)
+  })
+  spotifyRunning = false
+}
+function switchToMplayer() {
+  if (currentMeta.currentPlayer !== 'mplayer') pauseSpotifyQuietly('switch to mplayer')
+  currentMeta.currentPlayer = 'mplayer'
+}
+
 function stop() {
   playbackGeneration++
   clearLibraryResumeTimers()
@@ -1434,6 +1465,15 @@ function stop() {
   } else if (currentMeta.currentPlayer === 'mplayer') {
     stopLoading()
     player.stop()
+    // mplayer ignores 'stop' while it is still opening a playlist; it then starts playing after all, and
+    // since the player already counts as stopped nothing stopped it any more (seen when leaving the player
+    // page during the silent first seconds of a resume). Say it again unless something new was started.
+    const stopGeneration = playbackGeneration
+    for (const delay of [800, 2000]) {
+      setTimeout(() => {
+        if (stopGeneration === playbackGeneration) player.stop()
+      }, delay)
+    }
     //currentMeta.playing = false;
     writeplayerstatePause()
     currentMeta.currentTrackname = ''
@@ -1446,6 +1486,11 @@ function stop() {
     currentMeta.pause = false
     spotifyRunning = false
     log.debug(`${now()}: [Spotify Control] Playback stopped`)
+  } else {
+    // State unknown (e.g. after a restart of this process while something was playing): silence both.
+    player.stop()
+    pauseSpotifyQuietly('stop with unknown state')
+    writeplayerstatePause()
   }
 }
 
@@ -1693,9 +1738,18 @@ function refreshLocalPlaylist(albumDir) {
 // next album within these 1-2 seconds used to get the old album's track jump and seek applied
 // to the new one.
 let libraryResumeTimers = []
+// mplayer's own (per stream) volume is 0 while a resume jumps to its track and position: the first
+// seconds of track 1 and of the target track used to be heard before the jump.
+let libraryResumeMuted = false
+function unmuteLibraryResume() {
+  if (!libraryResumeMuted) return
+  libraryResumeMuted = false
+  player.setVolume(volumeStart)
+}
 function clearLibraryResumeTimers() {
   for (const timer of libraryResumeTimers) clearTimeout(timer)
   libraryResumeTimers = []
+  unmuteLibraryResume()
 }
 
 function playListAtTrack(playedList, trackNr, progressPct) {
@@ -1703,6 +1757,13 @@ function playListAtTrack(playedList, trackNr, progressPct) {
     `${now()}: [Spotify Control] Library resume — track ${trackNr}, pct ${progressPct}, list ${playedList}`,
   )
   playList(playedList)
+  const jumps = trackNr > 1 || progressPct > 1
+  if (jumps) {
+    // silent until the jump is done; set again once mplayer has opened its audio output
+    libraryResumeMuted = true
+    player.setVolume(0)
+    libraryResumeTimers.push(setTimeout(() => player.setVolume(0), 300))
+  }
   if (trackNr > 1) {
     libraryResumeTimers.push(
       setTimeout(() => {
@@ -1716,6 +1777,11 @@ function playListAtTrack(playedList, trackNr, progressPct) {
   }
   if (progressPct > 1) {
     libraryResumeTimers.push(setTimeout(() => player.seekPercent(progressPct), trackNr > 1 ? 2400 : 1200))
+  }
+  if (jumps) {
+    // a moment after the last jump, so the old position is no longer in the audio buffer
+    const lastJump = progressPct > 1 ? (trackNr > 1 ? 2400 : 1200) : 1200
+    libraryResumeTimers.push(setTimeout(unmuteLibraryResume, lastJump + 400))
   }
 }
 
@@ -2093,6 +2159,10 @@ function downloadTTS(name) {
 
 async function useSpotify(command) {
   playbackGeneration++
+  if (currentMeta.currentPlayer !== 'spotify') {
+    clearLibraryResumeTimers()
+    player.stop() // local media, radio or a podcast may still be playing in mplayer
+  }
   currentMeta.currentPlayer = 'spotify'
   currentMeta.currentType = 'spotify'
   const dir = command.dir
@@ -2297,7 +2367,7 @@ app.use((req, res) => {
   }
 
   if (hasDirSegment(command, 'library')) {
-    currentMeta.currentPlayer = 'mplayer'
+    switchToMplayer()
     currentMeta.currentType = 'local'
     // /musicsearch/library/resume/<cat:artist:title:trackNr:progressPct>
     // Falls back to plain playList() if the suffix doesn't parse — this
@@ -2325,13 +2395,13 @@ app.use((req, res) => {
   }
 
   if (hasDirSegment(command, 'nas')) {
-    currentMeta.currentPlayer = 'mplayer'
+    switchToMplayer()
     currentMeta.currentType = 'nas'
     playNasList(command.base)
   }
 
   if (hasDirSegment(command, 'radio')) {
-    currentMeta.currentPlayer = 'mplayer'
+    switchToMplayer()
     currentMeta.currentType = 'radio'
     const parts = decodeURIComponent(command.name).split(':title:artist:')
     currentMeta.currentTrackname = parts[0]
@@ -2343,7 +2413,7 @@ app.use((req, res) => {
   }
 
   if (hasDirSegment(command, 'rss')) {
-    currentMeta.currentPlayer = 'mplayer'
+    switchToMplayer()
     currentMeta.currentType = 'rss'
     const parts = decodeURIComponent(command.name).split(':title:artist:')
     currentMeta.currentTrackname = parts[0]

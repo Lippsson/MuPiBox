@@ -1451,6 +1451,9 @@ app.post('/api/playtime/release', localOrElternSession, async (req, res) => {
         cfg.playbackOverride = ov
       }
       ov.allowUntil = until
+      // The last parent action wins: releasing also ends a running "quiet now". The player lets a force block
+      // win over a release, so without this the box stayed blocked although the app said "override active".
+      ov.forceBlockUntil = 0
     })
     console.log(
       `${new Date().toLocaleString()}: [MuPiBox-Server] /api/playtime/release for ${minutes} min (until ${new Date(until).toLocaleString()})`,
@@ -1519,6 +1522,8 @@ app.post('/api/quiethours/now', localOrElternSession, async (req, res) => {
         cfg.playbackOverride = ov
       }
       ov.forceBlockUntil = until
+      // ... and "quiet now" ends a running release (see /api/playtime/release)
+      ov.allowUntil = 0
     })
     console.log(
       `${new Date().toLocaleString()}: [MuPiBox-Server] /api/quiethours/now for ${minutes} min (until ${new Date(until).toLocaleString()})`,
@@ -4646,6 +4651,9 @@ async function nasStreamWithResume(req: express.Request, res: express.Response, 
         attempt = 0
         next += (chunk as Buffer).length
         if (!res.write(chunk)) {
+          // Waiting for the player (paused, full buffer) is no NAS stall: without this, every pause longer
+          // than NAS_STALL_MS dropped the NAS connection and reconnected it again every 15 s.
+          clearTimeout(stall)
           await new Promise<void>((resolve) => {
             const done = () => {
               res.off('drain', done)
@@ -4655,6 +4663,8 @@ async function nasStreamWithResume(req: express.Request, res: express.Response, 
             res.on('drain', done)
             res.on('close', done)
           })
+          // the next chunk comes from the NAS again: watch it
+          armStall()
         }
       }
       clearTimeout(stall)
@@ -5505,7 +5515,10 @@ app.post('/api/telegram/screen', (req, res) => {
       const message = typeof req.body?.message === 'string' ? req.body.message : ''
       const args = message ? message.split('\n') : []
 
-      execFile('/usr/bin/python3', ['/usr/local/bin/mupibox/telegram_notify_screen.py', ...args], (error, _stdout, stderr) => {
+      // pm2 starts this process without TERM: a tool below the script then printed "'unknown': unknown terminal
+      // type" to stderr on every call, which counted as a failure although the message had been sent.
+      const childEnv = { ...process.env, TERM: process.env.TERM || 'dumb' }
+      execFile('/usr/bin/python3', ['/usr/local/bin/mupibox/telegram_notify_screen.py', ...args], { env: childEnv }, (error, _stdout, stderr) => {
         if (error) {
           console.error(
             `${new Date().toLocaleString()}: [MuPiBox-Server] Error sending telegram notification: ${error.message}`,
@@ -5514,9 +5527,8 @@ app.post('/api/telegram/screen', (req, res) => {
           return
         }
         if (stderr) {
-          console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Stderr telegram notification: ${stderr}`)
-          res.status(500).send('error')
-          return
+          // exit code 0: sent. Whatever came on stderr is a warning, not a failure.
+          console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] Telegram notification warning: ${stderr.trim()}`)
         }
         res.status(200).send('ok')
       })

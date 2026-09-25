@@ -24,7 +24,9 @@ export class PlaytimeBlockedOverlayComponent {
 
   protected readonly content: Signal<OverlayContent> = computed(() => {
     const s = this.playtimeService.status()
-    if (s.enabled !== true || s.blockSource !== 'quiet') {
+    // 'override' is a pause set by a parent ("quiet now" in the web app / Telegram, for N minutes): it ends
+    // soon, so it shows the quiet-time texts, not "that's enough for today".
+    if (s.enabled !== true || (s.blockSource !== 'quiet' && s.blockSource !== 'override')) {
       return {
         iconName: 'moon-outline',
         heading: this.texts.text('blockedHeading'),
@@ -32,7 +34,7 @@ export class PlaytimeBlockedOverlayComponent {
       }
     }
     // A quiet window with a label ("Bedtime", "Homework") shows that label as the heading.
-    const label = s.quiet.label?.trim()
+    const label = s.blockSource === 'quiet' ? s.quiet.label?.trim() : undefined
     return {
       iconName: label ? 'hourglass-outline' : 'moon-outline',
       heading: label || this.texts.text('quietHeading'),
