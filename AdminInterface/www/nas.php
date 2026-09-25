@@ -392,20 +392,22 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 			<li class="buttons">
 				<style>
 					/* Three columns of the same width, so the buttons of both rows line up. */
-					#nas-actions { display: grid; grid-template-columns: repeat(3, 200px) minmax(220px, 1fr) auto; gap: 10px; align-items: center; max-width: 1000px; }
+					#nas-actions { display: grid; grid-template-columns: repeat(4, 200px) minmax(120px, 1fr) auto; gap: 10px; align-items: center; max-width: 1200px; }
 					#nas-actions input.button_text { box-sizing: border-box; width: 100%; min-width: 0; margin: 0; }
-					#nas-actions > :nth-child(-n+3) { grid-row: 1; }
-					#nas-actions > :nth-child(n+4) { grid-row: 2; }
+					#nas-actions > :nth-child(-n+4) { grid-row: 1; }
+					#nas-actions > :nth-child(n+5) { grid-row: 2; }
+					#nas-progress { grid-column: 4 / 6; }
 					#nas-progress { display: none; position: relative; box-sizing: border-box; height: 28px; border-radius: 8px; background: #d9e3ea; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0, 0, 0, .25); }
 					#nas-progress-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background-image: linear-gradient(144deg, #024364, #00689C 50%, #44afe2); transition: width .4s; }
 					#nas-progress-text { position: relative; display: block; text-align: center; line-height: 28px; font-size: 13px; font-weight: bold; color: #fff; text-shadow: 0 0 3px rgba(0, 0, 0, .7); white-space: nowrap; }
 					#nas-download-cancel { display: none; }
 					@media (max-width: 900px) {
 						#nas-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-						#nas-actions > :nth-child(n+7) { grid-row: auto; grid-column: 1 / -1; }
+						#nas-actions > :nth-child(n+8) { grid-row: auto; grid-column: 1 / -1; }
 					}
 				</style>
 				<div id="nas-actions">
+					<input class="button_text" type="button" id="nas-only-selected" value="Show only selected" title="Shows only the folders with at least one checked box (and the folders leading to them)." />
 					<input class="button_text" type="button" value="Select all" onclick="document.querySelectorAll('input[name=\'artist_folders[]\']').forEach(function (box) { if (!box.disabled) { box.checked = true; box.dispatchEvent(new Event('change')); } });" />
 					<input class="button_text" type="button" value="Unselect all" onclick="document.querySelectorAll('input[name=\'artist_folders[]\']').forEach(function (box) { box.checked = false; box.dispatchEvent(new Event('change')); });" />
 					<input id="saveForm" class="button_text" type="submit" name="nas_save_selection" value="Save selection" />
@@ -441,6 +443,12 @@ var NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 	var root = document.getElementById('nas-root');
 	if (!root) { return; }
 	var shownInput = document.getElementById('shown_folders');
+	// Paths of the saved selection (shown, hidden, download): "Show only selected" opens the way to them.
+	var SAVED_SELECTED = <?= json_encode(array_values(array_unique(array_merge(
+		(array)(($data['nas']['artistFolders'] ?? ($data['synology']['artistFolders'] ?? array()))),
+		(array)(($data['nas']['hiddenFolders'] ?? ($data['synology']['hiddenFolders'] ?? array()))),
+		(array)(($data['nas']['downloadFolders'] ?? ($data['synology']['downloadFolders'] ?? array())))
+	)))) ?>;
 	var shown = {};
 	var STORE = 'nasTreeExpanded';
 
@@ -520,6 +528,27 @@ var NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 			if (!isNode(div)) { return; }
 			if (idx && q !== '') { filterNodeIdx(div, false); } else { filterNode(div, false, q); }
 		});
+		if (onlySelected) {
+			Array.prototype.forEach.call(root.children, function (div) { if (isNode(div)) { selectedOnlyNode(div); } });
+		}
+	}
+
+	// "Show only selected": a folder stays if one of its own boxes is checked or something below it stays;
+	// the folders leading to a selected one are shown open. Folders hidden by the text filter stay hidden.
+	var onlySelected = false;
+	function selectedOnlyNode(div) {
+		if (div.style.display === 'none') { return false; }
+		var kids = kidsOf(div), any = false;
+		if (kids) {
+			Array.prototype.forEach.call(kids.children, function (kid) {
+				if (isNode(kid) && selectedOnlyNode(kid)) { any = true; }
+			});
+		}
+		var row = div.querySelector(':scope > .nas-row');
+		var own = !!(row && row.querySelector('input[type="checkbox"]:checked'));
+		setOpenForFilter(div, any);
+		div.style.display = (own || any) ? '' : 'none';
+		return own || any;
 	}
 
 	// Loads the subfolders of every folder for which shouldLoad(div) is true (4 requests at a time),
@@ -605,6 +634,27 @@ var NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 		}
 	}
 	if (filterInput) { filterInput.addEventListener('input', runFilter); }
+
+	var onlySelectedBtn = document.getElementById('nas-only-selected');
+	if (onlySelectedBtn) {
+		onlySelectedBtn.addEventListener('click', function () {
+			onlySelected = !onlySelected;
+			onlySelectedBtn.value = onlySelected ? 'Show all' : 'Show only selected';
+			if (!onlySelected) { applyFilter(); return; }
+			// First load the folders that lead to the saved selections (they may not be opened yet), then filter.
+			var token = ++filterToken;
+			onlySelectedBtn.disabled = true;
+			showSearching(true);
+			crawl(function (d) {
+				var prefix = d.dataset.path + '/';
+				return SAVED_SELECTED.some(function (p) { return p.indexOf(prefix) === 0; });
+			}, token).then(function () {
+				onlySelectedBtn.disabled = false;
+				if (token === filterToken) { showSearching(false); }
+				applyFilter();
+			});
+		});
+	}
 
 	// Index status line ("Folder index: 3412 folders, updated ...  Refresh index").
 	var wasBuilding = false;
