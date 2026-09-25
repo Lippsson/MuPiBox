@@ -145,6 +145,7 @@ $downloadStarted = false;
 
 $nasFlash = '';
 $nasFlashError = '';
+$nasFlashTitle = 'Selection not saved'; // the popup title: what failed
 if (isset($_POST['nas_save_selection']) || isset($_POST['nas_download_selected'])) {
 	$checkedShow = $_POST['artist_folders'] ?? array();
 	$checkedHide = $_POST['hide_folders'] ?? array();
@@ -172,6 +173,7 @@ if (isset($_POST['nas_save_selection']) || isset($_POST['nas_download_selected']
 			$downloadStarted = true;
 			$nasFlash = '';
 		} else {
+			$nasFlashTitle = 'Download not started';
 			$nasFlashError = (string)($syncResult['error'] ?? 'Could not start the download.');
 		}
 	}
@@ -1009,13 +1011,14 @@ window.NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 	var autoStarted = <?= $downloadStarted ? 'true' : 'false' ?>;
 	var flash = <?= json_encode($nasFlash) ?>;
 	var flashError = <?= json_encode($nasFlashError) ?>;
+	var flashTitle = <?= json_encode($nasFlashTitle) ?>;
 	var flashBox = document.getElementById('nas-flash');
 	if (flash && flashBox) {
 		flashBox.textContent = flash;
 		flashBox.style.display = 'block';
 		setTimeout(function () { flashBox.style.display = 'none'; }, 5000);
 	}
-	if (flashError && window.nasNotice) { window.nasNotice('Download not started', flashError); }
+	if (flashError && window.nasNotice) { window.nasNotice(flashTitle, flashError); }
 	var bar = document.getElementById('nas-progress');
 	var fill = document.getElementById('nas-progress-fill');
 	var barText = document.getElementById('nas-progress-text');
