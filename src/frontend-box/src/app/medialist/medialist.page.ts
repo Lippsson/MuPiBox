@@ -151,7 +151,7 @@ export class MedialistPage extends SwiperIonicEventsHelper {
         this.mediaService.getLibraryVersion(),
       ]).pipe(
         tap(() => this.isLoading.set(true)),
-        switchMap(([category, artist, _version]) => {
+        switchMap(([category, artist, version]) => {
           if (artist === undefined) {
             return of([])
           }
@@ -179,7 +179,7 @@ export class MedialistPage extends SwiperIonicEventsHelper {
             (artist.coverMedia.showid && artist.coverMedia.showid.length > 0) ||
             (artist.coverMedia.type === 'rss' && artist.coverMedia.id.length > 0)
 
-          return this.mediaService.fetchMediaFromArtist(artist, category).pipe(
+          return this.mediaService.fetchMediaFromArtist(artist, category, version).pipe(
             catchError((error) => {
               console.error(error)
               return of([])

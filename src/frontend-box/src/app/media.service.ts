@@ -376,7 +376,51 @@ export class MediaService {
   }
 
   // Collect albums from a given artist in the current category
-  public fetchMediaFromArtist(artist: Artist, category: CategoryType): Observable<Media[]> {
+  // Album lists of the artists opened last, so going back from the player (which rebuilds the album
+  // page) shows the list at once instead of loading it again (2-3 s for a big Spotify artist). Keyed by
+  // the library version: any change of data.json (Smart-Sync, add/edit) starts over. Local folders and
+  // the NAS are read live on purpose (new files show up at once) and are not kept here.
+  private artistMediaCache = new Map<string, { at: number; media: Observable<Media[]> }>()
+  private static readonly ARTIST_CACHE_MS = 10 * 60 * 1000
+  private static readonly ARTIST_CACHE_MAX = 20
+
+  public fetchMediaFromArtist(artist: Artist, category: CategoryType, libraryVersion?: string): Observable<Media[]> {
+    const live = !!artist.coverMedia?.libraryPath || (category === 'nas' && !!artist.coverMedia?.nasPath)
+    if (live || libraryVersion === undefined) {
+      return this.loadMediaFromArtist(artist, category)
+    }
+    const key = `${libraryVersion}|${category}|${artist.name}|${artist.coverMedia?.artistid ?? ''}`
+    const hit = this.artistMediaCache.get(key)
+    // every caller gets its own copy: the player page changes the clicked entry (resume, shuffle)
+    const copy = map((list: Media[]) => {
+      try {
+        return structuredClone(list)
+      } catch {
+        return list.map((m) => ({ ...m })) // something not cloneable in an entry: at least a new object per entry
+      }
+    })
+    if (hit && Date.now() - hit.at < MediaService.ARTIST_CACHE_MS) {
+      return hit.media.pipe(copy)
+    }
+    // shareReplay: a second caller during the first load waits for it instead of loading twice
+    const media = this.loadMediaFromArtist(artist, category).pipe(
+      catchError((error) => {
+        this.artistMediaCache.delete(key) // don't keep a failed load
+        throw error
+      }),
+      shareReplay({ bufferSize: 1, refCount: false }),
+    )
+    for (const [k, v] of this.artistMediaCache) {
+      if (!k.startsWith(`${libraryVersion}|`) || Date.now() - v.at >= MediaService.ARTIST_CACHE_MS) this.artistMediaCache.delete(k)
+    }
+    if (this.artistMediaCache.size >= MediaService.ARTIST_CACHE_MAX) {
+      this.artistMediaCache.delete(this.artistMediaCache.keys().next().value as string)
+    }
+    this.artistMediaCache.set(key, { at: Date.now(), media })
+    return media.pipe(copy)
+  }
+
+  private loadMediaFromArtist(artist: Artist, category: CategoryType): Observable<Media[]> {
     if (artist.coverMedia?.libraryPath) {
       // Local folder: list one level live from disk.
       return this.http.get<Media[]>(
