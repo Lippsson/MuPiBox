@@ -579,12 +579,18 @@ export const I18N = {
     'hist.nothingToday': 'Heute noch nichts gespielt.',
     'hist.weekSummary': 'Insgesamt {min} Min in {tracks} Titeln.',
     // Theme
-    'theme.hint': 'Wirkt beim nächsten Box-Display-Reload (Neustart oder Kiosk-Reload).',
+    'theme.hint': 'Nach dem Wechsel kannst du das Display direkt neu laden lassen, sonst wirkt das Theme beim nächsten Neustart.',
     'theme.none': 'Keine Themes registriert.',
     'theme.switchQ': 'Theme auf „{theme}" wechseln?',
-    'theme.switchBody': 'Wird beim nächsten Box-Display-Reload sichtbar.',
+    'theme.switchBody': 'Danach kannst du wählen, ob das Display es sofort übernimmt.',
     'theme.apply': 'Anwenden',
     'theme.saved': 'Theme „{theme}" gespeichert. Aktiv beim nächsten Display-Reload.',
+    'theme.reloadQ': 'Display jetzt neu laden?',
+    'theme.reloadBody': 'Das Display übernimmt das neue Theme in wenigen Sekunden. Die Wiedergabe läuft weiter.',
+    'theme.reloadNow': 'Jetzt neu laden',
+    'theme.reloadLater': 'Später',
+    'theme.reloaded': 'Theme „{theme}" gespeichert, das Display übernimmt es gleich.',
+    'theme.reloadFailed': 'Theme „{theme}" gespeichert, aber das Display war nicht erreichbar. Es wirkt beim nächsten Neustart.',
   },
   en: {
     // Allgemein
@@ -1158,12 +1164,18 @@ export const I18N = {
     'hist.nothingToday': 'Nothing played yet today.',
     'hist.weekSummary': 'In total {min} min across {tracks} tracks.',
     // Theme
-    'theme.hint': 'Takes effect on the next box display reload (restart or kiosk reload).',
+    'theme.hint': 'After switching you can have the display reload right away, otherwise the theme takes effect on the next restart.',
     'theme.none': 'No themes registered.',
     'theme.switchQ': 'Switch the theme to "{theme}"?',
-    'theme.switchBody': 'Becomes visible on the next box display reload.',
+    'theme.switchBody': 'Afterwards you can choose whether the display shows it right away.',
     'theme.apply': 'Apply',
     'theme.saved': 'Theme "{theme}" saved. Active after the next display reload.',
+    'theme.reloadQ': 'Reload the display now?',
+    'theme.reloadBody': 'The display picks up the new theme within a few seconds. Playback keeps running.',
+    'theme.reloadNow': 'Reload now',
+    'theme.reloadLater': 'Later',
+    'theme.reloaded': 'Theme "{theme}" saved, the display is picking it up.',
+    'theme.reloadFailed': 'Theme "{theme}" saved, but the display could not be reached. It takes effect on the next restart.',
   },
 }
 

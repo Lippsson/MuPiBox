@@ -22,4 +22,6 @@ export interface CurrentMPlayer {
   // automatisch zur Player-View zu navigieren.
   triggerSource?: string
   triggerAt?: number
+  // Set when the parents' web app asks the display to show a newly chosen theme right away.
+  themeReloadAt?: number
 }

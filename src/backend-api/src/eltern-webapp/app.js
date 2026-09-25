@@ -2235,8 +2235,15 @@ async function applyTheme(theme) {
     feedback('#theme-feedback', 'error', res.body?.error ?? t('common.errorStatus', { status: res.status }))
     return
   }
-  feedback('#theme-feedback', 'success', t('theme.saved', { theme }))
   loadTheme()
+  // Show it on the display right away? "No" keeps the old behaviour: it shows on the next display reload.
+  if (!(await confirmDialog(t('theme.reloadQ'), t('theme.reloadBody'), { confirmLabel: t('theme.reloadNow'), cancelLabel: t('theme.reloadLater') }))) {
+    feedback('#theme-feedback', 'success', t('theme.saved', { theme }))
+    return
+  }
+  const rl = await api(`${API}/display/reload-theme`, { method: 'POST', body: {} })
+  if (rl.ok) feedback('#theme-feedback', 'success', t('theme.reloaded', { theme }))
+  else feedback('#theme-feedback', 'error', t('theme.reloadFailed', { theme }))
 }
 
 /** Phase 17h: submit the no-session password form. On success, re-run

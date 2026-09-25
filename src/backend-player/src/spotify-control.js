@@ -430,6 +430,9 @@ const currentMeta = {
   // triggerSource !== 'box' kommt.
   triggerSource: 'box',
   triggerAt: 0,
+  // The parents' web app switched the theme and asked the display to show it now: the display polls
+  // /local anyway and swaps its stylesheet when this goes up (no page reload, playback goes on).
+  themeReloadAt: 0,
 }
 // Live tracklist (with real names) of the currently playing NAS folder, fetched
 // once in playNasList() - used to name each track as it plays, since mplayer
@@ -2134,6 +2137,12 @@ app.get('/state', (_req, res) => {
     }
     res.send(state)
   }
+})
+
+// Called by the backend on the box (the parents' web app's "reload the display now").
+app.post('/display/reload-theme', (_req, res) => {
+  currentMeta.themeReloadAt = Date.now()
+  res.json({ ok: true })
 })
 
 /*endpoint to return all local metainformation*/

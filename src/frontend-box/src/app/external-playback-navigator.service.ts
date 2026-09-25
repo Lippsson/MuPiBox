@@ -25,6 +25,8 @@ export class ExternalPlaybackNavigatorService {
    *  erste echte externe Trigger lief in den Baseline-Zweig statt in die
    *  Navigation — das Display folgte erst beim zweiten Tippen. */
   private lastSeenTriggerAt: number | null = null
+  /** Same idea for "show the new theme now" from the parents' web app (see checkThemeReload). */
+  private lastSeenThemeReloadAt: number | null = null
   /** Tick-Zähler für die gedrosselte Abfrage auf der Player-Page. */
   private pollTick = 0
 
@@ -87,6 +89,7 @@ export class ExternalPlaybackNavigatorService {
         ),
       )
       .subscribe((data) => {
+        this.checkThemeReload(data.themeReloadAt)
         const at = data.triggerAt ?? 0
         const src = data.triggerSource ?? 'box'
         // Baseline-Tick: erstes Polling-Ergebnis nur lastSeen setzen, nicht
@@ -105,6 +108,38 @@ export class ExternalPlaybackNavigatorService {
         }
         if (at > this.lastSeenTriggerAt) this.lastSeenTriggerAt = at
       })
+  }
+
+  /** The parents' web app switched the theme and asked for it to show now. Rides on the /local poll
+   *  above (no extra requests). The first value only sets the baseline, like triggerAt; a player
+   *  restart resets it to 0, which is then just a new baseline. */
+  private checkThemeReload(reloadAt: number | undefined): void {
+    if (typeof reloadAt !== 'number') return
+    if (this.lastSeenThemeReloadAt === null || reloadAt < this.lastSeenThemeReloadAt) {
+      this.lastSeenThemeReloadAt = reloadAt
+      return
+    }
+    if (reloadAt === this.lastSeenThemeReloadAt) return
+    this.lastSeenThemeReloadAt = reloadAt
+    this.reloadThemeStylesheet(reloadAt)
+  }
+
+  /** active_theme.css is a symlink to the chosen theme; loading it again under a new query string
+   *  picks up the new target. The old stylesheet goes once the new one has loaded, so the display
+   *  doesn't flash unstyled. No page reload: playback and the Spotify player keep running. */
+  private reloadThemeStylesheet(version: number): void {
+    const old = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).filter((l) =>
+      (l.getAttribute('href') ?? '').startsWith('active_theme.css'),
+    )
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = `active_theme.css?v=${version}`
+    link.onload = () => {
+      for (const l of old) l.remove()
+    }
+    if (old.length) old[old.length - 1].after(link)
+    else document.head.appendChild(link)
+    console.log('🎨 Theme reloaded on request from the parents app')
   }
 
   /** Navigation aus dem Polling-Pfad: baut bei mplayer-Tracks (Library/RSS/

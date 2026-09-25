@@ -1468,6 +1468,28 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * POST /api/eltern/display/reload-theme
+   * After a theme change, when the parents want to see it right away: the display swaps its
+   * stylesheet on its next /local poll (2 s, 10 s on the player page). No page reload, so playback
+   * and the Spotify player in the display keep running.
+   */
+  router.post('/display/reload-theme', requireSession, requireCsrf, async (_req, res) => {
+    try {
+      const r = await fetch('http://127.0.0.1:5005/display/reload-theme', {
+        method: 'POST',
+        signal: AbortSignal.timeout(3000),
+      })
+      if (!r.ok) {
+        res.status(502).json({ error: `player answered ${r.status}` })
+        return
+      }
+      res.json({ ok: true })
+    } catch (err) {
+      res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
+    }
+  })
+
+  /**
    * GET /api/eltern/theme-preview/:name  (Phase 18 Item 3)
    * Serves the theme preview PNG that AdminInterface ships under
    * /var/www/images/<name>.png. Name MUST be in the installed-themes
