@@ -839,6 +839,37 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     res.json({ ok: true, applied: mutations })
   })
 
+  // iwlist refuses a second scan while one is running ("Device or resource busy", exit 255) - two
+  // requests close together, or wpa_supplicant's own background scan. That came back as a 500 in the
+  // web app. Requests arriving meanwhile share the running scan, and a busy one is tried again shortly.
+  let wlanScanInFlight: Promise<string> | null = null
+  const iwlistScan = (): Promise<string> => {
+    if (wlanScanInFlight) return wlanScanInFlight
+    const attempt = (retriesLeft: number): Promise<string> =>
+      new Promise((resolve, reject) => {
+        execFile(
+          'sudo',
+          ['/usr/sbin/iwlist', wifiIface(), 'scanning'],
+          { timeout: 12000, maxBuffer: 4 * 1024 * 1024 },
+          (err, stdout, stderr) => {
+            if (!err) {
+              resolve(stdout)
+              return
+            }
+            if (retriesLeft > 0 && /busy/i.test(`${stderr} ${err.message}`)) {
+              setTimeout(() => attempt(retriesLeft - 1).then(resolve, reject), 1500)
+              return
+            }
+            reject(err)
+          },
+        )
+      })
+    wlanScanInFlight = attempt(4).finally(() => {
+      wlanScanInFlight = null
+    })
+    return wlanScanInFlight
+  }
+
   /**
    * GET /api/eltern/wlan/scan  (Phase 18 Item 2)
    * Returns visible Wi-Fi networks, parsed from `iwlist wlan0 scanning`. We
@@ -846,11 +877,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * (empty SSID). Slow — iwlist takes ~3-5 s.
    */
   router.get('/wlan/scan', requireSession, (_req, res) => {
-    execFile('sudo', ['/usr/sbin/iwlist', wifiIface(), 'scanning'], { timeout: 12000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
-      if (err) {
-        res.status(500).json({ error: `iwlist failed: ${err.message}` })
-        return
-      }
+    iwlistScan().then((stdout) => {
       const blocks = stdout.split(/Cell \d+ -/)
       const byBest = new Map<string, { ssid: string; signal_dbm: number; encrypted: boolean }>()
       for (const blk of blocks) {
@@ -868,6 +895,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       }
       const networks = [...byBest.values()].sort((a, b) => b.signal_dbm - a.signal_dbm)
       res.json({ networks })
+    }, (err: Error) => {
+      res.status(500).json({ error: `iwlist failed: ${err.message}` })
     })
   })
 
