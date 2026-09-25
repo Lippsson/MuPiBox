@@ -151,7 +151,49 @@ def format_status(status):
         lines.append(f'✅ Override aktiv für noch {mins} min')
     return '\n'.join(lines)
 
-message_with_inline_keyboard = None
+def help_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Status",callback_data='status'), InlineKeyboardButton(text="Current Screen",callback_data='screen')],
+        [InlineKeyboardButton(text="Pause",callback_data='pause'), InlineKeyboardButton(text="Play",callback_data='play')],
+        [InlineKeyboardButton(text="+30 min",callback_data='extend_30'), InlineKeyboardButton(text="+60 min",callback_data='extend_60')],
+        [InlineKeyboardButton(text="Release 60",callback_data='release_60'), InlineKeyboardButton(text="QuietNow 60",callback_data='quietnow_60')],
+        [InlineKeyboardButton(text="Set Volume",callback_data='vol'), InlineKeyboardButton(text="Sleep Timer",callback_data='sleep')],
+        [InlineKeyboardButton(text="Finish current album",callback_data='finishalbum'), InlineKeyboardButton(text="Update Media-DB",callback_data='media')],
+        [InlineKeyboardButton(text="🔑 Parent login",callback_data='login')],
+        [InlineKeyboardButton(text="🔄 Smart-Sync",callback_data='resync'), InlineKeyboardButton(text="Status (Sync)",callback_data='syncstatus')],
+        [InlineKeyboardButton(text="Shutdown",callback_data='shutdown'), InlineKeyboardButton(text="Reboot",callback_data='reboot')]
+    ])
+
+def box_base_url():
+    # Telegram only makes a link tappable when its host is a real domain or an IP
+    # address; a bare host name like "MuPiBox" stays plain text. So use the LAN IP.
+    ip = ''
+    try:
+        out = subprocess.run(['hostname', '-I'], capture_output=True, text=True, timeout=3).stdout.split()
+        ip = next((a for a in out if '.' in a), '')
+    except Exception:
+        pass
+    return f"http://{ip or config['mupibox'].get('host', 'localhost')}:8200"
+
+def send_magic_link(chat_id, heading, button_text):
+    # Issue a single-use magic link for the Eltern-WebApp. We post from
+    # 127.0.0.1 so the localNetworkOnly gate accepts us; the receiver's
+    # chatId-whitelist (is_authorized in on_chat_message) is the actual
+    # auth boundary for who can request a link.
+    status_code, body = call_api_post('/eltern/magic-link/generate', {'source': 'telegram'})
+    if status_code != 201 or not isinstance(body, dict):
+        bot.sendMessage(chat_id, f'Magic-Link konnte nicht erzeugt werden: {status_code} {body}')
+        return
+    url = box_base_url() + body.get('url_path', '/eltern')
+    expires = body.get('expires_in', 900)
+    text = f'{heading}\n\nGültig {expires // 60} Min — Single-Use.\n\n<a href="{url}">{button_text}</a>\n\n<code>{url}</code>'
+    markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=button_text, url=url)]])
+    try:
+        bot.sendMessage(chat_id, text, parse_mode='HTML', disable_web_page_preview=True, reply_markup=markup)
+    except Exception as e:
+        # Telegram refuses button URLs it doesn't like; the text link still works then.
+        print(f'Magic link with button failed ({e}), sending without')
+        bot.sendMessage(chat_id, text, parse_mode='HTML', disable_web_page_preview=True)
 
 def on_chat_message(msg):
     content_type, chat_type, chat_id = telepot.glance(msg)
@@ -162,6 +204,9 @@ def on_chat_message(msg):
     if content_type != 'text':
         return
     command = msg['text']
+    # In groups Telegram appends the bot's name to a tapped command ("/login@MyBot"); drop it.
+    first, _, rest = command.partition(' ')
+    command = first.split('@', 1)[0] + (' ' + rest if rest else '')
     if command == '/shutdown':
         subprocess.run(["sudo", "bash", "/usr/local/bin/mupibox/shutdown.sh"])
     elif command == '/screen':
@@ -245,21 +290,9 @@ def on_chat_message(msg):
         else:
             bot.sendMessage(chat_id, 'Nutzung: /limit set <mon|tue|wed|thu|fri|sat|sun> <Minuten 0..1440>')
     elif command == '/help':
-        markup = InlineKeyboardMarkup(inline_keyboard=[
-                                    [InlineKeyboardButton(text="Status",callback_data='status'), InlineKeyboardButton(text="Current Screen",callback_data='screen')],
-                                    [InlineKeyboardButton(text="Pause",callback_data='pause'), InlineKeyboardButton(text="Play",callback_data='play')],
-                                    [InlineKeyboardButton(text="+30 min",callback_data='extend_30'), InlineKeyboardButton(text="+60 min",callback_data='extend_60')],
-                                    [InlineKeyboardButton(text="Release 60",callback_data='release_60'), InlineKeyboardButton(text="QuietNow 60",callback_data='quietnow_60')],
-                                    [InlineKeyboardButton(text="Set Volume",callback_data='vol'), InlineKeyboardButton(text="Sleep Timer",callback_data='sleep')],
-                                    [InlineKeyboardButton(text="Finish current album",callback_data='finishalbum'), InlineKeyboardButton(text="Update Media-DB",callback_data='media')],
-                                    [InlineKeyboardButton(text="🔄 Smart-Sync",callback_data='resync'), InlineKeyboardButton(text="Status (Sync)",callback_data='syncstatus')],
-                                    [InlineKeyboardButton(text="Shutdown",callback_data='shutdown'), InlineKeyboardButton(text="Reboot",callback_data='reboot')]
-                                ]
-                            )
-        global message_with_inline_keyboard
-        message_with_inline_keyboard = bot.sendMessage(chat_id, 'Possible commands:',reply_markup = markup)
+        bot.sendMessage(chat_id, 'Possible commands:', reply_markup=help_keyboard())
     elif command == '/command':
-        bot.sendMessage(chat_id, "<b><u>Possible commands:</u></b>\n\n<code><b>/help</b></code>\n<i>shows the inline keyboard</i>\n\n<code><b>/status</b></code>\n<i>show current playtime + quiet hours status</i>\n\n<code><b>/extend</b> <i>[minutes, default 30]</i></code>\n<i>add bonus minutes to today's playtime cap</i>\n\n<code><b>/release</b> <i>[minutes, default 60]</i></code>\n<i>bypass all blocks for N minutes</i>\n\n<code><b>/quietnow</b> <i>[minutes, default 60]</i></code>\n<i>force-block playback for N minutes</i>\n\n<code><b>/limit set</b> <i>&lt;day&gt; &lt;minutes&gt;</i></code>\n<i>set the playtime limit for one weekday (mon..sun, 0..1440)</i>\n\n<b>Smart-Sync (Phase 14):</b>\n<code><b>/resync</b></code> — trigger Spotify sync now\n<code><b>/syncstatus</b></code> — show last sync result + status\n<code><b>/playlists</b></code> — list LeniBox-prefixed playlists found\n<code><b>/eltern-login</b></code> — magic link to Eltern-WebApp\n<code><b>/spotify-connect</b></code> — magic link incl. Spotify wizard\n<code><b>/spotify-disconnect</b></code> — stop Smart-Sync (with confirm)\n\n<b>System:</b>\n<code><b>/reboot</b></code>\n<code><b>/shutdown</b></code>\n<code><b>/screen</b></code>\n<code><b>/sleep</b> <i>[minutes]</i></code>\n<code><b>/vol</b> <i>[0-100]</i></code>\n<code><b>/media</b></code>\n<code><b>/finishalbum</b></code>", parse_mode='HTML')
+        bot.sendMessage(chat_id, "<b><u>Possible commands:</u></b>\n\n<code><b>/help</b></code>\n<i>shows the inline keyboard</i>\n\n<code><b>/status</b></code>\n<i>show current playtime + quiet hours status</i>\n\n<code><b>/extend</b> <i>[minutes, default 30]</i></code>\n<i>add bonus minutes to today's playtime cap</i>\n\n<code><b>/release</b> <i>[minutes, default 60]</i></code>\n<i>bypass all blocks for N minutes</i>\n\n<code><b>/quietnow</b> <i>[minutes, default 60]</i></code>\n<i>force-block playback for N minutes</i>\n\n<code><b>/limit set</b> <i>&lt;day&gt; &lt;minutes&gt;</i></code>\n<i>set the playtime limit for one weekday (mon..sun, 0..1440)</i>\n\n<b>Smart-Sync (Phase 14):</b>\n<code><b>/resync</b></code> — trigger Spotify sync now\n<code><b>/syncstatus</b></code> — show last sync result + status\n<code><b>/playlists</b></code> — list LeniBox-prefixed playlists found\n<code><b>/login</b></code> — magic link to Eltern-WebApp\n<code><b>/spotify_connect</b></code> — magic link incl. Spotify wizard\n<code><b>/spotify_disconnect</b></code> — stop Smart-Sync (with confirm)\n\n<b>System:</b>\n<code><b>/reboot</b></code>\n<code><b>/shutdown</b></code>\n<code><b>/screen</b></code>\n<code><b>/sleep</b> <i>[minutes]</i></code>\n<code><b>/vol</b> <i>[0-100]</i></code>\n<code><b>/media</b></code>\n<code><b>/finishalbum</b></code>", parse_mode='HTML')
     elif command == '/media':
         bot.sendMessage(chat_id, "Starting media data update... This take a while, please wait for complete message")
         subprocess.run(["sudo", "/usr/local/bin/mupibox/./m3u_generator.sh"])
@@ -286,7 +319,7 @@ def on_chat_message(msg):
         elif status_code == 409:
             bot.sendMessage(chat_id, '⏳ Es läuft bereits ein Sync.')
         elif status_code == 400:
-            bot.sendMessage(chat_id, '⚠️ Smart-Sync ist nicht aktiviert. Aktiviere ihn in der Eltern-WebApp (/eltern-login).')
+            bot.sendMessage(chat_id, '⚠️ Smart-Sync ist nicht aktiviert. Aktiviere ihn in der Eltern-WebApp (/login).')
         else:
             bot.sendMessage(chat_id, f'Fehler: {status_code} {body}')
     elif command == '/syncstatus':
@@ -330,42 +363,13 @@ def on_chat_message(msg):
                 for p in playlists:
                     lines.append(f'📂 <code>{p.get("name", "?")}</code> · {p.get("items", 0)} Items')
                 bot.sendMessage(chat_id, '\n'.join(lines), parse_mode='HTML')
-    elif command == '/eltern-login':
-        # Issue a single-use magic link for the Eltern-WebApp. We post from
-        # 127.0.0.1 so the localNetworkOnly gate accepts us; the receiver's
-        # chatId-whitelist (this branch's is_authorized check above) is the
-        # actual auth boundary for who can request a link.
-        status_code, body = call_api_post('/eltern/magic-link/generate', {'source': 'telegram'})
-        if status_code == 201 and isinstance(body, dict):
-            url_path = body.get('url_path', '/eltern')
-            host = config['mupibox'].get('host', 'localhost')
-            url = f'http://{host}:8200{url_path}'
-            expires = body.get('expires_in', 900)
-            bot.sendMessage(
-                chat_id,
-                f'🔑 <b>Eltern-Hub Login</b>\n\nGültig {expires // 60} Min — Single-Use.\n\n<a href="{url}">Hier öffnen</a>\n\n<code>{url}</code>',
-                parse_mode='HTML',
-                disable_web_page_preview=True,
-            )
-        else:
-            bot.sendMessage(chat_id, f'Magic-Link konnte nicht erzeugt werden: {status_code} {body}')
-    elif command == '/spotify-connect':
-        # Same flow as /eltern-login — the WebApp's setup wizard will
+    elif command in ('/login', '/eltern-login', '/eltern_login'):
+        send_magic_link(chat_id, '🔑 <b>Eltern-Hub Login</b>', 'Hier öffnen')
+    elif command in ('/spotify_connect', '/spotify-connect'):
+        # Same flow as /login — the WebApp's setup wizard will
         # guide the user through Spotify OAuth.
-        status_code, body = call_api_post('/eltern/magic-link/generate', {'source': 'telegram'})
-        if status_code == 201 and isinstance(body, dict):
-            url_path = body.get('url_path', '/eltern')
-            host = config['mupibox'].get('host', 'localhost')
-            url = f'http://{host}:8200{url_path}'
-            bot.sendMessage(
-                chat_id,
-                f'🎵 <b>Spotify verbinden</b>\n\nÖffne den Link, klicke im Dashboard auf "Spotify einrichten":\n\n<a href="{url}">Eltern-Hub öffnen</a>\n\n<code>{url}</code>',
-                parse_mode='HTML',
-                disable_web_page_preview=True,
-            )
-        else:
-            bot.sendMessage(chat_id, f'Login-Link konnte nicht erzeugt werden: {status_code} {body}')
-    elif command == '/spotify-disconnect':
+        send_magic_link(chat_id, '🎵 <b>Spotify verbinden</b>\n\nÖffne den Link, klicke im Dashboard auf "Spotify einrichten".', 'Eltern-Hub öffnen')
+    elif command in ('/spotify_disconnect', '/spotify-disconnect'):
         # Confirm-step inline keyboard so a fat-finger tap doesn't kill
         # an active token. Actual disconnect happens in the callback handler.
         markup = InlineKeyboardMarkup(inline_keyboard=[
@@ -380,44 +384,67 @@ def on_chat_message(msg):
 
 def on_callback_query(msg):
     query_id, from_id, query_data = telepot.glance(msg, flavor='callback_query')
-    print('Callback Query:', query_id, from_id, query_data)
-    if not is_authorized(from_id):
-        print(f'Rejected callback from unauthorized user_id: {from_id}')
+    # The buttons hang on the message that answered /help. In a group that chat
+    # is the group (its id is what the parents allowed), not the person tapping,
+    # so authorize and reply via the message's chat.
+    keyboard_msg = msg.get('message') or {}
+    chat_id = keyboard_msg.get('chat', {}).get('id', from_id)
+    print('Callback Query:', query_id, chat_id, from_id, query_data)
+    answered = False
+
+    def answer(text=None, show_alert=True):
+        # Telegram takes one answer per tap; it also stops the spinner on the button.
+        nonlocal answered
+        if answered:
+            return
+        answered = True
+        try:
+            bot.answerCallbackQuery(query_id, text=text, show_alert=show_alert)
+        except Exception as e:
+            print(f'answerCallbackQuery failed: {e}')
+
+    if not (is_authorized(chat_id) or is_authorized(from_id)):
+        print(f'Rejected callback from unauthorized chat_id {chat_id} / user_id {from_id}')
+        answer('Not allowed', show_alert=False)
         return
 
-    global message_with_inline_keyboard
+    try:
+        handle_callback(query_data, chat_id, keyboard_msg, answer)
+    finally:
+        answer(show_alert=False)
 
+def handle_callback(query_data, chat_id, keyboard_msg, answer):
     if query_data == 'screen':
         subprocess.run(["sudo", "rm", "/tmp/telegram_screen.png"])
         subprocess.run(["sudo", "-H", "-u", "dietpi", "bash", "-c", "DISPLAY=:0 scrot /tmp/telegram_screen.png"])
-        bot.sendPhoto(from_id, open('/tmp/telegram_screen.png', 'rb'))
+        bot.sendPhoto(chat_id, open('/tmp/telegram_screen.png', 'rb'))
     elif query_data == 'status':
         status_code, body = call_api_get('/playtime')
         if status_code == 200:
-            bot.sendMessage(from_id, format_status(body), parse_mode='HTML')
+            bot.sendMessage(chat_id, format_status(body), parse_mode='HTML')
         else:
-            bot.answerCallbackQuery(query_id, text=f'Status-Abfrage fehlgeschlagen: {status_code}', show_alert=True)
+            answer(text=f'Status-Abfrage fehlgeschlagen: {status_code}', show_alert=True)
     elif query_data[:7] == 'extend_':
         mins = int(query_data.split('_')[1])
         status_code, body = call_api_post('/playtime/extend', {'minutes': mins})
         if status_code == 200:
-            bot.answerCallbackQuery(query_id, text=f'+{mins} min hinzugefügt', show_alert=True)
+            answer(text=f'+{mins} min hinzugefügt', show_alert=True)
         else:
-            bot.answerCallbackQuery(query_id, text=f'Fehler: {status_code}', show_alert=True)
+            answer(text=f'Fehler: {status_code}', show_alert=True)
     elif query_data[:8] == 'release_':
         mins = int(query_data.split('_')[1])
         status_code, body = call_api_post('/playtime/release', {'minutes': mins})
         if status_code == 200:
-            bot.answerCallbackQuery(query_id, text=f'Override für {mins} min aktiv', show_alert=True)
+            answer(text=f'Override für {mins} min aktiv', show_alert=True)
         else:
-            bot.answerCallbackQuery(query_id, text=f'Fehler: {status_code}', show_alert=True)
+            answer(text=f'Fehler: {status_code}', show_alert=True)
     elif query_data[:9] == 'quietnow_':
         mins = int(query_data.split('_')[1])
         status_code, body = call_api_post('/quiethours/now', {'minutes': mins})
         if status_code == 200:
-            bot.answerCallbackQuery(query_id, text=f'Stop für {mins} min aktiviert', show_alert=True)
+            answer(text=f'Stop für {mins} min aktiviert', show_alert=True)
         else:
-            bot.answerCallbackQuery(query_id, text=f'Fehler: {status_code}', show_alert=True)
+            answer(text=f'Fehler: {status_code}', show_alert=True)
     elif query_data == 'vol':
         markup = InlineKeyboardMarkup(inline_keyboard=[
                         [InlineKeyboardButton(text="10",callback_data='vol_10'), InlineKeyboardButton(text="20",callback_data='vol_20')],
@@ -427,7 +454,7 @@ def on_callback_query(msg):
                         [InlineKeyboardButton(text="90",callback_data='vol_90'), InlineKeyboardButton(text="Back",callback_data='back')]
                     ]
                 )
-        msg_idf = telepot.message_identifier(message_with_inline_keyboard)
+        msg_idf = telepot.message_identifier(keyboard_msg)
         bot.editMessageText(msg_idf, 'What volume should set?', reply_markup = markup )
     elif query_data == 'sleep':
         markup = InlineKeyboardMarkup(inline_keyboard=[
@@ -436,7 +463,7 @@ def on_callback_query(msg):
                         [InlineKeyboardButton(text="60",callback_data='sleep_60'), InlineKeyboardButton(text="Back",callback_data='back')]
                     ]
                 )
-        msg_idf = telepot.message_identifier(message_with_inline_keyboard)
+        msg_idf = telepot.message_identifier(keyboard_msg)
         bot.editMessageText(msg_idf, 'In how many minutes should the MuPiBox go to sleep?', reply_markup = markup )
     elif query_data[:4] == 'vol_':
         # Inline-keyboard values are hardcoded (10/30/50/70/100) but defense-
@@ -445,54 +472,46 @@ def on_callback_query(msg):
         parts = query_data.split("_", 1)
         v = clamp_volume(parts[1] if len(parts) > 1 else None)
         if v is None:
-            bot.answerCallbackQuery(query_id, text='Invalid volume', show_alert=True)
+            answer(text='Invalid volume', show_alert=True)
         else:
             volume = f"{v}%"
             subprocess.run(["/usr/bin/amixer", "sset", "Master", volume])
-            bot.answerCallbackQuery(query_id, text='Volume set to ' + volume, show_alert=True)
+            answer(text='Volume set to ' + volume, show_alert=True)
     elif query_data[:6] == 'sleep_':
         parts = query_data.split("_", 1)
         mins = clamp_sleep_minutes(parts[1] if len(parts) > 1 else None)
         if mins is None:
-            bot.answerCallbackQuery(query_id, text='Invalid sleep value', show_alert=True)
+            answer(text='Invalid sleep value', show_alert=True)
         else:
             subprocess.Popen(["sudo", "nohup", "/usr/local/bin/mupibox/./sleep_timer.sh", str(mins * 60)])
-            bot.sendMessage(from_id, f"Sleep timer set to {mins} minutes")
+            bot.sendMessage(chat_id, f"Sleep timer set to {mins} minutes")
     elif query_data == 'play':
         url = 'http://127.0.0.1:5005//play'  # local: the player only takes commands from the box itself or its own pages
-        bot.answerCallbackQuery(query_id, text='Play', show_alert=True)
+        answer(text='Play', show_alert=True)
         requests.get(url, timeout=5)
     elif query_data == 'pause':
         url = 'http://127.0.0.1:5005//pause'  # local: the player only takes commands from the box itself or its own pages
-        bot.answerCallbackQuery(query_id, text='Pause', show_alert=True)
+        answer(text='Pause', show_alert=True)
         requests.get(url, timeout=5)
     elif query_data == 'back':
-        markup = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="Status",callback_data='status'), InlineKeyboardButton(text="Current Screen",callback_data='screen')],
-                        [InlineKeyboardButton(text="Pause",callback_data='pause'), InlineKeyboardButton(text="Play",callback_data='play')],
-                        [InlineKeyboardButton(text="+30 min",callback_data='extend_30'), InlineKeyboardButton(text="+60 min",callback_data='extend_60')],
-                        [InlineKeyboardButton(text="Release 60",callback_data='release_60'), InlineKeyboardButton(text="QuietNow 60",callback_data='quietnow_60')],
-                        [InlineKeyboardButton(text="Set Volume",callback_data='vol'), InlineKeyboardButton(text="Sleep Timer",callback_data='sleep')],
-                        [InlineKeyboardButton(text="Finish current album",callback_data='finishalbum'), InlineKeyboardButton(text="Update Media-DB",callback_data='media')],
-                        [InlineKeyboardButton(text="Shutdown",callback_data='shutdown'), InlineKeyboardButton(text="Reboot",callback_data='reboot')]
-                    ]
-                )
-        msg_idf = telepot.message_identifier(message_with_inline_keyboard)
-        bot.editMessageText(msg_idf, 'Possible commands:', reply_markup = markup )
+        msg_idf = telepot.message_identifier(keyboard_msg)
+        bot.editMessageText(msg_idf, 'Possible commands:', reply_markup=help_keyboard())
+    elif query_data == 'login':
+        send_magic_link(chat_id, '🔑 <b>Eltern-Hub Login</b>', 'Hier öffnen')
     elif query_data == 'finishalbum':
-        bot.answerCallbackQuery(query_id, text='After finishing the current album the MuPiBox will be shut down.', show_alert=True)
-        bot.sendMessage(from_id, "After finishing the current album the MuPiBox will be shut down.")
+        answer(text='After finishing the current album the MuPiBox will be shut down.', show_alert=True)
+        bot.sendMessage(chat_id, "After finishing the current album the MuPiBox will be shut down.")
         subprocess.run(["sudo", "/usr/local/bin/mupibox/./albumstop_activator.sh"])
     elif query_data == 'shutdown':
+        answer(text='MuPiBox shutdown!', show_alert=True)
         subprocess.run(["sudo", "bash", "/usr/local/bin/mupibox/shutdown.sh"])
-        bot.answerCallbackQuery(query_id, text='MuPiBox shutdown!', show_alert=True)
     elif query_data == 'reboot':
+        answer(text='MuPiBox reboot!', show_alert=True)
         subprocess.run(["sudo", "reboot"])
-        bot.answerCallbackQuery(query_id, text='MuPiBox reboot!', show_alert=True)
     elif query_data == 'media':
-        bot.answerCallbackQuery(query_id, text='Starting media data update... This take a while, please wait for complete message.', show_alert=True)
+        answer(text='Starting media data update... This take a while, please wait for complete message.', show_alert=True)
         subprocess.run(["sudo", "/usr/local/bin/mupibox/./m3u_generator.sh"])
-        bot.answerCallbackQuery(query_id, text='Media update finished!', show_alert=True)
+        bot.sendMessage(chat_id, "Media update finished!")
     # ── Phase 14d — Smart-Sync controls ──────────────────────────────────
     elif query_data == 'spotify_disconnect_confirm':
         # POST /api/eltern/spotify-oauth/disconnect needs a session cookie
@@ -507,22 +526,22 @@ def on_callback_query(msg):
         # is one extra step parents can do in the WebApp.
         sc, _ = call_api_post('/spotify-sync/config', {'enabled': False})
         if sc == 200:
-            bot.answerCallbackQuery(query_id, text='Smart-Sync gestoppt. Token-Clear bitte in der Eltern-WebApp.', show_alert=True)
+            answer(text='Smart-Sync gestoppt. Token-Clear bitte in der Eltern-WebApp.', show_alert=True)
         else:
-            bot.answerCallbackQuery(query_id, text=f'Fehler {sc}', show_alert=True)
+            answer(text=f'Fehler {sc}', show_alert=True)
     elif query_data == 'spotify_disconnect_cancel':
-        bot.answerCallbackQuery(query_id, text='Abgebrochen.', show_alert=False)
+        answer(text='Abgebrochen.', show_alert=False)
     elif query_data == 'resync':
         sc, body = call_api_post('/spotify-sync/trigger?source=telegram', {})
         if sc == 202:
-            bot.answerCallbackQuery(query_id, text='🔄 Sync gestartet.', show_alert=True)
+            answer(text='🔄 Sync gestartet.', show_alert=True)
         elif sc == 429:
             wait = (body or {}).get('retry_after_seconds', 60) if isinstance(body, dict) else 60
-            bot.answerCallbackQuery(query_id, text=f'⏱ Cooldown — {wait}s warten.', show_alert=True)
+            answer(text=f'⏱ Cooldown — {wait}s warten.', show_alert=True)
         elif sc == 409:
-            bot.answerCallbackQuery(query_id, text='⏳ Bereits in Bearbeitung.', show_alert=True)
+            answer(text='⏳ Bereits in Bearbeitung.', show_alert=True)
         else:
-            bot.answerCallbackQuery(query_id, text=f'Fehler {sc}', show_alert=True)
+            answer(text=f'Fehler {sc}', show_alert=True)
     elif query_data == 'syncstatus':
         sc, body = call_api_get('/spotify-sync/status')
         if sc == 200 and isinstance(body, dict):
@@ -531,14 +550,11 @@ def on_callback_query(msg):
             adds = state_info.get('additions_count', 0)
             upds = state_info.get('updates_count', 0)
             rems = state_info.get('removals_count', 0)
-            bot.answerCallbackQuery(
-                query_id,
-                text=f'{last_status}  +{adds}/↻{upds}/−{rems}',
+            answer(text=f'{last_status}  +{adds}/↻{upds}/−{rems}',
                 show_alert=True,
             )
         else:
-            bot.answerCallbackQuery(query_id, text=f'Fehler {sc}', show_alert=True)
-        bot.sendMessage(from_id, "Media update finished!")
+            answer(text=f'Fehler {sc}', show_alert=True)
 
 TOKEN = config['telegram']['token']
 bot = telepot.Bot(TOKEN)

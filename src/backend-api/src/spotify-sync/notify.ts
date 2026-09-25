@@ -69,7 +69,7 @@ export function maybeNotifyAfterRun(
     (previousCounts.auth ?? 0) === 0
   ) {
     pushMessage(
-      `⚠️ MuPiBox Smart-Sync: Spotify-Anmeldung abgelaufen oder ungültig.\n\nBitte neu verbinden:\n/spotify-connect`,
+      `⚠️ MuPiBox Smart-Sync: Spotify-Anmeldung abgelaufen oder ungültig.\n\nBitte neu verbinden:\n/spotify_connect`,
     )
     return
   }
