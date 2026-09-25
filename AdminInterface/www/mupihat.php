@@ -75,8 +75,18 @@
 			foreach ($data["mupihat"]["battery_types"] as $key => $battery_type) {
 				if ($battery_type["name"] === "Custom") {
 					$data["mupihat"]["battery_types"][$key]["config"] = $values;
-					$change = 4;
-					$CHANGE_TXT = $CHANGE_TXT . "<li>Custom battery configuration saved</li>";
+					// The MuPiHAT service reads the battery values only when it starts: if Custom is the battery in use,
+					// save and restart it (change 5), otherwise the battery icon keeps showing the old thresholds.
+					if( isset($data["mupihat"]["selected_battery"]) && $data["mupihat"]["selected_battery"] === "Custom" && !empty($data["mupihat"]["hat_active"]) )
+						{
+						$change = 5;
+						$CHANGE_TXT = $CHANGE_TXT . "<li>Custom battery configuration saved and active</li>";
+						}
+					else
+						{
+						$change = 4;
+						$CHANGE_TXT = $CHANGE_TXT . "<li>Custom battery configuration saved</li>";
+						}
 					break;
 				}
 			}
