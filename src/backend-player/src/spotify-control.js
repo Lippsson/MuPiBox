@@ -1600,9 +1600,18 @@ function refreshLocalPlaylist(albumDir) {
 // next album within these 1-2 seconds used to get the old album's track jump and seek applied
 // to the new one.
 let libraryResumeTimers = []
+// mplayer's own (per stream) volume is 0 while a resume jumps to its track and position: the first
+// seconds of track 1 and of the target track used to be heard before the jump.
+let libraryResumeMuted = false
+function unmuteLibraryResume() {
+  if (!libraryResumeMuted) return
+  libraryResumeMuted = false
+  player.setVolume(volumeStart)
+}
 function clearLibraryResumeTimers() {
   for (const timer of libraryResumeTimers) clearTimeout(timer)
   libraryResumeTimers = []
+  unmuteLibraryResume()
 }
 
 function playListAtTrack(playedList, trackNr, progressPct) {
@@ -1610,6 +1619,13 @@ function playListAtTrack(playedList, trackNr, progressPct) {
     `${now()}: [Spotify Control] Library resume — track ${trackNr}, pct ${progressPct}, list ${playedList}`,
   )
   playList(playedList)
+  const jumps = trackNr > 1 || progressPct > 1
+  if (jumps) {
+    // silent until the jump is done; set again once mplayer has opened its audio output
+    libraryResumeMuted = true
+    player.setVolume(0)
+    libraryResumeTimers.push(setTimeout(() => player.setVolume(0), 300))
+  }
   if (trackNr > 1) {
     libraryResumeTimers.push(
       setTimeout(() => {
@@ -1623,6 +1639,11 @@ function playListAtTrack(playedList, trackNr, progressPct) {
   }
   if (progressPct > 1) {
     libraryResumeTimers.push(setTimeout(() => player.seekPercent(progressPct), trackNr > 1 ? 2400 : 1200))
+  }
+  if (jumps) {
+    // a moment after the last jump, so the old position is no longer in the audio buffer
+    const lastJump = progressPct > 1 ? (trackNr > 1 ? 2400 : 1200) : 1200
+    libraryResumeTimers.push(setTimeout(unmuteLibraryResume, lastJump + 400))
   }
 }
 
