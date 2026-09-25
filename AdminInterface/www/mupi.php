@@ -1868,7 +1868,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 
 			<li id="li_1" >
 				<style>
-				.rotary-info { display: inline-block; vertical-align: middle; margin-left: 10px; cursor: pointer; color: #0d5a80; font-size: 22px; line-height: 1; user-select: none; }
+				.rotary-info { display: inline-block; float: none; padding: 0; vertical-align: middle; margin: 0 0 0 10px; cursor: pointer; color: #0d5a80; font-size: 22px; line-height: 1; user-select: none; }
 				.rotary-info:hover { color: #0a3d57; }
 				.rotary-pop { text-align: left; position: fixed; z-index: 10000; box-sizing: border-box; max-width: 440px; width: calc(100vw - 32px); background: #fff; color: #222; border-radius: 10px; padding: 14px 16px; font-size: 14px; line-height: 1.45; box-shadow: 0 6px 24px rgba(0, 0, 0, .35); }
 				.rotary-pop img { display: block; width: 100%; max-width: 300px; height: auto; margin: 0 auto; border-radius: 4px; }
