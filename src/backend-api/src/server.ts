@@ -723,6 +723,7 @@ app.get('/api/rssfeed/cached', async (req, res) => {
 const imageContentTypes: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.jfif': 'image/jpeg',
   '.png': 'image/png',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
@@ -3767,7 +3768,7 @@ async function nasListFiles(folderPath: string): Promise<NasFileEntry[]> {
 }
 
 function nasFindCoverImage(files: NasFileEntry[]): string | undefined {
-  const image = files.find((f) => !f.isdir && /\.(jpe?g|png)$/i.test(f.name))
+  const image = files.find((f) => !f.isdir && /\.(jpe?g|jfif|png)$/i.test(f.name))
   return image?.path
 }
 
@@ -4652,6 +4653,7 @@ const nasContentTypes: Record<string, string> = {
   '.m4a': 'audio/mp4',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.jfif': 'image/jpeg',
   '.png': 'image/png',
 }
 
@@ -4900,7 +4902,7 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
 
 // --- Download local ("Download selected") ---------------------------------
 
-const nasDownloadExtensions = [...nasAudioExtensions, '.cue', '.jpg', '.jpeg', '.png']
+const nasDownloadExtensions = [...nasAudioExtensions, '.cue', '.jpg', '.jpeg', '.jfif', '.png']
 
 interface NasDownloadStatus {
   running: boolean
@@ -4985,18 +4987,20 @@ async function nasCollectFiles(session: NasSession, folderPath: string, out: Nas
   }
 }
 
-async function nasDownloadFile(nasPath: string, size: number): Promise<void> {
+async function nasDownloadFile(nasPath: string, size: number, force = false): Promise<void> {
   const target = nasLocalPath(nasPath)
   if (!target) {
     return
   }
-  try {
-    const existing = await stat(target)
-    if (size < 0 || existing.size === size) {
-      return
+  if (!force) {
+    try {
+      const existing = await stat(target)
+      if (size < 0 || existing.size === size) {
+        return
+      }
+    } catch {
+      // Not downloaded yet.
     }
-  } catch {
-    // Not downloaded yet.
   }
   await mkdir(path.dirname(target), { recursive: true })
 
@@ -5052,7 +5056,7 @@ async function nasPruneExcept(nasDir: string, keep: string[]): Promise<void> {
       continue
     }
     // Cover images of parent folders belong to the folders below them.
-    if (!entry.isDirectory() && /\.(jpe?g|png)$/i.test(entry.name)) {
+    if (!entry.isDirectory() && /\.(jpe?g|jfif|png)$/i.test(entry.name)) {
       continue
     }
     if (entry.isDirectory() && keep.some((k) => k.startsWith(`${child}/`))) {
@@ -5066,7 +5070,7 @@ async function nasPruneExcept(nasDir: string, keep: string[]): Promise<void> {
 async function nasLocalHasImage(dir: string): Promise<boolean> {
   try {
     const entries = await readdir(dir, { withFileTypes: true })
-    return entries.some((entry) => entry.isFile() && /\.(jpe?g|png)$/i.test(entry.name))
+    return entries.some((entry) => entry.isFile() && /\.(jpe?g|jfif|png)$/i.test(entry.name))
   } catch {
     return false
   }
@@ -5089,7 +5093,7 @@ async function nasDownloadParentCovers(folder: string, checked: Set<string>): Pr
       continue
     }
     const files = await withNasSession((session) => nasListFilesLive(session, ancestor, true))
-    const cover = files?.find((file) => !file.isdir && /\.(jpe?g|png)$/i.test(file.name))
+    const cover = files?.find((file) => !file.isdir && /\.(jpe?g|jfif|png)$/i.test(file.name))
     if (cover) {
       await nasDownloadFile(cover.path, cover.additional?.size ?? -1)
     }
@@ -5264,6 +5268,80 @@ app.post('/api/nas/download/sync', localOnly, (_req, res) => {
   res.json({ success: true })
 })
 
+// "Reload covers": a cover that was swapped on the NAS under the same file name shows up again.
+// 1. The thumbnails made from covers are dropped (they are made again the next time they are shown).
+// 2. The cover pictures inside the downloaded NAS folders are fetched again (a folder that is downloaded
+//    completely is not checked again by "Download selected", so a changed cover would stay old).
+let nasCoverRefreshRunning = false
+
+async function clearThumbnails(): Promise<number> {
+  let removed = 0
+  try {
+    for (const name of await readdir(thumbDir)) {
+      await rm(path.join(thumbDir, name), { force: true })
+      removed++
+    }
+  } catch {
+    // No cache folder yet.
+  }
+  return removed
+}
+
+async function nasRefreshLocalCovers(): Promise<{ updated: number; reachable: boolean }> {
+  if (!(await getActiveNasSession())) {
+    return { updated: 0, reachable: false }
+  }
+  let updated = 0
+  const walk = async (nasDir: string, localDir: string, depth: number): Promise<void> => {
+    let entries: fs.Dirent[]
+    try {
+      entries = await readdir(localDir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    // Only folders that exist on the NAS and here; a listing that fails (folder gone) is skipped.
+    const files = await withNasSession((session) => nasListFilesLive(session, nasDir === '' ? '/' : nasDir, true)).catch(() => undefined)
+    for (const file of files ?? []) {
+      if (!file.isdir && /\.(jpe?g|jfif|png)$/i.test(file.name)) {
+        try {
+          await nasDownloadFile(file.path, file.additional?.size ?? -1, true)
+          updated++
+        } catch (error) {
+          console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Cover reload failed for ${file.path}: ${error}`)
+        }
+      }
+    }
+    if (depth >= 12) {
+      return
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        await walk(`${nasDir}/${entry.name}`, path.join(localDir, entry.name), depth + 1)
+      }
+    }
+  }
+  await walk('', nasLocalRoot, 0)
+  return { updated, reachable: true }
+}
+
+app.post('/api/nas/covers/refresh', localOnly, async (_req, res) => {
+  if (nasCoverRefreshRunning || nasDownloadStatus.running) {
+    res.status(409).json({ success: false, error: 'A download or a cover reload is already running.' })
+    return
+  }
+  nasCoverRefreshRunning = true
+  try {
+    const thumbnails = await clearThumbnails()
+    const local = await nasRefreshLocalCovers()
+    res.json({ success: true, thumbnails, covers: local.updated, nasReachable: local.reachable })
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Cover reload failed: ${error}`)
+    res.status(500).json({ success: false, error: 'The covers could not be reloaded.' })
+  } finally {
+    nasCoverRefreshRunning = false
+  }
+})
+
 app.get('/api/nas/download/status', localOnly, (_req, res) => {
   res.json(nasDownloadStatus)
 })
@@ -5304,7 +5382,7 @@ async function libraryListFiles(relPath: string): Promise<NasFileEntry[]> {
 
 // Prefers a file called "cover.*", otherwise the first image in the folder.
 function libraryFindCover(files: NasFileEntry[]): string | undefined {
-  const images = files.filter((f) => !f.isdir && /\.(jpe?g|png)$/i.test(f.name))
+  const images = files.filter((f) => !f.isdir && /\.(jpe?g|jfif|png)$/i.test(f.name))
   return (images.find((f) => /^cover\./i.test(f.name)) ?? images[0])?.path
 }
 
@@ -5479,14 +5557,22 @@ function parseThumbSize(value: unknown): number | undefined {
 }
 
 function isThumbnailable(file: string): boolean {
-  return /\.(jpe?g|png)$/i.test(file)
+  return /\.(jpe?g|jfif|png)$/i.test(file)
 }
 
 function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
   return stat(thumb).then((info) => {
+    // Revalidated on every use (a cheap 304 on the box itself) instead of cached blindly for a day, so a
+    // reloaded cover (thumbnail made again, newer time) is shown at once.
     res.setHeader('Content-Type', 'image/jpeg')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Last-Modified', info.mtime.toUTCString())
+    const since = Date.parse(String(res.req?.headers?.['if-modified-since'] ?? ''))
+    if (Number.isFinite(since) && Math.floor(info.mtimeMs / 1000) * 1000 <= since) {
+      res.status(304).end()
+      return
+    }
     res.setHeader('Content-Length', String(info.size))
-    res.setHeader('Cache-Control', 'public, max-age=86400')
     fs.createReadStream(thumb).pipe(res)
   })
 }
