@@ -30,6 +30,7 @@ import { startScheduler } from './spotify-sync/scheduler'
 import type { RunSyncDeps } from './spotify-sync/state-machine'
 import { buildElternLandingHandler, createElternApiRouter } from './eltern/routes'
 import { startBucketCleanup } from './eltern/middleware'
+import { SUDO_BACKUP_SNIPPET, backupBeforeWrite } from './file-backup'
 import { browserGuard, corsOptionsFor, localOnly, localOrElternSession } from './request-guard'
 
 // Force IPv4 for DNS lookups to avoid EAI_AGAIN errors on Raspberry Pi
@@ -1172,7 +1173,8 @@ async function replaceMupiboxConfigFile(content: Record<string, unknown>): Promi
     // /tmp is a RAM disk and /etc is on the SD card, so a plain mv would copy into the target in
     // place. Copy next to it first, then rename on the same filesystem: a reader never sees half a
     // file. The caller holds the config lock.
-    await execFileAsync('sh', ['-c', 'sudo cp "$1" "$2.new" && sudo mv -f "$2.new" "$2"', 'replace-config', tmpPath, mupiboxConfigPath])
+    // The version replaced here is kept as .bak and as a daily copy in backup/ (see file-backup.ts).
+    await execFileAsync('sh', ['-c', `${SUDO_BACKUP_SNIPPET}; sudo cp "$1" "$2.new" && sudo mv -f "$2.new" "$2"`, 'replace-config', tmpPath, mupiboxConfigPath])
   } finally {
     await fs.promises.rm(tmpPath, { force: true })
   }
@@ -2261,6 +2263,8 @@ app.post('/api/add', (req, res) => {
 // or a crash mid-write left a cut-off JSON (the library or the resume list unreadable). Written
 // next to the target and renamed over it instead, so a reader sees the old or the new file.
 function writeJsonAtomic(file: string, data: unknown, callback: (error: Error | null) => void): void {
+  // The library: keep the version this write replaces (a bad edit once wiped an entry and there was nothing to go back to).
+  if (file === dataFile) backupBeforeWrite(file)
   const tmp = `${file}.tmp.${process.pid}.${Date.now()}`
   jsonfile.writeFile(tmp, data, { spaces: 4 }, (writeError) => {
     if (writeError) {

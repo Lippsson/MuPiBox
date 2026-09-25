@@ -11,6 +11,7 @@
 
 import * as fs from 'node:fs'
 import { promises as fsPromises } from 'node:fs'
+import { backupBeforeWrite } from '../file-backup'
 import type { BoxLibraryEntry, SyncDiff, SyncItem } from './types'
 
 /**
@@ -76,6 +77,7 @@ export async function applyDiff(
   } catch {
     // unreadable: write it below
   }
+  backupBeforeWrite(dataFilePath)
   const tmpPath = `${dataFilePath}.tmp.${process.pid}`
   await fsPromises.writeFile(tmpPath, serialized, 'utf8')
   // rename on the same filesystem is atomic on POSIX — what /api/add and
