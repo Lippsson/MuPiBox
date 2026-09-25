@@ -169,6 +169,17 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 	<head>
+		<script>
+		// After a form submit the page is kept invisible until the scroll position is restored (see footer.php),
+		// so it does not show the top of the page first and then jump down. Shown at the latest after 4 seconds.
+		try {
+			if (sessionStorage.getItem("mupibox-scroll") !== null) {
+				document.documentElement.style.visibility = "hidden";
+				if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+				setTimeout(function () { document.documentElement.style.visibility = ""; }, 4000);
+			}
+		} catch (e) {}
+		</script>
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
 		<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
