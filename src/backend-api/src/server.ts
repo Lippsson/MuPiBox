@@ -4495,6 +4495,149 @@ function nasServeLocalFile(req: express.Request, res: express.Response, file: st
   fs.createReadStream(file, { start, end }).pipe(res)
 }
 
+// Streams a NAS file to the player and carries on where it left off when the connection to the NAS breaks.
+//
+// The player (mplayer) reads the file from this box over HTTP. Passed through 1:1, a NAS connection that
+// dies (WiFi drop, NAS busy) ended the answer early, and mplayer took that for the end of the song and jumped
+// to the next one. Here the connection to the NAS is taken up again with a Range request from the byte that
+// was sent last; the player's own connection to this box never breaks, so it just waits (its buffer runs
+// dry, it pauses) and plays on where it stopped.
+//
+// There is no total time limit for the transfer (a long song over a slow link would have been cut off), only
+// a stall limit: no data for NAS_STALL_MS counts as a broken connection.
+const NAS_STALL_MS = 15000
+const NAS_OUTAGE_GIVE_UP_MS = 5 * 60 * 1000
+
+async function nasStreamWithResume(req: express.Request, res: express.Response, firstSession: NasSession, filePath: string): Promise<void> {
+  let session = firstSession
+  let clientGone = false
+  let controller: AbortController | undefined
+  res.once('close', () => {
+    clientGone = true
+    controller?.abort()
+  })
+
+  let started = false // headers sent
+  let next = 0 // next byte to send
+  let last: number | undefined // last byte of the wanted range (unknown for an answer without length)
+  let range = typeof req.headers.range === 'string' ? req.headers.range : undefined
+  let outageSince = 0
+  let attempt = 0
+
+  while (!clientGone) {
+    controller = new AbortController()
+    const abort = controller
+    let stall: NodeJS.Timeout | undefined
+    const armStall = () => {
+      clearTimeout(stall)
+      stall = setTimeout(() => abort.abort(), NAS_STALL_MS)
+    }
+    try {
+      armStall()
+      const headers: Record<string, string> = { Authorization: session.auth }
+      if (range) {
+        headers.Range = range
+      }
+      const upstream = await fetch(nasUrl(session, filePath), { headers, signal: abort.signal })
+
+      if (!started) {
+        if (upstream.status === 404 || upstream.status === 401 || upstream.status === 403) {
+          res.status(upstream.status === 404 ? 404 : 502).send('Failed to fetch file from NAS.')
+          return
+        }
+        res.status(upstream.status)
+        for (const header of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
+          const value = upstream.headers.get(header)
+          if (value) {
+            res.setHeader(header, value)
+          }
+        }
+        const contentRange = /^bytes (\d+)-(\d+)\//.exec(upstream.headers.get('content-range') ?? '')
+        const contentLength = Number(upstream.headers.get('content-length'))
+        if (upstream.status === 206 && contentRange) {
+          next = Number(contentRange[1])
+          last = Number(contentRange[2])
+        } else if (upstream.status === 200 && Number.isFinite(contentLength) && contentLength > 0) {
+          next = 0
+          last = contentLength - 1
+        }
+        started = true
+        res.flushHeaders()
+      } else if (upstream.status !== 206) {
+        // Anything but a partial answer would start the file from the beginning again: try once more.
+        throw new Error(`NAS answered ${upstream.status} to the resume request`)
+      }
+
+      if (!upstream.body) {
+        res.end()
+        return
+      }
+      for await (const chunk of Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream)) {
+        armStall()
+        if (clientGone) {
+          return
+        }
+        outageSince = 0
+        attempt = 0
+        next += (chunk as Buffer).length
+        if (!res.write(chunk)) {
+          await new Promise<void>((resolve) => {
+            const done = () => {
+              res.off('drain', done)
+              res.off('close', done)
+              resolve()
+            }
+            res.on('drain', done)
+            res.on('close', done)
+          })
+        }
+      }
+      clearTimeout(stall)
+      if (last === undefined || next > last) {
+        res.end() // complete
+        return
+      }
+      throw new Error(`connection closed after ${next} of ${last + 1} bytes`)
+    } catch (error) {
+      clearTimeout(stall)
+      if (clientGone) {
+        return
+      }
+      if (!started) {
+        // Nothing sent yet: a few tries to connect before the player is told it failed.
+        attempt++
+        if (attempt >= 3) {
+          console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to stream NAS file ${filePath}: ${error}`)
+          res.status(502).send('Failed to fetch file from NAS.')
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        session = (await getActiveNasSession()) ?? session
+        continue
+      }
+      if (last === undefined) {
+        // An answer without a length cannot be taken up again.
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] NAS stream of ${filePath} broke off and cannot be resumed: ${error}`)
+        res.destroy()
+        return
+      }
+      outageSince ||= Date.now()
+      if (Date.now() - outageSince > NAS_OUTAGE_GIVE_UP_MS) {
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] NAS unreachable for ${NAS_OUTAGE_GIVE_UP_MS / 1000} s, giving up on ${filePath} at byte ${next}`)
+        res.destroy()
+        return
+      }
+      attempt++
+      if (attempt === 1) {
+        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Lost the NAS connection at byte ${next} of ${last + 1} (${filePath}): ${error}. Resuming ...`)
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.min(5000, 1000 * attempt)))
+      session = (await getActiveNasSession()) ?? session
+      range = `bytes=${next}-${last}`
+    }
+  }
+}
+
 app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
   const filePath = typeof req.query.path === 'string' ? req.query.path : ''
   if (!filePath) {
@@ -4553,25 +4696,7 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
       }
     }
 
-    const upstream = await fetch(nasUrl(session, filePath), { headers, signal: AbortSignal.timeout(15000) })
-    if (upstream.status === 404 || upstream.status === 401 || upstream.status === 403) {
-      res.status(upstream.status === 404 ? 404 : 502).send('Failed to fetch file from NAS.')
-      return
-    }
-
-    res.status(upstream.status)
-    for (const header of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
-      const value = upstream.headers.get(header)
-      if (value) {
-        res.setHeader(header, value)
-      }
-    }
-
-    if (upstream.body) {
-      Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream).pipe(res)
-    } else {
-      res.end()
-    }
+    await nasStreamWithResume(req, res, session, filePath)
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to stream NAS file ${filePath}: ${error}`)
     res.status(502).send('Failed to fetch file from NAS.')
