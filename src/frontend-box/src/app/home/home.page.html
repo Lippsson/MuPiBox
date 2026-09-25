@@ -19,11 +19,7 @@
     
     <ion-buttons slot="end">
       <ion-button class="status-icons" (pointerdown)="settingsButtonPointerDown()" (pointerup)="settingsButtonPointerUp()" (pointerleave)="settingsButtonPointerUp()" (pointercancel)="settingsButtonPointerUp()">
-          @if (isOnline()) {
-            <ion-icon name="cloud-outline"></ion-icon>
-          } @else {
-            <ion-icon name="cloud-offline-outline"></ion-icon>
-          }
+          <mupi-wifi-icon></mupi-wifi-icon>
           <mupihat-icon></mupihat-icon>
         </ion-button>
       </ion-buttons>

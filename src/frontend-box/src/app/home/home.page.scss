@@ -9,6 +9,19 @@ ion-toolbar {
     }
 }
 
+// WiFi and battery symbol side by side, wider than the 70 px of the other toolbar buttons
+ion-toolbar ion-button.status-icons {
+    width: auto !important;
+    min-width: 70px;
+    --padding-start: 6px !important;
+    --padding-end: 6px !important;
+
+    mupi-wifi-icon,
+    mupihat-icon {
+        margin: 0 4px;
+    }
+}
+
 .status-icons {
     --padding-start: 0px !important;
     --padding-end: 0px !important;
