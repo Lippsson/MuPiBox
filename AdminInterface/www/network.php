@@ -80,7 +80,7 @@
 	// when it is loaded, so a change is active after the next boot.
 	$usb_power_labels = array('0' => 'Off', '1' => 'Minimal', '2' => 'Maximum');
 	$usb_power_key = isset($_POST['save_usb_wifi_power']) ? (string) $_POST['save_usb_wifi_power'] : '';
-	if( isset($usb_wifi_drivers[$usb_power_key]) && isset($_POST['usb_wifi_power_' . $usb_power_key]) && isset($usb_power_labels[$_POST['usb_wifi_power_' . $usb_power_key]]) )
+	if( isset($usb_wifi_drivers[$usb_power_key]) && isset($_POST['usb_wifi_power_' . $usb_power_key]) && is_string($_POST['usb_wifi_power_' . $usb_power_key]) && isset($usb_power_labels[$_POST['usb_wifi_power_' . $usb_power_key]]) )
 		{
 		$usb_power_module = $usb_wifi_drivers[$usb_power_key]['module'];
 		$usb_power_conf = '/etc/modprobe.d/' . $usb_power_module . '.conf';
