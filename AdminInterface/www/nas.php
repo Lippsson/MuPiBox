@@ -27,7 +27,7 @@ function nasAjaxGuard($post = false, $poll = false) {
 // These JSON answers come before header.php, so they need a login gate and CSRF check of their
 // own: without it anyone in the LAN could list the whole NAS, load or delete profiles, rebuild
 // the index or cancel a download through this page, without the admin login.
-$nasJsonActions = array('download_cancel', 'download_status', 'browse', 'index_status', 'index_search', 'index_refresh', 'profile_api');
+$nasJsonActions = array('covers_refresh', 'download_cancel', 'download_status', 'browse', 'index_status', 'index_search', 'index_refresh', 'profile_api');
 if (count(array_intersect($nasJsonActions, array_keys($_GET))) > 0) {
 	require __DIR__ . '/includes/auth_check.php';
 	if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -42,6 +42,12 @@ if (count(array_intersect($nasJsonActions, array_keys($_GET))) > 0) {
 			exit;
 		}
 	}
+}
+if (isset($_GET['covers_refresh']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+	nasAjaxGuard(true);
+	header('Content-Type: application/json');
+	echo json_encode(nasApiCall("$backendBase/covers/refresh", 'POST', new stdClass(), 240));
+	exit;
 }
 if (isset($_GET['download_cancel']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
 	nasAjaxGuard(true);
@@ -422,6 +428,8 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 ?>
 	<div style="padding-left:25px; display:flex; align-items:center; gap:12px; margin: 8px 0;">
 		<span class="nas-info" data-info="nas-info-nas" title="About the NAS tab" role="button" tabindex="0"><i class="fa-solid fa-circle-info"></i></span>
+		<input type="button" class="button_text" id="nas-covers-refresh" value="Reload covers" style="margin:0;" title="Loads the cover pictures again: the thumbnails are made again and the covers of downloaded folders are fetched from the NAS again." />
+		<span id="nas-covers-status" style="font-size:13px; color:#444;"></span>
 		<input type="button" class="button_text" id="nas-logout" value="Logout" style="margin:0;" title="<?= htmlspecialchars('Logout from NAS - ' . $nasLoginAddress, ENT_QUOTES) ?>" onclick="location.href='nas.php?relogin=1';" />
 	</div>
 <?php } ?>
@@ -1022,6 +1030,27 @@ window.NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 	});
 	window.addEventListener('scroll', closePop, true);
 	window.addEventListener('resize', closePop);
+})();
+</script>
+
+<script>
+(function () {
+	var btn = document.getElementById('nas-covers-refresh');
+	var out = document.getElementById('nas-covers-status');
+	if (!btn) { return; }
+	btn.addEventListener('click', function () {
+		btn.disabled = true;
+		out.textContent = 'Reloading covers ...';
+		fetch('nas.php?covers_refresh=1', { method: 'POST', headers: { 'X-CSRF-Token': NAS_CSRF } })
+			.then(function (r) { return r.json(); })
+			.then(function (res) {
+				btn.disabled = false;
+				if (!res || !res.success) { out.textContent = (res && res.error) ? res.error : 'The covers could not be reloaded.'; return; }
+				out.textContent = 'Done: ' + res.thumbnails + ' thumbnails dropped, ' + res.covers + ' covers of downloaded folders fetched again'
+					+ (res.nasReachable ? '.' : ' (NAS not reachable, downloaded covers were not checked).');
+			})
+			.catch(function () { btn.disabled = false; out.textContent = 'The covers could not be reloaded.'; });
+	});
 })();
 </script>
 
