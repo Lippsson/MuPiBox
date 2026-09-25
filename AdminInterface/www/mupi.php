@@ -1897,7 +1897,6 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				}
 				?>
 				</select></div>
-				<input id="saveForm" class="button_text" type="submit" name="rotary_save" value="Save rotary encoder settings" />
 			</li>
 			<?php } ?>
 
