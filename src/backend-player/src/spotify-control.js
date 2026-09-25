@@ -783,6 +783,47 @@ function finalizeQuietHoursBlock(reason) {
 // state is polled and playback stops when the song (or the last song of the album) is about to end.
 let spotifyGraceBusy = false
 let spotifyGraceItemId = null
+// Position (disc, track) of the previous poll in album mode: a jump back means the album ended and
+// Spotify started over (repeat context), even if the 2.5 s window before the end was missed.
+let spotifyGracePos = null
+// Polls in a row that gave no usable state (API error, token, rate limit, nothing reported).
+let spotifyGraceMisses = 0
+const SPOTIFY_GRACE_MAX_MISSES = 3 // ~4.5 s
+// Last track of an album, per album id: track_number counts per disc and total_tracks over all
+// discs, so on a multi-disc album (audiobook boxes) the two never matched.
+const spotifyAlbumLastTrack = new Map()
+async function spotifyLastTrackOfAlbum(album) {
+  if (!album?.id) return null
+  if (spotifyAlbumLastTrack.has(album.id)) return spotifyAlbumLastTrack.get(album.id)
+  const total = album.total_tracks ?? 0
+  if (total <= 0) return null
+  const { body } = await spotifyApi.getAlbumTracks(album.id, { offset: total - 1, limit: 1 })
+  const last = body?.items?.[0]?.id ?? null
+  if (last) {
+    if (spotifyAlbumLastTrack.size > 200) spotifyAlbumLastTrack.clear()
+    spotifyAlbumLastTrack.set(album.id, last)
+  }
+  return last
+}
+function spotifyGraceFinalize(reason) {
+  if (playtimeState.state === 'grace') finalizePlaytimeBlock(reason)
+  if (quietHoursState.state === 'grace') finalizeQuietHoursBlock(reason)
+  spotifyGraceItemId = null
+  spotifyGracePos = null
+  spotifyGraceMisses = 0
+}
+// "stop" chosen: the player only waits to learn whether it is a podcast episode. If the Web API
+// can't tell (error, expired token, rate limit), it stops instead of letting a song run for 30 min.
+function spotifyGraceMissed(why) {
+  spotifyGraceMisses++
+  const waitingForKind =
+    (playtimeState.state === 'grace' && playtimeState.stopUnlessEpisode) ||
+    (quietHoursState.state === 'grace' && quietHoursState.stopUnlessEpisode)
+  if (waitingForKind && spotifyGraceMisses >= SPOTIFY_GRACE_MAX_MISSES) {
+    log.warn(`${now()}: [Spotify Control] Grace check: no playback state (${why}) - "stop" chosen, stopping now`)
+    spotifyGraceFinalize('spotify: no playback state, "stop" chosen')
+  }
+}
 async function spotifyGraceCheck() {
   if (currentMeta.currentPlayer !== 'spotify' || spotifyGraceBusy) return
   const modes = []
@@ -790,14 +831,20 @@ async function spotifyGraceCheck() {
   if (quietHoursState.state === 'grace') modes.push(quietHoursState.graceMode)
   if (modes.length === 0) {
     spotifyGraceItemId = null
+    spotifyGracePos = null
+    spotifyGraceMisses = 0
     return
   }
-  const mode = modes.includes('track') ? 'track' : 'album' // if both are in grace the stricter one counts
+  let mode = modes.includes('track') ? 'track' : 'album' // if both are in grace the stricter one counts
   spotifyGraceBusy = true
   try {
     const { body } = await spotifyApi.getMyCurrentPlaybackState({ additional_types: 'episode,track' })
     const item = body?.item
-    if (!item) return
+    if (!item) {
+      spotifyGraceMissed('nothing reported')
+      return
+    }
+    spotifyGraceMisses = 0
     const remainingMs = (item.duration_ms ?? 0) - (body.progress_ms ?? 0)
     const isEpisode = item.type === 'episode'
     if (!isEpisode) {
@@ -806,21 +853,41 @@ async function spotifyGraceCheck() {
       if (quietHoursState.state === 'grace' && quietHoursState.stopUnlessEpisode) finalizeQuietHoursBlock('spotify: song, "stop" chosen')
       if (playtimeState.state !== 'grace' && quietHoursState.state !== 'grace') {
         spotifyGraceItemId = null
+        spotifyGracePos = null
         return
       }
+    } else {
+      // A podcast episode may always finish: give it the long safety cap (a song only gets 30 min).
+      const cap = Date.now() + GRACE_MAX_MS.album
+      if (playtimeState.state === 'grace' && playtimeState.graceEndsAt !== null && playtimeState.graceEndsAt < cap) playtimeState.graceEndsAt = cap
+      if (quietHoursState.state === 'grace' && quietHoursState.graceEndsAt !== null && quietHoursState.graceEndsAt < cap) quietHoursState.graceEndsAt = cap
     }
-    // "album" only means something inside an album; a playlist, podcast or audiobook counts as its current item
+    // "album" only means something inside an album played in order; a playlist, podcast, audiobook,
+    // shuffled or repeated album counts as its current item (its "end" can't be told reliably)
     const inAlbum = body.context?.type === 'album'
-    const lastOfWhatMayFinish = mode === 'track' || isEpisode || !inAlbum || item.track_number === item.album?.total_tracks
-    const movedOn = spotifyGraceItemId !== null && spotifyGraceItemId !== item.id && (mode === 'track' || isEpisode || !inAlbum)
+    if (mode === 'album' && (!inAlbum || body.shuffle_state === true || (body.repeat_state && body.repeat_state !== 'off'))) {
+      mode = 'track'
+    }
+    let lastOfWhatMayFinish = mode === 'track' || isEpisode
+    let jumpedBack = false
+    if (mode === 'album' && !isEpisode) {
+      const pos = { disc: item.disc_number ?? 1, track: item.track_number ?? 0 }
+      jumpedBack =
+        spotifyGracePos !== null &&
+        (pos.disc < spotifyGracePos.disc || (pos.disc === spotifyGracePos.disc && pos.track < spotifyGracePos.track))
+      spotifyGracePos = pos
+      const lastId = await spotifyLastTrackOfAlbum(item.album)
+      lastOfWhatMayFinish = lastId ? item.id === lastId : item.track_number === item.album?.total_tracks
+    }
+    const movedOn = spotifyGraceItemId !== null && spotifyGraceItemId !== item.id && (mode === 'track' || isEpisode)
     if (spotifyGraceItemId === null) spotifyGraceItemId = item.id
-    if (movedOn || (lastOfWhatMayFinish && remainingMs <= 2500)) {
-      if (playtimeState.state === 'grace') finalizePlaytimeBlock('spotify: song / album finished during grace period')
-      if (quietHoursState.state === 'grace') finalizeQuietHoursBlock('spotify: song / album finished during grace period')
-      spotifyGraceItemId = null
+    if (movedOn || jumpedBack || (lastOfWhatMayFinish && remainingMs <= 2500)) {
+      spotifyGraceFinalize('spotify: song / album finished during grace period')
     }
   } catch (e) {
-    log.debug(`${now()}: [Spotify Control] Grace check failed: ${e}`)
+    spotifyGraceMissed(String(e))
+    // once per series of failures: the check runs every 1.5 s and the log is on the SD card
+    if (spotifyGraceMisses === 1) log.warn(`${now()}: [Spotify Control] Grace check failed: ${e}`)
   } finally {
     spotifyGraceBusy = false
   }
