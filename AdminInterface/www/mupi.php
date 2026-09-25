@@ -1866,9 +1866,28 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 			</li>			
 			
 
-			<li id="li_1" >
-				<h2>Rotary encoder to control volume</h2>
-				<p>Turn the rotary encoder to change the volume (never above the max volume). Wiring: GPIO 24 = encoder A (CLK), GPIO 26 = encoder B (DT), GPIO 10 = push button (to GND).</p>
+			<li id="li_1" style="position: relative;">
+				<style>
+				.info-tip { display: inline-block; margin-left: 8px; vertical-align: middle; }
+				.info-tip > button { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid #888; background: #fff; color: #333; font: italic bold 14px/22px serif; cursor: pointer; }
+				.info-tip > button:hover, .info-tip > button:focus { background: #0d6efd; border-color: #0d6efd; color: #fff; outline: none; }
+				.info-tip .info-tip-box { display: none; position: absolute; z-index: 20; top: 44px; left: 50%; transform: translateX(-50%); width: 320px; max-width: 90%; padding: 12px; background: #fff; color: #333; border: 1px solid #aaa; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.25); font: normal 13px/1.4 sans-serif; text-align: left; }
+				.info-tip.open .info-tip-box, .info-tip:hover .info-tip-box { display: block; }
+				.info-tip .info-tip-box img { display: block; width: 100%; height: auto; border-radius: 4px; }
+				.info-tip .info-tip-box figcaption { margin: 4px 0 8px; font-size: 12px; font-style: italic; color: #666; text-align: center; }
+				</style>
+				<h2>Rotary encoder to control volume
+					<span class="info-tip">
+						<button type="button" aria-label="Information" onclick="this.parentNode.classList.toggle('open')">i</button>
+						<span class="info-tip-box">
+							<figure style="margin:0">
+								<img src="images/ky-040-rotary-encoder.jpg" alt="KY-040 Rotary Encoder Module" />
+								<figcaption>KY-040 Rotary Encoder Module</figcaption>
+							</figure>
+							Turn the rotary encoder to change the volume (never above the max volume). Wiring: GPIO 24 = encoder A (CLK), GPIO 26 = encoder B (DT), GPIO 10 = push button (to GND)
+						</span>
+					</span>
+				</h2>
 				<?php
 				$rotary_active = !empty($data["rotary"]["active"]);
 				$rotary_button = $data["rotary"]["button"] ?? "off";
@@ -1879,8 +1898,6 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 			</li>
 			<?php if( $rotary_active ) { ?>
 			<li id="li_1" >
-				<h2>Rotary encoder pins</h2>
-				<p>GPIO <b>24</b> (A / CLK), GPIO <b>26</b> (B / DT), GPIO <b>10</b> (push button). GPIO 10 is the SPI MOSI pin: it only works when SPI is not in use by another device.</p>
 				<h2>Volume change per step</h2>
 				<p>How many percent the volume changes with every click of the rotary encoder.</p>
 				<div>
