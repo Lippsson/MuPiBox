@@ -3,7 +3,7 @@
     <ion-buttons slot="start">
       <ion-back-button icon="arrow-back-outline" defaultHref="/settings"></ion-back-button>
     </ion-buttons>
-    <ion-title>WiFi@if (network()?.interface) {<span class="wifi-interface">{{ network()?.interface }}</span>}</ion-title>
+    <ion-title>WiFi@if (card().interface) {<span class="wifi-interface">{{ card().interface }}</span>}</ion-title>
     <ion-buttons slot="end">
       <ion-button (click)="wifiRestartButtonPressed()">
         <ion-icon slot="icon-only" name="refresh"></ion-icon>
@@ -18,20 +18,19 @@
 </ion-header>
 
 <ion-content class="wifi-content">
-  @let net = network();
   <ion-card class="status-card">
     <div class="status-row">
       <div class="status-ssid">
         <ion-icon name="wifi-outline"></ion-icon>
         <div>
-          <div class="ssid-name">{{ net?.wifi ?? '—' }}</div>
-          <div class="ssid-detail">{{ net?.wifilink ?? '' }} &middot; {{ net?.wifisignal ?? '' }}</div>
+          <div class="ssid-name">{{ card().name }}</div>
+          <div class="ssid-detail">{{ card().detail }}</div>
         </div>
       </div>
       <div class="status-ip">
         <div class="ip-label">Box IP address</div>
-        <div class="ip-value">{{ net?.ip ?? '—' }}</div>
-        <div class="gateway-value">Router: {{ net?.gateway ?? '—' }}</div>
+        <div class="ip-value">{{ card().ip }}</div>
+        <div class="gateway-value">Router: {{ card().gateway }}</div>
       </div>
     </div>
   </ion-card>

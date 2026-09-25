@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import { Observable } from 'rxjs'
 import { environment } from '../environments/environment'
-import type { WifiBandChoice, WifiConfiguredNetwork, WifiNetwork } from './wifi-network'
+import type { WifiBandChoice, WifiConfiguredNetwork, WifiNetwork, WifiStatus } from './wifi-network'
 
 @Injectable({
   providedIn: 'root',
@@ -12,6 +12,11 @@ export class WifiService {
 
   public getConfiguredNetworks(): Observable<WifiConfiguredNetwork[]> {
     return this.http.get<WifiConfiguredNetwork[]>(`${environment.backend.apiUrl}/wifi/configured`)
+  }
+
+  /** The WiFi link as it is right now. */
+  public getStatus(): Observable<WifiStatus> {
+    return this.http.get<WifiStatus>(`${environment.backend.apiUrl}/wifi/status`)
   }
 
   /** Networks in range (strongest first) plus saved ones that are out of range. */

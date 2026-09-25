@@ -1712,6 +1712,50 @@ app.get('/api/wifi/configured', async (_req, res) => {
   }
 })
 
+// The WiFi link as it is right now, for the WiFi page: network.json is only rewritten by a cron job every
+// 30 seconds, so a network change would show up there with a delay - and it names the adapter that is not
+// necessarily the one in use.
+app.get('/api/wifi/status', async (_req, res) => {
+  try {
+    const wifi = await wifiInterface()
+    const { stdout } = await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'status'])
+    const field = (name: string) => new RegExp('^' + name + '=(.*)$', 'm').exec(stdout)?.[1]
+    const state = field('wpa_state') ?? 'UNKNOWN'
+    const connected = state === 'COMPLETED'
+    let signalDbm: number | undefined
+    if (connected) {
+      try {
+        const { stdout: poll } = await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'signal_poll'])
+        const rssi = /^RSSI=(-?\d+)/m.exec(poll)?.[1]
+        signalDbm = rssi === undefined ? undefined : Number.parseInt(rssi, 10)
+      } catch {
+        // no signal value right now
+      }
+    }
+    let gateway: string | undefined
+    try {
+      const { stdout: route } = await execFileAsync('ip', ['-4', 'route', 'show', 'default', 'dev', wifi])
+      gateway = /via (\S+)/.exec(route)?.[1]
+    } catch {
+      // no default route on this adapter
+    }
+    const frequency = field('freq')
+    res.json({
+      interface: wifi,
+      state,
+      ssid: connected ? field('ssid') : undefined,
+      band: connected && frequency ? wifiBandOf(Number.parseInt(frequency, 10)) : undefined,
+      ip: connected ? field('ip_address') : undefined,
+      gateway: connected ? gateway : undefined,
+      signalDbm,
+      signal: signalDbm === undefined ? undefined : wifiSignalPercent(signalDbm),
+    })
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error reading wifi status: ${error}`)
+    res.status(500).send('error')
+  }
+})
+
 // wpa_cli prints SSIDs with non-ASCII / special bytes as \xNN escapes.
 function decodeWpaSsid(raw: string): string {
   const bytes: number[] = []

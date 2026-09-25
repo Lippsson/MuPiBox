@@ -19,6 +19,19 @@ export interface WifiNetwork {
 
 export type WifiBandChoice = 'auto' | '2.4' | '5'
 
+/** The WiFi link right now (not the 30-second old network.json). */
+export interface WifiStatus {
+  interface: string
+  /** wpa_supplicant state: COMPLETED = connected; SCANNING, ASSOCIATING ... while it connects. */
+  state: string
+  ssid?: string
+  band?: string
+  ip?: string
+  gateway?: string
+  signalDbm?: number
+  signal?: number
+}
+
 export interface WifiConfiguredNetwork {
   id: number
   ssid: string

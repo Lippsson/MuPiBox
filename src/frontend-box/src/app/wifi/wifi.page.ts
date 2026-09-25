@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core'
+import { Component, computed, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
 import {
@@ -18,11 +18,12 @@ import {
   IonToolbar,
 } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons'
+import { Subscription, catchError, EMPTY, switchMap, timer } from 'rxjs'
 import { addOutline, arrowBackOutline, lockClosedOutline, refresh, scanOutline, wifiOutline } from 'ionicons/icons'
 import { MediaService } from '../media.service'
 import { PlayerCmds, PlayerService } from '../player.service'
 import { WifiService } from '../wifi.service'
-import type { WifiBandChoice, WifiNetwork } from '../wifi-network'
+import type { WifiBandChoice, WifiNetwork, WifiStatus } from '../wifi-network'
 
 @Component({
   selector: 'app-wifi',
@@ -46,6 +47,36 @@ import type { WifiBandChoice, WifiNetwork } from '../wifi-network'
 })
 export class WifiPage {
   protected network = toSignal(this.mediaService.network$, { initialValue: null })
+  // The link as it is right now, asked for every few seconds while the page is open (network.json, which
+  // `network` comes from, is only rewritten every 30 seconds)
+  private status = signal<WifiStatus | null>(null)
+  private statusPolling?: Subscription
+  // What the top card shows: the live link, until the first answer the network.json values
+  protected card = computed(() => {
+    const live = this.status()
+    if (!live) {
+      const stored = this.network()
+      return {
+        interface: stored?.interface,
+        name: stored?.wifi ?? '—',
+        detail: `${stored?.wifilink ?? ''} · ${stored?.wifisignal ?? ''}`,
+        ip: stored?.ip ?? '—',
+        gateway: stored?.gateway ?? '—',
+      }
+    }
+    const connected = live.state === 'COMPLETED' && live.ssid
+    return {
+      interface: live.interface,
+      name: connected ? live.ssid : 'Connecting …',
+      detail: connected
+        ? [live.signal !== undefined ? `${live.signal} %` : '', live.signalDbm !== undefined ? `${live.signalDbm} dBm` : '', live.band ? `${live.band} GHz` : '']
+            .filter((part) => part !== '')
+            .join(' · ')
+        : '',
+      ip: live.ip ?? '—',
+      gateway: live.gateway ?? '—',
+    }
+  })
   protected networks = signal<WifiNetwork[]>([])
   protected loading = signal(true)
   protected readonly signalBars = [1, 2, 3, 4]
@@ -62,6 +93,13 @@ export class WifiPage {
 
   ionViewWillEnter() {
     this.loadNetworks()
+    this.statusPolling = timer(0, 3000)
+      .pipe(switchMap(() => this.wifiService.getStatus().pipe(catchError(() => EMPTY))))
+      .subscribe((status) => this.status.set(status))
+  }
+
+  ionViewWillLeave() {
+    this.statusPolling?.unsubscribe()
   }
 
   // Scans for networks in range (takes a few seconds) and merges them with the saved ones.
