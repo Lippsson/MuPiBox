@@ -489,6 +489,43 @@
   $change=2;
   }
 
+// The general "Submit" of the audio settings also saves the rotary encoder fields (they sit in the same form)
+$rotary_save = isset($_POST['rotary_save']) || ( isset($_POST['audioset']) && isset($_POST['rotary_step']) );
+if( isset($_POST['rotary_toggle']) || $rotary_save )
+	{
+	if( !isset($data["rotary"]) || !is_array($data["rotary"]) ) { $data["rotary"] = array( "active" => false, "button" => "off" ); }
+	if( isset($_POST['rotary_toggle']) )
+		{
+		if( $_POST['rotary_toggle'] == "enable" )
+			{
+			$data["rotary"]["active"] = true;
+			exec("sudo systemctl enable mupi_rotary.service");
+			exec("sudo systemctl restart mupi_rotary.service");
+			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder is active now.</li>";
+			}
+		else
+			{
+			$data["rotary"]["active"] = false;
+			exec("sudo systemctl stop mupi_rotary.service");
+			exec("sudo systemctl disable mupi_rotary.service");
+			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder is deactivated now.</li>";
+			}
+		}
+	if( $rotary_save )
+		{
+		// Only the offered functions (the service reads this value on every button press)
+		$rotary_button = in_array($_POST['rotary_button'] ?? '', array('off','playpause','next','ffwd'), true) ? $_POST['rotary_button'] : 'off';
+		$rotary_step = min(10, max(1, intval($_POST['rotary_step'] ?? 5)));
+		if( ($data["rotary"]["button"] ?? null) !== $rotary_button || ($data["rotary"]["step"] ?? null) !== $rotary_step )
+			{
+			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder settings saved (volume step ".$rotary_step."%, push button: ".$rotary_button.").</li>";
+			}
+		$data["rotary"]["button"] = $rotary_button;
+		$data["rotary"]["step"] = $rotary_step;
+		}
+	$change = 2;
+	}
+
 if( $_POST['fan_control'] )
 	{
 	$data["fan"]["fan_active"] = $_POST['FanPin'];
@@ -1828,6 +1865,87 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				</div>
 			</li>			
 			
+
+			<li id="li_1" >
+				<style>
+				.rotary-info { display: inline-block; float: none; padding: 0; vertical-align: middle; margin: 0 0 0 10px; cursor: pointer; color: #0d5a80; font-size: 22px; line-height: 1; user-select: none; }
+				.rotary-info:hover { color: #0a3d57; }
+				.rotary-pop { text-align: left; position: fixed; z-index: 10000; box-sizing: border-box; max-width: 440px; width: calc(100vw - 32px); background: #fff; color: #222; border-radius: 10px; padding: 14px 16px; font-size: 14px; line-height: 1.45; box-shadow: 0 6px 24px rgba(0, 0, 0, .35); }
+				.rotary-pop img { display: block; width: 100%; max-width: 300px; height: auto; margin: 0 auto; border-radius: 4px; }
+				.rotary-pop figcaption { margin: 4px 0 10px; font-size: 12px; font-style: italic; color: #666; text-align: center; }
+				</style>
+				<h2>Rotary encoder to control volume <span class="rotary-info" title="About the rotary encoder" role="button" tabindex="0"><i class="fa-solid fa-circle-info"></i></span></h2>
+				<div id="rotary-info-src" style="display:none;">
+					<figure style="margin:0">
+						<img src="images/ky-040-rotary-encoder.jpg" alt="KY-040 Rotary Encoder Module" />
+						<figcaption>KY-040 Rotary Encoder Module</figcaption>
+					</figure>
+					Turn the rotary encoder to change the volume (never above the max volume). Wiring: GPIO 26 = encoder A (CLK), GPIO 24 = encoder B (DT), GPIO 10 = push button (to GND)
+				</div>
+				<script>
+				(function () {
+					var pop = null;
+					function closePop() { if (pop) { document.body.removeChild(pop); pop = null; } }
+					function openPop(icon) {
+						var src = document.getElementById('rotary-info-src');
+						var same = pop && pop.__icon === icon;
+						closePop();
+						if (same || !src) { return; }
+						pop = document.createElement('div');
+						pop.className = 'rotary-pop';
+						pop.__icon = icon;
+						pop.innerHTML = src.innerHTML;
+						document.body.appendChild(pop);
+						var r = icon.getBoundingClientRect();
+						var w = pop.offsetWidth, h = pop.offsetHeight;
+						var left = Math.max(16, Math.min(r.left - 8, window.innerWidth - w - 16));
+						// below the icon; above it if there is no room underneath
+						var top = r.bottom + 8;
+						if (top + h > window.innerHeight - 8 && r.top - h - 8 > 8) { top = r.top - h - 8; }
+						pop.style.left = left + 'px';
+						pop.style.top = top + 'px';
+					}
+					document.addEventListener('click', function (e) {
+						var icon = e.target.closest ? e.target.closest('.rotary-info') : null;
+						if (icon) { openPop(icon); return; }
+						if (pop && !pop.contains(e.target)) { closePop(); }
+					});
+					document.addEventListener('keydown', function (e) {
+						if (e.key === 'Escape') { closePop(); return; }
+						if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('rotary-info')) { e.preventDefault(); openPop(e.target); }
+					});
+					window.addEventListener('scroll', closePop, true);
+					window.addEventListener('resize', closePop);
+				})();
+				</script>
+				<?php
+				$rotary_active = !empty($data["rotary"]["active"]);
+				$rotary_button = $data["rotary"]["button"] ?? "off";
+				echo "Rotary encoder: <b>" . ($rotary_active ? "active" : "not active") . "</b>";
+				?>
+				<br />
+				<input id="saveForm" class="button_text" type="submit" name="rotary_toggle" value="<?php print $rotary_active ? "disable" : "enable"; ?>" />
+			</li>
+			<?php if( $rotary_active ) { ?>
+			<li id="li_1" >
+				<h2>Volume change per step</h2>
+				<p>How many percent the volume changes with every click of the rotary encoder.</p>
+				<div>
+				<output id="rangeval" class="rangeval"><?php echo intval($data["rotary"]["step"] ?? 5); ?> %</output>
+				<input class="range slider-progress" name="rotary_step" type="range" min="1" max="10" step="1" value="<?php echo intval($data["rotary"]["step"] ?? 5); ?>" oninput="this.previousElementSibling.value = this.value + ' %'">
+				</div>
+				<h2>Push button function (GPIO 10)</h2>
+				<div><select id="rotary_button" name="rotary_button" class="element text medium">
+				<?php
+				$rotary_functions = array( "off" => "Inactive", "playpause" => "Toggle pause / play", "next" => "Next song", "ffwd" => "Fast forward (30 sec)" );
+				foreach($rotary_functions as $value => $label) {
+					$selected = ( $value == $rotary_button ) ? " selected=\"selected\"" : "";
+					print "<option value=\"" . $value . "\"" . $selected . ">" . $label . "</option>";
+				}
+				?>
+				</select></div>
+			</li>
+			<?php } ?>
 
 			<li class="buttons">
 				<input type="hidden" name="form_id" value="37271" />

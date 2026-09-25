@@ -1993,6 +1993,44 @@ async function wifiWriteBandEntries(entries: WifiBandEntry[]): Promise<void> {
   }
 }
 
+// The band of a network is chosen by hand (Auto | 2.4 GHz | 5 GHz on the WiFi page): 'Auto' takes the better band
+// when the connection is made and stays on it. The wpa_supplicant.conf of older installations has a global
+// bgscan ("simple:30:-70:60"): while connected, wpa_supplicant scans every 30-60 s and moves to a better access
+// point, also to the other band of the same network, without being asked. It is switched off here (in the
+// running wpa_supplicant and in the file); the installation scripts no longer write it.
+async function wifiStopBackgroundRoaming(): Promise<void> {
+  try {
+    const text = await readWpaConf()
+    if (!/^[ \t]*bgscan=/m.test(text)) {
+      return
+    }
+    const adapters = (await readdir('/sys/class/net')).filter((name) => /^wl[\w.-]+$/.test(name))
+    for (const adapter of adapters) {
+      try {
+        await execFileAsync('sudo', ['wpa_cli', '-i', adapter, 'set', 'bgscan', ''])
+      } catch {
+        // no wpa_supplicant on this adapter
+      }
+    }
+    const updated = text.replace(/^[ \t]*bgscan=.*\n?/gm, '')
+    const tmpPath = `/tmp/.wpa_supplicant.${process.pid}.${Date.now()}.conf`
+    const nextPath = `${WPA_CONF}.mupibox-new`
+    await writeFile(tmpPath, updated, { mode: 0o600 })
+    try {
+      // replaced like in wifiWriteBandEntries: a new file next to it (same owner and mode), then a rename
+      await execFileAsync('sudo', ['cp', tmpPath, nextPath])
+      await execFileAsync('sudo', ['chown', '--reference', WPA_CONF, nextPath])
+      await execFileAsync('sudo', ['chmod', '--reference', WPA_CONF, nextPath])
+      await execFileAsync('sudo', ['mv', '-f', nextPath, WPA_CONF])
+    } finally {
+      await fs.promises.rm(tmpPath, { force: true })
+    }
+    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Switched off the background scan (bgscan) of wpa_supplicant: the WiFi band changes only when it is chosen`)
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Could not switch off bgscan: ${error}`)
+  }
+}
+
 // wpa_cli save_config, keeping the band choices. adjust() changes the entries first (a network removed, a band set).
 // One save at a time: two requests at once (a double tap, delete + band) read and wrote the file over each other.
 let wifiSaveChain: Promise<unknown> = Promise.resolve()
@@ -2166,14 +2204,22 @@ app.post('/api/wifi/configured/:id/band', async (req, res) => {
       return
     }
     const frequencies = band === 'auto' ? [] : WIFI_BAND_FREQUENCIES[band]
-    // In effect at once (an empty value lifts the limit) ...
-    await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'set_network', String(id), 'freq_list', frequencies.join(' ')])
+    // The choice belongs to the network, not to one profile: a network saved twice (added again, or with and
+    // without a leading space) would otherwise stay usable on the other band through the profile that was not
+    // changed - wpa_supplicant simply connects with the better one.
+    const sameNetwork = saved.map((network, index) => ({ network, index })).filter(({ network }) => network.ssid === saved[position].ssid)
+    for (const { network } of sameNetwork) {
+      // In effect at once (an empty value lifts the limit) ...
+      await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'set_network', String(network.id), 'freq_list', frequencies.join(' ')])
+    }
     // ... and kept in the file for the next start of wpa_supplicant
     await wifiSaveConfig(wifi, (entries) => {
-      if (entries[position]) entries[position].frequencies = frequencies.join(' ')
+      for (const { index } of sameNetwork) {
+        if (entries[index]) entries[index].frequencies = frequencies.join(' ')
+      }
     })
     // Connected right now: connect again so the choice takes effect (a few seconds without network).
-    if (saved[position].current) {
+    if (sameNetwork.some(({ network }) => network.current)) {
       await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'reassociate'])
     }
     console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Wifi network ${id}: band ${band}`)
@@ -4340,6 +4386,44 @@ app.get('/api/nas/browse', localOnly, async (req, res) => {
 // `list` selects which selection is changed: "artist" (Show in MuPiBox, default),
 // "hidden" (Hide in MuPiBox) or "download" (Download local). A folder is either shown or
 // hidden, never both: setting one removes the other.
+// Saves the whole selection of the admin page in ONE config write. The page used to send three /mark
+// requests per folder shown in the tree (Show, Hide, Download), each rewriting the config file: with a few
+// dozen folders in the tree that took a long time on a Pi, whatever was ticked.
+//   shown: the folders that were on the page; show / hide / download: which of them are ticked.
+// Folders that were not on the page keep their state. A folder is either shown or hidden (hidden wins).
+app.post('/api/nas/selection', localOnly, async (req, res) => {
+  const list = (value: unknown): string[] | undefined =>
+    Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? (value as string[]) : undefined
+  const shown = list(req.body?.shown)
+  const show = list(req.body?.show)
+  const hide = list(req.body?.hide)
+  const download = list(req.body?.download)
+  if (!shown || !show || !hide || !download) {
+    res.status(400).json({ success: false, error: 'shown, show, hide and download must be lists of paths.' })
+    return
+  }
+
+  try {
+    const shownSet = new Set(shown)
+    const hideSet = new Set(hide)
+    // what was not on the page stays as it is; what was on the page becomes what is ticked
+    const merge = (existing: string[] | undefined, ticked: string[]): string[] =>
+      Array.from(new Set([...(existing ?? []).filter((p) => !shownSet.has(p)), ...ticked.filter((p) => shownSet.has(p))]))
+    await updateNasConfig((settings) => {
+      const update: Record<string, unknown> = {
+        artistFolders: merge(settings?.artistFolders, show.filter((p) => !hideSet.has(p))),
+        hiddenFolders: merge(settings?.hiddenFolders, hide),
+        downloadFolders: merge(settings?.downloadFolders, download),
+      }
+      return { ...update, ...nasTrackActiveProfile(settings, update) }
+    })
+    res.json({ success: true })
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to save NAS selection: ${error}`)
+    res.status(500).json({ success: false })
+  }
+})
+
 app.post('/api/nas/mark', localOnly, async (req, res) => {
   const { path: folderPath, marked, list } = req.body ?? {}
   if (typeof folderPath !== 'string' || typeof marked !== 'boolean') {
@@ -4442,6 +4526,78 @@ app.get('/api/nas/children', nasPathWithinSelection, async (req, res) => {
   }
 })
 
+// --- CUE sheets --------------------------------------------------------------------------------------
+// A ripped album is often ONE audio file (e.g. "Album.flac", the whole CD) with a "Album.cue" next to it that
+// lists the tracks by start time. Without reading the cue the folder has one "track" named like the file.
+
+interface NasCueTrack {
+  title: string
+  startSeconds: number
+}
+
+// Cue files are UTF-8 (often with a BOM) or an old single-byte code page.
+function nasDecodeText(buffer: Buffer): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer).replace(/^\uFEFF/, '')
+  } catch {
+    return new TextDecoder('windows-1252').decode(buffer)
+  }
+}
+
+// Returns the tracks of a cue sheet that describes ONE audio file, or undefined (several FILE entries,
+// fewer than two tracks, start times that do not increase: not a layout this can play by seeking).
+function nasParseCue(text: string): NasCueTrack[] | undefined {
+  const tracks: NasCueTrack[] = []
+  let files = 0
+  let current: NasCueTrack | undefined
+  let hasIndex = false
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    const quoted = (): string => line.match(/"([^"]*)"/)?.[1] ?? line.replace(/^\S+\s+/, '').trim()
+    if (/^FILE\s/i.test(line)) {
+      files++
+    } else if (/^TRACK\s+\d+\s+AUDIO/i.test(line)) {
+      current = { title: '', startSeconds: 0 }
+      hasIndex = false
+      tracks.push(current)
+    } else if (/^TITLE\s/i.test(line) && current) {
+      current.title = quoted()
+    } else if (/^INDEX\s+01\s/i.test(line) && current && !hasIndex) {
+      const m = line.match(/(\d+):(\d+):(\d+)\s*$/)
+      if (!m) {
+        return undefined
+      }
+      current.startSeconds = Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 75 // 75 frames per second
+      hasIndex = true
+    }
+  }
+  if (files !== 1 || tracks.length < 2) {
+    return undefined
+  }
+  for (let i = 1; i < tracks.length; i++) {
+    if (!(tracks[i].startSeconds > tracks[i - 1].startSeconds)) {
+      return undefined
+    }
+  }
+  return tracks
+}
+
+// The text of a NAS file: from the local copy if the folder was downloaded, otherwise live from the NAS.
+async function nasReadTextFile(nasPath: string): Promise<string | undefined> {
+  const local = nasLocalPath(nasPath)
+  if (local && fs.existsSync(local)) {
+    return nasDecodeText(await readFile(local))
+  }
+  const buffer = await withNasSession(async (session) => {
+    const response = await fetch(nasUrl(session, nasPath), { headers: { Authorization: session.auth }, signal: AbortSignal.timeout(8000) })
+    if (!response.ok) {
+      throw new NasApiError(`WebDAV error ${response.status}`)
+    }
+    return Buffer.from(await response.arrayBuffer())
+  })
+  return buffer ? nasDecodeText(buffer) : undefined
+}
+
 app.get('/api/nas/tracklist', nasPathWithinSelection, async (req, res) => {
   const folderPath = typeof req.query.path === 'string' ? req.query.path : ''
   if (!folderPath) {
@@ -4451,11 +4607,36 @@ app.get('/api/nas/tracklist', nasPathWithinSelection, async (req, res) => {
 
   try {
     const files = await nasListFiles(folderPath)
-    const tracks = files
+    const audio = files
       .filter((f) => !f.isdir && nasAudioExtensions.some((ext) => f.name.toLowerCase().endsWith(ext)))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-      .map((f, index) => ({ position: index + 1, name: f.name, path: f.path }))
-    res.json(tracks)
+
+    // One audio file plus a cue sheet: the tracks come from the cue (played by seeking in the file).
+    const cues = files.filter((f) => !f.isdir && f.name.toLowerCase().endsWith('.cue'))
+    if (audio.length === 1 && cues.length > 0) {
+      const audioBase = audio[0].name.replace(/\.[^.]+$/, '').toLowerCase()
+      const cue = cues.find((c) => c.name.replace(/\.[^.]+$/, '').toLowerCase() === audioBase) ?? cues[0]
+      try {
+        const text = await nasReadTextFile(cue.path)
+        const cueTracks = text ? nasParseCue(text) : undefined
+        if (cueTracks) {
+          res.json(
+            cueTracks.map((track, index) => ({
+              position: index + 1,
+              name: track.title || `Track ${index + 1}`,
+              path: audio[0].path,
+              startSeconds: track.startSeconds,
+              cue: true,
+            })),
+          )
+          return
+        }
+      } catch (error) {
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Could not read the cue sheet ${cue.path}: ${error}`)
+      }
+    }
+
+    res.json(audio.map((f, index) => ({ position: index + 1, name: f.name, path: f.path })))
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to list NAS tracklist for ${folderPath}: ${error}`)
     res.status(502).json([])
@@ -4719,7 +4900,7 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
 
 // --- Download local ("Download selected") ---------------------------------
 
-const nasDownloadExtensions = [...nasAudioExtensions, '.jpg', '.jpeg', '.png']
+const nasDownloadExtensions = [...nasAudioExtensions, '.cue', '.jpg', '.jpeg', '.png']
 
 interface NasDownloadStatus {
   running: boolean
@@ -5633,6 +5814,7 @@ process.on('uncaughtException', (err) => {
 
 if (!testServe) {
   app.listen(8200)
+  void wifiStopBackgroundRoaming()
   console.log(`${new Date().toLocaleString()}: [mupibox-backend-api] Server started at http://localhost:8200`)
   // Spotify-sync scheduler — only in production / dev, not under tests.
   // Boot-after-60s lead-in inside startScheduler so initial config load

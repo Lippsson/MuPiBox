@@ -137,7 +137,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const savedScroll = sessionStorage.getItem("mupibox-scroll");
     if (savedScroll !== null) {
         sessionStorage.removeItem("mupibox-scroll");
-        window.scrollTo(0, parseInt(savedScroll, 10));
+        const target = parseInt(savedScroll, 10);
+        window.scrollTo(0, target);
+        // Images, fonts and charts change the page height while loading: scroll again once everything is
+        // there, then show the page (it is hidden by header.php until now).
+        const reveal = function () {
+            window.scrollTo(0, target);
+            document.documentElement.style.visibility = "";
+        };
+        if (document.readyState === "complete") reveal();
+        else window.addEventListener("load", reveal);
     }
 });
 
