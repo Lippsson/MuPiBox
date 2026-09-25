@@ -9,7 +9,7 @@ import QRCode from 'qrcode'
 
 const OVERLAY_TIMEOUT_S = 60
 
-// Port of the backend-api (server.js) where the /eltern routes + magic-link
+// Port of the backend-api (server.js) where the /parents (formerly /eltern) routes + magic-link
 // endpoints live. Kept here so the QR/URL we hand the parent's phone point at
 // the right place rather than the kiosk's localhost.
 const ELTERN_PORT = 8200
@@ -51,7 +51,7 @@ export class ElternMagicLinkService {
         return
       }
       const body = (await res.json()) as { token: string }
-      const url = `http://${host}:${ELTERN_PORT}/eltern?token=${encodeURIComponent(body.token)}`
+      const url = `http://${host}:${ELTERN_PORT}/parents?token=${encodeURIComponent(body.token)}`
       const qrDataUrl = await QRCode.toDataURL(url, { margin: 2, width: 320 })
       this.magicLinkUrl.set(url)
       this.qrUrl.set(qrDataUrl)

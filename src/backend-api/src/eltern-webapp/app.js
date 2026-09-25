@@ -3070,7 +3070,7 @@ async function toggleSync(enable) {
 }
 
 async function connectSpotify() {
-  const res = await api(`${API}/spotify-oauth/init?return=${encodeURIComponent('/eltern')}`)
+  const res = await api(`${API}/spotify-oauth/init?return=${encodeURIComponent(location.pathname.startsWith('/eltern') ? '/eltern' : '/parents')}`)
   if (res.ok && res.body?.authorize_url) {
     location.href = res.body.authorize_url
   } else if (res.status === 400 && res.body?.error === 'no_client_id') {
@@ -3262,14 +3262,14 @@ async function bootstrap() {
   // the confirmation feedback immediately, and strip the query so a
   // reload doesn't re-trigger it.
   if (state.spotifyConnected) {
-    history.replaceState({}, '', '/eltern#sync')
+    history.replaceState({}, '', `${location.pathname}#sync`)
     onRoute()
     // Allow loadSync's render to complete, then push feedback over it.
     setTimeout(() => feedback('#sync-feedback', 'success', t('sync.connectedMsg')), 50)
     return
   }
   if (state.spotifyError) {
-    history.replaceState({}, '', '/eltern#sync')
+    history.replaceState({}, '', `${location.pathname}#sync`)
     onRoute()
     setTimeout(() => feedback('#sync-feedback', 'error', t('sync.spotifyError', { err: state.spotifyError })), 50)
     return

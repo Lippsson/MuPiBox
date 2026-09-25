@@ -5557,8 +5557,8 @@ const spotifySyncDeps: RunSyncDeps = {
 app.use('/api/spotify-sync', createSpotifySyncRouter(spotifySyncDeps))
 
 // Phase 14c — Eltern-WebApp routes.
-// JSON API under /api/eltern/* + a magic-link landing handler at /eltern
-// that redeems ?token=... into a session cookie and redirects to /eltern
+// JSON API under /api/eltern/* + a magic-link landing handler at /parents
+// that redeems ?token=... into a session cookie and redirects to /parents
 // (without the query) so the WebApp shell loads cleanly.
 app.use(
   '/api/eltern',
@@ -5569,23 +5569,27 @@ app.use(
     currentPlayLogStart,
   }),
 )
-app.get('/eltern', buildElternLandingHandler())
-// Static WebApp assets (HTML/CSS/JS). The landing handler above runs
-// first and either redeems a token (-> redirect) or calls next() so the
-// static middleware below serves the shell.
-app.use(
-  '/eltern',
-  express.static(path.join(__dirname, 'eltern-webapp'), {
-    // ETag bleibt aktiv, aber keine implizite Browser-Cache-Frist: bei
-    // jedem Request wird via If-None-Match revalidiert. 304 wenn nichts
-    // neu — kostet wenig und stellt sicher dass neu deployte HTML/JS
-    // sofort ankommen statt im aggressiven Mobile-Browser-Cache zu
-    // hängen.
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'no-cache')
-    },
-  }),
-)
+// The web app lives at /parents; /eltern (its first address) keeps working for bookmarks, home-screen
+// icons and links sent before.
+for (const base of ['/parents', '/eltern']) {
+  app.get(base, buildElternLandingHandler())
+  // Static WebApp assets (HTML/CSS/JS). The landing handler above runs
+  // first and either redeems a token (-> redirect) or calls next() so the
+  // static middleware below serves the shell.
+  app.use(
+    base,
+    express.static(path.join(__dirname, 'eltern-webapp'), {
+      // ETag bleibt aktiv, aber keine implizite Browser-Cache-Frist: bei
+      // jedem Request wird via If-None-Match revalidiert. 304 wenn nichts
+      // neu — kostet wenig und stellt sicher dass neu deployte HTML/JS
+      // sofort ankommen statt im aggressiven Mobile-Browser-Cache zu
+      // hängen.
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-cache')
+      },
+    }),
+  )
+}
 
 // Catch-all handler: send back Angular's index.html file for any non-API routes
 // This must be placed after all API routes but before starting the server

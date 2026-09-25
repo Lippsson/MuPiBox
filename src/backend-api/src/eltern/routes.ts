@@ -150,7 +150,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     res.status(201).json({
       token: link.token,
       expires_in: link.expiresIn,
-      url_path: `/eltern?token=${encodeURIComponent(link.token)}`,
+      url_path: `/parents?token=${encodeURIComponent(link.token)}`,
     })
   })
 
@@ -174,7 +174,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       res.status(400).send('no host header')
       return
     }
-    const url = `http://${host}/eltern?token=${encodeURIComponent(token)}`
+    const url = `http://${host}/parents?token=${encodeURIComponent(token)}`
     try {
       // SVG output — scales without pixel-blur on the box's 7" display.
       // errorCorrectionLevel=M is the sweet spot for 64-128-char URLs.
@@ -259,7 +259,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * GET /api/eltern/spotify-oauth/init
    * Starts the Authorize-flow. Returns the Spotify URL the WebApp should
    * window.location.href to. Caller's redirect-target after callback is
-   * optionally provided as ?return=/eltern/sync (defaults to /eltern).
+   * optionally provided as ?return=/parents/sync (defaults to /parents; /eltern still accepted).
    */
   router.get('/spotify-oauth/init', requireSession, (req, res) => {
     const host = req.headers.host
@@ -270,7 +270,9 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     // Only a page of the parents' app: the value ends up in res.redirect() after the login, and
     // "https://elsewhere" or "//elsewhere" made that an open redirect.
     const ret =
-      typeof req.query.return === 'string' && /^\/eltern(?:[/?#]|$)/.test(req.query.return) ? req.query.return : '/eltern'
+      typeof req.query.return === 'string' && /^\/(?:parents|eltern)(?:[/?#]|$)/.test(req.query.return)
+        ? req.query.return
+        : '/parents'
     const result = buildAuthorizeUrl({
       getMupiboxConfig: deps.getMupiboxConfig,
       sessionId: req.elternSessionId ?? '',
@@ -279,7 +281,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       redirectAfter: ret,
     })
     if ('error' in result) {
-      res.status(400).json({ error: 'no_client_id', redirect_to: '/eltern/wizard' })
+      res.status(400).json({ error: 'no_client_id', redirect_to: '/parents/wizard' })
       return
     }
     res.json({
@@ -310,7 +312,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     const code = typeof req.query.code === 'string' ? req.query.code : ''
     const error = typeof req.query.error === 'string' ? req.query.error : ''
     if (error) {
-      res.redirect(`/eltern?spotify_error=${encodeURIComponent(error)}`)
+      res.redirect(`/parents?spotify_error=${encodeURIComponent(error)}`)
       return
     }
     if (!state || !code) {
@@ -335,7 +337,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       updateMupiboxConfig: deps.updateMupiboxConfig,
     })
     if (!exchange.ok) {
-      res.redirect(`/eltern?spotify_error=${encodeURIComponent(exchange.reason)}`)
+      res.redirect(`/parents?spotify_error=${encodeURIComponent(exchange.reason)}`)
       return
     }
     res.redirect(`${original.redirectAfter}?spotify_connected=1`)
@@ -1930,7 +1932,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
 }
 
 /**
- * Creates the /eltern landing-page route — separate from the API router
+ * Creates the /parents (and old /eltern) landing-page route — separate from the API router
  * because it handles the magic-link query param and either issues a
  * session cookie + redirect or serves the WebApp shell.
  *
@@ -1952,8 +1954,8 @@ export function buildElternLandingHandler(): import('express').RequestHandler {
       res.status(401).send('Magic link invalid or expired / Magic-Link ungültig oder abgelaufen')
       return
     }
-    // Set cookie, strip the token from URL by redirecting to /eltern
+    // Set cookie, strip the token from URL by redirecting to the same page (/parents, or /eltern for old links)
     res.setHeader('Set-Cookie', buildSessionCookie(session.sessionId, 24 * 60 * 60))
-    res.redirect('/eltern')
+    res.redirect(req.path === '/eltern' ? '/eltern' : '/parents')
   }
 }
