@@ -592,6 +592,13 @@ function isActuallyPlaying() {
   return false
 }
 
+// Grace period with nothing playing any more (stopped, paused, the player page left): there is nothing left
+// to let finish, so block now. Counted in seconds of the 1 s ticks; a few of them so that the short gap of a
+// track change is not taken for "stopped".
+const GRACE_IDLE_LIMIT_S = 5
+let playtimeGraceIdle = 0
+let quietGraceIdle = 0
+
 // state machine: 'normal' (under limit) → 'grace' (over limit, current track finishing) → 'blocked' (stopped)
 const playtimeState = {
   date: '',
@@ -967,8 +974,12 @@ function playtimeTickStep() {
       }
     } else if (playtimeState.state === 'grace') {
       // (the song / album ending is handled by the player events and the Spotify check below)
+      playtimeGraceIdle = isActuallyPlaying() ? 0 : playtimeGraceIdle + 1
       if (playtimeState.graceEndsAt !== null && Date.now() >= playtimeState.graceEndsAt) {
         finalizePlaytimeBlock(`grace safety limit reached (${playtimeState.graceMode})`)
+      } else if (playtimeGraceIdle >= GRACE_IDLE_LIMIT_S) {
+        playtimeGraceIdle = 0
+        finalizePlaytimeBlock('nothing playing any more during the grace period')
       }
     } else if (playtimeState.state === 'blocked') {
       // Still blocked, but parent might have just added bonus — re-evaluate
@@ -1036,8 +1047,12 @@ function quietHoursTickStep() {
         finalizeQuietHoursBlock(`entered window ${window.from}-${window.to} (${!isActuallyPlaying() ? 'nothing playing' : currentMeta.currentType === 'radio' ? 'radio stream' : 'no grace configured'})`)
       }
     } else if (quietHoursState.state === 'grace') {
+      quietGraceIdle = isActuallyPlaying() ? 0 : quietGraceIdle + 1
       if (quietHoursState.graceEndsAt !== null && Date.now() >= quietHoursState.graceEndsAt) {
         finalizeQuietHoursBlock(`grace safety limit reached (${quietHoursState.graceMode})`)
+      } else if (quietGraceIdle >= GRACE_IDLE_LIMIT_S) {
+        quietGraceIdle = 0
+        finalizeQuietHoursBlock('nothing playing any more during the grace period')
       }
     }
     // 'blocked': stay blocked
