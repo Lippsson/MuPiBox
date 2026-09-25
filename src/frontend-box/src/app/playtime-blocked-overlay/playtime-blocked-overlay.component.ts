@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, Signal } from '@a
 import { IonIcon } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons'
 import { hourglassOutline, moonOutline, musicalNotesOutline } from 'ionicons/icons'
-import type { PlaybackBlockSource } from '../playtime.model'
+import { DisplayTextsService } from '../display-texts.service'
 import { PlaytimeService } from '../playtime.service'
 
 interface OverlayContent {
@@ -20,38 +20,29 @@ interface OverlayContent {
 })
 export class PlaytimeBlockedOverlayComponent {
   private playtimeService = inject(PlaytimeService)
+  private texts = inject(DisplayTextsService)
 
   protected readonly content: Signal<OverlayContent> = computed(() => {
     const s = this.playtimeService.status()
-    if (s.enabled !== true) return DEFAULT_PLAYTIME_CONTENT
-    return contentForBlock(s.blockSource, s.quiet.label)
+    if (s.enabled !== true || s.blockSource !== 'quiet') {
+      return {
+        iconName: 'moon-outline',
+        heading: this.texts.text('blockedHeading'),
+        subheading: this.texts.text('blockedSubheading'),
+      }
+    }
+    // A quiet window with a label ("Bedtime", "Homework") shows that label as the heading.
+    const label = s.quiet.label?.trim()
+    return {
+      iconName: label ? 'hourglass-outline' : 'moon-outline',
+      heading: label || this.texts.text('quietHeading'),
+      subheading: this.texts.text('quietSubheading'),
+    }
   })
 
   constructor() {
     addIcons({ moonOutline, musicalNotesOutline, hourglassOutline })
+    // created each time playback gets blocked: pick up texts changed in the meantime
+    this.texts.refresh()
   }
-}
-
-const DEFAULT_PLAYTIME_CONTENT: OverlayContent = {
-  iconName: 'moon-outline',
-  heading: 'Heute war genug Musik',
-  subheading: "Morgen geht's weiter",
-}
-
-function contentForBlock(source: PlaybackBlockSource | null, quietLabel: string | undefined): OverlayContent {
-  if (source === 'quiet') {
-    if (quietLabel?.trim()) {
-      return {
-        iconName: 'hourglass-outline',
-        heading: quietLabel,
-        subheading: 'Bald gibt es wieder Musik',
-      }
-    }
-    return {
-      iconName: 'moon-outline',
-      heading: 'Ruhezeit',
-      subheading: 'Bald gibt es wieder Musik',
-    }
-  }
-  return DEFAULT_PLAYTIME_CONTENT
 }

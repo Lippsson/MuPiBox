@@ -49,6 +49,19 @@ export interface ElternRouterDeps {
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
  *  flag because the box serves over plain HTTP on LAN. */
+// Keys of the texts shown on the box display (see /display-texts and the box frontend's display-texts.service).
+const DISPLAY_TEXT_KEYS = [
+  'blockedHeading',
+  'blockedSubheading',
+  'quietHeading',
+  'quietSubheading',
+  'parentsTitle',
+  'parentsHint',
+  'parentsCountdown',
+  'parentsClose',
+  'parentsTile',
+] as const
+
 function buildSessionCookie(sessionId: string, maxAgeSeconds: number): string {
   return `${SESSION_COOKIE}=${sessionId}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}`
 }
@@ -330,6 +343,54 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   router.post('/spotify-oauth/disconnect', requireSession, requireCsrf, async (_req, res) => {
     await clearSpotifyTokens(deps.updateMupiboxConfig)
     res.json({ ok: true })
+  })
+
+  /**
+   * GET/POST /api/eltern/display-texts
+   * Texts of the box display's overlays (limit reached, quiet time, parents' QR code), stored in
+   * mupiboxconfig.json under displayTexts (+ displayLanguage). A missing or empty key means the text of the chosen language -
+   * so parents can write them in their own language, or something personal ("Good night, Emma").
+   */
+  router.get('/display-texts', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    const stored = (cfg?.displayTexts as Record<string, unknown> | undefined) ?? {}
+    const texts: Record<string, string> = {}
+    for (const key of DISPLAY_TEXT_KEYS) {
+      if (typeof stored[key] === 'string') texts[key] = stored[key] as string
+    }
+    res.json({ texts, language: typeof cfg?.displayLanguage === 'string' ? cfg.displayLanguage : 'en' })
+  })
+
+  router.post('/display-texts', requireSession, requireCsrf, async (req, res) => {
+    const incoming = (req.body?.texts ?? {}) as Record<string, unknown>
+    if (typeof incoming !== 'object' || Array.isArray(incoming)) {
+      res.status(400).json({ error: 'texts must be an object' })
+      return
+    }
+    // language code of assets/i18n/display-texts.json (e.g. 'de', 'nb'); unknown codes fall back to English on the box
+    const language = req.body?.language
+    if (language !== undefined && (typeof language !== 'string' || !/^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(language))) {
+      res.status(400).json({ error: 'invalid language' })
+      return
+    }
+    const texts: Record<string, string> = {}
+    for (const key of DISPLAY_TEXT_KEYS) {
+      const value = incoming[key]
+      if (value === undefined || value === null) continue
+      if (typeof value !== 'string') {
+        res.status(400).json({ error: `${key} must be a string` })
+        return
+      }
+      // one line of plain text: control characters out, at most 120 characters
+      const clean = Array.from(value, (ch) => (ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127 ? ' ' : ch)).join('').trim().slice(0, 120)
+      if (clean) texts[key] = clean
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      if (Object.keys(texts).length > 0) cfg.displayTexts = texts
+      else delete cfg.displayTexts
+      if (typeof language === 'string') cfg.displayLanguage = language
+    })
+    res.json({ ok: true, texts, language })
   })
 
   /**

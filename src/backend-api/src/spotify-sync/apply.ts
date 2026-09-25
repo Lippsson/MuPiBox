@@ -65,8 +65,19 @@ export async function applyDiff(
 
   // Atomic write: tmp + rename. Same {spaces: 2} indent as the rest of
   // the backend (matches the Phase-10 M5 helper output).
+  const serialized = `${JSON.stringify(after, null, 2)}\n`
+  // Nothing changed (the usual case every 15 minutes): leave the file alone. Rewriting identical
+  // content wore the SD card and changed data.json's mtime, which the box display takes as "the
+  // library changed" - it reloaded its lists and lost the scroll position.
+  try {
+    if ((await fsPromises.readFile(dataFilePath, 'utf8')) === serialized) {
+      return { libraryAfter: after, appliedAdditions, appliedUpdates, appliedRemovals }
+    }
+  } catch {
+    // unreadable: write it below
+  }
   const tmpPath = `${dataFilePath}.tmp.${process.pid}`
-  await fsPromises.writeFile(tmpPath, `${JSON.stringify(after, null, 2)}\n`, 'utf8')
+  await fsPromises.writeFile(tmpPath, serialized, 'utf8')
   // rename on the same filesystem is atomic on POSIX — what /api/add and
   // the Phase-3 trap-and-mv scripts rely on too.
   fs.renameSync(tmpPath, dataFilePath)

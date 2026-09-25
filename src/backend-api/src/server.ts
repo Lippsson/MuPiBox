@@ -1137,14 +1137,17 @@ async function replaceMupiboxConfigFile(content: Record<string, unknown>): Promi
   }
 }
 
-function updateMupiboxConfig(mutate: (cfg: Record<string, unknown>) => void): Promise<void> {
+// `mutate` changes the freshly read config in place; returning false skips the write (nothing changed).
+function updateMupiboxConfig(mutate: (cfg: Record<string, unknown>) => void | false): Promise<void> {
   const run = mupiboxConfigWriteChain.then(async () => {
     // Read, change and replace all under the shared lock: with only the replace locked, the admin
     // interface could save between our read and our write, and its change was overwritten.
     const release = await acquireMupiboxConfigLock()
     try {
       const current = (await readJsonFile(mupiboxConfigPath)) as Record<string, unknown>
-      mutate(current)
+      if (mutate(current) === false) {
+        return
+      }
       await replaceMupiboxConfigFile(current)
     } finally {
       release()
@@ -1834,7 +1837,7 @@ const WIFI_BAND_FREQUENCIES: Record<'2.4' | '5', number[]> = {
   '2.4': [2412, 2417, 2422, 2427, 2432, 2437, 2442, 2447, 2452, 2457, 2462, 2467, 2472],
   '5': [
     5180, 5200, 5220, 5240, 5260, 5280, 5300, 5320, 5500, 5520, 5540, 5560, 5580, 5600, 5620, 5640, 5660, 5680, 5700, 5720,
-    5745, 5765, 5785, 5805, 5825,
+    5745, 5765, 5785, 5805, 5825, 5845, 5865, 5885, // incl. U-NII-4 (channels 169-177): a router there was cut off with "5 GHz"
   ],
 }
 
@@ -1860,9 +1863,15 @@ function wifiFrequenciesOf(body: string): string {
   return (list?.[1] ?? list?.[2] ?? '').trim()
 }
 
+// The file is often root:root 600 (add_wifi.sh sets that), so it is read through sudo.
+async function readWpaConf(): Promise<string> {
+  const { stdout } = await execFileAsync('sudo', ['cat', WPA_CONF])
+  return stdout
+}
+
 async function wifiBandEntries(): Promise<WifiBandEntry[]> {
   try {
-    return wifiBlocks(await readFile(WPA_CONF, 'utf8')).map((b) => ({ ssid: b.ssid, frequencies: wifiFrequenciesOf(b.body) }))
+    return wifiBlocks(await readWpaConf()).map((b) => ({ ssid: b.ssid, frequencies: wifiFrequenciesOf(b.body) }))
   } catch {
     return []
   }
@@ -1870,7 +1879,9 @@ async function wifiBandEntries(): Promise<WifiBandEntry[]> {
 
 // Writes the entries' freq_list lines into the config file (block by block, only where the SSID still matches).
 async function wifiWriteBandEntries(entries: WifiBandEntry[]): Promise<void> {
-  const text = await readFile(WPA_CONF, 'utf8')
+  const text = await readWpaConf()
+  // Nothing to put back and nothing to remove: leave the file alone.
+  if (!entries.some((e) => e.frequencies) && !/^s*freq_list=/m.test(text)) return
   let index = 0
   const updated = text.replace(/(network\s*=\s*\{)([\s\S]*?)(\n\s*\})/g, (whole, open: string, body: string, close: string) => {
     const entry = entries[index++]
@@ -1881,10 +1892,15 @@ async function wifiWriteBandEntries(entries: WifiBandEntry[]): Promise<void> {
   })
   if (updated === text) return
   const tmpPath = `/tmp/.wpa_supplicant.${process.pid}.${Date.now()}.conf`
+  const nextPath = `${WPA_CONF}.mupibox-new`
   await writeFile(tmpPath, updated, { mode: 0o600 })
   try {
-    // cp keeps the owner and mode of the existing file
-    await execFileAsync('sudo', ['cp', tmpPath, WPA_CONF])
+    // Replaced atomically (new file next to it, same owner and mode, then rename): a cp truncated the file
+    // first, and a power cut in that moment (box on battery) left the box without any WLAN after reboot.
+    await execFileAsync('sudo', ['cp', tmpPath, nextPath])
+    await execFileAsync('sudo', ['chown', '--reference', WPA_CONF, nextPath])
+    await execFileAsync('sudo', ['chmod', '--reference', WPA_CONF, nextPath])
+    await execFileAsync('sudo', ['mv', '-f', nextPath, WPA_CONF])
   } finally {
     await fs.promises.rm(tmpPath, { force: true })
   }
@@ -1897,7 +1913,7 @@ async function wifiWriteBandEntries(entries: WifiBandEntry[]): Promise<void> {
 // running wpa_supplicant and in the file); the installation scripts no longer write it.
 async function wifiStopBackgroundRoaming(): Promise<void> {
   try {
-    const text = await readFile(WPA_CONF, 'utf8')
+    const text = await readWpaConf()
     if (!/^[ \t]*bgscan=/m.test(text)) {
       return
     }
@@ -1911,9 +1927,14 @@ async function wifiStopBackgroundRoaming(): Promise<void> {
     }
     const updated = text.replace(/^[ \t]*bgscan=.*\n?/gm, '')
     const tmpPath = `/tmp/.wpa_supplicant.${process.pid}.${Date.now()}.conf`
+    const nextPath = `${WPA_CONF}.mupibox-new`
     await writeFile(tmpPath, updated, { mode: 0o600 })
     try {
-      await execFileAsync('sudo', ['cp', tmpPath, WPA_CONF])
+      // replaced like in wifiWriteBandEntries: a new file next to it (same owner and mode), then a rename
+      await execFileAsync('sudo', ['cp', tmpPath, nextPath])
+      await execFileAsync('sudo', ['chown', '--reference', WPA_CONF, nextPath])
+      await execFileAsync('sudo', ['chmod', '--reference', WPA_CONF, nextPath])
+      await execFileAsync('sudo', ['mv', '-f', nextPath, WPA_CONF])
     } finally {
       await fs.promises.rm(tmpPath, { force: true })
     }
@@ -1924,11 +1945,25 @@ async function wifiStopBackgroundRoaming(): Promise<void> {
 }
 
 // wpa_cli save_config, keeping the band choices. adjust() changes the entries first (a network removed, a band set).
-async function wifiSaveConfig(wifi: string, adjust?: (entries: WifiBandEntry[]) => void): Promise<void> {
-  const entries = await wifiBandEntries()
-  adjust?.(entries)
-  await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'save_config'])
-  await wifiWriteBandEntries(entries)
+// One save at a time: two requests at once (a double tap, delete + band) read and wrote the file over each other.
+let wifiSaveChain: Promise<unknown> = Promise.resolve()
+// Returns false if the network change was saved but the band choices could not be put back into the file: the
+// save itself worked, so deleting a network or changing a password must not fail because of that.
+function wifiSaveConfig(wifi: string, adjust?: (entries: WifiBandEntry[]) => void): Promise<boolean> {
+  const run = wifiSaveChain.then(async () => {
+    const entries = await wifiBandEntries()
+    adjust?.(entries)
+    await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'save_config'])
+    try {
+      await wifiWriteBandEntries(entries)
+      return true
+    } catch (error) {
+      console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Could not keep the WLAN band choices: ${error}`)
+      return false
+    }
+  })
+  wifiSaveChain = run.catch(() => undefined)
+  return run
 }
 
 // The band choice of every saved network, in the order of wpa_cli list_networks. A position whose SSID does not
@@ -3527,10 +3562,11 @@ const nasPathWithinSelection: express.RequestHandler = async (req, res, next) =>
   const selected = [...(settings?.artistFolders ?? []), ...(settings?.downloadFolders ?? [])].map(normalizeNasPath)
   const hidden = (settings?.hiddenFolders ?? []).map(normalizeNasPath)
   const wanted = parts ? normalizeNasPath(raw) : ''
+  // A folder marked "Hide in MuPiBox" is left out together with everything below it (as in the NAS tab).
   if (
     parts &&
     selected.some((folder) => wanted === folder || wanted.startsWith(`${folder}/`)) &&
-    !hidden.some((folder) => wanted === folder || wanted.startsWith(`${folder}/`))
+    !nasIsHidden(wanted, hidden)
   ) {
     next()
     return
@@ -3707,37 +3743,25 @@ function nasDecrypt(value: string): string | undefined {
   }
 }
 
-let nasConfigWriteChain: Promise<void> = Promise.resolve()
-
-// Changes are applied one after another: several requests at once (e.g. one per folder when "Save
-// selection" is pressed) must not overwrite each other's read-modify-write. `change` is either the
-// values to set or a function that computes them from the current settings (returning undefined = no write).
+// Changes go through the shared config writer (updateMupiboxConfig): it serialises them with every
+// other config write of this server and holds the flock the admin interface uses, so neither several
+// requests at once (e.g. one per folder when "Save selection" is pressed) nor a save in the admin
+// interface overwrite each other. `change` is either the values to set or a function that computes them
+// from the current settings (returning undefined = no write).
 function updateNasConfig(
   change: Record<string, unknown> | ((settings: NasConfig | undefined) => Record<string, unknown> | undefined),
 ): Promise<void> {
-  const run = nasConfigWriteChain.then(async () => {
-    if (typeof change === 'function') {
-      // nothing to change: no write at all (e.g. the profile list that is already stored)
-      const preview = change(nasSettings(await getMupiboxConfig()))
-      if (!preview) {
-        return
-      }
+  return updateMupiboxConfig((cfg) => {
+    const current = cfg as MupiboxConfig
+    const partial = typeof change === 'function' ? change(nasSettings(current)) : change
+    if (!partial) {
+      return false
     }
-    // The shared writer of the server (config lock, fresh read, atomic replace): the NAS settings share the
-    // file with the parents' settings (play time, quiet hours, ...) and must not overwrite each other's changes.
-    await updateMupiboxConfig((cfg) => {
-      const settings = nasSettings(cfg as MupiboxConfig)
-      const partial = typeof change === 'function' ? change(settings) : change
-      if (!partial) {
-        return
-      }
-      // Old config files call this section "synology": carry its values over to "nas" and drop the old key.
-      cfg.nas = { ...(settings ?? {}), ...partial }
-      delete cfg.synology
-    })
+    // Old config files call this section "synology": carry its values over to "nas" and drop the old key.
+    const merged = { ...(nasSettings(current) ?? {}), ...partial }
+    delete cfg.synology
+    cfg.nas = merged
   })
-  nasConfigWriteChain = run.catch(() => undefined)
-  return run
 }
 
 // --- Profiles: named selections of the NAS tab ---------------------------------------------------
@@ -4007,9 +4031,9 @@ app.post('/api/nas/profiles/delete', localOnly, async (req, res) => {
   }
 })
 
-// NAS administration (login, browsing the whole NAS, selecting folders, profiles, index, downloads) is
-// done by the admin interface, which calls these routes server-side through localhost (nas.php).
-// From the LAN they exposed the box's NAS login to anyone.
+// NAS administration (login, browsing the whole NAS, profiles, index, selecting folders, downloads)
+// is done by the admin interface, which calls these routes server-side through localhost (nas.php).
+// From the LAN they exposed the box's NAS login and the whole NAS to anyone.
 app.post('/api/nas/login', localOnly, async (req, res) => {
   const { address, https: useHttps, account, password, rememberMe } = req.body ?? {}
   if (typeof address !== 'string' || !address || typeof account !== 'string' || !account || typeof password !== 'string' || !password) {

@@ -588,6 +588,24 @@ if( $_POST['fan_control'] )
   $CHANGE_TXT = $CHANGE_TXT."<li>Playtime limit settings saved (live, no restart needed)</li>";
   $change = 2;
   }
+ // Overlay texts of the box display: key => label. The texts per language come from the box frontend's
+ // assets/i18n/display-texts.json; the box shows own text > chosen language > English.
+ $display_text_fields = array(
+  'blockedHeading' => 'Limit reached - heading',
+  'blockedSubheading' => 'Limit reached - second line',
+  'quietHeading' => 'Quiet time - heading (only for rules without a label)',
+  'quietSubheading' => 'Quiet time - second line',
+  'parentsTitle' => 'Parents QR code - heading',
+  'parentsHint' => 'Parents QR code - hint',
+  'parentsCountdown' => 'Parents QR code - countdown ({s} = seconds)',
+  'parentsClose' => 'Parents QR code - close button',
+  'parentsTile' => 'Tile in the box settings',
+ );
+ $display_languages = array();
+ $display_lang_file = @file_get_contents('/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/assets/i18n/display-texts.json');
+ $display_lang_json = $display_lang_file ? json_decode($display_lang_file, true) : null;
+ if( is_array($display_lang_json) && isset($display_lang_json['languages']) && is_array($display_lang_json['languages']) ) $display_languages = $display_lang_json['languages'];
+
  if( $_POST['quiethours_save'] )
   {
   if( !isset($data["quietHours"]) || !is_array($data["quietHours"]) )
@@ -603,7 +621,10 @@ if( $_POST['fan_control'] )
   unset($data["quietHours"]["maxOverrunMinutes"]);
   $quiethours_days = array('mon','tue','wed','thu','fri','sat','sun');
   $quiethours_window_count = 0;
-  foreach( $quiethours_days as $d )
+  // The rule fields are built by the page script. Without its marker (script failed or JS off) the posted
+  // form has no windows at all: keep the stored schedule instead of saving every day as empty.
+  $quiethours_windows_posted = isset($_POST['quiet_windows_present']) && $_POST['quiet_windows_present'] === '1';
+  foreach( ($quiethours_windows_posted ? $quiethours_days : array()) as $d )
    {
    $rawWindows = isset($_POST['quiet_windows'][$d]) && is_array($_POST['quiet_windows'][$d]) ? $_POST['quiet_windows'][$d] : array();
    $cleaned = array();
@@ -625,7 +646,26 @@ if( $_POST['fan_control'] )
    $data["quietHours"]["schedule"][$d] = array_values($cleaned);
    }
   $playtime_changed = true;
-  $CHANGE_TXT = $CHANGE_TXT."<li>Quiet hours saved (".$quiethours_window_count." window(s), live, no restart needed)</li>";
+  $CHANGE_TXT = $CHANGE_TXT."<li>Quiet hours saved (".($quiethours_windows_posted ? $quiethours_window_count." window(s)" : "rules unchanged").", live, no restart needed)</li>";
+  $change = 2;
+  }
+ // Texts of the overlays on the box display (same keys as the parents' web app). An empty field
+ // removes the text: the box shows the text of the chosen language then.
+ if( isset($_POST['displaytexts_save']) )
+  {
+  $display_texts = array();
+  $dt_lang = isset($_POST['dt_language']) && is_string($_POST['dt_language']) ? $_POST['dt_language'] : 'en';
+  if( preg_match('/^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i', $dt_lang) ) $data["displayLanguage"] = $dt_lang;
+  foreach( $display_text_fields as $dt_key => $dt_label )
+   {
+   $dt_value = isset($_POST['dt_'.$dt_key]) && is_string($_POST['dt_'.$dt_key]) ? $_POST['dt_'.$dt_key] : '';
+   $dt_value = trim(preg_replace('/[\x00-\x1F\x7F]/u', ' ', $dt_value) ?? '');
+   $dt_value = mb_substr($dt_value, 0, 120);
+   if( $dt_value !== '' ) $display_texts[$dt_key] = $dt_value;
+   }
+  if( count($display_texts) > 0 ) $data["displayTexts"] = $display_texts;
+  else unset($data["displayTexts"]);
+  $CHANGE_TXT = $CHANGE_TXT."<li>Display texts saved (language ".htmlspecialchars($data["displayLanguage"] ?? "en").", ".count($display_texts)." own text(s), shown the next time an overlay appears)</li>";
   $change = 2;
   }
  // Only one of the offered GPIO pins (it went unchecked into a root sed command).
@@ -1101,6 +1141,12 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 			});
 			// the hidden fields the PHP save reads
 			hidden.innerHTML = '';
+			// tells the PHP save that the rule fields below are complete (see quiet_windows_present)
+			var present = document.createElement('input');
+			present.type = 'hidden';
+			present.name = 'quiet_windows_present';
+			present.value = '1';
+			hidden.appendChild(present);
 			var perDay = {};
 			rules.forEach(function (rule) {
 				var n = perDay[rule.day] = (perDay[rule.day] === undefined ? 0 : perDay[rule.day] + 1);
@@ -1213,6 +1259,52 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 		render();
 	})();
 	</script>
+
+	<details id="displaytexts">
+		<summary><i class="fa-solid fa-font"></i> Display texts</summary>
+		<ul>
+			<li id="li_1">
+				<h2>About</h2>
+				<p>Texts the child sees on the box display when the daily limit is used up, during a quiet time, on the parents' QR code and on its tile in the box settings. Choose a language; any text can be replaced by your own. A quiet-time rule with a label (e.g. "Bedtime") shows that label as the heading.</p>
+			</li>
+			<li id="li_1">
+				<?php
+				$display_texts_stored = isset($data["displayTexts"]) && is_array($data["displayTexts"]) ? $data["displayTexts"] : array();
+				$display_lang_current = isset($data["displayLanguage"]) && is_string($data["displayLanguage"]) ? $data["displayLanguage"] : 'en';
+				echo '<h2>Language</h2><select name="dt_language" id="dt_language" class="element select medium">';
+				if( !isset($display_languages[$display_lang_current]) ) echo '<option value="'.htmlspecialchars($display_lang_current, ENT_QUOTES).'" selected>'.htmlspecialchars($display_lang_current).'</option>';
+				foreach( $display_languages as $dl_code => $dl )
+					{
+					$dl_name = is_array($dl) && isset($dl['name']) && is_string($dl['name']) ? $dl['name'] : $dl_code;
+					echo '<option value="'.htmlspecialchars($dl_code, ENT_QUOTES).'"'.($dl_code === $display_lang_current ? ' selected' : '').'>'.htmlspecialchars($dl_name).'</option>';
+					}
+				echo '</select><p>Own texts below (optional) replace the text of the language. Empty = text of the language (in grey).</p>';
+				foreach( $display_text_fields as $dt_key => $dt_label )
+					{
+					$dt_current = isset($display_texts_stored[$dt_key]) && is_string($display_texts_stored[$dt_key]) ? $display_texts_stored[$dt_key] : '';
+					echo '<h2>'.htmlspecialchars($dt_label, ENT_QUOTES).'</h2>';
+					echo '<input type="text" class="element text large" name="dt_'.htmlspecialchars($dt_key, ENT_QUOTES).'" data-dtkey="'.htmlspecialchars($dt_key, ENT_QUOTES).'" maxlength="120" value="'.htmlspecialchars($dt_current, ENT_QUOTES).'">';
+					}
+				?>
+				<script>
+				(function () {
+					// grey suggestions = texts of the chosen language
+					var langs = <?php echo json_encode($display_languages, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+					var select = document.getElementById('dt_language');
+					function apply() {
+						var set = (langs[select.value] || langs.en || {}).texts || {};
+						document.querySelectorAll('input[data-dtkey]').forEach(function (input) { input.placeholder = set[input.getAttribute('data-dtkey')] || ''; });
+					}
+					select.addEventListener('change', apply);
+					apply();
+				})();
+				</script>
+			</li>
+			<li class="buttons">
+				<input id="saveForm" class="button_text" type="submit" name="displaytexts_save" value="Save display texts" />
+			</li>
+		</ul>
+	</details>
 
 	<details id="systemsettings">
 		<summary><i class="fa-solid fa-screwdriver-wrench"></i> System settings</summary>

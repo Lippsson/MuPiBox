@@ -45,6 +45,10 @@ export interface SwiperData<T> {
 })
 export class SwiperComponent<T> {
   public data = input.required<SwiperData<T>[]>()
+  // Identifies the list (e.g. category + artist). A page can be rebuilt when the player opens (the album
+  // list is), which lost the remembered position with the component; kept per key it survives that.
+  public positionKey = input<string | undefined>(undefined)
+  private static readonly positions = new Map<string, number>()
   public roundImages = input<boolean>(false)
   public elementClicked = output<SwiperData<T>>()
 
@@ -69,6 +73,10 @@ export class SwiperComponent<T> {
   private static readonly RENDER_INITIAL = 15
   private static readonly RENDER_CHUNK_SIZE = 30
   private static readonly RENDER_CHUNK_DELAY_MS = 80
+  // Slides kept rendered ahead of the current position (10 screens of three). The list grows only
+  // when the user gets that close to the end of what is rendered: building 30 slides every 80 ms in
+  // the background made the first pages stutter while the user was already swiping through them.
+  private static readonly RENDER_AHEAD = 30
   private renderTimer: number | undefined
 
   // This is a hacky workaround for the problem that the swiper doesn't allow to scroll
@@ -81,6 +89,8 @@ export class SwiperComponent<T> {
   // Since we reset the swiper container when the page is entered / left, we need to
   // manually cache / restore the swiper position.
   private cachedSwiperPosition = 0
+  // Set when the page is shown again with a remembered position; cleared once the swiper went there.
+  private pendingRestore = false
 
   // Lists with fewer covers than this are spread over the whole screen instead of scrolled.
   private static readonly FEW_COVERS = 10
@@ -136,10 +146,27 @@ export class SwiperComponent<T> {
     // pageIsShown only — must not track shownData (would re-fire on every
     // render-chunk and snap to the cached index mid-swipe).
     effect(() => {
-      if (this.pageIsShown()) {
-        this.swiper()?.slideTo(this.cachedSwiperPosition, 0)
-        this.selectedIndex = this.cachedSwiperPosition
-      }
+      if (!this.pageIsShown()) return
+      this.selectedIndex = this.cachedSwiperPosition
+      this.pendingRestore = this.cachedSwiperPosition > 0
+    })
+
+    // The restore itself waits until the slides of this visit are really in the DOM: right after
+    // the page is shown the list is still empty (it is only rendered while the page is visible),
+    // so an immediate slideTo went nowhere and the list opened at the start.
+    effect(() => {
+      const count = this.shownData().length
+      if (!this.pendingRestore || count === 0) return
+      setTimeout(() => {
+        const sw = this.swiper()
+        const len = (sw as unknown as { slides?: HTMLElement[] } | undefined)?.slides?.length ?? 0
+        if (!this.pendingRestore || !sw || len === 0) return
+        if (len > this.cachedSwiperPosition || len >= this.data().length) {
+          ;(sw as unknown as { update?: () => void }).update?.()
+          sw.slideTo(Math.min(this.cachedSwiperPosition, len - 1), 0)
+          this.pendingRestore = false
+        }
+      }, 0)
     })
 
     // New slides need their tilt as soon as they are rendered.
@@ -153,6 +180,27 @@ export class SwiperComponent<T> {
       setTimeout(() => this.applyCoverflow(), 0)
       // The swiper's scrollbar only exists a moment later.
       setTimeout(() => this.applyCoverflow(), 400)
+    })
+
+    // Drive progressive expansion. Tracks pageIsShown + data().length.
+    // When the input data grows (typical: empty array → full array once
+    // the parent's HTTP fetch resolves), kick off the chunked render
+    // loop. Without this, the first ionViewDidEnter saw data().length=0,
+    // bailed immediately, and never restarted when the real data arrived
+    // — user saw only the initial 15 slides for the rest of the visit.
+    effect(() => {
+      if (!this.pageIsShown()) {
+        if (this.renderTimer !== undefined) {
+          clearTimeout(this.renderTimer)
+          this.renderTimer = undefined
+        }
+        return
+      }
+      const target = this.data()?.length ?? 0
+      const cur = untracked(() => this.renderableLimit())
+      if (target > cur && this.renderTimer === undefined) {
+        this.maybeGrow()
+      }
     })
   }
 
@@ -175,6 +223,7 @@ export class SwiperComponent<T> {
     if (!swiper || typeof swiper.activeIndex !== 'number') return
     this.cachedSwiperPosition = swiper.activeIndex
     this.preloadCoversNear(swiper.activeIndex)
+    this.maybeGrow()
   }
 
   private preloadCoversNear(activeIndex: number): void {
@@ -202,8 +251,14 @@ export class SwiperComponent<T> {
   }
 
   public ionViewDidEnter(): void {
+    const key = this.positionKey()
+    if (key && this.cachedSwiperPosition === 0) {
+      this.cachedSwiperPosition = SwiperComponent.positions.get(key) ?? 0
+    }
     this.pageIsShown.set(true)
-    this.renderableLimit.set(SwiperComponent.RENDER_INITIAL)
+    // Render at least up to the remembered position (plus a few slides around it), so coming
+    // back from an album list lands on the artist you left instead of the end of the first chunk.
+    this.renderableLimit.set(Math.max(SwiperComponent.RENDER_INITIAL, this.cachedSwiperPosition + 12))
     // Don't kick the render timer here — the effect tracking pageIsShown +
     // data().length will start it as soon as data has arrived.
     // Eager preload of the initial window so the first few swipes
@@ -235,12 +290,27 @@ export class SwiperComponent<T> {
           ;(swiper as unknown as { update: () => void }).update()
         }
       })
-      this.scheduleNextChunk()
+      this.maybeGrow()
     }, SwiperComponent.RENDER_CHUNK_DELAY_MS) as unknown as number
+  }
+
+  // Starts the next chunk if the list is not complete yet and the user is within RENDER_AHEAD
+  // slides of its rendered end. Cover Flow keeps growing eagerly (it positions all slides itself).
+  private maybeGrow(): void {
+    if (!this.pageIsShown() || this.renderTimer !== undefined) return
+    const cur = this.renderableLimit()
+    if (cur >= (this.data()?.length ?? 0)) return
+    if (this.coverflow() || this.cachedSwiperPosition + SwiperComponent.RENDER_AHEAD >= cur) {
+      this.scheduleNextChunk()
+    }
   }
 
   public ionViewWillLeave(): void {
     this.cachedSwiperPosition = this.isFewCovers() ? this.selectedIndex : (this.swiper()?.activeIndex ?? 0)
+    const key = this.positionKey()
+    if (key) {
+      SwiperComponent.positions.set(key, this.cachedSwiperPosition)
+    }
     this.pageIsShown.set(false)
     if (this.renderTimer !== undefined) {
       clearTimeout(this.renderTimer)
@@ -251,6 +321,11 @@ export class SwiperComponent<T> {
   public resetSwiperPosition(): void {
     this.swiper()?.slideTo(0, 0)
     this.cachedSwiperPosition = 0
+    this.pendingRestore = false
+    const key = this.positionKey()
+    if (key) {
+      SwiperComponent.positions.delete(key)
+    }
     this.selectedIndex = 0
     this.applyCoverflow()
   }

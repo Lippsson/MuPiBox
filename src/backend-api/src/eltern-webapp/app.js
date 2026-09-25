@@ -39,7 +39,7 @@ const SECTIONS = {
   library:   { title: 'Library',             parent: 'hub', loader: () => { loadLibrary(); loadSubscriptions(); loadSyncStatus() } },
   play:      { title: 'Wiedergabe starten',  parent: 'hub', loader: () => loadPlay() },
   search:    { title: 'Spotify-Suche',       parent: 'library', loader: () => resetSearch() },
-  caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
+  caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => { loadCaps(); loadDisplayTexts() } },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => loadWlan() },
   bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => loadBluetooth() },
@@ -799,6 +799,98 @@ function renderQuietSchedule() {
       dayEl.appendChild(row)
     })
     root.appendChild(dayEl)
+  }
+}
+
+// Texts of the overlays on the box display. The box shows per text: own text > chosen language > English.
+// Languages and their texts come from the box frontend's assets/i18n/display-texts.json (same server).
+const DISPLAY_TEXT_FIELDS = [
+  { key: 'blockedHeading', label: 'Spielzeit aufgebraucht – Überschrift' },
+  { key: 'blockedSubheading', label: 'Spielzeit aufgebraucht – Unterzeile' },
+  { key: 'quietHeading', label: 'Ruhezeit – Überschrift (nur ohne Namen der Regel)' },
+  { key: 'quietSubheading', label: 'Ruhezeit – Unterzeile' },
+  { key: 'parentsTitle', label: 'QR-Code – Überschrift' },
+  { key: 'parentsHint', label: 'QR-Code – Hinweis' },
+  { key: 'parentsCountdown', label: 'QR-Code – Countdown ({s} = Sekunden)' },
+  { key: 'parentsClose', label: 'QR-Code – Schließen-Knopf' },
+  { key: 'parentsTile', label: 'Kachel in den Einstellungen der Box' },
+]
+let displayLanguages = {}
+
+function applyDisplayPlaceholders() {
+  const code = $('#display-lang')?.value || 'en'
+  const texts = displayLanguages[code]?.texts ?? displayLanguages.en?.texts ?? {}
+  for (const input of document.querySelectorAll('#display-texts-form input[data-key]')) {
+    input.placeholder = texts[input.dataset.key] ?? ''
+  }
+}
+
+async function loadDisplayTexts() {
+  const box = $('#display-texts-form')
+  if (!box) return
+  const [res, file] = await Promise.all([
+    api(`${API}/display-texts`),
+    fetch('/assets/i18n/display-texts.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+  ])
+  displayLanguages = file?.languages ?? {}
+  const texts = res.ok ? (res.body?.texts ?? {}) : {}
+  const current = res.ok ? (res.body?.language ?? 'en') : 'en'
+  box.textContent = ''
+
+  const langRow = document.createElement('div')
+  langRow.className = 'form-row'
+  const langLabel = document.createElement('label')
+  langLabel.htmlFor = 'display-lang'
+  langLabel.textContent = 'Sprache'
+  const select = document.createElement('select')
+  select.id = 'display-lang'
+  const codes = Object.keys(displayLanguages)
+  if (!codes.includes(current)) codes.unshift(current)
+  for (const code of codes) {
+    const opt = document.createElement('option')
+    opt.value = code
+    opt.textContent = displayLanguages[code]?.name ?? code
+    if (code === current) opt.selected = true
+    select.appendChild(opt)
+  }
+  select.addEventListener('change', applyDisplayPlaceholders)
+  langRow.append(langLabel, select)
+  box.appendChild(langRow)
+
+  const hint = document.createElement('p')
+  hint.className = 'dim'
+  hint.textContent = 'Eigene Texte (optional) ersetzen den Text der Sprache. Leer = Text der Sprache (grau).'
+  box.appendChild(hint)
+
+  for (const field of DISPLAY_TEXT_FIELDS) {
+    const row = document.createElement('div')
+    row.className = 'form-row'
+    const label = document.createElement('label')
+    label.htmlFor = `display-text-${field.key}`
+    label.textContent = field.label
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.id = `display-text-${field.key}`
+    input.dataset.key = field.key
+    input.maxLength = 120
+    input.value = texts[field.key] ?? ''
+    row.append(label, input)
+    box.appendChild(row)
+  }
+  applyDisplayPlaceholders()
+}
+
+async function saveDisplayTexts() {
+  const texts = {}
+  for (const input of document.querySelectorAll('#display-texts-form input[data-key]')) {
+    texts[input.dataset.key] = input.value.trim()
+  }
+  const language = $('#display-lang')?.value || 'en'
+  const res = await api(`${API}/display-texts`, { method: 'POST', body: { language, texts } })
+  if (res.ok) {
+    feedback('#display-texts-feedback', 'success', 'Gespeichert. Erscheint beim nächsten Einblenden auf der Box.')
+  } else {
+    feedback('#display-texts-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
   }
 }
 
@@ -3277,6 +3369,7 @@ function wire() {
   // Phase 15h — Caps-screen actions.
   $('#caps-back-btn')?.addEventListener('click', () => navigate('hub'))
   $('#caps-save-btn')?.addEventListener('click', saveCapsConfig)
+  $('#display-texts-save-btn')?.addEventListener('click', saveDisplayTexts)
   $('#caps-extend-btn')?.addEventListener('click', capsExtend)
   $('#caps-release-btn')?.addEventListener('click', capsRelease)
   $('#caps-quietnow-btn')?.addEventListener('click', capsQuietNow)
