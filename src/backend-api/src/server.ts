@@ -2117,14 +2117,22 @@ app.post('/api/wifi/configured/:id/band', async (req, res) => {
       return
     }
     const frequencies = band === 'auto' ? [] : WIFI_BAND_FREQUENCIES[band]
-    // In effect at once (an empty value lifts the limit) ...
-    await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'set_network', String(id), 'freq_list', frequencies.join(' ')])
+    // The choice belongs to the network, not to one profile: a network saved twice (added again, or with and
+    // without a leading space) would otherwise stay usable on the other band through the profile that was not
+    // changed - wpa_supplicant simply connects with the better one.
+    const sameNetwork = saved.map((network, index) => ({ network, index })).filter(({ network }) => network.ssid === saved[position].ssid)
+    for (const { network } of sameNetwork) {
+      // In effect at once (an empty value lifts the limit) ...
+      await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'set_network', String(network.id), 'freq_list', frequencies.join(' ')])
+    }
     // ... and kept in the file for the next start of wpa_supplicant
     await wifiSaveConfig(wifi, (entries) => {
-      if (entries[position]) entries[position].frequencies = frequencies.join(' ')
+      for (const { index } of sameNetwork) {
+        if (entries[index]) entries[index].frequencies = frequencies.join(' ')
+      }
     })
     // Connected right now: connect again so the choice takes effect (a few seconds without network).
-    if (saved[position].current) {
+    if (sameNetwork.some(({ network }) => network.current)) {
       await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'reassociate'])
     }
     console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Wifi network ${id}: band ${band}`)
