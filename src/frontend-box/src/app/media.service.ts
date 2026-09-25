@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http'
-import { Injectable } from '@angular/core'
-import { firstValueFrom, forkJoin, from, iif, interval, Observable, of, Subject, timer } from 'rxjs'
+import { Injectable, signal } from '@angular/core'
+import { defer, firstValueFrom, forkJoin, from, iif, interval, Observable, of, Subject, timer } from 'rxjs'
 import {
   catchError,
   distinctUntilChanged,
@@ -527,6 +527,9 @@ export class MediaService {
     )
   }
 
+  // true when the NAS list could not be loaded even after the retries (the home page shows the placeholder)
+  public readonly nasUnavailable = signal(false)
+
   private fetchMedia(category: CategoryType): Observable<Media[]> {
     if (category === 'nas') {
       // NAS media is fetched live from the NAS on every call (never cached
@@ -534,9 +537,16 @@ export class MediaService {
       // below entirely - the backend already returns ready-to-use Media[].
       // The backend answers 503 while marked folders cannot be read (NAS not reachable yet, e.g. right after
       // boot before the network is up): try again a few times instead of showing an empty tab for good.
-      return this.http.get<Media[]>(`${this.getApiBackendUrl()}/nas/artists`).pipe(
-        retry({ count: 24, delay: () => timer(5000) }),
-        catchError(() => of([] as Media[])),
+      // (About 40 s in all: a list that loads for a minute makes the loading component reload the page.)
+      return defer(() => {
+        this.nasUnavailable.set(false)
+        return this.http.get<Media[]>(`${this.getApiBackendUrl()}/nas/artists`)
+      }).pipe(
+        retry({ count: 8, delay: () => timer(5000) }),
+        catchError(() => {
+          this.nasUnavailable.set(true)
+          return of([] as Media[])
+        }),
       )
     }
     const dataMedia = this.updateMedia(`${this.getApiBackendUrl()}/data`, false, category)
