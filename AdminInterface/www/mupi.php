@@ -1880,7 +1880,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 						<img src="images/ky-040-rotary-encoder.jpg" alt="KY-040 Rotary Encoder Module" />
 						<figcaption>KY-040 Rotary Encoder Module</figcaption>
 					</figure>
-					Turn the rotary encoder to change the volume (never above the max volume). Wiring: GPIO 24 = encoder A (CLK), GPIO 26 = encoder B (DT), GPIO 10 = push button (to GND)
+					Turn the rotary encoder to change the volume (never above the max volume). Wiring: GPIO 26 = encoder A (CLK), GPIO 24 = encoder B (DT), GPIO 10 = push button (to GND)
 				</div>
 				<script>
 				(function () {

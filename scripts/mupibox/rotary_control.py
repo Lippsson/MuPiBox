@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Rotary encoder for the volume, with push button (KY-040 style).
-#   GPIO 24 = encoder A (CLK), GPIO 26 = encoder B (DT), GPIO 10 = push button (to GND)
+#   GPIO 26 = encoder A (CLK), GPIO 24 = encoder B (DT), GPIO 10 = push button (to GND)
 # Turning changes the volume by rotary.step percent per detent (the player keeps the max volume and the display in sync), the push button
 # does what is chosen in the admin interface (rotary.button in mupiboxconfig.json, read again on every press).
 
@@ -14,8 +14,8 @@ import RPi.GPIO as GPIO
 
 CONFIG = "/etc/mupibox/mupiboxconfig.json"
 PLAYER = "http://localhost:5005"
-PIN_A = 24
-PIN_B = 26
+PIN_A = 26
+PIN_B = 24
 PIN_BUTTON = 10
 
 # Gray code: previous state (A<<1|B) and new state -> +1 clockwise (A falls first while B is high, as on a KY-040),
