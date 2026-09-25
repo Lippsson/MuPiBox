@@ -164,7 +164,9 @@ def help_keyboard():
         [b(text='+30 min', callback_data='extend_30'), b(text='+60 min', callback_data='extend_60')],
         [b(text=tr('kb_release60'), callback_data='release_60'), b(text=tr('kb_quietnow60'), callback_data='quietnow_60')],
         [b(text=tr('kb_volume'), callback_data='vol'), b(text=tr('kb_sleep'), callback_data='sleep')],
-        [b(text=tr('kb_finishalbum'), callback_data='finishalbum'), b(text=tr('kb_media'), callback_data='media')],
+        # No "Update media DB" button: change_checker runs it when the media folder changes, and it blocks the bot
+        # for a long time; /media (text command) and the admin interface still have it.
+        [b(text=tr('kb_finishalbum'), callback_data='finishalbum')],
         [b(text=tr('kb_login'), callback_data='login')],
         [b(text=tr('kb_resync'), callback_data='resync'), b(text=tr('kb_syncstatus'), callback_data='syncstatus')],
         [b(text=tr('kb_shutdown'), callback_data='shutdown'), b(text=tr('kb_reboot'), callback_data='reboot')]
