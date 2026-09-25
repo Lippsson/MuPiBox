@@ -45,6 +45,10 @@ export interface SwiperData<T> {
 })
 export class SwiperComponent<T> {
   public data = input.required<SwiperData<T>[]>()
+  // Identifies the list (e.g. category + artist). A page can be rebuilt when the player opens (the album
+  // list is), which lost the remembered position with the component; kept per key it survives that.
+  public positionKey = input<string | undefined>(undefined)
+  private static readonly positions = new Map<string, number>()
   public roundImages = input<boolean>(false)
   public elementClicked = output<SwiperData<T>>()
 
@@ -69,6 +73,10 @@ export class SwiperComponent<T> {
   private static readonly RENDER_INITIAL = 15
   private static readonly RENDER_CHUNK_SIZE = 30
   private static readonly RENDER_CHUNK_DELAY_MS = 80
+  // Slides kept rendered ahead of the current position (10 screens of three). The list grows only
+  // when the user gets that close to the end of what is rendered: building 30 slides every 80 ms in
+  // the background made the first pages stutter while the user was already swiping through them.
+  private static readonly RENDER_AHEAD = 30
   private renderTimer: number | undefined
 
   // This is a hacky workaround for the problem that the swiper doesn't allow to scroll
@@ -191,7 +199,7 @@ export class SwiperComponent<T> {
       const target = this.data()?.length ?? 0
       const cur = untracked(() => this.renderableLimit())
       if (target > cur && this.renderTimer === undefined) {
-        this.scheduleNextChunk()
+        this.maybeGrow()
       }
     })
   }
@@ -215,6 +223,7 @@ export class SwiperComponent<T> {
     if (!swiper || typeof swiper.activeIndex !== 'number') return
     this.cachedSwiperPosition = swiper.activeIndex
     this.preloadCoversNear(swiper.activeIndex)
+    this.maybeGrow()
   }
 
   private preloadCoversNear(activeIndex: number): void {
@@ -242,6 +251,10 @@ export class SwiperComponent<T> {
   }
 
   public ionViewDidEnter(): void {
+    const key = this.positionKey()
+    if (key && this.cachedSwiperPosition === 0) {
+      this.cachedSwiperPosition = SwiperComponent.positions.get(key) ?? 0
+    }
     this.pageIsShown.set(true)
     // Render at least up to the remembered position (plus a few slides around it), so coming
     // back from an album list lands on the artist you left instead of the end of the first chunk.
@@ -277,12 +290,27 @@ export class SwiperComponent<T> {
           ;(swiper as unknown as { update: () => void }).update()
         }
       })
-      this.scheduleNextChunk()
+      this.maybeGrow()
     }, SwiperComponent.RENDER_CHUNK_DELAY_MS) as unknown as number
+  }
+
+  // Starts the next chunk if the list is not complete yet and the user is within RENDER_AHEAD
+  // slides of its rendered end. Cover Flow keeps growing eagerly (it positions all slides itself).
+  private maybeGrow(): void {
+    if (!this.pageIsShown() || this.renderTimer !== undefined) return
+    const cur = this.renderableLimit()
+    if (cur >= (this.data()?.length ?? 0)) return
+    if (this.coverflow() || this.cachedSwiperPosition + SwiperComponent.RENDER_AHEAD >= cur) {
+      this.scheduleNextChunk()
+    }
   }
 
   public ionViewWillLeave(): void {
     this.cachedSwiperPosition = this.isFewCovers() ? this.selectedIndex : (this.swiper()?.activeIndex ?? 0)
+    const key = this.positionKey()
+    if (key) {
+      SwiperComponent.positions.set(key, this.cachedSwiperPosition)
+    }
     this.pageIsShown.set(false)
     if (this.renderTimer !== undefined) {
       clearTimeout(this.renderTimer)
@@ -294,6 +322,10 @@ export class SwiperComponent<T> {
     this.swiper()?.slideTo(0, 0)
     this.cachedSwiperPosition = 0
     this.pendingRestore = false
+    const key = this.positionKey()
+    if (key) {
+      SwiperComponent.positions.delete(key)
+    }
     this.selectedIndex = 0
     this.applyCoverflow()
   }

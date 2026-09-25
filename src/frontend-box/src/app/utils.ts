@@ -16,6 +16,17 @@ export type ExtraDataMedia = Pick<
 const NO_COVER_FALLBACK = '../assets/images/nocover_mupi.png'
 const SPOTIFY_CDN_RE = /^https:\/\/i\.scdn\.co\/image\/([A-Za-z0-9]+)$/
 
+// Spotify lists the same cover in several sizes (640, 300, 64 px). The tiles are at most ~300 px
+// on the box display, so take the smallest one that is at least 300 px wide: a quarter of the bytes
+// of the 640 px image, which the Pi otherwise has to decode for every tile while swiping. Images
+// without a width (some playlists) or lists without a 300 px entry fall back to the first one.
+export function pickCoverUrl(images: { url?: string; width?: number | null }[] | undefined | null): string | undefined {
+  if (!images?.length) return undefined
+  const sized = images.filter((img) => img?.url && typeof img.width === 'number' && img.width >= 300)
+  sized.sort((a, b) => (a.width as number) - (b.width as number))
+  return sized[0]?.url ?? images[0]?.url
+}
+
 export function localizeCoverUrl(url: string | undefined | null): string {
   if (!url) return NO_COVER_FALLBACK
   const match = url.match(SPOTIFY_CDN_RE)

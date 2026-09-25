@@ -72,6 +72,8 @@ export class HomePage extends SwiperIonicEventsHelper {
   protected visibleCategories = computed(() => this.categories.filter((c) => !this.hiddenCategories().includes(c.key)))
 
   protected artists: Signal<Artist[]>
+  // Category of the list currently shown; a reload of the same category keeps the scroll position.
+  private lastShownCategory: string | undefined
   protected swiperData: Signal<SwiperData<Artist>[]>
   protected isOnline: Signal<boolean>
   protected isLoading: WritableSignal<boolean> = signal(false)
@@ -137,9 +139,18 @@ export class HomePage extends SwiperIonicEventsHelper {
               console.error(error)
               return of([])
             }),
+            map((artists) => ({ category, artists })),
           )
         }),
-        tap(() => this.resetSwiperPosition()),
+        // Back to the first artist only when the tab changed. A reload because the library changed
+        // (Smart-Sync) keeps the position - it used to throw the child back to the start.
+        tap(({ category }) => {
+          if (category !== this.lastShownCategory) {
+            this.lastShownCategory = category
+            this.resetSwiperPosition()
+          }
+        }),
+        map(({ artists }) => artists),
         tap(() => this.isLoading.set(false)),
       ),
     )
