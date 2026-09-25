@@ -1535,3 +1535,7 @@ select:focus, textarea:focus {
 .album-line button { flex: 0 0 auto; padding: 8px 12px; min-height: 36px; font-size: 13px; }
 .album-line.out { opacity: 0.45; }
 .album-line.excluded .album-nm { text-decoration: line-through; color: var(--text-dim); }
+
+/* Sprachwahl der WebApp (Hub + Anmelde-Screen): kompakte Zeile Label + Auswahl. */
+.lang-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 4px 4px; }
+.lang-row select { width: auto; min-width: 11em; }
