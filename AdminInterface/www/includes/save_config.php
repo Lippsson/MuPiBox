@@ -113,7 +113,14 @@ function save_mupiboxconfig(array $data, ?string &$errorOut = null): bool {
         // /tmp is a RAM disk and /etc on the SD card: a plain mv would copy into the target in
         // place and a reader could see half a file. Copy next to it, then rename on the same
         // filesystem.
-        $cmd = 'sudo cp ' . escapeshellarg($tmp) . ' /etc/mupibox/mupiboxconfig.json.new'
+        // First keep the version being replaced: mupiboxconfig.json.bak and, on the first save of a day, a copy in
+        // /etc/mupibox/backup/ (the last 7 days). Same as the backend does (src/backend-api/src/file-backup.ts);
+        // a failing backup never stops the save.
+        $backup = '{ f=/etc/mupibox/mupiboxconfig.json; d=/etc/mupibox/backup; day=$(date +%F);'
+                . ' sudo cp -p "$f" "$f.bak";'
+                . ' if [ ! -e "$d/mupiboxconfig-$day.json" ]; then sudo mkdir -p "$d" && sudo cp -p "$f" "$d/mupiboxconfig-$day.json"'
+                . ' && ls -1 "$d"/mupiboxconfig-????-??-??.json | sort -r | tail -n +8 | xargs -r sudo rm -f; fi; } 2>/dev/null || true; ';
+        $cmd = $backup . 'sudo cp ' . escapeshellarg($tmp) . ' /etc/mupibox/mupiboxconfig.json.new'
              . ' && sudo mv -f /etc/mupibox/mupiboxconfig.json.new /etc/mupibox/mupiboxconfig.json 2>&1';
         $output = [];
         $rc = 0;

@@ -30,6 +30,7 @@ import { startScheduler } from './spotify-sync/scheduler'
 import type { RunSyncDeps } from './spotify-sync/state-machine'
 import { buildElternLandingHandler, createElternApiRouter } from './eltern/routes'
 import { startBucketCleanup } from './eltern/middleware'
+import { SUDO_BACKUP_SNIPPET, backupBeforeWrite } from './file-backup'
 import { browserGuard, corsOptionsFor, localOnly, localOrElternSession } from './request-guard'
 
 // Force IPv4 for DNS lookups to avoid EAI_AGAIN errors on Raspberry Pi
@@ -1031,6 +1032,47 @@ app.get('/api/spotify/cover/:imageId', async (req, res) => {
   res.send(buf)
 })
 
+// Cover of a Spotify entry that has none stored in data.json (added by hand: just an album or artist id), for the
+// parents' web app. The lookup goes through the cached Spotify API calls, then the browser is sent to the cover
+// proxy above, so every image is fetched from Spotify once.
+const SPOTIFY_COVER_KINDS = new Set(['album', 'artist', 'playlist', 'show', 'audiobook'])
+app.get('/api/spotify/cover-for/:kind/:id', async (req, res) => {
+  const { kind, id } = req.params
+  if (!SPOTIFY_COVER_KINDS.has(kind) || !/^[A-Za-z0-9]{10,40}$/.test(id)) {
+    res.status(400).type('text/plain').send('bad request')
+    return
+  }
+  if (!spotifyApiService) {
+    res.status(503).type('text/plain').send('Spotify not available')
+    return
+  }
+  try {
+    const api = spotifyApiService
+    const item =
+      kind === 'album'
+        ? await api.getAlbum(id)
+        : kind === 'artist'
+          ? await api.getArtist(id)
+          : kind === 'playlist'
+            ? await api.getPlaylist(id)
+            : kind === 'show'
+              ? await api.getShow(id)
+              : await api.getAudiobook(id)
+    // the smallest image that is still sharp in a list (>= 300 px), else the biggest there is
+    const images = [...(item?.images ?? [])].sort((a, b) => (a.width ?? 0) - (b.width ?? 0))
+    const image = images.find((i) => (i.width ?? 0) >= 300) ?? images[images.length - 1]
+    const imageId = image?.url?.match(/^https:\/\/i\.scdn\.co\/image\/([A-Za-z0-9]+)$/)?.[1]
+    if (!imageId) {
+      res.status(404).type('text/plain').send('no cover')
+      return
+    }
+    res.set('Cache-Control', 'public, max-age=86400')
+    res.redirect(302, `/api/spotify/cover/${imageId}`)
+  } catch {
+    res.status(404).type('text/plain').send('no cover')
+  }
+})
+
 app.get('/api/mupihat', (_req, res) => {
   // Same hang-without-file as /api/data: a box without a MuPiHAT board
   // simply has no /tmp/mupihat.json — return an empty object rather than
@@ -1131,7 +1173,8 @@ async function replaceMupiboxConfigFile(content: Record<string, unknown>): Promi
     // /tmp is a RAM disk and /etc is on the SD card, so a plain mv would copy into the target in
     // place. Copy next to it first, then rename on the same filesystem: a reader never sees half a
     // file. The caller holds the config lock.
-    await execFileAsync('sh', ['-c', 'sudo cp "$1" "$2.new" && sudo mv -f "$2.new" "$2"', 'replace-config', tmpPath, mupiboxConfigPath])
+    // The version replaced here is kept as .bak and as a daily copy in backup/ (see file-backup.ts).
+    await execFileAsync('sh', ['-c', `${SUDO_BACKUP_SNIPPET}; sudo cp "$1" "$2.new" && sudo mv -f "$2.new" "$2"`, 'replace-config', tmpPath, mupiboxConfigPath])
   } finally {
     await fs.promises.rm(tmpPath, { force: true })
   }
@@ -1263,20 +1306,55 @@ function trimPlayLog(): void {
   }
 }
 
+// When the player stops answering, the last track is closed at the moment it was last seen playing.
+// Skipping those ticks forever kept the old track "playing": a player that hung for two hours put
+// two hours on the history although nothing was heard.
+const PLAY_LOG_STALE_MS = 60_000
+let lastPlaySeenTs: number | null = null
+
+function closePlayLogEntry(endMs: number, sync = false): void {
+  if (lastPlayFingerprint !== null && lastPlayStartTs !== null && lastPlayMeta !== null) {
+    const line = {
+      ts: new Date(endMs).toISOString(),
+      event: 'stop',
+      duration_seconds: Math.max(0, Math.round((endMs - lastPlayStartTs) / 1000)),
+      ...lastPlayMeta,
+    }
+    if (sync) {
+      try {
+        fs.appendFileSync(PLAY_LOG_PATH, `${JSON.stringify(line)}\n`)
+      } catch {
+        /* shutting down, nothing else to do */
+      }
+    } else {
+      appendPlayLogLine(line)
+    }
+  }
+  lastPlayFingerprint = null
+  lastPlayStartTs = null
+  lastPlayMeta = null
+  lastPlaySeenTs = null
+}
+
+/** Start of the track the history is timing right now (null when nothing plays). */
+function currentPlayLogStart(): number | null {
+  return lastPlayStartTs
+}
+
 async function tickPlayLog(): Promise<void> {
   const state = await fetchCurrentPlayerState()
-  if (state === null) return // transient — skip this tick
   const now = Date.now()
-  if (state.fingerprint === lastPlayFingerprint) return // no change
-
-  if (lastPlayFingerprint !== null && lastPlayStartTs !== null && lastPlayMeta !== null) {
-    appendPlayLogLine({
-      ts: new Date(now).toISOString(),
-      event: 'stop',
-      duration_seconds: Math.max(0, Math.round((now - lastPlayStartTs) / 1000)),
-      ...lastPlayMeta,
-    })
+  if (state === null) {
+    // transient — skip this tick, unless the player has been gone for a while
+    if (lastPlaySeenTs !== null && now - lastPlaySeenTs > PLAY_LOG_STALE_MS) closePlayLogEntry(lastPlaySeenTs)
+    return
   }
+  if (state.fingerprint === lastPlayFingerprint) {
+    if (lastPlayFingerprint !== null) lastPlaySeenTs = now
+    return // no change
+  }
+
+  closePlayLogEntry(now)
   if (state.fingerprint !== null && state.meta !== null) {
     appendPlayLogLine({
       ts: new Date(now).toISOString(),
@@ -1286,10 +1364,7 @@ async function tickPlayLog(): Promise<void> {
     lastPlayFingerprint = state.fingerprint
     lastPlayStartTs = now
     lastPlayMeta = state.meta
-  } else {
-    lastPlayFingerprint = null
-    lastPlayStartTs = null
-    lastPlayMeta = null
+    lastPlaySeenTs = now
   }
 }
 
@@ -1307,6 +1382,13 @@ function startPlayLogPoller(): void {
     }
   }, PLAY_LOG_POLL_MS)
   if (typeof timer.unref === 'function') timer.unref()
+  // pm2 restart / shutdown: close the running track, otherwise the history counts it until the next start.
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(signal, () => {
+      closePlayLogEntry(lastPlaySeenTs ?? Date.now(), true)
+      process.exit(0)
+    })
+  }
 }
 
 // === End Phase 18 Item 4 =======================================================
@@ -2227,6 +2309,8 @@ app.post('/api/add', (req, res) => {
 // or a crash mid-write left a cut-off JSON (the library or the resume list unreadable). Written
 // next to the target and renamed over it instead, so a reader sees the old or the new file.
 function writeJsonAtomic(file: string, data: unknown, callback: (error: Error | null) => void): void {
+  // The library: keep the version this write replaces (a bad edit once wiped an entry and there was nothing to go back to).
+  if (file === dataFile) backupBeforeWrite(file)
   const tmp = `${file}.tmp.${process.pid}.${Date.now()}`
   jsonfile.writeFile(tmp, data, { spaces: 4 }, (writeError) => {
     if (writeError) {
@@ -2502,6 +2586,23 @@ app.post('/api/deleteresume', (req, res) => {
   })
 })
 
+// Checks for /api/edit and /api/delete. The parents' web app sends the entry as it knew it
+// ("original"); if the library changed in between (Smart-Sync, another edit), the index may point to a
+// different entry by now, and editing or deleting it would hit the wrong one.
+const LIBRARY_ID_KEYS = ['type', 'id', 'artistid', 'playlistid', 'showid', 'audiobookid', 'title', 'artist', 'category']
+function sameLibraryEntry(a: unknown, b: unknown): boolean {
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false
+  const x = a as Record<string, unknown>
+  const y = b as Record<string, unknown>
+  return LIBRARY_ID_KEYS.every((k) => (x[k] ?? null) === (y[k] ?? null))
+}
+function libraryIndexProblem(data: unknown, index: unknown, original: unknown): string | null {
+  if (!Array.isArray(data)) return 'library unreadable'
+  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= data.length) return 'bad index'
+  if (original !== undefined && !sameLibraryEntry(data[index], original)) return 'library changed'
+  return null
+}
+
 app.post('/api/delete', (req, res) => {
   const lockResult = acquireLock(dataLock, '/api/delete')
   if (lockResult === 'locked') {
@@ -2521,6 +2622,12 @@ app.post('/api/delete', (req, res) => {
       res.status(200).send('error')
       return
     }
+    const problem = libraryIndexProblem(data, req.body?.index, req.body?.original)
+    if (problem) {
+      releaseLock(dataLock, '/api/delete')
+      res.status(problem === 'library changed' ? 409 : 400).send(problem)
+      return
+    }
     data.splice(req.body.index, 1)
     writeJsonAtomic(dataFile, data, (writeError) => {
       releaseLock(dataLock, '/api/delete')
@@ -2535,6 +2642,13 @@ app.post('/api/delete', (req, res) => {
 })
 
 app.post('/api/edit', (req, res) => {
+  // The new entry comes as { index, data }. Without data (the web app used to send the fields next to
+  // index) splice() put null into the library, and that entry was gone.
+  const entry = req.body?.data
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    res.status(400).send('data missing')
+    return
+  }
   const lockResult = acquireLock(dataLock, '/api/edit')
   if (lockResult === 'locked') {
     console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/edit data.json is locked`)
@@ -2553,7 +2667,13 @@ app.post('/api/edit', (req, res) => {
       res.status(200).send('error')
       return
     }
-    data.splice(req.body.index, 1, req.body.data)
+    const problem = libraryIndexProblem(data, req.body.index, req.body.original)
+    if (problem) {
+      releaseLock(dataLock, '/api/edit')
+      res.status(problem === 'library changed' ? 409 : 400).send(problem)
+      return
+    }
+    data.splice(req.body.index, 1, entry)
     writeJsonAtomic(dataFile, data, (writeError) => {
       releaseLock(dataLock, '/api/edit')
       if (writeError) {
@@ -5618,8 +5738,8 @@ const spotifySyncDeps: RunSyncDeps = {
 app.use('/api/spotify-sync', createSpotifySyncRouter(spotifySyncDeps))
 
 // Phase 14c — Eltern-WebApp routes.
-// JSON API under /api/eltern/* + a magic-link landing handler at /eltern
-// that redeems ?token=... into a session cookie and redirects to /eltern
+// JSON API under /api/eltern/* + a magic-link landing handler at /parents
+// that redeems ?token=... into a session cookie and redirects to /parents
 // (without the query) so the WebApp shell loads cleanly.
 app.use(
   '/api/eltern',
@@ -5627,25 +5747,30 @@ app.use(
     getMupiboxConfig: getMupiboxConfigSync,
     updateMupiboxConfig,
     activeDataPath: activedataFile,
+    currentPlayLogStart,
   }),
 )
-app.get('/eltern', buildElternLandingHandler())
-// Static WebApp assets (HTML/CSS/JS). The landing handler above runs
-// first and either redeems a token (-> redirect) or calls next() so the
-// static middleware below serves the shell.
-app.use(
-  '/eltern',
-  express.static(path.join(__dirname, 'eltern-webapp'), {
-    // ETag bleibt aktiv, aber keine implizite Browser-Cache-Frist: bei
-    // jedem Request wird via If-None-Match revalidiert. 304 wenn nichts
-    // neu — kostet wenig und stellt sicher dass neu deployte HTML/JS
-    // sofort ankommen statt im aggressiven Mobile-Browser-Cache zu
-    // hängen.
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'no-cache')
-    },
-  }),
-)
+// The web app lives at /parents; /eltern (its first address) keeps working for bookmarks, home-screen
+// icons and links sent before.
+for (const base of ['/parents', '/eltern']) {
+  app.get(base, buildElternLandingHandler())
+  // Static WebApp assets (HTML/CSS/JS). The landing handler above runs
+  // first and either redeems a token (-> redirect) or calls next() so the
+  // static middleware below serves the shell.
+  app.use(
+    base,
+    express.static(path.join(__dirname, 'eltern-webapp'), {
+      // ETag bleibt aktiv, aber keine implizite Browser-Cache-Frist: bei
+      // jedem Request wird via If-None-Match revalidiert. 304 wenn nichts
+      // neu — kostet wenig und stellt sicher dass neu deployte HTML/JS
+      // sofort ankommen statt im aggressiven Mobile-Browser-Cache zu
+      // hängen.
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-cache')
+      },
+    }),
+  )
+}
 
 // Catch-all handler: send back Angular's index.html file for any non-API routes
 // This must be placed after all API routes but before starting the server

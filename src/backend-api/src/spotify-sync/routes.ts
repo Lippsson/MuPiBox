@@ -9,6 +9,7 @@
 // + config to verify the sync loop works end-to-end.
 
 import * as fs from 'node:fs'
+import { backupBeforeWrite } from '../file-backup'
 import { localOrElternSession } from '../request-guard'
 import { promises as fsPromises } from 'node:fs'
 import { Router } from 'express'
@@ -118,6 +119,7 @@ export function createSpotifySyncRouter(deps: RunSyncDeps): Router {
       // doesn't immediately drop it on a sync that runs before discovery.
       target.source = 'spotify-sync'
       if (!target.spotify_sync_playlists) target.spotify_sync_playlists = []
+      backupBeforeWrite(deps.dataFile)
       const tmp = `${deps.dataFile}.tmp.${process.pid}`
       await fsPromises.writeFile(tmp, `${JSON.stringify(library, null, 2)}\n`, 'utf8')
       fs.renameSync(tmp, deps.dataFile)

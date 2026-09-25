@@ -511,6 +511,9 @@ const currentMeta = {
   // triggerSource !== 'box' kommt.
   triggerSource: 'box',
   triggerAt: 0,
+  // The parents' web app switched the theme and asked the display to show it now: the display polls
+  // /local anyway and swaps its stylesheet when this goes up (no page reload, playback goes on).
+  themeReloadAt: 0,
 }
 // Live tracklist (with real names) of the currently playing NAS folder, fetched
 // once in playNasList() - used to name each track as it plays, since mplayer
@@ -840,7 +843,7 @@ function finalizePlaytimeBlock(reason) {
   // loops over all configured chatIds, so both Family group and individual DMs
   // receive the message.
   if (hasConfiguredTelegram()) {
-    cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Hörzeit aufgebraucht heute"')
+    cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py --key n_playtime_used_up')
   }
 }
 
@@ -851,12 +854,13 @@ function finalizeQuietHoursBlock(reason) {
   quietHoursState.state = 'blocked'
   quietHoursState.graceEndsAt = null
   if (hasConfiguredTelegram()) {
-    const msg = label ? `Ruhezeit gestartet: ${label}` : 'Ruhezeit gestartet'
+    // Sent as a text key: telegram_send_message.py puts it into the bot's language (German/English).
+    const msg = label ? ['--key', 'n_quiet_started_label', `label=${label}`] : ['--key', 'n_quiet_started']
     // No shell: the label is free text from the parents' UI, and escaping only `"` left
     // $(...) and backticks inside the double quotes executable.
     require('node:child_process').execFile(
       '/usr/bin/python3',
-      ['/usr/local/bin/mupibox/telegram_send_message.py', msg],
+      ['/usr/local/bin/mupibox/telegram_send_message.py', ...msg],
       (e) => e && console.error(`${new Date().toLocaleString()}: [QuietHours] Telegram message failed: ${e.message}`),
     )
   }
@@ -2261,6 +2265,12 @@ app.get('/state', (_req, res) => {
     }
     res.send(state)
   }
+})
+
+// Called by the backend on the box (the parents' web app's "reload the display now").
+app.post('/display/reload-theme', (_req, res) => {
+  currentMeta.themeReloadAt = Date.now()
+  res.json({ ok: true })
 })
 
 /*endpoint to return all local metainformation*/

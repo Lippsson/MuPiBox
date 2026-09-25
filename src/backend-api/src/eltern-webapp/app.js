@@ -327,13 +327,31 @@ async function loadLibrary() {
   }
 }
 
+/** Spotify entries added by hand carry only an id, no cover: the box looks the picture up (cached) and
+ *  serves it from its cover cache. '' for everything else. */
+function spotifyCoverUrl(item) {
+  if (item?.type !== 'spotify') return ''
+  const ref = item.id
+    ? ['album', item.id]
+    : item.artistid
+      ? ['artist', item.artistid]
+      : item.playlistid
+        ? ['playlist', item.playlistid]
+        : item.showid
+          ? ['show', item.showid]
+          : item.audiobookid
+            ? ['audiobook', item.audiobookid]
+            : null
+  return ref ? `/api/spotify/cover-for/${ref[0]}/${encodeURIComponent(String(ref[1]))}` : ''
+}
+
 function renderLibrary() {
   const list = $('#library-list')
   // Filter pipeline
   const q = libraryState.search.trim().toLowerCase()
   let filtered = libraryState.items.filter((m) => {
     // Skip resume entries — they're internal, not parent-managed.
-    if (m.isResume === true || m.category === 'resume') return false
+    if (!m || m.isResume === true || m.category === 'resume') return false
     if (libraryState.categoryFilter !== 'all' && m.category !== libraryState.categoryFilter) return false
     const source = m.source ?? 'manual'
     if (libraryState.sourceFilter !== 'all' && source !== libraryState.sourceFilter) return false
@@ -362,7 +380,9 @@ function renderLibrary() {
     cover.className = 'library-item-cover'
     cover.loading = 'lazy'
     cover.alt = ''
-    const src = item.cover_override ?? item.cover ?? item.artistcover_override ?? item.artistcover ?? ''
+    const src = item.cover_override ?? item.cover ?? item.artistcover_override ?? item.artistcover ?? spotifyCoverUrl(item)
+    // no picture to be had: keep the empty tile instead of a broken-image icon
+    cover.onerror = () => cover.removeAttribute('src')
     if (src) cover.src = src
 
     const meta = document.createElement('div')
@@ -489,14 +509,9 @@ function openLibraryEditSheet(item) {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ index: item.index, ...updated }),
+      body: JSON.stringify({ index: item.index, data: updated, original: item }),
     })
-    if (res.ok) {
-      closeLibraryEditSheet()
-      await loadLibrary()
-    } else {
-      toast('error', t('common.saveFailedStatus', { status: res.status }))
-    }
+    await handleLibraryWriteResult(res, 'common.saveFailedStatus')
   })
   actions.appendChild(saveBtn)
   if (!isSync) {
@@ -509,14 +524,9 @@ function openLibraryEditSheet(item) {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index: item.index }),
+        body: JSON.stringify({ index: item.index, original: item }),
       })
-      if (res.ok) {
-        closeLibraryEditSheet()
-        await loadLibrary()
-      } else {
-        toast('error', t('common.deleteFailedStatus', { status: res.status }))
-      }
+      await handleLibraryWriteResult(res, 'common.deleteFailedStatus')
     })
     actions.appendChild(delBtn)
   } else {
@@ -529,6 +539,24 @@ function openLibraryEditSheet(item) {
   body.appendChild(actions)
 
   $('#library-edit-backdrop').hidden = false
+}
+
+// /api/edit and /api/delete answer "ok"; "locked"/"error" come with status 200 too, so the text counts.
+async function handleLibraryWriteResult(res, failKey) {
+  const text = res.ok ? await res.text().catch(() => '') : ''
+  if (res.ok && text.trim() === 'ok') {
+    closeLibraryEditSheet()
+    await loadLibrary()
+    return
+  }
+  if (res.status === 409) {
+    // the library changed since it was loaded: show the current one instead of touching the wrong entry
+    toast('error', t('libedit.changedReload'))
+    closeLibraryEditSheet()
+    await loadLibrary()
+    return
+  }
+  toast('error', t(failKey, { status: res.ok ? text.trim() || res.status : res.status }))
 }
 
 function updated_or_label(item) {
@@ -1994,7 +2022,7 @@ function renderPlay() {
     .map((item, idx) => ({ item, idx }))
     .filter(({ item }) => {
       if (!item || typeof item !== 'object') return false
-      if (item.isResume === true || item.category === 'resume') return false
+      if (!item || item.isResume === true || item.category === 'resume') return false
       // Filter nach Top-Level-Kategorie. 'radio' deckt sowohl category='radio'
       // als auch type='radio' ab (manche Einträge haben nur eines gesetzt).
       if (cat === 'radio') {
@@ -2019,7 +2047,8 @@ function renderPlay() {
   grid.innerHTML = filtered.map(({ item, idx }) => {
     const artist = escapeHtml(String(item.artist_override ?? item.artist ?? ''))
     const title = escapeHtml(String(item.title_override ?? item.title ?? item.artist ?? '—'))
-    const cover = item.cover ? escapeHtml(String(item.cover)) : ''
+    const coverUrl = item.cover_override ?? item.cover ?? spotifyCoverUrl(item)
+    const cover = coverUrl ? escapeHtml(String(coverUrl)) : ''
     const typeLabel = playTypeLabel(item)
     const coverEl = cover
       ? `<img class="play-tile-cover" src="${cover}" alt="" loading="lazy">`
@@ -2034,6 +2063,16 @@ function renderPlay() {
         </div>
       </button>`
   }).join('')
+  // a cover that can't be loaded (no picture on Spotify, box offline) becomes the placeholder
+  for (const img of grid.querySelectorAll('img.play-tile-cover')) {
+    img.addEventListener('error', () => {
+      const idx = Number(img.closest('.play-tile')?.dataset.idx)
+      const ph = document.createElement('div')
+      ph.className = 'play-tile-cover-placeholder'
+      ph.innerHTML = typeIcon(playState.items[idx] ?? {})
+      img.replaceWith(ph)
+    }, { once: true })
+  }
 }
 
 function playTypeLabel(item) {
@@ -2227,8 +2266,15 @@ async function applyTheme(theme) {
     feedback('#theme-feedback', 'error', res.body?.error ?? t('common.errorStatus', { status: res.status }))
     return
   }
-  feedback('#theme-feedback', 'success', t('theme.saved', { theme }))
   loadTheme()
+  // Show it on the display right away? "No" keeps the old behaviour: it shows on the next display reload.
+  if (!(await confirmDialog(t('theme.reloadQ'), t('theme.reloadBody'), { confirmLabel: t('theme.reloadNow'), cancelLabel: t('theme.reloadLater') }))) {
+    feedback('#theme-feedback', 'success', t('theme.saved', { theme }))
+    return
+  }
+  const rl = await api(`${API}/display/reload-theme`, { method: 'POST', body: {} })
+  if (rl.ok) feedback('#theme-feedback', 'success', t('theme.reloaded', { theme }))
+  else feedback('#theme-feedback', 'error', t('theme.reloadFailed', { theme }))
 }
 
 /** Phase 17h: submit the no-session password form. On success, re-run
@@ -3024,7 +3070,7 @@ async function toggleSync(enable) {
 }
 
 async function connectSpotify() {
-  const res = await api(`${API}/spotify-oauth/init?return=${encodeURIComponent('/eltern')}`)
+  const res = await api(`${API}/spotify-oauth/init?return=${encodeURIComponent(location.pathname.startsWith('/eltern') ? '/eltern' : '/parents')}`)
   if (res.ok && res.body?.authorize_url) {
     location.href = res.body.authorize_url
   } else if (res.status === 400 && res.body?.error === 'no_client_id') {
@@ -3216,14 +3262,14 @@ async function bootstrap() {
   // the confirmation feedback immediately, and strip the query so a
   // reload doesn't re-trigger it.
   if (state.spotifyConnected) {
-    history.replaceState({}, '', '/eltern#sync')
+    history.replaceState({}, '', `${location.pathname}#sync`)
     onRoute()
     // Allow loadSync's render to complete, then push feedback over it.
     setTimeout(() => feedback('#sync-feedback', 'success', t('sync.connectedMsg')), 50)
     return
   }
   if (state.spotifyError) {
-    history.replaceState({}, '', '/eltern#sync')
+    history.replaceState({}, '', `${location.pathname}#sync`)
     onRoute()
     setTimeout(() => feedback('#sync-feedback', 'error', t('sync.spotifyError', { err: state.spotifyError })), 50)
     return

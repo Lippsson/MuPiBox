@@ -45,6 +45,8 @@ export interface ElternRouterDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
   updateMupiboxConfig: (mutate: (cfg: Record<string, unknown>) => void) => Promise<void>
   activeDataPath: string
+  /** Start (ms) of the track the play-log poller is timing right now, null when nothing plays. */
+  currentPlayLogStart?: () => number | null
 }
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
@@ -148,7 +150,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     res.status(201).json({
       token: link.token,
       expires_in: link.expiresIn,
-      url_path: `/eltern?token=${encodeURIComponent(link.token)}`,
+      url_path: `/parents?token=${encodeURIComponent(link.token)}`,
     })
   })
 
@@ -172,7 +174,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       res.status(400).send('no host header')
       return
     }
-    const url = `http://${host}/eltern?token=${encodeURIComponent(token)}`
+    const url = `http://${host}/parents?token=${encodeURIComponent(token)}`
     try {
       // SVG output — scales without pixel-blur on the box's 7" display.
       // errorCorrectionLevel=M is the sweet spot for 64-128-char URLs.
@@ -257,7 +259,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * GET /api/eltern/spotify-oauth/init
    * Starts the Authorize-flow. Returns the Spotify URL the WebApp should
    * window.location.href to. Caller's redirect-target after callback is
-   * optionally provided as ?return=/eltern/sync (defaults to /eltern).
+   * optionally provided as ?return=/parents/sync (defaults to /parents; /eltern still accepted).
    */
   router.get('/spotify-oauth/init', requireSession, (req, res) => {
     const host = req.headers.host
@@ -268,7 +270,9 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     // Only a page of the parents' app: the value ends up in res.redirect() after the login, and
     // "https://elsewhere" or "//elsewhere" made that an open redirect.
     const ret =
-      typeof req.query.return === 'string' && /^\/eltern(?:[/?#]|$)/.test(req.query.return) ? req.query.return : '/eltern'
+      typeof req.query.return === 'string' && /^\/(?:parents|eltern)(?:[/?#]|$)/.test(req.query.return)
+        ? req.query.return
+        : '/parents'
     const result = buildAuthorizeUrl({
       getMupiboxConfig: deps.getMupiboxConfig,
       sessionId: req.elternSessionId ?? '',
@@ -277,7 +281,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       redirectAfter: ret,
     })
     if ('error' in result) {
-      res.status(400).json({ error: 'no_client_id', redirect_to: '/eltern/wizard' })
+      res.status(400).json({ error: 'no_client_id', redirect_to: '/parents/wizard' })
       return
     }
     res.json({
@@ -308,7 +312,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     const code = typeof req.query.code === 'string' ? req.query.code : ''
     const error = typeof req.query.error === 'string' ? req.query.error : ''
     if (error) {
-      res.redirect(`/eltern?spotify_error=${encodeURIComponent(error)}`)
+      res.redirect(`/parents?spotify_error=${encodeURIComponent(error)}`)
       return
     }
     if (!state || !code) {
@@ -333,7 +337,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       updateMupiboxConfig: deps.updateMupiboxConfig,
     })
     if (!exchange.ok) {
-      res.redirect(`/eltern?spotify_error=${encodeURIComponent(exchange.reason)}`)
+      res.redirect(`/parents?spotify_error=${encodeURIComponent(exchange.reason)}`)
       return
     }
     res.redirect(`${original.redirectAfter}?spotify_connected=1`)
@@ -837,6 +841,37 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     res.json({ ok: true, applied: mutations })
   })
 
+  // iwlist refuses a second scan while one is running ("Device or resource busy", exit 255) - two
+  // requests close together, or wpa_supplicant's own background scan. That came back as a 500 in the
+  // web app. Requests arriving meanwhile share the running scan, and a busy one is tried again shortly.
+  let wlanScanInFlight: Promise<string> | null = null
+  const iwlistScan = (): Promise<string> => {
+    if (wlanScanInFlight) return wlanScanInFlight
+    const attempt = (retriesLeft: number): Promise<string> =>
+      new Promise((resolve, reject) => {
+        execFile(
+          'sudo',
+          ['/usr/sbin/iwlist', wifiIface(), 'scanning'],
+          { timeout: 12000, maxBuffer: 4 * 1024 * 1024 },
+          (err, stdout, stderr) => {
+            if (!err) {
+              resolve(stdout)
+              return
+            }
+            if (retriesLeft > 0 && /busy/i.test(`${stderr} ${err.message}`)) {
+              setTimeout(() => attempt(retriesLeft - 1).then(resolve, reject), 1500)
+              return
+            }
+            reject(err)
+          },
+        )
+      })
+    wlanScanInFlight = attempt(4).finally(() => {
+      wlanScanInFlight = null
+    })
+    return wlanScanInFlight
+  }
+
   /**
    * GET /api/eltern/wlan/scan  (Phase 18 Item 2)
    * Returns visible Wi-Fi networks, parsed from `iwlist wlan0 scanning`. We
@@ -844,11 +879,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * (empty SSID). Slow — iwlist takes ~3-5 s.
    */
   router.get('/wlan/scan', requireSession, (_req, res) => {
-    execFile('sudo', ['/usr/sbin/iwlist', wifiIface(), 'scanning'], { timeout: 12000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
-      if (err) {
-        res.status(500).json({ error: `iwlist failed: ${err.message}` })
-        return
-      }
+    iwlistScan().then((stdout) => {
       const blocks = stdout.split(/Cell \d+ -/)
       const byBest = new Map<string, { ssid: string; signal_dbm: number; encrypted: boolean }>()
       for (const blk of blocks) {
@@ -866,6 +897,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       }
       const networks = [...byBest.values()].sort((a, b) => b.signal_dbm - a.signal_dbm)
       res.json({ networks })
+    }, (err: Error) => {
+      res.status(500).json({ error: `iwlist failed: ${err.message}` })
     })
   })
 
@@ -1024,6 +1057,10 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     // Downsample to roughly 120 points so the chart stays light.
     const TARGET = 120
     const samples = all.length <= TARGET ? all : all.filter((_, i) => i % Math.ceil(all.length / TARGET) === 0)
+    // Always end on the newest reading: the web app shows it as "last ... at ...", and the thinning
+    // above usually dropped it.
+    const newest = all[all.length - 1]
+    if (newest && samples[samples.length - 1] !== newest) samples.push(newest)
     res.json({ hours, samples })
   })
 
@@ -1285,12 +1322,16 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     type Play = { tsMs: number; source: string; title: string; artist: string; album: string; duration: number }
     const plays: Play[] = []
     let pending: { tsMs: number; source: string; title: string; artist: string; album: string } | null = null
+    // A start without a stop (box switched off, backend killed): how long it really played is unknown.
+    // Counting it up to the next start put hours of a switched-off box on the history, so it counts at
+    // most this long.
+    const ORPHAN_MAX_S = 10 * 60
+    const orphanSeconds = (fromMs: number, toMs: number) =>
+      Math.min(ORPHAN_MAX_S, Math.max(0, Math.round((toMs - fromMs) / 1000)))
     for (const e of entries) {
       if (e.event === 'start') {
         if (pending !== null) {
-          // orphan start (no stop recorded — e.g. backend-api restarted mid-track).
-          // Extrapolate up to the new start's ts so the gap is attributed to it.
-          plays.push({ ...pending, duration: Math.max(0, Math.round((Date.parse(e.ts) - pending.tsMs) / 1000)) })
+          plays.push({ ...pending, duration: orphanSeconds(pending.tsMs, Date.parse(e.ts)) })
         }
         pending = {
           tsMs: Date.parse(e.ts),
@@ -1305,8 +1346,14 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       }
     }
     if (pending !== null) {
-      // Currently still playing — extrapolate to now so today's number reflects reality.
-      plays.push({ ...pending, duration: Math.max(0, Math.round((Date.now() - pending.tsMs) / 1000)) })
+      // Currently still playing (the poller times exactly this start) — count up to now so today's
+      // number reflects reality. Otherwise it's a start left over from before a restart.
+      const running = deps.currentPlayLogStart?.()
+      const isRunning = running != null && Math.abs(running - pending.tsMs) < 2000
+      const duration = isRunning
+        ? Math.max(0, Math.round((Date.now() - pending.tsMs) / 1000))
+        : orphanSeconds(pending.tsMs, Date.now())
+      plays.push({ ...pending, duration })
     }
 
     const totalSeconds = plays.reduce((s, p) => s + p.duration, 0)
@@ -1424,6 +1471,28 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       return
     }
     res.json({ ok: true, theme })
+  })
+
+  /**
+   * POST /api/eltern/display/reload-theme
+   * After a theme change, when the parents want to see it right away: the display swaps its
+   * stylesheet on its next /local poll (2 s, 10 s on the player page). No page reload, so playback
+   * and the Spotify player in the display keep running.
+   */
+  router.post('/display/reload-theme', requireSession, requireCsrf, async (_req, res) => {
+    try {
+      const r = await fetch('http://127.0.0.1:5005/display/reload-theme', {
+        method: 'POST',
+        signal: AbortSignal.timeout(3000),
+      })
+      if (!r.ok) {
+        res.status(502).json({ error: `player answered ${r.status}` })
+        return
+      }
+      res.json({ ok: true })
+    } catch (err) {
+      res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
+    }
   })
 
   /**
@@ -1863,7 +1932,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
 }
 
 /**
- * Creates the /eltern landing-page route — separate from the API router
+ * Creates the /parents (and old /eltern) landing-page route — separate from the API router
  * because it handles the magic-link query param and either issues a
  * session cookie + redirect or serves the WebApp shell.
  *
@@ -1885,8 +1954,8 @@ export function buildElternLandingHandler(): import('express').RequestHandler {
       res.status(401).send('Magic link invalid or expired / Magic-Link ungültig oder abgelaufen')
       return
     }
-    // Set cookie, strip the token from URL by redirecting to /eltern
+    // Set cookie, strip the token from URL by redirecting to the same page (/parents, or /eltern for old links)
     res.setHeader('Set-Cookie', buildSessionCookie(session.sessionId, 24 * 60 * 60))
-    res.redirect('/eltern')
+    res.redirect(req.path === '/eltern' ? '/eltern' : '/parents')
   }
 }

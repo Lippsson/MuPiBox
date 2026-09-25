@@ -25,10 +25,12 @@ import type { RunSyncResult } from './state-machine'
 
 const TELEGRAM_SCRIPT = '/usr/local/bin/mupibox/telegram_send_message.py'
 
-/** Best-effort message send via the existing Python helper. */
-function pushMessage(text: string): void {
+/** Best-effort message send via the existing Python helper. `key` is a text of telegram_i18n.py's TEXTS: the
+ *  script sends it in the bot's language (German/English) with the values filled in. */
+function pushMessage(key: string, values: Record<string, string | number> = {}): void {
+  const args = ['--key', key, ...Object.entries(values).map(([name, value]) => `${name}=${value}`)]
   try {
-    const child = spawn('/usr/bin/python3', [TELEGRAM_SCRIPT, text], {
+    const child = spawn('/usr/bin/python3', [TELEGRAM_SCRIPT, ...args], {
       stdio: 'ignore',
       detached: false,
     })
@@ -68,9 +70,7 @@ export function maybeNotifyAfterRun(
     (result.state === 'AUTH_FAILED' || result.state === 'AUTH_NEEDS_REAUTH') &&
     (previousCounts.auth ?? 0) === 0
   ) {
-    pushMessage(
-      `⚠️ MuPiBox Smart-Sync: Spotify-Anmeldung abgelaufen oder ungültig.\n\nBitte neu verbinden:\n/spotify-connect`,
-    )
+    pushMessage('n_sync_auth_failed')
     return
   }
 
@@ -82,9 +82,7 @@ export function maybeNotifyAfterRun(
     const before = previousCounts[kind] ?? 0
     const now = state.failure_counters[kind] ?? 0
     if (now >= threshold && before < threshold) {
-      pushMessage(
-        `⚠️ MuPiBox Smart-Sync: ${kind === 'network' ? 'Netzwerk' : 'interner Fehler'} — ${now} fehlgeschlagene Versuche in Folge.\n\nDetails via /syncstatus.`,
-      )
+      pushMessage(kind === 'network' ? 'n_sync_failures_network' : 'n_sync_failures_internal', { count: now })
       return
     }
   }
@@ -95,18 +93,14 @@ export function maybeNotifyAfterRun(
     // Suppressed if it's the same set as last time — Phase 14e will add
     // per-conflict diffing; for now we send once and rely on the user
     // disabling notify_on_conflict if they don't want it.
-    pushMessage(
-      `ℹ️ MuPiBox Smart-Sync: ${result.conflictsCount} Konflikt(e) (Manual + Sync-Playlist gleich).\n\nManuelle Einträge bleiben unangetastet. Details in der Eltern-WebApp.`,
-    )
+    pushMessage('n_sync_conflicts', { count: result.conflictsCount })
     return
   }
 
   // Completed sync summary — opt-in only.
   if (config.notify_on_sync && result.state === 'COMPLETED') {
     if (result.additions > 0 || result.removals > 0) {
-      pushMessage(
-        `✅ MuPiBox Smart-Sync: +${result.additions} hinzugefügt, −${result.removals} entfernt.`,
-      )
+      pushMessage('n_sync_summary', { adds: result.additions, rems: result.removals })
     }
   }
 }
