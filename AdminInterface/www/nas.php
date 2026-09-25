@@ -396,14 +396,17 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 					#nas-actions input.button_text { box-sizing: border-box; width: 100%; min-width: 0; margin: 0; }
 					#nas-actions > :nth-child(-n+4) { grid-row: 1; }
 					#nas-actions > :nth-child(n+5) { grid-row: 2; }
-					#nas-progress { grid-column: 4 / 6; }
+					#nas-actions > #nas-progress { grid-row: 3; grid-column: 1 / 4; }
+					#nas-actions > #nas-download-cancel { grid-row: 3; grid-column: 4; }
+					#nas-actions > #nas-covers-status { grid-row: 4; grid-column: 1 / -1; font-size: 13px; color: #444; text-align: left; }
+					#nas-covers-status:empty { display: none; }
 					#nas-progress { display: none; position: relative; box-sizing: border-box; height: 28px; border-radius: 8px; background: #d9e3ea; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0, 0, 0, .25); }
 					#nas-progress-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background-image: linear-gradient(144deg, #024364, #00689C 50%, #44afe2); transition: width .4s; }
 					#nas-progress-text { position: relative; display: block; text-align: center; line-height: 28px; font-size: 13px; font-weight: bold; color: #fff; text-shadow: 0 0 3px rgba(0, 0, 0, .7); white-space: nowrap; }
 					#nas-download-cancel { display: none; }
 					@media (max-width: 900px) {
 						#nas-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-						#nas-actions > :nth-child(n+8) { grid-row: auto; grid-column: 1 / -1; }
+						#nas-actions > :nth-child(n+9) { grid-row: auto; grid-column: 1 / -1; }
 					}
 				</style>
 				<div id="nas-actions">
@@ -414,8 +417,10 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 					<input class="button_text" type="button" value="Select all downloads" onclick="document.querySelectorAll('input[name=\'download_folders[]\']').forEach(function (box) { box.checked = true; });" />
 					<input class="button_text" type="button" value="Unselect all downloads" onclick="document.querySelectorAll('input[name=\'download_folders[]\']').forEach(function (box) { box.checked = false; });" />
 					<input class="button_text" type="submit" name="nas_download_selected" value="Download selected" onclick="return confirm('Download the checked folders to the MuPiBox and delete local copies of unchecked ones?');" />
+					<input class="button_text" type="button" id="nas-covers-refresh" value="Reload covers" title="Loads the cover pictures again: the thumbnails are made again and the covers of downloaded folders are fetched from the NAS again." />
 					<div id="nas-progress"><div id="nas-progress-fill"></div><span id="nas-progress-text"></span></div>
 					<input class="button_text" type="button" id="nas-download-cancel" value="Cancel" />
+					<div id="nas-covers-status"></div>
 				</div>
 			</li>
 			<li id="li_1" style="padding-top:6px;">
@@ -430,8 +435,6 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 ?>
 	<div style="padding-left:25px; display:flex; align-items:center; gap:12px; margin: 8px 0;">
 		<span class="nas-info" data-info="nas-info-nas" title="About the NAS tab" role="button" tabindex="0"><i class="fa-solid fa-circle-info"></i></span>
-		<input type="button" class="button_text" id="nas-covers-refresh" value="Reload covers" style="margin:0;" title="Loads the cover pictures again: the thumbnails are made again and the covers of downloaded folders are fetched from the NAS again." />
-		<span id="nas-covers-status" style="font-size:13px; color:#444;"></span>
 		<input type="button" class="button_text" id="nas-logout" value="Logout" style="margin:0;" title="<?= htmlspecialchars('Logout from NAS - ' . $nasLoginAddress, ENT_QUOTES) ?>" onclick="location.href='nas.php?relogin=1';" />
 	</div>
 <?php } ?>
