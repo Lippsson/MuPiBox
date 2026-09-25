@@ -81,6 +81,8 @@ export class SwiperComponent<T> {
   // Since we reset the swiper container when the page is entered / left, we need to
   // manually cache / restore the swiper position.
   private cachedSwiperPosition = 0
+  // Set when the page is shown again with a remembered position; cleared once the swiper went there.
+  private pendingRestore = false
 
   // Lists with fewer covers than this are spread over the whole screen instead of scrolled.
   private static readonly FEW_COVERS = 10
@@ -136,10 +138,27 @@ export class SwiperComponent<T> {
     // pageIsShown only — must not track shownData (would re-fire on every
     // render-chunk and snap to the cached index mid-swipe).
     effect(() => {
-      if (this.pageIsShown()) {
-        this.swiper()?.slideTo(this.cachedSwiperPosition, 0)
-        this.selectedIndex = this.cachedSwiperPosition
-      }
+      if (!this.pageIsShown()) return
+      this.selectedIndex = this.cachedSwiperPosition
+      this.pendingRestore = this.cachedSwiperPosition > 0
+    })
+
+    // The restore itself waits until the slides of this visit are really in the DOM: right after
+    // the page is shown the list is still empty (it is only rendered while the page is visible),
+    // so an immediate slideTo went nowhere and the list opened at the start.
+    effect(() => {
+      const count = this.shownData().length
+      if (!this.pendingRestore || count === 0) return
+      setTimeout(() => {
+        const sw = this.swiper()
+        const len = (sw as unknown as { slides?: HTMLElement[] } | undefined)?.slides?.length ?? 0
+        if (!this.pendingRestore || !sw || len === 0) return
+        if (len > this.cachedSwiperPosition || len >= this.data().length) {
+          ;(sw as unknown as { update?: () => void }).update?.()
+          sw.slideTo(Math.min(this.cachedSwiperPosition, len - 1), 0)
+          this.pendingRestore = false
+        }
+      }, 0)
     })
 
     // New slides need their tilt as soon as they are rendered.
@@ -224,7 +243,9 @@ export class SwiperComponent<T> {
 
   public ionViewDidEnter(): void {
     this.pageIsShown.set(true)
-    this.renderableLimit.set(SwiperComponent.RENDER_INITIAL)
+    // Render at least up to the remembered position (plus a few slides around it), so coming
+    // back from an album list lands on the artist you left instead of the end of the first chunk.
+    this.renderableLimit.set(Math.max(SwiperComponent.RENDER_INITIAL, this.cachedSwiperPosition + 12))
     // Don't kick the render timer here — the effect tracking pageIsShown +
     // data().length will start it as soon as data has arrived.
     // Eager preload of the initial window so the first few swipes
@@ -272,6 +293,7 @@ export class SwiperComponent<T> {
   public resetSwiperPosition(): void {
     this.swiper()?.slideTo(0, 0)
     this.cachedSwiperPosition = 0
+    this.pendingRestore = false
     this.selectedIndex = 0
     this.applyCoverflow()
   }

@@ -413,7 +413,10 @@ export class MediaService {
     // because multiple data.json rows may share the same artist name (each
     // album its own row), and there's no single API call that retrieves
     // them as a group.
-    return this.fetchMedia(category).pipe(
+    // onlyArtist: rows that name another artist are skipped before their Spotify/RSS lookup -
+    // the result is the same, but an artist of single albums (e.g. 169 rows) no longer waits for
+    // the lookups of the whole category (327 rows).
+    return this.fetchMedia(category, artist.name).pipe(
       map((media: Media[]) => {
         return media.filter((currentMedia) => currentMedia.artist === artist.name)
       }),
@@ -526,14 +529,14 @@ export class MediaService {
     )
   }
 
-  private fetchMedia(category: CategoryType): Observable<Media[]> {
+  private fetchMedia(category: CategoryType, onlyArtist?: string): Observable<Media[]> {
     if (category === 'nas') {
       // NAS media is fetched live from the NAS on every call (never cached
       // into data.json), so it bypasses the Spotify-oriented updateMedia pipeline
       // below entirely - the backend already returns ready-to-use Media[].
       return this.http.get<Media[]>(`${this.getApiBackendUrl()}/nas/artists`)
     }
-    const dataMedia = this.updateMedia(`${this.getApiBackendUrl()}/data`, false, category)
+    const dataMedia = this.updateMedia(`${this.getApiBackendUrl()}/data`, false, category, onlyArtist)
 
     if (category === 'audiobook' || category === 'music' || category === 'other') {
       // Local files are read live from the media folders (any folder depth), so
@@ -551,7 +554,7 @@ export class MediaService {
   }
 
   // Get the media data for the current category from the server
-  private updateMedia(url: string, resume: boolean, category: CategoryType): Observable<Media[]> {
+  private updateMedia(url: string, resume: boolean, category: CategoryType, onlyArtist?: string): Observable<Media[]> {
     // Custom rxjs pipe applied to every iif-branch's service-call output.
     // Carries the original item's user-relevant fields onto the Media that
     // the spotify/rss/library service builds out of upstream API data:
@@ -587,7 +590,12 @@ export class MediaService {
         for (const item of items) {
           item.category = item.category === undefined ? 'audiobook' : item.category
         }
-        return items.filter((item) => item.category === category)
+        return items.filter(
+          (item) =>
+            item.category === category &&
+            // A row with its own artist keeps it (overwriteArtist), so it can only match that artist.
+            (onlyArtist === undefined || !(item.artist?.length > 0) || item.artist === onlyArtist),
+        )
       }),
       mergeMap((items) => from(items)), // parallel calls for each item
       map(
