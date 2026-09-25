@@ -489,7 +489,9 @@
   $change=2;
   }
 
-if( isset($_POST['rotary_toggle']) || isset($_POST['rotary_save']) )
+// The general "Submit" of the audio settings also saves the rotary encoder fields (they sit in the same form)
+$rotary_save = isset($_POST['rotary_save']) || ( isset($_POST['audioset']) && isset($_POST['rotary_step']) );
+if( isset($_POST['rotary_toggle']) || $rotary_save )
 	{
 	if( !isset($data["rotary"]) || !is_array($data["rotary"]) ) { $data["rotary"] = array( "active" => false, "button" => "off" ); }
 	if( isset($_POST['rotary_toggle']) )
@@ -509,13 +511,17 @@ if( isset($_POST['rotary_toggle']) || isset($_POST['rotary_save']) )
 			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder is deactivated now.</li>";
 			}
 		}
-	if( isset($_POST['rotary_save']) )
+	if( $rotary_save )
 		{
 		// Only the offered functions (the service reads this value on every button press)
 		$rotary_button = in_array($_POST['rotary_button'] ?? '', array('off','playpause','next','ffwd'), true) ? $_POST['rotary_button'] : 'off';
+		$rotary_step = min(10, max(1, intval($_POST['rotary_step'] ?? 5)));
+		if( ($data["rotary"]["button"] ?? null) !== $rotary_button || ($data["rotary"]["step"] ?? null) !== $rotary_step )
+			{
+			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder settings saved (volume step ".$rotary_step."%, push button: ".$rotary_button.").</li>";
+			}
 		$data["rotary"]["button"] = $rotary_button;
-		$data["rotary"]["step"] = min(10, max(1, intval($_POST['rotary_step'] ?? 5)));
-		$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder settings saved (volume step ".$data["rotary"]["step"]."%, push button: ".$rotary_button.").</li>";
+		$data["rotary"]["step"] = $rotary_step;
 		}
 	$change = 2;
 	}
