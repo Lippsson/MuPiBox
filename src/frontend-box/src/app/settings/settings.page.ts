@@ -25,6 +25,7 @@ import { ElternMagicLinkService } from '../eltern-magic-link.service'
 import { DisplayTextsService } from '../display-texts.service'
 import { MediaService } from '../media.service'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
+import { WifiIconComponent } from '../wifi-icon/wifi-icon.component'
 
 export interface SettingsMenuEntry {
   name: string
@@ -41,6 +42,7 @@ export interface SettingsMenuEntry {
     IonBackButton,
     IonTitle,
     MupiHatIconComponent,
+    WifiIconComponent,
     IonHeader,
     IonToolbar,
     IonButtons,

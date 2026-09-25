@@ -12,6 +12,7 @@ import { LoadingComponent } from '../loading/loading.component'
 import { Media } from '../media'
 import { MediaService } from '../media.service'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
+import { WifiIconComponent } from '../wifi-icon/wifi-icon.component'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
 import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
 
@@ -21,6 +22,7 @@ import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
   styleUrls: ['./resume.page.scss'],
   imports: [
     MupiHatIconComponent,
+    WifiIconComponent,
     LoadingComponent,
     IonHeader,
     IonToolbar,
