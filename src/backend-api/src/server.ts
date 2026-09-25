@@ -1451,6 +1451,9 @@ app.post('/api/playtime/release', localOrElternSession, async (req, res) => {
         cfg.playbackOverride = ov
       }
       ov.allowUntil = until
+      // The last parent action wins: releasing also ends a running "quiet now". The player lets a force block
+      // win over a release, so without this the box stayed blocked although the app said "override active".
+      ov.forceBlockUntil = 0
     })
     console.log(
       `${new Date().toLocaleString()}: [MuPiBox-Server] /api/playtime/release for ${minutes} min (until ${new Date(until).toLocaleString()})`,
@@ -1519,6 +1522,8 @@ app.post('/api/quiethours/now', localOrElternSession, async (req, res) => {
         cfg.playbackOverride = ov
       }
       ov.forceBlockUntil = until
+      // ... and "quiet now" ends a running release (see /api/playtime/release)
+      ov.allowUntil = 0
     })
     console.log(
       `${new Date().toLocaleString()}: [MuPiBox-Server] /api/quiethours/now for ${minutes} min (until ${new Date(until).toLocaleString()})`,
