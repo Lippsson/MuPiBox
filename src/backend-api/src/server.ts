@@ -3651,19 +3651,20 @@ function normalizeNasPath(nasPath: string): string {
 // The box plays and lists only what the parents selected in the admin interface ("Show in
 // MuPiBox" / "Download local"). These routes proxied ANY path with the box's NAS login - with an
 // account that can read more than music, anyone in the LAN could fetch e.g. /Privat/Steuern.pdf.
-const nasPathWithinSelection: express.RequestHandler = async (req, res, next) => {
-  const raw = typeof req.query.path === 'string' ? req.query.path : ''
+async function nasPathSelected(raw: string): Promise<boolean> {
   const parts = nasPathParts(raw)
+  if (!parts) return false
   const settings = nasSettings(await getMupiboxConfig())
   const selected = [...(settings?.artistFolders ?? []), ...(settings?.downloadFolders ?? [])].map(normalizeNasPath)
   const hidden = (settings?.hiddenFolders ?? []).map(normalizeNasPath)
-  const wanted = parts ? normalizeNasPath(raw) : ''
+  const wanted = normalizeNasPath(raw)
   // A folder marked "Hide in MuPiBox" is left out together with everything below it (as in the NAS tab).
-  if (
-    parts &&
-    selected.some((folder) => wanted === folder || wanted.startsWith(`${folder}/`)) &&
-    !nasIsHidden(wanted, hidden)
-  ) {
+  return selected.some((folder) => wanted === folder || wanted.startsWith(`${folder}/`)) && !nasIsHidden(wanted, hidden)
+}
+
+const nasPathWithinSelection: express.RequestHandler = async (req, res, next) => {
+  const raw = typeof req.query.path === 'string' ? req.query.path : ''
+  if (await nasPathSelected(raw)) {
     next()
     return
   }
@@ -5832,6 +5833,7 @@ app.use(
     updateMupiboxConfig,
     activeDataPath: activedataFile,
     currentPlayLogStart,
+    nasPathSelected,
   }),
 )
 // The web app lives at /parents; /eltern (its first address) keeps working for bookmarks, home-screen

@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import { NavigationExtras, Router } from '@angular/router'
-import { catchError, interval, of, switchMap, timeout } from 'rxjs'
+import { catchError, firstValueFrom, interval, of, switchMap, timeout } from 'rxjs'
 import { filter, map } from 'rxjs/operators'
 import { environment } from 'src/environments/environment'
 import type { CurrentMPlayer } from './current.mplayer'
@@ -102,7 +102,7 @@ export class ExternalPlaybackNavigatorService {
           this.lastSeenTriggerAt = at
           if (!this.isCurrentlyOnPlayerPage() && !this.isNavigatingToPlayer) {
             console.log(`🎵 External playback trigger from "${src}" — navigating to /player`)
-            this.navigateToPlayerExternal(data)
+            void this.navigateToPlayerExternal(data)
           }
           return
         }
@@ -146,9 +146,26 @@ export class ExternalPlaybackNavigatorService {
    *  Radio) ein Media-Objekt aus den /local-Daten und gibt es als
    *  navigationExtras.state mit. Player-Page erkennt am `externalPlayback:
    *  true` Flag dass Track schon läuft und ruft NICHT playMedia() doppelt. */
-  private navigateToPlayerExternal(data: CurrentMPlayer): void {
+  private async navigateToPlayerExternal(data: CurrentMPlayer): Promise<void> {
     const media = this.buildMediaFromLocal(data)
     this.isNavigatingToPlayer = true
+    // A NAS album: its cover is the one the NAS tab shows, found in the listing of the parent folder.
+    if (media?.type === 'nas' && media.nasPath) {
+      const parent = media.nasPath.split('/').slice(0, -1).join('/')
+      const siblings = await firstValueFrom(
+        this.http
+          .get<Media[]>(`${environment.backend.apiUrl}/nas/children?path=${encodeURIComponent(parent)}`)
+          .pipe(
+            timeout(2000),
+            catchError(() => of([] as Media[])),
+          ),
+      )
+      const own = siblings.find((entry) => entry.nasPath === media.nasPath)
+      if (own?.cover) {
+        media.cover = own.cover
+        media.artistcover = own.artistcover
+      }
+    }
     const extras: NavigationExtras = { state: { externalPlayback: true } }
     if (media) (extras.state as Record<string, unknown>).media = media
     this.router
@@ -175,6 +192,18 @@ export class ExternalPlaybackNavigatorService {
   private buildMediaFromLocal(data: CurrentMPlayer): Media | null {
     if (data.currentPlayer !== 'mplayer') return null
     const path = String((data as { path?: string }).path ?? '')
+    // A NAS album (started from the parents' web app): path is the album folder on the NAS. The player page
+    // loads its track list by nasPath, and the cover is the folder's picture as the NAS tab shows it.
+    if ((data as { currentType?: string }).currentType === 'nas' && path) {
+      const folders = path.split('/').filter(Boolean)
+      return {
+        type: 'nas',
+        category: 'nas',
+        artist: folders[folders.length - 2] ?? '',
+        title: String(data.album ?? folders[folders.length - 1] ?? ''),
+        nasPath: path,
+      } as Media
+    }
     const pathParts = path.split('/').filter(Boolean)
     const category = pathParts[0] || 'music'
     const artist = pathParts[1] || ''
