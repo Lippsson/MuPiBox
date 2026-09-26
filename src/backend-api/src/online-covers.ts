@@ -119,16 +119,14 @@ export function scoreCandidate(series: string, album: string, c: Candidate): num
   }
   const seriesCompact = normalize(series).replace(/ /g, '')
   if (seriesCompact.length >= 4 && both.replace(/ /g, '').includes(seriesCompact)) score += 2
-  // A one-word name ("Christliche") is found in far too many titles ("Christliche Kinderlieder"): without episode
-  // number or series it has to be the whole title, apart from additions in brackets or after a colon/dash
-  // ("Pollyanna (Das immer fröhliche Mädchen)").
-  if (words.length === 1 && score === 1) {
-    const nameNorm = normalize(name)
-    const parts = c.title
-      .replace(/[([{].*?[)\]}]/g, ' ')
-      .split(/:| - /)
-      .map((part) => normalize(part))
-    if (!parts.includes(nameNorm)) return 0
+  // Without episode number or series the name has to be the whole title, apart from additions in brackets or before/
+  // after a colon or dash ("Pollyanna (Das immer fröhliche Mädchen)", "Folge 1: In 80 Tagen um die Welt") - else
+  // "Christliche" takes "Christliche Kinderlieder" and "Asterix & Obelix" "34: Asterix & Obelix feiern Geburtstag".
+  if (score === 1) {
+    const withoutBrackets = (text: string) => text.replace(/[([{].*?[)\]}]/g, ' ')
+    const names = [normalize(name), normalize(withoutBrackets(name))]
+    const parts = [title, ...withoutBrackets(c.title).split(/:| - /).map((part) => normalize(part))]
+    if (!parts.some((part) => names.includes(part))) return 0
   }
   if (c.genre && KIDS_GENRES.test(c.genre)) score += 1
   if (/\bsingle\b/.test(title)) score -= 1
