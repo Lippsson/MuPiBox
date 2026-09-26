@@ -1047,10 +1047,10 @@ app.get('/api/online-cover/:file', (req, res) => {
     res.status(400).type('text/plain').send('invalid name')
     return
   }
-  res.set('Cache-Control', 'public, max-age=86400')
-  // dotfiles: the cache lies below /home/dietpi/.mupibox, which sendFile refuses by default (404)
-  res.sendFile(file, { dotfiles: 'allow' }, (err) => {
-    if (err && !res.headersSent) res.status(404).type('text/plain').send('cover not available')
+  // dotfiles: the cache lies below /home/dietpi/.mupibox, which sendFile refuses by default (404). Only a picture
+  // may be kept by the browser: a cached "not found" would hide the cover for a day.
+  res.sendFile(file, { dotfiles: 'allow', headers: { 'Cache-Control': 'public, max-age=86400' } }, (err) => {
+    if (err && !res.headersSent) res.status(404).set('Cache-Control', 'no-store').type('text/plain').send('cover not available')
   })
 })
 

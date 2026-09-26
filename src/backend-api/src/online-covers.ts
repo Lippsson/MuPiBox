@@ -133,6 +133,11 @@ export function scoreCandidate(series: string, album: string, c: Candidate): num
   return score
 }
 
+// v: browsers kept a 404 of the first version (sent with a one-day cache) - a new URL goes past it
+function coverUrl(file: string): string {
+  return `/api/online-cover/${file}?v=2`
+}
+
 export class OnlineCovers {
   private index: Record<string, OnlineCoverEntry> = {}
   private readonly indexPath: string
@@ -165,7 +170,7 @@ export class OnlineCovers {
   coverFor(type: 'nas' | 'local', folderPath: string, series: string, album: string): string | undefined {
     const key = OnlineCovers.key(type, folderPath)
     const entry = this.index[key]
-    if (entry?.status === 'found' && entry.file) return `/api/online-cover/${entry.file}`
+    if (entry?.status === 'found' && entry.file) return coverUrl(entry.file)
     if (!entry && this.isEnabled() && !this.queued.has(key)) {
       this.queued.add(key)
       this.queue.push({ key, series, album })
@@ -176,7 +181,7 @@ export class OnlineCovers {
 
   list(): Array<OnlineCoverEntry & { key: string; url?: string }> {
     return Object.entries(this.index)
-      .map(([key, e]) => ({ key, ...e, url: e.file ? `/api/online-cover/${e.file}` : undefined }))
+      .map(([key, e]) => ({ key, ...e, url: e.file ? coverUrl(e.file) : undefined }))
       .sort((a, b) => b.at - a.at)
   }
 
