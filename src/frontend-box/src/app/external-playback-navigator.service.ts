@@ -56,6 +56,16 @@ export class ExternalPlaybackNavigatorService {
     this.spotifyService.trackChangeDetected$
       .pipe(filter((track) => track !== null && this.isCurrentlyOnPlayerPage()))
       .subscribe(() => this.pollNow$.next())
+    // Spotify pausing on the player page: e.g. the player switched to a NAS/local album started from the phone.
+    // That album starts a few seconds later, so ask a few times in that span instead of waiting for the 10 s tick.
+    let wasPaused = true
+    this.spotifyService.playerState$.subscribe((state) => {
+      const paused = !state || state.paused
+      if (paused && !wasPaused && this.isCurrentlyOnPlayerPage()) {
+        for (const delay of [500, 2500, 4500, 7000]) setTimeout(() => this.pollNow$.next(), delay)
+      }
+      wasPaused = paused
+    })
 
     // Monitor external playback detection
     this.spotifyService.trackChangeDetected$
@@ -199,19 +209,21 @@ export class ExternalPlaybackNavigatorService {
   private async navigateToPlayerExternal(data: CurrentMPlayer, replacePlayerPage = false): Promise<void> {
     const media = this.buildMediaFromLocal(data)
     this.isNavigatingToPlayer = true
-    // A NAS album: its cover is the one the NAS tab shows, found in the listing of the parent folder. Looked up
-    // before the old page is left, so a replaced page is gone only for a moment.
-    if (media?.type === 'nas' && media.nasPath) {
-      const parent = media.nasPath.split('/').slice(0, -1).join('/')
+    // A NAS or local album: its cover is the one the NAS tab / the library shows, found in the listing of the
+    // parent folder. Looked up before the old page is left, so a replaced page is gone only for a moment.
+    const folderPath = media?.type === 'nas' ? media.nasPath : media?.type === 'library' ? media.libraryPath : undefined
+    if (media && folderPath) {
+      const parent = folderPath.split('/').slice(0, -1).join('/')
+      const listing = media.type === 'nas' ? 'nas' : 'library'
       const siblings = await firstValueFrom(
         this.http
-          .get<Media[]>(`${environment.backend.apiUrl}/nas/children?path=${encodeURIComponent(parent)}`)
+          .get<Media[]>(`${environment.backend.apiUrl}/${listing}/children?path=${encodeURIComponent(parent)}`)
           .pipe(
             timeout(2000),
             catchError(() => of([] as Media[])),
           ),
       )
-      const own = siblings.find((entry) => entry.nasPath === media.nasPath)
+      const own = siblings.find((entry) => (media.type === 'nas' ? entry.nasPath : entry.libraryPath) === folderPath)
       if (own?.cover) {
         media.cover = own.cover
         media.artistcover = own.artistcover
@@ -278,7 +290,11 @@ export class ExternalPlaybackNavigatorService {
     const ctype = String((data as { currentType?: string }).currentType ?? 'local')
     const type: Media['type'] =
       ctype === 'rss' ? 'rss' : ctype === 'radio' ? 'radio' : 'library'
-    return { type, category, artist, title } as Media
+    const media = { type, category, artist, title } as Media
+    // A local album: path is its folder in the library (e.g. audiobook/<artist>/<album>), as the box's own
+    // library pages know it - the cover is looked up there (see navigateToPlayerExternal).
+    if (type === 'library' && pathParts.length >= 2) media.libraryPath = pathParts.join('/')
+    return media
   }
 
   private isCurrentlyOnPlayerPage(): boolean {
