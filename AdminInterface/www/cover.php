@@ -1,5 +1,69 @@
 <?php
+	// Online covers (NAS and local albums without a picture) are kept by the backend. The page shows them through
+	// this proxy, so they load on an https admin page too. Answers before header.php: an image, no HTML.
+	$ocBackend = 'http://localhost:8200/api';
+	if (isset($_GET['online_cover'])) {
+		require __DIR__ . '/includes/auth_check.php';
+		$ocFile = (string)$_GET['online_cover'];
+		if (!preg_match('/^[a-f0-9]{40}\.jpg$/', $ocFile)) {
+			http_response_code(400);
+			exit;
+		}
+		$ch = curl_init("$ocBackend/online-cover/$ocFile");
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+		$ocImage = curl_exec($ch);
+		$ocStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		curl_close($ch);
+		if ($ocImage === false || $ocStatus !== 200) {
+			http_response_code(404);
+			exit;
+		}
+		header('Content-Type: image/jpeg');
+		header('Cache-Control: private, max-age=86400');
+		echo $ocImage;
+		exit;
+	}
+
+	function ocApiCall($url, $body = null) {
+		$ch = curl_init($url);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+		if ($body !== null) {
+			curl_setopt($ch, CURLOPT_POST, true);
+			curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
+			curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
+		}
+		$response = curl_exec($ch);
+		curl_close($ch);
+		$decoded = $response === false ? null : json_decode($response, true);
+		return is_array($decoded) ? $decoded : array('success' => false);
+	}
+
 	include ('includes/header.php');
+
+	if (isset($_POST['online_covers_save'])) {
+		$data['mupibox']['onlineCovers'] = isset($_POST['onlineCovers']);
+		$ocError = '';
+		if (save_mupiboxconfig($data, $ocError)) {
+			$CHANGE_TXT = $CHANGE_TXT . "<li>Online covers " . ($data['mupibox']['onlineCovers'] ? 'switched on' : 'switched off') . "</li>";
+		} else {
+			$CHANGE_TXT = $CHANGE_TXT . "<li>ERROR: the setting could not be saved: " . htmlspecialchars($ocError) . "</li>";
+		}
+		$change = 1;
+	}
+	if (isset($_POST['online_cover_reject'])) {
+		$ocResult = ocApiCall("$ocBackend/online-covers/reject", array('key' => (string)($_POST['online_cover_key'] ?? '')));
+		$CHANGE_TXT = $CHANGE_TXT . (!empty($ocResult['success']) ? "<li>Cover discarded - this album is not looked up again.</li>" : "<li>ERROR: the cover could not be discarded.</li>");
+		$change = 1;
+	}
+	if (isset($_POST['online_covers_retry'])) {
+		$ocResult = ocApiCall("$ocBackend/online-covers/retry", array('alsoRejected' => isset($_POST['online_covers_retry_rejected'])));
+		$CHANGE_TXT = $CHANGE_TXT . (!empty($ocResult['success'])
+			? "<li>" . (int)($ocResult['cleared'] ?? 0) . " albums are looked up again the next time they are shown.</li>"
+			: "<li>ERROR: the MuPiBox backend could not be reached.</li>");
+		$change = 1;
+	}
 
 	if( $_POST['deleteimage'] )
 		{
@@ -109,6 +173,60 @@
 		</li>
 	</ul>
 </form>
+
+<?php
+	$ocEnabled = (($data['mupibox']['onlineCovers'] ?? false) === true);
+	$ocList = ocApiCall("$ocBackend/online-covers");
+	$ocEntries = is_array($ocList['entries'] ?? null) ? $ocList['entries'] : array();
+	$ocCount = array('found' => 0, 'none' => 0, 'rejected' => 0);
+	foreach ($ocEntries as $ocEntry) {
+		$ocStatus = $ocEntry['status'] ?? '';
+		if (isset($ocCount[$ocStatus])) $ocCount[$ocStatus]++;
+	}
+?>
+<form class="appnitro" method="post" action="cover.php">
+	<ul>
+		<li class="li_norm"><h2>Online covers for NAS and local albums</h2>
+			<p>Albums on the NAS or on the box without a picture of their own get their cover from iTunes or Deezer.
+			A cover is only taken when title and episode number or series clearly match, otherwise the album keeps
+			the picture of the folder above. Albums are looked up in the background the first time they are shown on
+			the box or in the Parent Web App; the cover appears the next time. The folder names are sent to Apple and
+			Deezer for this.</p>
+			<label class="labelchecked" for="onlineCovers">Look up covers online:&nbsp; &nbsp;
+				<input type="checkbox" id="onlineCovers" name="onlineCovers" value="1" <?= $ocEnabled ? 'checked="checked"' : '' ?> />
+			</label>
+			<input type="submit" class="button_text" value="Save" name="online_covers_save">
+			<p>Found: <?= $ocCount['found'] ?> &nbsp;|&nbsp; No match: <?= $ocCount['none'] ?> &nbsp;|&nbsp; Discarded: <?= $ocCount['rejected'] ?></p>
+		</li>
+		<li class="li_norm">
+			<label class="labelchecked" for="online_covers_retry_rejected">Also discarded ones:&nbsp;
+				<input type="checkbox" id="online_covers_retry_rejected" name="online_covers_retry_rejected" value="1" />
+			</label>
+			<input type="submit" class="button_text" value="Look up albums without a match again" name="online_covers_retry">
+		</li>
+	</ul>
+</form>
+<?php
+	if ($ocCount['found'] > 0) {
+		print "<div style='margin:30px;overflow:hidden;'>";
+		foreach ($ocEntries as $ocEntry) {
+			if (($ocEntry['status'] ?? '') !== 'found' || !preg_match('/^[a-f0-9]{40}\.jpg$/', (string)($ocEntry['file'] ?? ''))) continue;
+			$ocKey = (string)($ocEntry['key'] ?? '');
+			$ocWhere = strpos($ocKey, 'nas:') === 0 ? 'NAS' : 'local';
+			$ocSource = ($ocEntry['source'] ?? '') === 'itunes' ? 'iTunes' : 'Deezer';
+			print "<div style='float:left;width:200px;margin:0 15px 20px 0;' align='center'>";
+			print "<form method=\"post\" action=\"cover.php\">";
+			print "<img src='cover.php?online_cover=" . $ocEntry['file'] . "' style='width:180px;height:180px;object-fit:cover;' loading='lazy' alt=''>";
+			print "<p style='margin:4px 0;'><b>" . htmlspecialchars((string)($ocEntry['album'] ?? '')) . "</b><br>";
+			print "<small>" . $ocWhere . ": " . htmlspecialchars((string)($ocEntry['series'] ?? '')) . "<br>";
+			print $ocSource . ": " . htmlspecialchars((string)($ocEntry['matchedArtist'] ?? '')) . " - " . htmlspecialchars((string)($ocEntry['matchedTitle'] ?? '')) . "</small></p>";
+			print "<input type=\"hidden\" name=\"online_cover_key\" value=\"" . htmlspecialchars($ocKey, ENT_QUOTES) . "\">";
+			print "<input type=\"submit\" class=\"button_text\" value=\"Discard (wrong cover)\" name=\"online_cover_reject\">";
+			print "</form></div>";
+		}
+		print "</div>";
+	}
+?>
 
 
 <?php

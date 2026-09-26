@@ -34,6 +34,7 @@
 			"mystic"
 			],
 		"customTheme": "",
+		"onlineCovers": false,
 		"startSound": "/home/dietpi/MuPiBox/sysmedia/sound/startup.wav",
 		"shutSound": "/home/dietpi/MuPiBox/sysmedia/sound/shutdown.wav",
 		"startVolume": "40",

@@ -31,6 +31,7 @@ import type { RunSyncDeps } from './spotify-sync/state-machine'
 import { buildElternLandingHandler, createElternApiRouter } from './eltern/routes'
 import { startBucketCleanup } from './eltern/middleware'
 import { SUDO_BACKUP_SNIPPET, backupBeforeWrite } from './file-backup'
+import { OnlineCovers } from './online-covers'
 import { browserGuard, corsOptionsFor, localOnly, localOrElternSession } from './request-guard'
 
 // Force IPv4 for DNS lookups to avoid EAI_AGAIN errors on Raspberry Pi
@@ -75,6 +76,12 @@ readJsonFile(`${configBasePath}/config.json`).then((configFile) => {
 // from its own SD+RAM after the first miss -- caps Chromium's parallel
 // connection limit to one host and saves repeat CDN round-trips.
 const coverCacheService = new CoverCacheService(path.join(process.cwd(), 'cache'))
+// Covers from iTunes/Deezer for NAS and local albums without a picture (see online-covers.ts). Off unless
+// mupibox.onlineCovers is switched on in the admin interface (Cover page).
+const onlineCovers = new OnlineCovers(
+  path.join(process.cwd(), 'cache', 'online-covers'),
+  () => (getMupiboxConfigSync()?.mupibox as { onlineCovers?: boolean } | undefined)?.onlineCovers === true,
+)
 
 const mupiboxConfigPath = '/etc/mupibox/mupiboxconfig.json'
 const mupiboxConfigDir = path.dirname(mupiboxConfigPath)
@@ -1031,6 +1038,31 @@ app.get('/api/spotify/cover/:imageId', async (req, res) => {
   res.set('Cache-Control', 'public, max-age=31536000, immutable')
   res.set('ETag', `"${req.params.imageId}"`)
   res.send(buf)
+})
+
+// Online covers of NAS and local albums (online-covers.ts). The file names are sha1 hashes, checked in filePath().
+app.get('/api/online-cover/:file', (req, res) => {
+  const file = onlineCovers.filePath(req.params.file)
+  if (!file) {
+    res.status(400).type('text/plain').send('invalid name')
+    return
+  }
+  res.set('Cache-Control', 'public, max-age=86400')
+  res.sendFile(file, (err) => {
+    if (err && !res.headersSent) res.status(404).type('text/plain').send('cover not available')
+  })
+})
+
+// For the admin interface (Cover page): what was found, throw away a wrong one, look up the misses again.
+app.get('/api/online-covers', localOnly, (_req, res) => {
+  res.json({ success: true, entries: onlineCovers.list() })
+})
+app.post('/api/online-covers/reject', localOnly, (req, res) => {
+  const key = typeof req.body?.key === 'string' ? req.body.key : ''
+  res.json({ success: onlineCovers.reject(key) })
+})
+app.post('/api/online-covers/retry', localOnly, (req, res) => {
+  res.json({ success: true, cleared: onlineCovers.retry(req.body?.alsoRejected === true) })
 })
 
 // Cover of a Spotify entry that has none stored in data.json (added by hand: just an album or artist id), for the
@@ -3782,17 +3814,31 @@ async function nasBuildMediaEntry(
 ): Promise<Record<string, unknown>> {
   const files = await nasListFiles(folderPath)
   const ownCoverPath = nasFindCoverImage(files) ?? (await nasFindCoverBelow(files))
-  const coverPath = ownCoverPath ?? fallbackCoverPath
+  const isContainer = nasIsContainer(files)
+  // An album without a picture: its own cover from the internet beats the series' picture from the folder above.
+  const cover =
+    (ownCoverPath ? nasStreamUrl(ownCoverPath) : undefined) ??
+    (isContainer ? undefined : onlineAlbumCover('nas', folderPath)) ??
+    (fallbackCoverPath ? nasStreamUrl(fallbackCoverPath) : undefined)
   return {
     type: 'nas',
     category: 'nas',
     artist: artistName,
     title,
     nasPath: folderPath,
-    nasIsContainer: nasIsContainer(files),
-    cover: coverPath ? nasStreamUrl(coverPath) : undefined,
-    artistcover: coverPath ? nasStreamUrl(coverPath) : undefined,
+    nasIsContainer: isContainer,
+    cover,
+    artistcover: cover,
   }
+}
+
+// Online cover of an album folder (NAS path or library path), see online-covers.ts; asks for a lookup when there is
+// none yet. The folder above names the series ("Pumuckl/029 Originalmusik").
+function onlineAlbumCover(type: 'nas' | 'local', folderPath: string): string | undefined {
+  const parts = folderPath.split('/').filter(Boolean)
+  const album = parts.at(-1)
+  if (!album) return undefined
+  return onlineCovers.coverFor(type, folderPath, parts.at(-2) ?? '', album)
 }
 
 // The NAS login password is kept in the config file encrypted (AES-256-GCM), so the configuration
@@ -5578,33 +5624,47 @@ function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
 
 // Covers are asked for as small thumbnails (see above).
 // Cover of the NAS or local album mplayer plays (the parents' web app shows it in "now playing"): the album
-// folder's picture, else its parent's - as the NAS tab and the library show them. Kept 10 minutes per folder,
-// as the web app asks every few seconds and a NAS listing is a network round trip.
-const playingCoverCache = new Map<string, { cover: string | null; at: number }>()
+// folder's picture, else its online cover, else its parent's picture - as the NAS tab and the library show them.
+// The folder pictures are kept 10 minutes per folder, as the web app asks every few seconds and a NAS listing is a
+// network round trip.
+const playingCoverCache = new Map<
+  string,
+  { album?: { type: 'nas' | 'local'; path: string }; own: string | null; parent: string | null; at: number }
+>()
 async function playingAlbumCover(type: string, folder: string): Promise<string | null> {
   const key = `${type}|${folder}`
-  const cached = playingCoverCache.get(key)
-  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.cover
-  let cover: string | null = null
-  try {
-    const parent = folder.split('/').slice(0, -1).join('/')
-    if (type === 'nas' && (await nasPathSelected(folder))) {
-      const image =
-        nasFindCoverImage(await nasListFiles(folder)) ??
-        ((await nasPathSelected(parent)) ? nasFindCoverImage(await nasListFiles(parent)) : undefined)
-      cover = image ? nasStreamUrl(image) : null
-    } else if (type === 'local' && libraryRel(folder)) {
-      const image =
-        libraryFindCover(await libraryListFiles(folder)) ??
-        (libraryRel(parent) ? libraryFindCover(await libraryListFiles(parent)) : undefined)
-      cover = image ? libraryFileUrl(image) : null
+  let cached = playingCoverCache.get(key)
+  if (!cached || Date.now() - cached.at >= 10 * 60 * 1000) {
+    let album: { type: 'nas' | 'local'; path: string } | undefined
+    let own: string | null = null
+    let parentCover: string | null = null
+    try {
+      const parent = folder.split('/').slice(0, -1).join('/')
+      if (type === 'nas' && (await nasPathSelected(folder))) {
+        album = { type: 'nas', path: folder }
+        const image = nasFindCoverImage(await nasListFiles(folder))
+        const parentImage =
+          !image && (await nasPathSelected(parent)) ? nasFindCoverImage(await nasListFiles(parent)) : undefined
+        own = image ? nasStreamUrl(image) : null
+        parentCover = parentImage ? nasStreamUrl(parentImage) : null
+      } else if (type === 'local' && libraryRel(folder)) {
+        album = { type: 'local', path: libraryRel(folder) ?? folder }
+        const image = libraryFindCover(await libraryListFiles(folder))
+        const parentImage = !image && libraryRel(parent) ? libraryFindCover(await libraryListFiles(parent)) : undefined
+        own = image ? libraryFileUrl(image) : null
+        parentCover = parentImage ? libraryFileUrl(parentImage) : null
+      }
+    } catch {
+      own = null
+      parentCover = null
     }
-  } catch {
-    cover = null
+    if (playingCoverCache.size > 50) playingCoverCache.clear()
+    cached = { album, own, parent: parentCover, at: Date.now() }
+    playingCoverCache.set(key, cached)
   }
-  if (playingCoverCache.size > 50) playingCoverCache.clear()
-  playingCoverCache.set(key, { cover, at: Date.now() })
-  return cover
+  if (cached.own) return cached.own
+  const online = cached.album ? onlineAlbumCover(cached.album.type, cached.album.path) : undefined
+  return online ?? cached.parent
 }
 
 function libraryFileUrl(relPath: string): string {
@@ -5619,8 +5679,11 @@ async function libraryBuildEntry(
 ): Promise<Record<string, unknown>> {
   const files = await libraryListFiles(relPath)
   const isContainer = nasIsContainer(files)
-  const coverPath =
-    libraryFindCover(files) ?? (isContainer ? await libraryFindCoverBelow(files, 2) : undefined) ?? fallbackCoverPath
+  const ownCoverPath = libraryFindCover(files) ?? (isContainer ? await libraryFindCoverBelow(files, 2) : undefined)
+  const cover =
+    (ownCoverPath ? libraryFileUrl(ownCoverPath) : undefined) ??
+    (isContainer ? undefined : onlineAlbumCover('local', relPath)) ??
+    (fallbackCoverPath ? libraryFileUrl(fallbackCoverPath) : undefined)
   return {
     type: 'library',
     category: relPath.split('/')[0],
@@ -5629,8 +5692,8 @@ async function libraryBuildEntry(
     libraryPath: relPath,
     // A folder with only subfolders (no audio files) opens the next level instead of playing.
     libraryIsContainer: isContainer,
-    cover: coverPath ? libraryFileUrl(coverPath) : undefined,
-    artistcover: coverPath ? libraryFileUrl(coverPath) : undefined,
+    cover,
+    artistcover: cover,
   }
 }
 
