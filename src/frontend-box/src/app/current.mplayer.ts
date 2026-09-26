@@ -29,4 +29,6 @@ export interface CurrentMPlayer {
   activeSpotifyId?: string
   currentType?: string
   path?: string
+  // The file that plays (nas:<NAS path> / local:<library path>): its embedded picture is shown (/api/track-cover).
+  trackFile?: string
 }

@@ -294,6 +294,8 @@ player.on('metadata', (val) => {
     if (track) {
       currentMeta.currentTrackname = track.cue ? track.name : track.name.replace(/\.[^./]+$/, '')
     }
+    // the file that plays: the display and the web app show its embedded picture (/api/track-cover)
+    currentMeta.trackFile = track ? `nas:${track.path}` : undefined
   } else if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio') {
     currentMeta.currentTrackname = val.Title
   }
@@ -344,6 +346,12 @@ player.on('track-change', () => player.getProps(['filename']))
 
 player.on('path', (val) => {
   console.log('track path is', val)
+  // A local file that plays (NAS: set from the track list, see 'metadata'): its embedded picture is shown.
+  const mediaRoot = '/home/dietpi/MuPiBox/media/'
+  if (currentMeta.currentType !== 'nas') {
+    currentMeta.trackFile =
+      typeof val === 'string' && val.startsWith(mediaRoot) ? `local:${val.slice(mediaRoot.length)}` : undefined
+  }
   if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio' && currentMeta.currentType !== 'nas') {
     // The folder holding the file, whatever the folder depth (was: fixed 7th segment).
     const pathParts = val.split('/')
@@ -1804,6 +1812,7 @@ function playListAtTrack(playedList, trackNr, progressPct) {
 
 function playList(playedList) {
   playbackGeneration++
+  currentMeta.trackFile = undefined // the new album's first file sets it (see the path event)
   clearLibraryResumeTimers()
   //let playedTitel = playedList.split('album:').pop();
   playedTitelmod = decodeURI(playedList).replace(/:/g, '/')
@@ -1878,6 +1887,7 @@ async function playNasList(nasPath) {
     currentMeta.currentTrackname = tracks[0]?.name?.replace(/\.[^./]+$/, '') || folderName
     currentMeta.album = folderName
     currentMeta.path = decodedPath
+    currentMeta.trackFile = undefined
 
     // mplayer takes an http URL of a .wma file for a Windows Media stream server (STREAM_ASF) and stops at once;
     // through ffmpeg's http reader it plays as the file it is.

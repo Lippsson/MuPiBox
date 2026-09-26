@@ -34,6 +34,7 @@ import type { RunSyncDeps } from './spotify-sync/state-machine'
 import { buildElternLandingHandler, createElternApiRouter } from './eltern/routes'
 import { startBucketCleanup } from './eltern/middleware'
 import { SUDO_BACKUP_SNIPPET, backupBeforeWrite } from './file-backup'
+import { readEmbeddedPicture } from './embedded-cover'
 import { OnlineCovers } from './online-covers'
 import { browserGuard, corsOptionsFor, localOnly, localOrElternSession } from './request-guard'
 
@@ -6348,6 +6349,91 @@ function isThumbnailable(file: string): boolean {
   return /\.(jpe?g|jfif|png|webp)$/i.test(file)
 }
 
+// --- Track covers -------------------------------------------------------------------------------------------------
+// The picture embedded in the audio file that plays (ID3 / FLAC, see embedded-cover.ts): like Spotify, a playlist of
+// different stories shows each one's own cover. "file" is nas:<NAS path> or local:<library path> (the player sets it
+// as trackFile). The picture is read once (only the head of the file) and kept as a thumbnail on the SD; files
+// without one are remembered for a while.
+const trackCoverMissing = new Map<string, number>()
+const TRACK_COVER_MISSING_MS = 6 * 3600 * 1000
+
+async function trackCover(file: string): Promise<string | undefined> {
+  const colon = file.indexOf(':')
+  const type = file.slice(0, colon)
+  const filePath = file.slice(colon + 1)
+  if (!/\.(mp3|flac)$/i.test(filePath)) return undefined // the formats embedded-cover.ts reads
+  let seed: string
+  let read: (start: number, end: number) => Promise<Buffer>
+  if (type === 'nas') {
+    if (!(await nasPathSelected(filePath))) return undefined
+    const normalized = normalizeNasPath(filePath)
+    const folder = normalized.split('/').slice(0, -1).join('/') || '/'
+    const entry = (await nasListFiles(folder).catch(() => [] as NasFileEntry[])).find((f) => f.path === normalized)
+    if (!entry) return undefined
+    seed = `track|${normalized}|${entry.version ?? entry.additional?.size ?? ''}`
+    const local = nasLocalPath(normalized)
+    const localCopy = local && fs.existsSync(local) ? local : undefined
+    read = async (start, end) => {
+      if (localCopy) return await readFileRange(localCopy, start, end)
+      const session = (await getActiveNasSession()) ?? nasLastSession
+      if (!session) throw new Error('NAS not reachable')
+      const response = await nasFetch(session, nasUrl(session, normalized), {
+        headers: { Authorization: session.auth, Range: `bytes=${start}-${end}` },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (response.status !== 206 && response.status !== 200) throw new Error(`HTTP ${response.status}`)
+      const data = Buffer.from(await response.arrayBuffer())
+      // a server that ignores the range sends the whole file from the start
+      return response.status === 200 ? data.subarray(start, end + 1) : data
+    }
+  } else if (type === 'local') {
+    const rel = libraryRel(filePath)
+    if (!rel) return undefined
+    const absolute = path.join(libraryRoot, rel)
+    const info = await stat(absolute).catch(() => undefined)
+    if (!info?.isFile()) return undefined
+    seed = `track|local|${rel}|${info.mtimeMs}|${info.size}`
+    read = (start, end) => readFileRange(absolute, start, end)
+  } else {
+    return undefined
+  }
+  const missingSince = trackCoverMissing.get(seed)
+  if (missingSince && Date.now() - missingSince < TRACK_COVER_MISSING_MS) return undefined
+  const thumb = await getThumbnail(`track:${file}`, NAS_COVER_THUMB_SIZE, seed, async () => {
+    const picture = await readEmbeddedPicture(read).catch(() => undefined)
+    if (!picture) return undefined
+    const tmp = path.join('/tmp', `.trackcover-${crypto.randomBytes(6).toString('hex')}${picture.mime === 'image/png' ? '.png' : '.jpg'}`)
+    await writeFile(tmp, picture.data)
+    return tmp
+  })
+  if (!thumb) {
+    if (trackCoverMissing.size > 5000) trackCoverMissing.clear()
+    trackCoverMissing.set(seed, Date.now())
+  }
+  return thumb
+}
+
+async function readFileRange(file: string, start: number, end: number): Promise<Buffer> {
+  const handle = await fs.promises.open(file, 'r')
+  try {
+    const buffer = Buffer.alloc(Math.max(0, end - start + 1))
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, start)
+    return buffer.subarray(0, bytesRead)
+  } finally {
+    await handle.close()
+  }
+}
+
+app.get('/api/track-cover', async (req, res) => {
+  const file = typeof req.query.file === 'string' ? req.query.file : ''
+  const thumb = file ? await trackCover(file).catch(() => undefined) : undefined
+  if (!thumb) {
+    res.status(404).set('Cache-Control', 'no-store').send('no track cover')
+    return
+  }
+  await sendThumbnail(res, thumb)
+})
+
 function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
   return stat(thumb).then((info) => {
     // Revalidated on every use (a cheap 304 on the box itself) instead of cached blindly for a day, so a
@@ -6682,6 +6768,8 @@ app.use(
     currentPlayLogStart,
     nasPathSelected,
     playingAlbumCover,
+    playingTrackCover: async (file: string) =>
+      (await trackCover(file).catch(() => undefined)) ? `/api/track-cover?file=${encodeURIComponent(file)}` : null,
   }),
 )
 // The web app lives at /parents; /eltern (its first address) keeps working for bookmarks, home-screen

@@ -104,6 +104,39 @@ export class PlayerPage implements OnInit, AfterViewInit {
   resumeTimer = 0
   resumeAdded = false
   cover = ''
+  // The picture embedded in the file that plays (NAS / local), when it has one - shown instead of the album cover,
+  // so a folder of different stories shows each one's own cover (as Spotify does for a playlist).
+  private trackCover = ''
+  private trackCoverFile: string | undefined
+
+  private followTrackCover(trackFile: string | undefined): void {
+    if (this.media?.type !== 'nas' && this.media?.type !== 'library') trackFile = undefined
+    if (trackFile === this.trackCoverFile) return
+    this.trackCoverFile = trackFile
+    if (!trackFile) {
+      this.useTrackCover('')
+      return
+    }
+    // loaded first, and only shown when there is one: no broken picture, no flicker for files without
+    const url = `${environment.backend.apiUrl}/track-cover?file=${encodeURIComponent(trackFile)}`
+    const img = new Image()
+    img.onload = () => {
+      if (this.trackCoverFile === trackFile) this.useTrackCover(url)
+    }
+    img.onerror = () => {
+      if (this.trackCoverFile === trackFile) this.useTrackCover('')
+    }
+    img.src = url
+  }
+
+  private useTrackCover(url: string): void {
+    this.trackCover = url
+    if (url) {
+      this.cover = url
+    } else if (this.media?.cover) {
+      this.cover = this.artworkService.cachedCoverUrl(this.media, this.media.cover)
+    }
+  }
   playing = true
   updateProgression = false
   private isExternalPlayback = false
@@ -209,6 +242,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
       this.currentPlayedSpotify = spotify
       if (this.media?.type === 'spotify' && spotify?.item?.album?.images?.[0]?.url) {
         this.cover = spotify.item.album.images[0].url
+      } else if (this.trackCover) {
+        this.cover = this.trackCover
       } else if (this.media?.cover) {
         this.cover = this.artworkService.cachedCoverUrl(this.media, this.media.cover)
       } else {
@@ -217,6 +252,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
     })
     this.mediaService.local$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((local) => {
       this.currentPlayedLocal = local
+      this.followTrackCover(local?.trackFile)
     })
     this.mediaService.albumStop$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((albumStop) => {
       this.albumStop = albumStop

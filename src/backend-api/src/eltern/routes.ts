@@ -51,6 +51,8 @@ export interface ElternRouterDeps {
   nasPathSelected?: (path: string) => Promise<boolean>
   /** Cover URL of the NAS ('nas') or local ('local') album folder mplayer plays, null if there is none. */
   playingAlbumCover?: (type: string, folder: string) => Promise<string | null>
+  // The picture embedded in the file that plays (nas:<path> / local:<path>), if it has one
+  playingTrackCover?: (file: string) => Promise<string | null>
 }
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
@@ -1105,7 +1107,12 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         if ((source === 'nas' || source === 'local') && folder) {
           const parts = folder.split('/').filter(Boolean)
           artist = parts[parts.length - 2] ?? ''
-          coverUrl = (await deps.playingAlbumCover?.(source, folder)) ?? null
+          // the track's own picture (a playlist of different stories) before the album's
+          const trackFile = typeof local.trackFile === 'string' ? local.trackFile : ''
+          coverUrl =
+            (trackFile ? await deps.playingTrackCover?.(trackFile) : null) ??
+            (await deps.playingAlbumCover?.(source, folder)) ??
+            null
         }
       } else if (player === 'spotify') {
         try {
