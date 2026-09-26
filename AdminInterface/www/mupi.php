@@ -1633,7 +1633,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 					<label class="mupi-toggle" for="coverflowShowNames">
 						<input type="checkbox" id="coverflowShowNames" name="coverflowShowNames" value="1" <?= (($data["mupibox"]["coverflowShowNames"] ?? false) === true) ? 'checked="checked"' : '' ?> />
 						<span class="track"></span>
-						<span>Ordner/Albumnamen einblenden</span>
+						<span>Show folder/album names</span>
 					</label>
 				</div>
 				<?php $kmSelected = isset($kmNames[$data["mupibox"]["theme"]]); $kmStageOn = (($data["mupibox"]["themeStage"] ?? false) === true); ?>
