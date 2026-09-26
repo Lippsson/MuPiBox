@@ -1888,16 +1888,23 @@ function playRadioURL(radioURL) {
   }
   const generation = ++playbackGeneration
   startLoading()
-  resolveStreamUrl(radioURL).then((streamURL) => {
-    if (generation !== playbackGeneration) {
-      log.debug(`${now()}: [Spotify Control] Playlist ${radioURL} dropped (stopped or replaced meanwhile)`)
-      return
-    }
-    if (streamURL !== radioURL) {
-      log.info(`${now()}: [Spotify Control] Opened playlist ${radioURL}: playing its first stream ${streamURL}`)
-    }
-    playURL(streamURL)
-  })
+  resolveStreamUrl(radioURL)
+    .then((streamURL) => {
+      // like the NAS path: playtime / quiet hours may have started a grace period while the playlist was read
+      if (generation !== playbackGeneration || isPlaybackBlocked()) {
+        log.debug(`${now()}: [Spotify Control] Playlist ${radioURL} dropped (stopped, replaced or blocked meanwhile)`)
+        if (generation === playbackGeneration) stopLoading()
+        return
+      }
+      if (streamURL !== radioURL) {
+        log.info(`${now()}: [Spotify Control] Opened playlist ${radioURL}: playing its first stream ${streamURL}`)
+      }
+      playURL(streamURL)
+    })
+    .catch((err) => {
+      log.error(`${now()}: [Spotify Control] Could not start ${radioURL}: ${err}`)
+      if (generation === playbackGeneration) stopLoading()
+    })
 }
 
 function playURL(playedURL) {
@@ -1974,7 +1981,8 @@ function seek(progress) {
         const index = Math.max(0, currentMeta.currentTracknr - 1)
         const track = currentCue.tracks[index]
         const end = cueTrackEnd(index)
-        cueSeek(track.startSeconds + ((end - track.startSeconds) * progress) / 100)
+        // the last track's end is only known once mplayer told the file length: until then no seek (it would go backwards)
+        if (end > track.startSeconds) cueSeek(track.startSeconds + ((end - track.startSeconds) * progress) / 100)
       } else {
         player.seekPercent(progress)
       }
