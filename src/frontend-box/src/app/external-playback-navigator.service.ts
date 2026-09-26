@@ -132,7 +132,12 @@ export class ExternalPlaybackNavigatorService {
           // On the player page only for something else than it shows: a pause/resume from the phone is no new
           // album, but a NAS album replaced by Spotify (or another album) is.
           const somethingElse = !onPlayerPage || key !== this.playerPageKey
-          if (stillPending && somethingElse && !this.isNavigatingToPlayer) {
+          // Spotify started from the phone while the display's Spotify player is not connected yet (seconds after
+          // a restart): it plays on another device, the page would find nothing, go back after a few seconds and
+          // send STOP on its way out. So the display stays where it is.
+          const displayCanShowIt = data.currentPlayer !== 'spotify' || this.spotifyService.isPlayerReady()
+          if (!displayCanShowIt) console.warn('[ExternalPlayback] Spotify started elsewhere, display player not ready')
+          if (stillPending && somethingElse && displayCanShowIt && !this.isNavigatingToPlayer) {
             console.log(`🎵 External playback trigger from "${this.pendingExternalSource}" — navigating to /player`)
             this.playerPageKey = key
             void this.navigateToPlayerExternal(data, onPlayerPage)
