@@ -30,6 +30,8 @@ export class ExternalPlaybackNavigatorService {
   private pendingExternalSource = ''
   /** What the open player page shows (see playingKey), so a pause/resume from the phone doesn't rebuild it. */
   private playerPageKey = ''
+  /** True while the player page is being left only to be opened again for a new start from the phone. */
+  public replacingPlayerPage = false
   /** Same idea for "show the new theme now" from the parents' web app (see checkThemeReload). */
   private lastSeenThemeReloadAt: number | null = null
   /** Tick-Zähler für die gedrosselte Abfrage auf der Player-Page. */
@@ -184,6 +186,11 @@ export class ExternalPlaybackNavigatorService {
     // The player page shows something else: navigating to /player again would keep the old page, so it is
     // left first (not shown) and opened fresh for what plays now.
     if (replacePlayerPage) {
+      // The old page must not stop the player on its way out (it would stop what just started) nor save
+      // its resume position (the progress already belongs to the new media): see PlayerPage.ionViewWillLeave.
+      // Stays set until shortly after the new player page is open: Ionic may call the leave hook during the
+      // page transition, i.e. after the first navigation already resolved.
+      this.replacingPlayerPage = true
       await this.router.navigateByUrl('/home', { skipLocationChange: true }).catch(() => false)
     }
     // A NAS album: its cover is the one the NAS tab shows, found in the listing of the parent folder.
@@ -215,11 +222,13 @@ export class ExternalPlaybackNavigatorService {
         }
         setTimeout(() => {
           this.isNavigatingToPlayer = false
+          this.replacingPlayerPage = false
         }, 3000)
       })
       .catch((error) => {
         console.error('❌ External-trigger navigation failed:', error)
         this.isNavigatingToPlayer = false
+        this.replacingPlayerPage = false
       })
   }
 

@@ -41,6 +41,7 @@ import { firstValueFrom, type Observable } from 'rxjs'
 import { environment } from '../../environments/environment'
 import type { AlbumStop } from '../albumstop'
 import { CurrentMediaService } from '../current-media.service'
+import { ExternalPlaybackNavigatorService } from '../external-playback-navigator.service'
 import type { CurrentMPlayer } from '../current.mplayer'
 import type { CurrentSpotify } from '../current.spotify'
 import { ArtworkService } from '../artwork.service'
@@ -117,6 +118,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
   // (normal -> grace, grace -> blocked, etc.) and persist resume on time.
   private prevPlaytimeState: PlaytimePlayState | 'unknown' = 'unknown'
   private destroyRef = inject(DestroyRef)
+  private externalNavigator = inject(ExternalPlaybackNavigatorService)
   public readonly spotify$: Observable<CurrentSpotify>
   public readonly local$: Observable<CurrentMPlayer>
 
@@ -387,6 +389,14 @@ export class PlayerPage implements OnInit, AfterViewInit {
   ionViewWillLeave() {
     clearTimeout(this.longPressTimer)
     this.showTrackList = false
+    // Left only because something else was started from the phone and the page opens again for it: the
+    // player already switched, so no STOP (it would stop the new playback) and no resume save (the progress
+    // belongs to the new media by now).
+    if (this.externalNavigator.replacingPlayerPage) {
+      this.updateProgression = false
+      this.resumePlay = false
+      return
+    }
     if (
       (this.media.type === 'spotify' || this.media.type === 'library' || this.media.type === 'nas' || this.media.type === 'rss') &&
       !this.media.shuffle &&
