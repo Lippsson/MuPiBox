@@ -83,10 +83,12 @@
 		if( strlen($newpwd) < 6 )
 			{
 			$CHANGE_TXT=$CHANGE_TXT."<li>Password not changed: at least 6 characters</li>";
+			$change = 3; // message only, nothing saved (else the refusal was not shown at all)
 			}
 		else if( $oldhash !== '' && !password_verify($curpwd, $oldhash) )
 			{
 			$CHANGE_TXT=$CHANGE_TXT."<li>Password not changed: current password is wrong</li>";
+			$change = 3;
 			}
 		else
 			{
