@@ -1613,6 +1613,8 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				<div class="themePrev"><img src="images/<?php print isset($kmNames[$data["mupibox"]["theme"]]) ? 'km/' . htmlspecialchars($data["mupibox"]["theme"]) . '.svg' : htmlspecialchars($data["mupibox"]["theme"]) . '.png'; ?>" width="250" height="150" name="selectedTheme" style="object-fit:cover;" /></div>
 				<style>
 					.mupi-toggle { display:inline-flex; align-items:center; gap:10px; margin-top:12px; cursor:pointer; }
+					/* the label text as big as the normal text of the page (the label defaults were 9px bold) */
+					.mupi-toggle span:not(.track) { font-size:13px; font-weight:400; line-height:1.5; color:#212529; float:none; margin:0; padding:0; }
 					.mupi-toggle input { position:absolute; opacity:0; width:0; height:0; }
 					.mupi-toggle .track { position:relative; width:44px; height:24px; border-radius:12px; background:#bbb; transition:background .15s; flex:0 0 auto; }
 					.mupi-toggle .track::after { content:""; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .15s; box-shadow:0 1px 3px rgba(0,0,0,.35); }
@@ -1642,7 +1644,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 						<span class="track"></span>
 						<span>Cover-Flow-Ansicht (Bühne)</span>
 					</label>
-					<p style="margin:4px 0 0 54px; font-size:90%; color:#555;">Großes Cover in der Mitte, Nachbarn kleiner. Wischen oder Nachbar antippen holt ihn in die Mitte.</p>
+					<p style="margin:4px 0 0 54px; color:#212529;">Großes Cover in der Mitte, Nachbarn kleiner. Wischen oder Nachbar antippen holt ihn in die Mitte.</p>
 					<div id="kmAutoReadWrap" style="<?= $kmStageOn ? '' : 'display:none;' ?>">
 						<label class="mupi-toggle" for="themeStageAutoRead">
 							<input type="checkbox" id="themeStageAutoRead" name="themeStageAutoRead" value="1" <?= (($data["mupibox"]["themeStageAutoRead"] ?? false) === true) ? 'checked="checked"' : '' ?> />
