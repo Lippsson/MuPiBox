@@ -1865,9 +1865,12 @@ async function playNasList(nasPath) {
     currentMeta.album = folderName
     currentMeta.path = decodedPath
 
-    const playlistLines = (cueMode ? [tracks[0]] : tracks).map(
-      (track) => `http://localhost:8200/api/nas/stream?path=${encodeURIComponent(track.path)}`,
-    )
+    // mplayer takes an http URL of a .wma file for a Windows Media stream server (STREAM_ASF) and stops at once;
+    // through ffmpeg's http reader it plays as the file it is.
+    const playlistLines = (cueMode ? [tracks[0]] : tracks).map((track) => {
+      const url = `http://localhost:8200/api/nas/stream?path=${encodeURIComponent(track.path)}`
+      return /\.wma$/i.test(track.path) ? `ffmpeg://${url}` : url
+    })
     const tmpPlaylistPath = '/tmp/nas_playlist.m3u'
     fs.writeFileSync(tmpPlaylistPath, playlistLines.join('\n'))
 
