@@ -21,6 +21,8 @@ export interface NasConfig {
   hiddenFolders?: string[]
   profiles?: Record<string, NasProfile>
   activeProfile?: string
+  // SHA-256 fingerprint of the NAS certificate confirmed in the admin interface (https with a self-signed one)
+  certFingerprint?: string
   [key: string]: unknown
 }
 

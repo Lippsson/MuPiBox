@@ -2,10 +2,13 @@ import { exec, execFile, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import dns from 'node:dns'
 import fs from 'node:fs'
+import https from 'node:https'
 import { mkdir, readdir, readFile, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
+import net from 'node:net'
 import path from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import tls from 'node:tls'
 import { promisify } from 'node:util'
 import cors from 'cors'
 import express from 'express'
@@ -3440,6 +3443,147 @@ function nasSettings(config: MupiboxConfig | undefined): NasConfig | undefined {
 interface NasSession {
   base: string // WebDAV base URL without trailing slash, may contain a path prefix
   auth: string // Authorization header value (HTTP Basic)
+  // SHA-256 fingerprint of the NAS's own (self-signed) certificate the parents confirmed: https then trusts exactly
+  // this certificate (see nasFetch)
+  fingerprint?: string
+}
+
+// The certificate of an https NAS is not trusted (self-signed, as Synology's own), or not the one confirmed.
+class NasCertificateError extends Error {
+  constructor(readonly certificate: NasCertificateInfo | undefined) {
+    super('NAS certificate not trusted')
+  }
+}
+
+interface NasCertificateInfo {
+  fingerprint: string
+  subject: string
+  issuer: string
+  validTo: string
+}
+
+// What the NAS presents on https, without trusting it: shown in the admin interface to be confirmed.
+function nasPeekCertificate(base: string, timeoutMs = 8000): Promise<NasCertificateInfo | undefined> {
+  const url = new URL(base)
+  if (url.protocol !== 'https:') return Promise.resolve(undefined)
+  return new Promise((resolve) => {
+    const socket = tls.connect({
+      host: url.hostname,
+      port: Number(url.port || 443),
+      servername: net.isIP(url.hostname) ? undefined : url.hostname,
+      rejectUnauthorized: false,
+      timeout: timeoutMs,
+    })
+    const done = (info: NasCertificateInfo | undefined) => {
+      socket.destroy()
+      resolve(info)
+    }
+    socket.once('secureConnect', () => {
+      const cert = socket.getPeerCertificate()
+      done(
+        cert?.fingerprint256
+          ? {
+              fingerprint: cert.fingerprint256,
+              subject: String(cert.subject?.CN ?? cert.subject?.O ?? ''),
+              issuer: String(cert.issuer?.CN ?? cert.issuer?.O ?? ''),
+              validTo: String(cert.valid_to ?? ''),
+            }
+          : undefined,
+      )
+    })
+    socket.once('timeout', () => done(undefined))
+    socket.once('error', () => done(undefined))
+  })
+}
+
+// Every request to the NAS goes through here. With a confirmed certificate (https with Synology's own, self-signed
+// one - fetch() refuses it) the TLS connection is made first, its certificate compared with the confirmed
+// fingerprint, and only then is the request - with the login - sent over it. Anything else goes through fetch().
+async function nasFetch(
+  session: NasSession,
+  url: string,
+  init: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal } = {},
+): Promise<Response> {
+  const target = new URL(url)
+  if (!session.fingerprint || target.protocol !== 'https:') {
+    return await fetch(url, init)
+  }
+  const fingerprint = session.fingerprint
+  const socket = await new Promise<tls.TLSSocket>((resolve, reject) => {
+    const s = tls.connect({
+      host: target.hostname,
+      port: Number(target.port || 443),
+      servername: net.isIP(target.hostname) ? undefined : target.hostname,
+      rejectUnauthorized: false, // checked by the fingerprint below
+    })
+    const onAbort = () => {
+      s.destroy()
+      reject(init.signal?.reason ?? new Error('aborted'))
+    }
+    if (init.signal?.aborted) return onAbort()
+    init.signal?.addEventListener('abort', onAbort, { once: true })
+    s.once('secureConnect', () => {
+      init.signal?.removeEventListener('abort', onAbort)
+      const cert = s.getPeerCertificate()
+      if (!cert?.fingerprint256 || cert.fingerprint256.toUpperCase() !== fingerprint.toUpperCase()) {
+        s.destroy()
+        reject(
+          new NasCertificateError(
+            cert?.fingerprint256
+              ? {
+                  fingerprint: cert.fingerprint256,
+                  subject: String(cert.subject?.CN ?? ''),
+                  issuer: String(cert.issuer?.CN ?? ''),
+                  validTo: String(cert.valid_to ?? ''),
+                }
+              : undefined,
+          ),
+        )
+        return
+      }
+      resolve(s)
+    })
+    s.once('error', (error) => {
+      init.signal?.removeEventListener('abort', onAbort)
+      reject(error)
+    })
+  })
+  return await new Promise<Response>((resolve, reject) => {
+    const req = https.request(
+      {
+        method: init.method ?? 'GET',
+        hostname: target.hostname,
+        port: Number(target.port || 443),
+        path: `${target.pathname}${target.search}`,
+        headers: init.headers,
+        createConnection: () => socket,
+        signal: init.signal,
+      },
+      (res) => {
+        const headers = new Headers()
+        for (const [name, value] of Object.entries(res.headers)) {
+          if (Array.isArray(value)) value.forEach((v) => headers.append(name, v))
+          else if (value !== undefined) headers.set(name, String(value))
+        }
+        const status = res.statusCode ?? 502
+        const noBody = status === 204 || status === 304 || init.method === 'HEAD'
+        if (noBody) res.resume()
+        resolve(
+          new Response(noBody ? null : (Readable.toWeb(res) as unknown as ReadableStream), {
+            status,
+            statusText: res.statusMessage,
+            headers,
+          }),
+        )
+      },
+    )
+    req.once('error', (error) => {
+      socket.destroy()
+      reject(error)
+    })
+    if (init.body !== undefined) req.write(init.body)
+    req.end()
+  })
 }
 
 let nasSessionCache: NasSession | undefined
@@ -3487,10 +3631,11 @@ async function nasLogin(
   account: string,
   password: string,
   timeoutMs = 10000,
-): Promise<{ success: boolean; session?: NasSession; error?: string }> {
-  const session: NasSession = { base, auth: nasBasicAuth(account, password) }
+  fingerprint?: string,
+): Promise<{ success: boolean; session?: NasSession; error?: string; certificate?: NasCertificateInfo }> {
+  const session: NasSession = { base, auth: nasBasicAuth(account, password), fingerprint: fingerprint || undefined }
   try {
-    const response = await fetch(nasUrl(session, '/'), {
+    const response = await nasFetch(session, nasUrl(session, '/'), {
       method: 'PROPFIND',
       headers: { Authorization: session.auth, Depth: '1' },
       signal: AbortSignal.timeout(timeoutMs),
@@ -3516,9 +3661,24 @@ async function nasLogin(
     }
     return { success: false, error: `The NAS answered with HTTP ${response.status}. Is this the WebDAV address/port?` }
   } catch (error) {
+    if (error instanceof NasCertificateError) {
+      // A confirmed certificate, but the NAS now shows another one (renewed on the NAS - or not the NAS).
+      return {
+        success: false,
+        error: 'The certificate of the NAS is not the one confirmed before. If it was renewed on the NAS, compare the new fingerprint below and confirm it.',
+        certificate: error.certificate,
+      }
+    }
     const cause = error instanceof Error ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}` : ''
     if (/certificate|SELF_SIGNED|UNABLE_TO_VERIFY|CERT_/i.test(cause)) {
-      return { success: false, error: 'Certificate not trusted - use HTTP, or install a valid certificate on the NAS.' }
+      // Synology's own certificate is self-signed: show it, so it can be confirmed once (then trusted by its
+      // fingerprint, see nasFetch).
+      return {
+        success: false,
+        error:
+          "The NAS uses a certificate that is not signed by a known authority (e.g. Synology's own). Check its fingerprint below and confirm it - or use HTTP.",
+        certificate: await nasPeekCertificate(base),
+      }
     }
     return { success: false, error: 'Could not reach the NAS. Check the address (with WebDAV port) and network connection.' }
   }
@@ -3551,7 +3711,7 @@ async function nasLoginWithRememberedCredentials(): Promise<NasSession | undefin
   const base = nasResolveBase(syn.address, Boolean(syn.https))
   // A NAS that is switched off answers at once (no route / refused); one whose disks sleep needs 10-20 s to wake
   // up. 4 s marked such a NAS offline for 30 s, and every tap in that time failed.
-  const result = await nasLogin(base, syn.account, password, 15000)
+  const result = await nasLogin(base, syn.account, password, 15000, syn.certFingerprint)
   if (!result.success || !result.session) {
     if (/reach/i.test(result.error ?? '')) {
       nasMarkOffline()
@@ -3676,7 +3836,7 @@ function parsePropfind(xml: string, session: NasSession, folderPath: string): Na
 }
 
 async function nasListFilesLive(session: NasSession, folderPath: string, _withSize = false): Promise<NasFileEntry[]> {
-  const response = await fetch(`${nasUrl(session, folderPath)}/`, {
+  const response = await nasFetch(session, `${nasUrl(session, folderPath)}/`, {
     method: 'PROPFIND',
     headers: { Authorization: session.auth, Depth: '1', 'Content-Type': 'application/xml' },
     body: '<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getetag/><getlastmodified/></prop></propfind>',
@@ -4097,7 +4257,7 @@ function nasTrackActiveProfile(settings: NasConfig | undefined, changes: Record<
 }
 
 async function nasFolderExists(session: NasSession, folderPath: string): Promise<boolean> {
-  const response = await fetch(`${nasUrl(session, folderPath)}/`, {
+  const response = await nasFetch(session, `${nasUrl(session, folderPath)}/`, {
     method: 'PROPFIND',
     headers: { Authorization: session.auth, Depth: '0' },
     signal: AbortSignal.timeout(8000),
@@ -4292,17 +4452,22 @@ app.post('/api/nas/profiles/delete', localOnly, async (req, res) => {
 // is done by the admin interface, which calls these routes server-side through localhost (nas.php).
 // From the LAN they exposed the box's NAS login and the whole NAS to anyone.
 app.post('/api/nas/login', localOnly, async (req, res) => {
-  const { address, https: useHttps, account, password, rememberMe } = req.body ?? {}
+  const { address, https: useHttps, account, password, rememberMe, certFingerprint } = req.body ?? {}
   if (typeof address !== 'string' || !address || typeof account !== 'string' || !account || typeof password !== 'string' || !password) {
     res.status(400).json({ success: false, error: 'address, account and password are required.' })
     return
   }
 
   const base = nasResolveBase(address, Boolean(useHttps))
+  // A certificate fingerprint the parents confirmed in the admin interface (SHA-256, "AB:CD:..."): only for https.
+  const fingerprint =
+    base.startsWith('https:') && typeof certFingerprint === 'string' && /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/i.test(certFingerprint)
+      ? certFingerprint.toUpperCase()
+      : undefined
   // A wrong password may be answered slowly by some NAS models: be generous here.
-  const result = await nasLogin(base, account, password, 25000)
+  const result = await nasLogin(base, account, password, 25000, fingerprint)
   if (!result.success || !result.session) {
-    res.json({ success: false, error: result.error })
+    res.json({ success: false, error: result.error, certificate: result.certificate })
     return
   }
 
@@ -4313,7 +4478,14 @@ app.post('/api/nas/login', localOnly, async (req, res) => {
 
   if (rememberMe === true) {
     try {
-      await updateNasConfig({ address, https: Boolean(useHttps), account, password: nasEncrypt(password), rememberMe: true })
+      await updateNasConfig({
+        address,
+        https: Boolean(useHttps),
+        account,
+        password: nasEncrypt(password),
+        rememberMe: true,
+        certFingerprint: fingerprint ?? '',
+      })
     } catch (error) {
       console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to save NAS login: ${error}`)
     }
@@ -4745,7 +4917,7 @@ async function nasReadTextFile(nasPath: string): Promise<string | undefined> {
     return localSize > NAS_TEXT_MAX_BYTES ? undefined : nasDecodeText(await readFile(local))
   }
   const buffer = await withNasSession(async (session) => {
-    const response = await fetch(nasUrl(session, nasPath), { headers: { Authorization: session.auth }, signal: AbortSignal.timeout(8000) })
+    const response = await nasFetch(session, nasUrl(session, nasPath), { headers: { Authorization: session.auth }, signal: AbortSignal.timeout(8000) })
     if (!response.ok) {
       throw new NasApiError(`WebDAV error ${response.status}`)
     }
@@ -4892,7 +5064,7 @@ async function nasStreamWithResume(req: express.Request, res: express.Response, 
       if (range) {
         headers.Range = range
       }
-      const upstream = await fetch(nasUrl(session, filePath), { headers, signal: abort.signal })
+      const upstream = await nasFetch(session, nasUrl(session, filePath), { headers, signal: abort.signal })
 
       if (!started) {
         if (upstream.status === 404 || upstream.status === 401 || upstream.status === 403) {
@@ -5003,6 +5175,12 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
     res.status(400).send('path is required')
     return
   }
+  // This route needs no login (the box's own UI and the remote control use it): only what the box plays or shows -
+  // audio, covers, cue sheets - not any other file (PDF, documents) lying in a selected folder.
+  if (!nasDownloadExtensions.some((ext) => filePath.toLowerCase().endsWith(ext))) {
+    res.status(403).send('not a media file')
+    return
+  }
 
   // A downloaded copy always wins: no network needed, and it works offline.
   const localFile = nasLocalPath(filePath)
@@ -5047,7 +5225,7 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
       const version = parentFiles.find((f) => f.path === normalizeNasPath(filePath))?.version
       const seed = `nas|${filePath}|${version ?? Math.floor(Date.now() / 86400000)}`
       const thumb = await getThumbnail(`nas:${filePath}`, thumbSize, seed, async () => {
-        const full = await fetch(nasUrl(session, filePath), { headers, signal: AbortSignal.timeout(20000) })
+        const full = await nasFetch(session, nasUrl(session, filePath), { headers, signal: AbortSignal.timeout(20000) })
         if (!full.ok) {
           return undefined
         }
@@ -5198,7 +5376,7 @@ async function nasDownloadFile(nasPath: string, size: number, force = false, sig
     }
     const outer = signal ?? nasDownloadAbort?.signal
     armStall()
-    const response = await fetch(nasUrl(session, nasPath), {
+    const response = await nasFetch(session, nasUrl(session, nasPath), {
       headers: { Authorization: session.auth },
       signal: outer ? AbortSignal.any([outer, stall.signal]) : stall.signal,
     }).catch((error) => {

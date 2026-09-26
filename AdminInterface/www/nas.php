@@ -111,6 +111,7 @@ function nasApiCall($url, $method = 'GET', $body = null, $timeout = 30) {
 }
 
 $loginError = '';
+$loginCertificate = null; // the NAS certificate to confirm (https with a self-signed one)
 
 if (isset($_POST['nas_signin'])) {
 	$address = trim($_POST['nas_address'] ?? '');
@@ -126,16 +127,22 @@ if (isset($_POST['nas_signin'])) {
 	} elseif ($password === '') {
 		$loginError = 'Password not filled in.';
 	} else {
+		// A certificate confirmed below (checkbox): the fingerprint it was shown with.
+		$certFingerprint = isset($_POST['nas_cert_trust']) ? (string)($_POST['nas_cert_fingerprint'] ?? '') : '';
 		$result = nasApiCall("$backendBase/login", 'POST', array(
 			'address' => $address,
 			'https' => $useHttps,
 			'account' => $account,
 			'password' => $password,
 			'rememberMe' => $rememberMe,
+			'certFingerprint' => $certFingerprint,
 		), 30);
 
 		if (empty($result['success'])) {
 			$loginError = $result['error'] ?? 'Login failed.';
+			if (!empty($result['certificate']['fingerprint'])) {
+				$loginCertificate = $result['certificate'];
+			}
 		}
 	}
 }
@@ -311,6 +318,21 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 			</li>
 			<?php if ($loginError) { ?>
 				<li id="li_1"><p style="color:#900;"><?= htmlspecialchars($loginError) ?></p></li>
+			<?php } ?>
+			<?php if ($loginCertificate) { ?>
+				<li id="li_1">
+					<div style="border:1px solid #dcdcdc;border-radius:6px;padding:10px 14px;background:#fafafa;">
+						<p style="margin:0 0 6px 0;"><b>Certificate of the NAS</b></p>
+						<p style="margin:0;font-size:13px;">Issued to: <?= htmlspecialchars((string)($loginCertificate['subject'] ?? '')) ?><br>
+						Issued by: <?= htmlspecialchars((string)($loginCertificate['issuer'] ?? '')) ?><br>
+						Valid until: <?= htmlspecialchars((string)($loginCertificate['validTo'] ?? '')) ?><br>
+						SHA-256 fingerprint:<br><code style="word-break:break-all;"><?= htmlspecialchars((string)$loginCertificate['fingerprint']) ?></code></p>
+						<p style="margin:8px 0 0 0;font-size:13px;">To check it, open the NAS with https in a browser (e.g. https://&lt;NAS&gt;:5001), show the
+						certificate via the warning / lock icon and compare its SHA-256 fingerprint. Only if they match:</p>
+						<input type="hidden" name="nas_cert_fingerprint" value="<?= htmlspecialchars((string)$loginCertificate['fingerprint'], ENT_QUOTES) ?>" />
+						<label style="display:block;margin-top:6px;"><input type="checkbox" name="nas_cert_trust" value="1" /> Trust this certificate (enter the password again and sign in)</label>
+					</div>
+				</li>
 			<?php } ?>
 			<li class="buttons">
 				<input id="saveForm" class="button_text" type="submit" name="nas_signin" value="Sign In" title="Signing in can take up to ~15 seconds." />
