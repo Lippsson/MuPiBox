@@ -3526,6 +3526,9 @@ async function nasLogin(
 
 let nasSessionPromise: Promise<NasSession | undefined> | undefined
 let nasOfflineUntil = 0
+// The last session that worked. A stream keeps using it while the NAS is marked offline: one slow folder listing
+// (another request) must not cut off the album that is playing - the stream has its own retries.
+let nasLastSession: NasSession | undefined
 
 // After a network failure, skip the NAS for a short while so the kids' UI can fall
 // back to the local downloads immediately instead of waiting on timeouts every time.
@@ -3546,8 +3549,9 @@ async function nasLoginWithRememberedCredentials(): Promise<NasSession | undefin
     return undefined
   }
   const base = nasResolveBase(syn.address, Boolean(syn.https))
-  // Short timeout: an unreachable NAS must not hold up the kids' UI.
-  const result = await nasLogin(base, syn.account, password, 4000)
+  // A NAS that is switched off answers at once (no route / refused); one whose disks sleep needs 10-20 s to wake
+  // up. 4 s marked such a NAS offline for 30 s, and every tap in that time failed.
+  const result = await nasLogin(base, syn.account, password, 15000)
   if (!result.success || !result.session) {
     if (/reach/i.test(result.error ?? '')) {
       nasMarkOffline()
@@ -3555,6 +3559,7 @@ async function nasLoginWithRememberedCredentials(): Promise<NasSession | undefin
     return undefined
   }
   nasSessionCache = result.session
+  nasLastSession = result.session
   if (!syn.password.startsWith(nasSecretPrefix)) {
     // A clear-text password from an older config: store it encrypted from now on.
     updateNasConfig({ password: nasEncrypt(password) }).catch(() => undefined)
@@ -3660,9 +3665,15 @@ async function nasListFilesLive(session: NasSession, folderPath: string, _withSi
     method: 'PROPFIND',
     headers: { Authorization: session.auth, Depth: '1', 'Content-Type': 'application/xml' },
     body: '<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/></prop></propfind>',
-    signal: AbortSignal.timeout(8000),
+    // 20 s: a NAS waking its disks answers after 10-20 s (8 s marked it offline for 30 s)
+    signal: AbortSignal.timeout(20000),
   })
   const text = await response.text()
+  if (response.status === 401) {
+    // The login is no longer accepted (password changed, session on the NAS side gone): withNasSession()
+    // signs in again once.
+    throw new NasSessionExpiredError('WebDAV 401')
+  }
   if (response.status !== 207 && response.status !== 200) {
     // Folder gone / no permission: the NAS answered, so it is not offline.
     throw new NasApiError(`WebDAV error ${response.status}`)
@@ -4234,6 +4245,7 @@ app.post('/api/nas/login', localOnly, async (req, res) => {
   }
 
   nasSessionCache = result.session
+  nasLastSession = result.session
   nasOfflineUntil = 0
 
   if (rememberMe === true) {
@@ -4579,14 +4591,21 @@ app.get('/api/nas/children', nasPathWithinSelection, async (req, res) => {
         }
       },
     )
+    // Folders that failed because the NAS dropped out meanwhile (not: a folder without permission): the list would
+    // be missing albums without telling. 503 lets the box and the web app try again, as for /api/nas/artists.
+    if (entries.some((entry) => entry === undefined) && Date.now() < nasOfflineUntil) {
+      res.status(503).json([])
+      return
+    }
     // Audio files next to the subfolders: first comes an entry that plays them.
     if (nasHasAudio(files) && (await folderIsContainer(files, nasListFiles))) {
       entries.unshift(await nasBuildMediaEntry(folderPath, parentName, parentName, undefined, true))
     }
     res.json(entries.filter((entry) => entry !== undefined))
   } catch (error) {
+    // The folder itself could not be read (NAS not reachable): not an empty folder.
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to list NAS children of ${folderPath}: ${error}`)
-    res.json([])
+    res.status(503).json([])
   }
 })
 
@@ -4756,7 +4775,9 @@ function nasServeLocalFile(req: express.Request, res: express.Response, file: st
   }
 
   res.setHeader('Content-Length', String(end - start + 1))
-  fs.createReadStream(file, { start, end }).pipe(res)
+  // pipeline: a read error (file deleted meanwhile, SD error) must not become an uncaught exception that ends the
+  // backend, and the file is closed when the player drops the connection (every seek).
+  pipeline(fs.createReadStream(file, { start, end }), res).catch(() => undefined)
 }
 
 // Streams a NAS file to the player and carries on where it left off when the connection to the NAS breaks.
@@ -4936,7 +4957,9 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
     }
   }
 
-  const session = await getActiveNasSession()
+  // While the NAS is marked offline (after another request failed), a stream still tries with the last session
+  // that worked: the album that is playing must not skip every track for 30 s.
+  const session = (await getActiveNasSession()) ?? nasLastSession
   if (!session) {
     res.status(401).send('Not logged in to the NAS, or the NAS is not reachable.')
     return
@@ -5658,7 +5681,7 @@ function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
       return
     }
     res.setHeader('Content-Length', String(info.size))
-    fs.createReadStream(thumb).pipe(res)
+    pipeline(fs.createReadStream(thumb), res).catch(() => undefined)
   })
 }
 

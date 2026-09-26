@@ -1842,8 +1842,22 @@ async function playNasList(nasPath) {
   const generation = ++playbackGeneration
 
   try {
-    const response = await fetch(`http://localhost:8200/api/nas/tracklist?path=${encodeURIComponent(decodedPath)}`)
-    const tracks = await response.json()
+    // The NAS may not answer at the first try (waking up, WiFi hiccup): one more try after 3 s. An empty or failed
+    // list used to be played anyway - an empty playlist, "playing" set, and nothing to hear.
+    const loadTracks = async () => {
+      const response = await fetch(`http://localhost:8200/api/nas/tracklist?path=${encodeURIComponent(decodedPath)}`)
+      const list = response.ok ? await response.json() : []
+      return Array.isArray(list) ? list : []
+    }
+    let tracks = await loadTracks()
+    if (tracks.length === 0 && generation === playbackGeneration) {
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+      tracks = await loadTracks()
+    }
+    if (tracks.length === 0) {
+      console.warn(`${now()}: [Spotify Control] NAS playback of ${decodedPath} not started: no tracks (NAS not reachable?)`)
+      return
+    }
     // The track list can take seconds (NAS over WebDAV). A stop, another album, or a playtime /
     // quiet-hours block in the meantime used to be overtaken: the late answer started playback
     // anyway. Such a start is dropped now.
