@@ -457,6 +457,7 @@ setInterval(() => {
 }, 5000)
 
 let activeDevice = null
+let displaySpotifyDevice = null // the display's Web Playback SDK device, as reported by the display
 // AR5-4: was `const nowDate = new Date()` evaluated once at module-load.
 // All 86 log templates that used `${now()}` printed
 // the boot timestamp on every line, making production debugging useless.
@@ -1631,6 +1632,18 @@ function shuffleoff() {
   )
 }
 
+// Spotify's play on the chosen device; when that device is gone (404: the display reported it, then its page
+// was reloaded), once more without a device, i.e. on the currently active one - as before.
+function playOnDevice(playOptions) {
+  return spotifyApi.play(playOptions).catch((err) => {
+    if (!playOptions.device_id || err?.statusCode !== 404) throw err
+    log.debug(`${now()}: [Spotify Control] Device ${playOptions.device_id} not found, playing on the active device`)
+    if (activeDevice === playOptions.device_id) activeDevice = null
+    const { device_id: _gone, ...withoutDevice } = playOptions
+    return spotifyApi.play(withoutDevice)
+  })
+}
+
 function playMe() {
   log.debug(`${now()}: [Spotify Control] Spotify play ${currentMeta.activeSpotifyId}`)
   resumeOffset = currentMeta.activeSpotifyId.split(':')[3]
@@ -1655,7 +1668,7 @@ function playMe() {
 
   if (contextUri.split(':')[1] === 'episode') {
     playOptions.uris = [contextUri]
-    spotifyApi.play(playOptions).then(
+    playOnDevice(playOptions).then(
       (_data) => {
         counter.countplay++
         if (config.server.logLevel === 'debug') {
@@ -1682,7 +1695,7 @@ function playMe() {
     // });
   } else {
     playOptions.context_uri = contextUri
-    spotifyApi.play(playOptions).then(
+    playOnDevice(playOptions).then(
       (_data) => {
         log.debug(`${now()}: [Spotify Control] Playback started`)
         counter.countplay++
@@ -2189,11 +2202,11 @@ async function useSpotify(command) {
     activeDevice = newdevice
     log.debug(`${now()}: [Spotify Control] Device set to: ${activeDevice}`)
   } else {
-    // Reset device to let Spotify use the currently active device
-    activeDevice = null
-    log.debug(
-      `${now()}: [Spotify Control] Using current active Spotify device (no device_id specified)`,
-    )
+    // Not from the display: play on the display's device when it reported one. Spotify's "currently active
+    // device" often is none (after a restart, or after the NAS or local media played) - then nothing played.
+    // If that device is gone, playMe() tries once more without a device (see playOnDevice()).
+    activeDevice = displaySpotifyDevice
+    log.debug(`${now()}: [Spotify Control] No device in the request, using the display's: ${activeDevice}`)
   }
 
   currentMeta.activeSpotifyId = command.name
@@ -2273,6 +2286,18 @@ app.get('/state', (_req, res) => {
     }
     res.send(state)
   }
+})
+
+// The display reports its Spotify device (the Web Playback SDK in the kiosk) when it connects. Starts that
+// don't come from the display (/current/..., e.g. the parents' web app or Telegram) play there.
+app.get('/display/spotify-device/:id', (req, res) => {
+  if (!/^[A-Za-z0-9]{20,64}$/.test(req.params.id)) {
+    res.status(400).json({ error: 'bad device id' })
+    return
+  }
+  displaySpotifyDevice = req.params.id
+  log.debug(`${now()}: [Spotify Control] Display device: ${displaySpotifyDevice}`)
+  res.json({ ok: true })
 })
 
 // Called by the backend on the box (the parents' web app's "reload the display now").
