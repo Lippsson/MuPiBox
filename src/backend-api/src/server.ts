@@ -10,6 +10,7 @@ import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import tls from 'node:tls'
 import { promisify } from 'node:util'
+import { fileURLToPath } from 'node:url'
 import cors from 'cors'
 import express from 'express'
 import type {
@@ -74,6 +75,9 @@ readJsonFile(`${configBasePath}/config.json`).then((configFile) => {
   } else {
     console.warn('No Spotify configuration found, Spotify API service will not be available')
   }
+}).catch((error) => {
+  // a missing or broken config.json was an unhandled rejection
+  console.error(`${new Date().toLocaleString()}: [mupibox-backend-api] could not read ${configBasePath}/config.json: ${error}`)
 })
 // Phase-X: SD-backed LRU cache for Spotify cover images. Frontend rewrites
 // i.scdn.co URLs to /api/spotify/cover/:imageId so the box serves covers
@@ -200,7 +204,10 @@ const resumeLock = '/tmp/.resume.lock'
 // RSS feed cache: persisted on disk (not /tmp) so cached podcast covers and feed
 // data survive a reboot.
 const rssCacheDataDir = `${configBasePath}/rss-cache`
-const rssCoverDir = path.join(__dirname, 'www', 'rss-covers')
+// The folder of this file: __dirname in the bundle (esbuild, CommonJS); run directly as an ES module (the tests, via
+// tsx) there is no __dirname, and the tests failed before the first one ran.
+const serverDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url))
+const rssCoverDir = path.join(serverDir, 'www', 'rss-covers')
 const rssCoverPublicBase = '/rss-covers'
 // Maximum age (ms) of a lock file before it's considered stale and reclaimable.
 // A write+release cycle is sub-second in practice; 30s gives a generous margin
@@ -321,7 +328,7 @@ app.use(express.urlencoded({ extended: false }))
 // production.
 if (productionServe) {
   // Static path to compiled Angular app
-  app.use(express.static(path.join(__dirname, 'www')))
+  app.use(express.static(path.join(serverDir, 'www')))
 }
 
 // MED-2: harden /api/rssfeed against SSRF.
@@ -776,7 +783,7 @@ async function warmConfiguredPodcasts(): Promise<void> {
     // No data file yet.
   }
 }
-setTimeout(() => void warmConfiguredPodcasts(), 60 * 1000)
+setTimeout(() => void warmConfiguredPodcasts(), 60 * 1000).unref()
 
 app.get('/api/rssfeed/cached', async (req, res) => {
   const rssUrl = req.query.url
@@ -6440,7 +6447,7 @@ async function warmLibraryThumbnails(dir: string, depth: number): Promise<void> 
     }
   }
 }
-setTimeout(() => void warmLibraryThumbnails(libraryRoot, 0), 90 * 1000)
+setTimeout(() => void warmLibraryThumbnails(libraryRoot, 0), 90 * 1000).unref()
 
 function parseThumbSize(value: unknown): number | undefined {
   const size = Number(value)
@@ -6901,7 +6908,7 @@ for (const base of ['/parents', '/eltern']) {
   // static middleware below serves the shell.
   app.use(
     base,
-    express.static(path.join(__dirname, 'eltern-webapp'), {
+    express.static(path.join(serverDir, 'eltern-webapp'), {
       // ETag bleibt aktiv, aber keine implizite Browser-Cache-Frist: bei
       // jedem Request wird via If-None-Match revalidiert. 304 wenn nichts
       // neu — kostet wenig und stellt sicher dass neu deployte HTML/JS
@@ -6918,7 +6925,7 @@ for (const base of ['/parents', '/eltern']) {
 // This must be placed after all API routes but before starting the server
 if (productionServe) {
   app.get(/.*/, (_req, res) => {
-    res.sendFile('index.html', { root: path.join(__dirname, 'www') })
+    res.sendFile('index.html', { root: path.join(serverDir, 'www') })
   })
 }
 
