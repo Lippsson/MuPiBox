@@ -27,6 +27,7 @@ import {
 import { addIcons } from 'ionicons'
 import {
   arrowBackOutline,
+  close,
   pause,
   play,
   playBack,
@@ -36,6 +37,7 @@ import {
   shuffleOutline,
   volumeHighOutline,
   volumeLowOutline,
+  volumeMedium,
 } from 'ionicons/icons'
 import { firstValueFrom, type Observable } from 'rxjs'
 import { environment } from '../../environments/environment'
@@ -46,6 +48,8 @@ import type { CurrentMPlayer } from '../current.mplayer'
 import type { CurrentSpotify } from '../current.spotify'
 import { ArtworkService } from '../artwork.service'
 import { CoverFlipService } from '../cover-flip.service'
+import { DisplayTextsService } from '../display-texts.service'
+import { KmThemeService } from '../theme/km-theme.service'
 import { LogService } from '../log.service'
 import { isResumeEntry, type Media } from '../media'
 import { MediaService } from '../media.service'
@@ -104,6 +108,29 @@ export class PlayerPage implements OnInit, AfterViewInit {
   resumeTimer = 0
   resumeAdded = false
   cover = ''
+  // km themes (children's themes): their own markup in the template (see theme/km-theme.service.ts)
+  private readonly kmTheme = inject(KmThemeService)
+  protected readonly km = this.kmTheme.isKm
+  protected readonly displayTexts = inject(DisplayTextsService)
+
+  /** km themes: position and length under the progress bar (Spotify, and mplayer when it knows the length) */
+  protected kmTimes(): { position: string; duration: string } | undefined {
+    const format = (ms: number) => {
+      const total = Math.max(0, Math.floor(ms / 1000))
+      const h = Math.floor(total / 3600)
+      const m = Math.floor((total % 3600) / 60)
+      const sec = String(total % 60).padStart(2, '0')
+      return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+    }
+    if (this.media?.type === 'spotify') {
+      const duration = this.currentPlayedSpotify?.item?.duration_ms
+      return duration ? { position: format(this.currentPlayedSpotify?.progress_ms ?? 0), duration: format(duration) } : undefined
+    }
+    const seconds = this.currentPlayedLocal?.durationSeconds
+    if (!seconds) return undefined
+    return { position: format((this.currentPlayedLocal?.positionSeconds ?? 0) * 1000), duration: format(seconds * 1000) }
+  }
+
   // The picture embedded in the file that plays (NAS / local), when it has one - shown instead of the album cover,
   // so a folder of different stories shows each one's own cover (as Spotify does for a playlist).
   private trackCover = ''
@@ -213,6 +240,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
       playBack,
       shuffleOutline,
       playForward,
+      volumeMedium,
+      close,
     })
   }
 
