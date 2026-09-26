@@ -4383,6 +4383,15 @@ app.post('/api/nas/selection', localOnly, async (req, res) => {
         hiddenFolders: merge(settings?.hiddenFolders, hide),
         downloadFolders: merge(settings?.downloadFolders, download),
       }
+      // nothing changed: no config write (and no backup copy) for a "Save selection" without changes
+      const same = (a: unknown, b: unknown) => JSON.stringify([...((a as string[]) ?? [])].sort()) === JSON.stringify([...((b as string[]) ?? [])].sort())
+      if (
+        same(update.artistFolders, settings?.artistFolders) &&
+        same(update.hiddenFolders, settings?.hiddenFolders) &&
+        same(update.downloadFolders, settings?.downloadFolders)
+      ) {
+        return undefined
+      }
       return { ...update, ...nasTrackActiveProfile(settings, update) }
     })
     res.json({ success: true })
@@ -4551,15 +4560,23 @@ function nasParseCue(text: string): NasCueTrack[] | undefined {
 }
 
 // The text of a NAS file: from the local copy if the folder was downloaded, otherwise live from the NAS.
+// A cue sheet is a few KB: anything much bigger (a mis-named file) is not read into memory.
+const NAS_TEXT_MAX_BYTES = 1024 * 1024
+
 async function nasReadTextFile(nasPath: string): Promise<string | undefined> {
   const local = nasLocalPath(nasPath)
-  if (local && fs.existsSync(local)) {
-    return nasDecodeText(await readFile(local))
+  const localSize = local ? await stat(local).then((s) => s.size, () => undefined) : undefined
+  if (local && localSize !== undefined) {
+    return localSize > NAS_TEXT_MAX_BYTES ? undefined : nasDecodeText(await readFile(local))
   }
   const buffer = await withNasSession(async (session) => {
     const response = await fetch(nasUrl(session, nasPath), { headers: { Authorization: session.auth }, signal: AbortSignal.timeout(8000) })
     if (!response.ok) {
       throw new NasApiError(`WebDAV error ${response.status}`)
+    }
+    if (Number(response.headers.get('content-length') ?? 0) > NAS_TEXT_MAX_BYTES) {
+      await response.body?.cancel().catch(() => {})
+      return undefined
     }
     return Buffer.from(await response.arrayBuffer())
   })
@@ -4955,7 +4972,9 @@ async function nasCollectFiles(session: NasSession, folderPath: string, out: Nas
   }
 }
 
-async function nasDownloadFile(nasPath: string, size: number, force = false): Promise<void> {
+// `signal` is for a download outside "Download selected" (e.g. "Reload covers"): it gets its own time limit and its
+// bytes are not counted in the download progress.
+async function nasDownloadFile(nasPath: string, size: number, force = false, signal?: AbortSignal): Promise<void> {
   const target = nasLocalPath(nasPath)
   if (!target) {
     return
@@ -4973,7 +4992,10 @@ async function nasDownloadFile(nasPath: string, size: number, force = false): Pr
   await mkdir(path.dirname(target), { recursive: true })
 
   const done = await withNasSession(async (session) => {
-    const response = await fetch(nasUrl(session, nasPath), { headers: { Authorization: session.auth }, signal: nasDownloadAbort?.signal })
+    const response = await fetch(nasUrl(session, nasPath), {
+      headers: { Authorization: session.auth },
+      signal: signal ?? nasDownloadAbort?.signal,
+    })
     if (!response.ok || !response.body) {
       throw new NasApiError(`WebDAV download error ${response.status}`)
     }
@@ -4982,7 +5004,7 @@ async function nasDownloadFile(nasPath: string, size: number, force = false): Pr
     const partFile = `${target}.part`
     const counter = new Transform({
       transform(chunk, _encoding, callback) {
-        nasDownloadStatus.bytesDone += chunk.length
+        if (!signal) nasDownloadStatus.bytesDone += chunk.length
         callback(null, chunk)
       },
     })
@@ -5226,8 +5248,9 @@ app.post('/api/nas/download/cancel', localOnly, (_req, res) => {
 })
 
 app.post('/api/nas/download/sync', localOnly, (_req, res) => {
-  if (nasDownloadStatus.running) {
-    res.status(409).json({ success: false, error: 'A download is already running.' })
+  // both write into the same .part files, so not at the same time as "Reload covers" either
+  if (nasDownloadStatus.running || nasCoverRefreshRunning) {
+    res.status(409).json({ success: false, error: 'A download or a cover reload is already running.' })
     return
   }
   runNasSync().catch((error) => {
@@ -5246,6 +5269,8 @@ async function clearThumbnails(): Promise<number> {
   let removed = 0
   try {
     for (const name of await readdir(thumbDir)) {
+      // a thumbnail being written right now: its rename would fail and switch thumbnails off for a while
+      if (name.endsWith('.tmp')) continue
       await rm(path.join(thumbDir, name), { force: true })
       removed++
     }
@@ -5271,8 +5296,12 @@ async function nasRefreshLocalCovers(): Promise<{ updated: number; reachable: bo
     const files = await withNasSession((session) => nasListFilesLive(session, nasDir === '' ? '/' : nasDir, true)).catch(() => undefined)
     for (const file of files ?? []) {
       if (!file.isdir && /\.(jpe?g|jfif|png|webp)$/i.test(file.name)) {
+        // only pictures that are here already: the walk also lists folders above downloaded ones (and the NAS root),
+        // whose other pictures were never fetched
+        const target = nasLocalPath(file.path)
+        if (!target || !(await stat(target).then(() => true, () => false))) continue
         try {
-          await nasDownloadFile(file.path, file.additional?.size ?? -1, true)
+          await nasDownloadFile(file.path, file.additional?.size ?? -1, true, AbortSignal.timeout(30_000))
           updated++
         } catch (error) {
           console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Cover reload failed for ${file.path}: ${error}`)
