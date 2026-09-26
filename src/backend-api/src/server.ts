@@ -3791,9 +3791,14 @@ async function nasFindCoverBelow(files: NasFileEntry[]): Promise<string | undefi
   return undefined
 }
 
+// Changes when the covers are reloaded (and at every start of the backend). It is part of the cover
+// address, so a browser that still holds an older picture of the same address (from the time covers were
+// cached for a day) asks for the picture again instead of showing the old one.
+let nasCoverVersion = Date.now()
+
 // Only used for covers, which are asked for as small thumbnails.
 function nasStreamUrl(filePath: string): string {
-  return `/api/nas/stream?path=${encodeURIComponent(filePath)}&w=400`
+  return `/api/nas/stream?path=${encodeURIComponent(filePath)}&w=400&v=${nasCoverVersion}`
 }
 
 // A folder that holds no audio files but only subfolders is a "container": the
@@ -5331,6 +5336,7 @@ app.post('/api/nas/covers/refresh', localOnly, async (_req, res) => {
   }
   nasCoverRefreshRunning = true
   try {
+    nasCoverVersion = Date.now()
     const thumbnails = await clearThumbnails()
     const local = await nasRefreshLocalCovers()
     res.json({ success: true, thumbnails, covers: local.updated, nasReachable: local.reachable })
