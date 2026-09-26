@@ -410,7 +410,7 @@ export const I18N = {
     // Texte auf dem Display
     'dtexts.title': 'Texte auf dem Display',
     'dtexts.hint':
-      'Was das Kind auf dem Display sieht, wenn die Spielzeit aufgebraucht ist oder eine Ruhezeit läuft, dazu der QR-Code für diese WebApp und ihre Kachel in den Einstellungen der Box. Sprache wählen und bei Bedarf einzelne Texte selbst formulieren.',
+      'Was das Kind auf dem Display sieht, wenn die Spielzeit aufgebraucht ist oder eine Ruhezeit läuft, dazu der QR-Code für diese WebApp. Sprache wählen und bei Bedarf einzelne Texte selbst formulieren.',
     'dtexts.save': 'Texte speichern',
     'dtexts.language': 'Sprache',
     'dtexts.ownHint': 'Eigene Texte (optional) ersetzen den Text der Sprache. Leer = Text der Sprache (grau).',
@@ -423,7 +423,6 @@ export const I18N = {
     'dfield.parentsHint': 'QR-Code – Hinweis',
     'dfield.parentsCountdown': 'QR-Code – Countdown ({s} = Sekunden)',
     'dfield.parentsClose': 'QR-Code – Schließen-Knopf',
-    'dfield.parentsTile': 'Kachel in den Einstellungen der Box',
     // Akku
     'power.level': 'Akku-Stand',
     'power.vbat': 'Akku-Spannung',
@@ -993,7 +992,7 @@ export const I18N = {
     // Texte auf dem Display
     'dtexts.title': 'Texts on the display',
     'dtexts.hint':
-      'What your child sees on the display when playtime is used up or a quiet time is running, plus the QR code for this web app and its tile in the box settings. Choose a language and, if you like, write individual texts yourself.',
+      'What your child sees on the display when playtime is used up or a quiet time is running, plus the QR code for this web app. Choose a language and, if you like, write individual texts yourself.',
     'dtexts.save': 'Save texts',
     'dtexts.language': 'Language',
     'dtexts.ownHint': "Custom texts (optional) replace the language's text. Empty = the language's text (grey).",
@@ -1006,7 +1005,6 @@ export const I18N = {
     'dfield.parentsHint': 'QR code – hint',
     'dfield.parentsCountdown': 'QR code – countdown ({s} = seconds)',
     'dfield.parentsClose': 'QR code – close button',
-    'dfield.parentsTile': 'Tile in the box settings',
     // Akku
     'power.level': 'Battery level',
     'power.vbat': 'Battery voltage',

@@ -640,7 +640,6 @@ if( $_POST['fan_control'] )
   'parentsHint' => 'Parents QR code - hint',
   'parentsCountdown' => 'Parents QR code - countdown ({s} = seconds)',
   'parentsClose' => 'Parents QR code - close button',
-  'parentsTile' => 'Tile in the box settings',
  );
  $display_languages = array();
  $display_lang_file = @file_get_contents('/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/assets/i18n/display-texts.json');
@@ -1306,7 +1305,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 		<ul>
 			<li id="li_1">
 				<h2>About</h2>
-				<p>Texts the child sees on the box display when the daily limit is used up, during a quiet time, on the parents' QR code and on its tile in the box settings. Choose a language; any text can be replaced by your own. A quiet-time rule with a label (e.g. "Bedtime") shows that label as the heading.</p>
+				<p>Texts the child sees on the box display when the daily limit is used up, during a quiet time and on the parents' QR code. Choose a language; any text can be replaced by your own. A quiet-time rule with a label (e.g. "Bedtime") shows that label as the heading.</p>
 			</li>
 			<li id="li_1">
 				<?php

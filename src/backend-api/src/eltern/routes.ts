@@ -61,7 +61,6 @@ const DISPLAY_TEXT_KEYS = [
   'parentsHint',
   'parentsCountdown',
   'parentsClose',
-  'parentsTile',
 ] as const
 
 function buildSessionCookie(sessionId: string, maxAgeSeconds: number): string {

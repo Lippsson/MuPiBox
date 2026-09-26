@@ -845,7 +845,6 @@ const DISPLAY_TEXT_FIELDS = [
   { key: 'parentsHint', labelKey: 'dfield.parentsHint' },
   { key: 'parentsCountdown', labelKey: 'dfield.parentsCountdown' },
   { key: 'parentsClose', labelKey: 'dfield.parentsClose' },
-  { key: 'parentsTile', labelKey: 'dfield.parentsTile' },
 ]
 let displayLanguages = {}
 
