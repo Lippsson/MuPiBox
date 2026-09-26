@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import { NavigationExtras, Router } from '@angular/router'
-import { catchError, firstValueFrom, interval, of, switchMap, timeout } from 'rxjs'
+import { Subject, catchError, firstValueFrom, interval, merge, of, switchMap, timeout } from 'rxjs'
 import { filter, map } from 'rxjs/operators'
 import { environment } from 'src/environments/environment'
 import type { CurrentMPlayer } from './current.mplayer'
@@ -32,6 +32,8 @@ export class ExternalPlaybackNavigatorService {
   private playerPageKey = ''
   /** True while the player page is being left only to be opened again for a new start from the phone. */
   public replacingPlayerPage = false
+  /** Ask /local right now (outside the timer), e.g. when a Spotify track starts while on the player page. */
+  private readonly pollNow$ = new Subject<void>()
   /** Same idea for "show the new theme now" from the parents' web app (see checkThemeReload). */
   private lastSeenThemeReloadAt: number | null = null
   /** Tick-Zähler für die gedrosselte Abfrage auf der Player-Page. */
@@ -47,6 +49,12 @@ export class ExternalPlaybackNavigatorService {
   }
 
   private initializeExternalPlaybackDetection(): void {
+    // On the player page the /local poll runs only every 10 s. A Spotify track starting in the display's player
+    // (e.g. an album from the phone replacing a NAS album) asks at once instead, so the page switches in a moment.
+    this.spotifyService.trackChangeDetected$
+      .pipe(filter((track) => track !== null && this.isCurrentlyOnPlayerPage()))
+      .subscribe(() => this.pollNow$.next())
+
     // Monitor external playback detection
     this.spotifyService.trackChangeDetected$
       .pipe(
@@ -76,16 +84,17 @@ export class ExternalPlaybackNavigatorService {
   private initializeTriggerSourcePolling(): void {
     // 2s ist ein guter Kompromiss: spürbar genug für "ich tipp in WebApp,
     // Display switcht in <3s", ohne unnötiges Load auf den Player.
-    interval(2000)
-      .pipe(
-        // Auf der Player-Page wird grundsätzlich nicht navigiert (siehe
-        // isCurrentlyOnPlayerPage()-Guard unten) — dort hält der Poll nur
-        // noch lastSeenTriggerAt aktuell, und dafür reicht ein Fünftel der
-        // Frequenz. Das ist genau der Zustand, in dem die Box am längsten
-        // steht (Kind hört etwas) und auf Akku läuft: 43.200 Requests/Tag
-        // sinken damit auf rund 9.000, ohne dass die Reaktionszeit ausserhalb
-        // der Player-Page leidet.
+    merge(
+      interval(2000).pipe(
+        // Auf der Player-Page nur jeder fünfte Tick (10 s): Das ist genau der
+        // Zustand, in dem die Box am längsten steht (Kind hört etwas) und auf
+        // Akku läuft: 43.200 Requests/Tag sinken damit auf rund 9.000. Ein
+        // Spotify-Titelwechsel fragt dort sofort nach (pollNow$).
         filter(() => !this.isCurrentlyOnPlayerPage() || this.pollTick++ % 5 === 0),
+      ),
+      this.pollNow$,
+    )
+      .pipe(
         switchMap(() =>
           this.http
             .get<CurrentMPlayer>(`${environment.backend.playerUrl}/local`)
