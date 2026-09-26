@@ -25,6 +25,9 @@ export class ExternalPlaybackNavigatorService {
    *  erste echte externe Trigger lief in den Baseline-Zweig statt in die
    *  Navigation — das Display folgte erst beim zweiten Tippen. */
   private lastSeenTriggerAt: number | null = null
+  /** An external start not followed yet: until when (ms) to wait for it to play, 0 = none. */
+  private pendingExternalUntil = 0
+  private pendingExternalSource = ''
   /** Same idea for "show the new theme now" from the parents' web app (see checkThemeReload). */
   private lastSeenThemeReloadAt: number | null = null
   /** Tick-Zähler für die gedrosselte Abfrage auf der Player-Page. */
@@ -98,15 +101,22 @@ export class ExternalPlaybackNavigatorService {
           this.lastSeenTriggerAt = at
           return
         }
-        if (at > this.lastSeenTriggerAt && src !== 'box' && data.playing === true) {
+        if (at > this.lastSeenTriggerAt) {
           this.lastSeenTriggerAt = at
-          if (!this.isCurrentlyOnPlayerPage() && !this.isNavigatingToPlayer) {
-            console.log(`🎵 External playback trigger from "${src}" — navigating to /player`)
+          // A start from the parents' web app or Telegram is followed once it really plays. A NAS album (its
+          // track list is fetched first) or a stream takes a few seconds: the trigger waits for that instead of
+          // being used up by a poll that still saw nothing playing.
+          this.pendingExternalUntil = src !== 'box' ? Date.now() + 30_000 : 0
+          this.pendingExternalSource = src
+        }
+        if (this.pendingExternalUntil && data.playing === true) {
+          const stillPending = Date.now() < this.pendingExternalUntil
+          this.pendingExternalUntil = 0
+          if (stillPending && !this.isCurrentlyOnPlayerPage() && !this.isNavigatingToPlayer) {
+            console.log(`🎵 External playback trigger from "${this.pendingExternalSource}" — navigating to /player`)
             void this.navigateToPlayerExternal(data)
           }
-          return
         }
-        if (at > this.lastSeenTriggerAt) this.lastSeenTriggerAt = at
       })
   }
 
