@@ -46,12 +46,16 @@ export class ElternMagicLinkService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source: 'settings-qr' }),
       })
-      if (!res.ok) {
-        console.warn('[eltern-magic-link] generate failed:', res.status)
-        return
+      // A login link is only made on the box itself (the backend refuses it from other devices, e.g. this page
+      // shown in the admin interface's browser view). Then the plain address of the parents' app is shown: it
+      // asks for the parent password - instead of the tap doing nothing at all.
+      let url = `http://${host}:${ELTERN_PORT}/parents`
+      if (res.ok) {
+        const body = (await res.json()) as { token: string }
+        url += `?token=${encodeURIComponent(body.token)}`
+      } else {
+        console.warn('[eltern-magic-link] no login link (status', res.status, ') - showing the plain address')
       }
-      const body = (await res.json()) as { token: string }
-      const url = `http://${host}:${ELTERN_PORT}/parents?token=${encodeURIComponent(body.token)}`
       const qrDataUrl = await QRCode.toDataURL(url, { margin: 2, width: 320 })
       this.magicLinkUrl.set(url)
       this.qrUrl.set(qrDataUrl)
