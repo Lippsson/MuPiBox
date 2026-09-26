@@ -3795,10 +3795,13 @@ function nasListFilesLiveCached(folderPath: string): Promise<NasFileEntry[] | un
   return entry.files
 }
 
-// Lists a NAS folder: from the local copy if it was downloaded, otherwise live
-// from the NAS, and from whatever is stored locally if the NAS is unreachable.
+// Lists a NAS folder: live from the NAS, and from whatever is stored locally if the NAS is unreachable.
+// A downloaded folder is listed live too while the NAS is known to answer (a session is active), so episodes added
+// on the NAS after the download show up (and play from the NAS; the downloaded files still play from here, see
+// /api/nas/stream). Without an active session it is listed from the copy straight away - no waiting on a NAS that
+// is off.
 async function nasListFiles(folderPath: string): Promise<NasFileEntry[]> {
-  if (nasIsDownloaded(folderPath)) {
+  if (nasIsDownloaded(folderPath) && (!nasSessionCache || Date.now() < nasOfflineUntil)) {
     const local = await nasLocalListFiles(folderPath)
     if (local) {
       return local
@@ -5141,11 +5144,24 @@ interface NasFileToDownload {
   size: number
 }
 
-async function nasCollectFiles(session: NasSession, folderPath: string, out: NasFileToDownload[]): Promise<void> {
+// A subfolder that cannot be read is noted in `failed` (its folder then gets no marker and nothing is removed
+// locally) instead of ending the whole download.
+async function nasCollectFiles(
+  session: NasSession,
+  folderPath: string,
+  out: NasFileToDownload[],
+  failed: string[],
+): Promise<void> {
   const files = await nasListFilesLive(session, folderPath, true)
   for (const file of files) {
     if (file.isdir) {
-      await nasCollectFiles(session, file.path, out)
+      try {
+        await nasCollectFiles(session, file.path, out, failed)
+      } catch (error) {
+        if (error instanceof NasSessionExpiredError) throw error
+        failed.push(file.path)
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] NAS download: cannot read ${file.path}: ${error}`)
+      }
     } else if (nasDownloadExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))) {
       out.push({ nasPath: file.path, size: file.additional?.size ?? -1 })
     }
@@ -5172,11 +5188,25 @@ async function nasDownloadFile(nasPath: string, size: number, force = false, sig
   await mkdir(path.dirname(target), { recursive: true })
 
   const done = await withNasSession(async (session) => {
+    // No data for NAS_STALL_MS = a dead connection (WiFi gone without a reset): without this the download hung for
+    // ever, "running" stayed set, and every later download was refused.
+    const stall = new AbortController()
+    let stallTimer: NodeJS.Timeout | undefined
+    const armStall = () => {
+      clearTimeout(stallTimer)
+      stallTimer = setTimeout(() => stall.abort(new Error('NAS download stalled')), NAS_STALL_MS)
+    }
+    const outer = signal ?? nasDownloadAbort?.signal
+    armStall()
     const response = await fetch(nasUrl(session, nasPath), {
       headers: { Authorization: session.auth },
-      signal: signal ?? nasDownloadAbort?.signal,
+      signal: outer ? AbortSignal.any([outer, stall.signal]) : stall.signal,
+    }).catch((error) => {
+      clearTimeout(stallTimer)
+      throw error
     })
     if (!response.ok || !response.body) {
+      clearTimeout(stallTimer)
       throw new NasApiError(`WebDAV download error ${response.status}`)
     }
     // Write to a temp name first so a half-finished file is never mistaken for a
@@ -5184,6 +5214,7 @@ async function nasDownloadFile(nasPath: string, size: number, force = false, sig
     const partFile = `${target}.part`
     const counter = new Transform({
       transform(chunk, _encoding, callback) {
+        armStall()
         if (!signal) nasDownloadStatus.bytesDone += chunk.length
         callback(null, chunk)
       },
@@ -5197,6 +5228,8 @@ async function nasDownloadFile(nasPath: string, size: number, force = false, sig
     } catch (error) {
       await rm(partFile, { force: true }) // cancelled or failed: no half file is left behind
       throw error
+    } finally {
+      clearTimeout(stallTimer)
     }
     await rename(partFile, target)
     return true
@@ -5263,11 +5296,40 @@ async function nasDownloadParentCovers(folder: string, checked: Set<string>): Pr
       continue
     }
     const files = await withNasSession((session) => nasListFilesLive(session, ancestor, true))
-    const cover = files?.find((file) => !file.isdir && /\.(jpe?g|jfif|png|webp)$/i.test(file.name))
+    const cover = files ? pickCoverImage(files) : undefined
     if (cover) {
       await nasDownloadFile(cover.path, cover.additional?.size ?? -1)
     }
   }
+}
+
+// Files in the local copy of a downloaded folder that are no longer on the NAS (deleted or renamed there) - only
+// the kinds of files the download makes, only below this folder, and only called for a folder that was read
+// completely.
+async function nasRemoveDeletedFiles(folder: string, onNas: Set<string>): Promise<void> {
+  const walk = async (nasDir: string): Promise<void> => {
+    const dir = nasLocalPath(nasDir)
+    if (!dir) return
+    let entries: fs.Dirent[]
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const child = `${normalizeNasPath(nasDir)}/${entry.name}`.replace(/^\/\//, '/')
+      if (entry.isDirectory()) {
+        await walk(child)
+      } else if (
+        nasDownloadExtensions.some((ext) => entry.name.toLowerCase().endsWith(ext)) &&
+        !onNas.has(normalizeNasPath(child))
+      ) {
+        await rm(path.join(dir, entry.name), { force: true })
+        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] NAS download: removed ${child} (no longer on the NAS)`)
+      }
+    }
+  }
+  await walk(folder)
 }
 
 async function runNasSync(): Promise<void> {
@@ -5317,10 +5379,8 @@ async function runNasSync(): Promise<void> {
       }
     }
 
-    const pending = desired.filter((folder) => !nasIsDownloaded(folder))
-    if (pending.length === 0) {
-      await downloadParentCovers()
-      status.message = 'Everything selected is already downloaded.'
+    if (desired.length === 0) {
+      status.message = 'Nothing is selected for download.'
       return
     }
 
@@ -5328,18 +5388,37 @@ async function runNasSync(): Promise<void> {
       throw new Error('The NAS is not reachable - nothing was downloaded.')
     }
 
+    // Every selected folder is read again, the downloaded ones too: new episodes are fetched, changed files
+    // replaced, and files deleted on the NAS removed here (files already there in full are skipped, see
+    // nasDownloadFile). Before, a downloaded folder was never looked at again.
     status.message = 'Reading folders on the NAS...'
-    const plan: { folder: string; files: NasFileToDownload[] }[] = []
-    for (const folder of pending) {
+    const plan: { folder: string; files: NasFileToDownload[]; complete: boolean }[] = []
+    for (const folder of desired) {
       if (status.cancelRequested) {
         break
       }
       const files: NasFileToDownload[] = []
-      await withNasSession(async (session) => {
-        files.length = 0
-        await nasCollectFiles(session, folder, files)
-      })
-      plan.push({ folder, files })
+      const failedFolders: string[] = []
+      let collected: boolean | undefined
+      try {
+        collected = await withNasSession(async (session) => {
+          files.length = 0
+          failedFolders.length = 0
+          await nasCollectFiles(session, folder, files, failedFolders)
+          return true
+        })
+      } catch (error) {
+        if (!(error instanceof NasApiError)) throw error
+        // this folder is gone or not readable: the others go on
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] NAS download: cannot read ${folder}: ${error}`)
+        plan.push({ folder, files: [], complete: false })
+        continue
+      }
+      if (!collected) {
+        // The NAS dropped out while reading: an empty plan would mark the folder "done" with nothing in it.
+        throw new Error('The NAS stopped answering while the folders were read - nothing was downloaded.')
+      }
+      plan.push({ folder, files, complete: failedFolders.length === 0 })
       status.filesTotal += files.length
     }
 
@@ -5362,8 +5441,8 @@ async function runNasSync(): Promise<void> {
 
     await downloadParentCovers()
 
-    let failed = 0
-    for (const { folder, files } of plan) {
+    let failed = plan.filter((entry) => !entry.complete).length
+    for (const { folder, files, complete } of plan) {
       let folderFailed = 0
       for (const file of files) {
         if (status.cancelRequested) {
@@ -5386,11 +5465,13 @@ async function runNasSync(): Promise<void> {
         break // this folder is incomplete: no marker
       }
 
-      // The marker is only written once the whole folder is complete, which is
-      // how later runs know to skip it.
+      // The marker is only written once the whole folder is complete (every subfolder read, every file there):
+      // a folder with the marker plays from here when the NAS is not reachable. Never for a folder without
+      // files - its empty copy would stand for the folder.
       const localDir = nasLocalPath(folder)
-      if (folderFailed === 0 && localDir) {
+      if (folderFailed === 0 && complete && files.length > 0 && localDir) {
         await mkdir(localDir, { recursive: true })
+        await nasRemoveDeletedFiles(folder, new Set(files.map((file) => normalizeNasPath(file.nasPath))))
         await writeFile(
           path.join(localDir, nasDownloadMarker),
           JSON.stringify({ nasPath: folder, completedAt: new Date().toISOString() }),
@@ -5406,7 +5487,7 @@ async function runNasSync(): Promise<void> {
     status.message =
       failed === 0
         ? `Done - ${status.filesDone} files downloaded.`
-        : `Finished with ${failed} failed files - run "Download selected" again to retry.`
+        : `Finished with ${failed} failed files or folders - run "Download selected" again to retry.`
   } catch (error) {
     status.error = error instanceof Error ? error.message : String(error)
     status.message = `Failed: ${status.error}`
