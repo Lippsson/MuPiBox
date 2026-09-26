@@ -3613,6 +3613,14 @@ interface NasFileEntry {
   path: string
   isdir: boolean
   additional?: { size?: number }
+  // ETag or last-modified date from the NAS: changes when the file changes (thumbnail cache key)
+  version?: string
+}
+
+// Not shown and not played: hidden files (macOS "._01.mp3" companions, ".DS_Store"), DSM's "@eaDir" thumbnail
+// folders, recycle bin and snapshots.
+function nasIsSystemEntry(name: string): boolean {
+  return name.startsWith('.') || name.startsWith('@') || name === '#recycle' || name === '#snapshot'
 }
 
 const xmlEntities: Record<string, string> = { '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"', '&apos;': "'" }
@@ -3648,13 +3656,20 @@ function parsePropfind(xml: string, session: NasSession, folderPath: string): Na
     if (hrefPath === folder) {
       continue // the folder itself
     }
+    const name = hrefPath.split('/').pop() ?? hrefPath
+    if (nasIsSystemEntry(name)) {
+      continue
+    }
     const isdir = /<(?:\w+:)?collection\s*\/?>/i.test(block)
     const sizeMatch = block.match(/<(?:\w+:)?getcontentlength[^>]*>(\d+)</i)
+    const versionMatch =
+      block.match(/<(?:\w+:)?getetag[^>]*>([^<]+)</i) ?? block.match(/<(?:\w+:)?getlastmodified[^>]*>([^<]+)</i)
     entries.push({
-      name: hrefPath.split('/').pop() ?? hrefPath,
+      name,
       path: hrefPath,
       isdir,
       additional: sizeMatch ? { size: Number(sizeMatch[1]) } : undefined,
+      version: versionMatch ? decodeXml(versionMatch[1].trim()) : undefined,
     })
   }
   return entries
@@ -3664,7 +3679,7 @@ async function nasListFilesLive(session: NasSession, folderPath: string, _withSi
   const response = await fetch(`${nasUrl(session, folderPath)}/`, {
     method: 'PROPFIND',
     headers: { Authorization: session.auth, Depth: '1', 'Content-Type': 'application/xml' },
-    body: '<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/></prop></propfind>',
+    body: '<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getetag/><getlastmodified/></prop></propfind>',
     // 20 s: a NAS waking its disks answers after 10-20 s (8 s marked it offline for 30 s)
     signal: AbortSignal.timeout(20000),
   })
@@ -3748,6 +3763,38 @@ async function nasLocalListFiles(nasPath: string): Promise<NasFileEntry[] | unde
     .map((entry) => ({ name: entry.name, path: `${normalized}/${entry.name}`, isdir: entry.isDirectory() }))
 }
 
+// Live listings are kept for a minute: opening a folder lists every subfolder (and looks below them for covers
+// and albums), and going back from the player opened it all again - "Christliche" (161 folders) took 2 s every
+// time. Requests for the same folder at the same time share one PROPFIND. Changes on the NAS show up after at
+// most a minute; a new NAS login or "Reload covers" empties the cache.
+const NAS_LIST_CACHE_MS = 60 * 1000
+const NAS_LIST_CACHE_MAX = 600
+const nasListCache = new Map<string, { at: number; files: Promise<NasFileEntry[] | undefined> }>()
+
+function nasListCacheClear(): void {
+  nasListCache.clear()
+}
+
+function nasListFilesLiveCached(folderPath: string): Promise<NasFileEntry[] | undefined> {
+  const key = normalizeNasPath(folderPath)
+  const hit = nasListCache.get(key)
+  if (hit && Date.now() - hit.at < NAS_LIST_CACHE_MS) {
+    return hit.files
+  }
+  const entry = { at: Date.now(), files: withNasSession((session) => nasListFilesLive(session, folderPath)) }
+  nasListCache.delete(key) // re-insert: the map's order is the age order for the eviction below
+  nasListCache.set(key, entry)
+  const forget = () => {
+    if (nasListCache.get(key) === entry) nasListCache.delete(key)
+  }
+  // a failed or session-less listing is not kept
+  entry.files.then((files) => files === undefined && forget(), forget)
+  while (nasListCache.size > NAS_LIST_CACHE_MAX) {
+    nasListCache.delete(nasListCache.keys().next().value as string)
+  }
+  return entry.files
+}
+
 // Lists a NAS folder: from the local copy if it was downloaded, otherwise live
 // from the NAS, and from whatever is stored locally if the NAS is unreachable.
 async function nasListFiles(folderPath: string): Promise<NasFileEntry[]> {
@@ -3758,7 +3805,7 @@ async function nasListFiles(folderPath: string): Promise<NasFileEntry[]> {
     }
   }
   try {
-    const live = await withNasSession((session) => nasListFilesLive(session, folderPath))
+    const live = await nasListFilesLiveCached(folderPath)
     if (live !== undefined) {
       return live
     }
@@ -3774,9 +3821,21 @@ async function nasListFiles(folderPath: string): Promise<NasFileEntry[]> {
   throw new Error(`NAS folder not available: ${folderPath}`)
 }
 
+// The folder's picture: "cover", "folder", "front" or "albumart" first, then any other picture except an obvious
+// back side / booklet page - the first image in the NAS's order was often "back.jpg".
+function pickCoverImage(files: NasFileEntry[]): NasFileEntry | undefined {
+  const images = files.filter((f) => !f.isdir && /\.(jpe?g|jfif|png|webp)$/i.test(f.name))
+  const base = (f: NasFileEntry) => f.name.replace(/\.[^.]+$/, '').toLowerCase()
+  return (
+    images.find((f) => /^(cover|folder|front|albumart\w*)$/.test(base(f))) ??
+    images.find((f) => /cover|front/.test(base(f)) && !/back/.test(base(f))) ??
+    images.find((f) => !/back|rueck|rück|inlay|booklet|cd\d?$|disc/.test(base(f))) ??
+    images[0]
+  )
+}
+
 function nasFindCoverImage(files: NasFileEntry[]): string | undefined {
-  const image = files.find((f) => !f.isdir && /\.(jpe?g|jfif|png|webp)$/i.test(f.name))
-  return image?.path
+  return pickCoverImage(files)?.path
 }
 
 // A folder without a picture of its own (e.g. an artist folder holding only album subfolders)
@@ -4247,6 +4306,7 @@ app.post('/api/nas/login', localOnly, async (req, res) => {
   nasSessionCache = result.session
   nasLastSession = result.session
   nasOfflineUntil = 0
+  nasListCacheClear() // another NAS or account: its folders
 
   if (rememberMe === true) {
     try {
@@ -4582,6 +4642,12 @@ app.get('/api/nas/children', nasPathWithinSelection, async (req, res) => {
       4,
       async (sub) => {
         try {
+          // A folder with nothing to play (only pictures, an eBook, ...) is no tile. The listing is cached, so
+          // nasBuildMediaEntry() does not ask the NAS again.
+          const subFiles = await nasListFiles(sub.path)
+          if (!nasHasAudio(subFiles) && !(await folderIsContainer(subFiles, nasListFiles))) {
+            return null
+          }
           return await nasBuildMediaEntry(sub.path, parentName, sub.name, parentCoverPath)
         } catch (error) {
           console.error(
@@ -4601,7 +4667,7 @@ app.get('/api/nas/children', nasPathWithinSelection, async (req, res) => {
     if (nasHasAudio(files) && (await folderIsContainer(files, nasListFiles))) {
       entries.unshift(await nasBuildMediaEntry(folderPath, parentName, parentName, undefined, true))
     }
-    res.json(entries.filter((entry) => entry !== undefined))
+    res.json(entries.filter((entry) => entry))
   } catch (error) {
     // The folder itself could not be read (NAS not reachable): not an empty folder.
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to list NAS children of ${folderPath}: ${error}`)
@@ -4972,8 +5038,12 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
     }
 
     if (thumbSize && isThumbnailable(filePath) && !req.headers.range) {
-      const day = Math.floor(Date.now() / 86400000)
-      const thumb = await getThumbnail(`nas:${filePath}`, thumbSize, `nas|${filePath}|${day}`, async () => {
+      // The picture's ETag / date from the (cached) listing of its folder: the thumbnail is made again only when
+      // the picture changed. The day as key made every shown cover again each day, as a new file on the SD.
+      const parentFiles = await nasListFiles(filePath.split('/').slice(0, -1).join('/') || '/').catch(() => [])
+      const version = parentFiles.find((f) => f.path === normalizeNasPath(filePath))?.version
+      const seed = `nas|${filePath}|${version ?? Math.floor(Date.now() / 86400000)}`
+      const thumb = await getThumbnail(`nas:${filePath}`, thumbSize, seed, async () => {
         const full = await fetch(nasUrl(session, filePath), { headers, signal: AbortSignal.timeout(20000) })
         if (!full.ok) {
           return undefined
@@ -5439,6 +5509,7 @@ app.post('/api/nas/covers/refresh', localOnly, async (_req, res) => {
   nasCoverRefreshRunning = true
   try {
     nasCoverVersion = Date.now()
+    nasListCacheClear()
     const thumbnails = await clearThumbnails()
     const local = await nasRefreshLocalCovers()
     res.json({ success: true, thumbnails, covers: local.updated, nasReachable: local.reachable })
@@ -5488,10 +5559,9 @@ async function libraryListFiles(relPath: string): Promise<NasFileEntry[]> {
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
 }
 
-// Prefers a file called "cover.*", otherwise the first image in the folder.
+// Same choice as on the NAS (pickCoverImage).
 function libraryFindCover(files: NasFileEntry[]): string | undefined {
-  const images = files.filter((f) => !f.isdir && /\.(jpe?g|jfif|png|webp)$/i.test(f.name))
-  return (images.find((f) => /^cover\./i.test(f.name)) ?? images[0])?.path
+  return pickCoverImage(files)?.path
 }
 
 // An artist folder without a picture of its own gets the cover of the first album
@@ -5581,8 +5651,16 @@ function getThumbnail(
     return running
   }
   const job = (async () => {
-    if (fs.existsSync(target)) {
+    try {
+      const info = await stat(target)
+      // In use: moved up once a month (one small metadata write), so pruneThumbnails() keeps it.
+      if (Date.now() - info.mtimeMs > 30 * 24 * 3600 * 1000) {
+        const now = new Date()
+        await fs.promises.utimes(target, now, now).catch(() => undefined)
+      }
       return target
+    } catch {
+      // not made yet
     }
     await mkdir(thumbDir, { recursive: true })
     const temp = `${target}.${process.pid}.tmp`
@@ -5618,7 +5696,9 @@ function getThumbnail(
   return job
 }
 
-// Thumbnails of covers that were changed or removed stay in the cache folder; drop old ones.
+// Thumbnails of covers that were changed or removed stay in the cache folder; drop the ones not used for two
+// months (a used one is moved up monthly, see getThumbnail). At the start and then once a day - the backend runs
+// for weeks.
 async function pruneThumbnails(): Promise<void> {
   try {
     const limit = Date.now() - 60 * 24 * 3600 * 1000
@@ -5633,6 +5713,7 @@ async function pruneThumbnails(): Promise<void> {
   }
 }
 void pruneThumbnails()
+setInterval(() => void pruneThumbnails(), 24 * 3600 * 1000).unref()
 
 // Makes the thumbnails of all local covers in the background a while after start, so that
 // the first look at a folder does not have to wait for them.
@@ -5809,6 +5890,11 @@ app.get('/api/library/children', async (req, res) => {
         .filter((f) => f.isdir)
         .map(async (sub) => {
           try {
+            // a folder with nothing to play is no tile (as on the NAS)
+            const subFiles = await libraryListFiles(sub.path)
+            if (!nasHasAudio(subFiles) && !(await folderIsContainer(subFiles, libraryListFiles))) {
+              return null
+            }
             return await libraryBuildEntry(sub.path, parentName, sub.name, parentCoverPath)
           } catch (error) {
             console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Skipping unreadable folder ${sub.path}: ${error}`)
@@ -5820,7 +5906,7 @@ app.get('/api/library/children', async (req, res) => {
     if (nasHasAudio(files) && (await folderIsContainer(files, libraryListFiles))) {
       entries.unshift(await libraryBuildEntry(libraryRel(folderPath) ?? folderPath, parentName, parentName, undefined, true))
     }
-    res.json(entries.filter((entry) => entry !== undefined))
+    res.json(entries.filter((entry) => entry))
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to list library folder ${folderPath}: ${error}`)
     res.json([])
