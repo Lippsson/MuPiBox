@@ -44,15 +44,17 @@ export interface Media {
   // Full NAS path of this entry's folder, used for NAS media (type: 'nas')
   // to browse/stream it live instead of resolving a local file path.
   nasPath?: string
-  // True for a NAS folder that only contains subfolders (no audio files): it is
-  // drilled into like an artist level instead of being played.
+  // True for a NAS folder with subfolders holding audio: it is drilled into like
+  // an artist level instead of being played.
   nasIsContainer?: boolean
   // Local files (type: 'library'): folder below ~/MuPiBox/media, e.g.
   // "audiobook/Artist/Album", read live from disk at any depth. Entries without
   // it are old-style library entries from data.json (category/artist/title).
   libraryPath?: string
-  // True for a local folder that only contains subfolders: it opens the next level.
+  // True for a local folder with subfolders holding audio: it opens the next level.
   libraryIsContainer?: boolean
+  // The audio files lying directly in such a folder (NAS or local), next to its subfolders: listed first.
+  ownFiles?: boolean
   // Marks an item whose Spotify metadata fetch failed (network blip,
   // region lock, removed from catalogue, etc.). Set by spotify.service's
   // catchError fallbacks so the item still occupies its slot in the list

@@ -845,7 +845,6 @@ const DISPLAY_TEXT_FIELDS = [
   { key: 'parentsHint', labelKey: 'dfield.parentsHint' },
   { key: 'parentsCountdown', labelKey: 'dfield.parentsCountdown' },
   { key: 'parentsClose', labelKey: 'dfield.parentsClose' },
-  { key: 'parentsTile', labelKey: 'dfield.parentsTile' },
 ]
 let displayLanguages = {}
 
@@ -1892,7 +1891,9 @@ function renderPlayback(b) {
   // via Opacity damit das Bild nicht flackert.
   if (b.coverUrl) {
     if (cover) {
-      if (cover.src !== b.coverUrl) {
+      // getAttribute: cover.src is the absolute URL, a relative coverUrl (NAS/local album) would differ on every
+      // refresh and make the picture flicker
+      if (cover.getAttribute('src') !== b.coverUrl) {
         cover.style.opacity = '0'
         cover.src = b.coverUrl
         cover.onload = () => { cover.style.opacity = '1' }
@@ -1992,7 +1993,110 @@ async function playbackAction(action) {
 const playState = {
   items: [],
   search: '',
-  category: 'all',  // all | music | audiobook | radio
+  category: 'all',  // all | music | audiobook | radio | nas
+  // NAS: the folders selected in the admin interface, browsed live like the box's NAS tab.
+  nasStack: [],     // the opened folders, [{ title, path }]; empty = the top level
+  nasItems: null,   // entries of the current level (null = not loaded yet)
+  nasError: '',
+}
+
+/** Loads one NAS level: the selected folders (top) or the subfolders of `path`. */
+async function loadNasLevel() {
+  const grid = $('#play-grid')
+  const top = playState.nasStack.at(-1)
+  playState.nasItems = null
+  playState.nasError = ''
+  renderPlay()
+  if (grid) grid.innerHTML = skeletonLines(6)
+  try {
+    const url = top ? `/api/nas/children?path=${encodeURIComponent(top.path)}` : '/api/nas/artists'
+    const res = await fetch(url, { credentials: 'same-origin' })
+    // 503: folders are selected, but the NAS can't be reached right now
+    if (res.status === 503) playState.nasError = t('play.nasUnreachable')
+    else if (!res.ok) playState.nasError = t('play.libraryNotLoaded', { status: res.status })
+    const data = res.ok ? await res.json() : []
+    playState.nasItems = Array.isArray(data) ? data : []
+  } catch (err) {
+    playState.nasItems = []
+    playState.nasError = t('common.errorMsg', { msg: err.message })
+  }
+  renderPlay()
+}
+
+function renderNasCrumbs() {
+  const nav = $('#play-crumbs')
+  if (!nav) return
+  nav.hidden = playState.category !== 'nas'
+  if (nav.hidden) return
+  const parts = [{ title: 'NAS' }, ...playState.nasStack]
+  nav.innerHTML = parts
+    .map((p, i) =>
+      i === parts.length - 1
+        ? `<span class="play-crumb is-current">${escapeHtml(p.title)}</span>`
+        : `<button class="play-crumb" data-depth="${i}">${escapeHtml(p.title)}</button><span class="play-crumb-sep">›</span>`,
+    )
+    .join('')
+}
+
+function renderNas(grid, q) {
+  if (playState.nasItems === null) return // loading
+  if (playState.nasError) {
+    grid.innerHTML = emptyStateHtml('⚠️', escapeHtml(playState.nasError))
+    return
+  }
+  const entries = playState.nasItems
+    .map((item, idx) => ({ item, idx }))
+    .filter(({ item }) => {
+      if (!q) return true
+      return `${item.title ?? ''} ${item.artist ?? ''}`.toLowerCase().includes(q)
+    })
+  if (entries.length === 0) {
+    grid.innerHTML = emptyStateHtml('🗄️', q ? t('play.noSearchResults') : playState.nasStack.length ? t('play.emptyCategory') : t('play.nasEmpty'))
+    return
+  }
+  grid.innerHTML = entries.map(({ item, idx }) => {
+    const title = escapeHtml(String(item.title ?? '—'))
+    const artist = escapeHtml(String(item.artist ?? ''))
+    const cover = item.cover ? escapeHtml(String(item.cover)) : ''
+    const isFolder = item.nasIsContainer === true
+    const coverEl = cover
+      ? `<img class="play-tile-cover" src="${cover}" alt="" loading="lazy">`
+      : `<div class="play-tile-cover-placeholder">${isFolder ? '📁' : '🎧'}</div>`
+    const aria = isFolder ? t('play.openAria', { title }) : t('play.playAria', { title })
+    return `
+      <button class="play-tile" data-nas-idx="${idx}" aria-label="${aria}">
+        ${coverEl}
+        <span class="play-tile-badge">${isFolder ? `📁 ${t('play.nasFolder')}` : 'NAS'}</span>
+        <div class="play-tile-overlay">
+          <div class="play-tile-title">${title}</div>
+          <div class="play-tile-artist">${artist}</div>
+        </div>
+      </button>`
+  }).join('')
+  for (const img of grid.querySelectorAll('img.play-tile-cover')) {
+    img.addEventListener('error', () => {
+      const item = playState.nasItems?.[Number(img.closest('.play-tile')?.dataset.nasIdx)]
+      const ph = document.createElement('div')
+      ph.className = 'play-tile-cover-placeholder'
+      ph.textContent = item?.nasIsContainer ? '📁' : '🎧'
+      img.replaceWith(ph)
+    }, { once: true })
+  }
+}
+
+/** A NAS tile: a folder with subfolders opens, an album plays on the box. */
+function onNasTile(idx) {
+  const item = playState.nasItems?.[idx]
+  if (!item?.nasPath) return
+  if (item.nasIsContainer) {
+    playState.nasStack.push({ title: String(item.title ?? ''), path: item.nasPath })
+    playState.search = ''
+    const search = $('#play-search')
+    if (search) search.value = ''
+    loadNasLevel()
+    return
+  }
+  startPlayback(String(item.title ?? t('play.newTrack')), `${API}/library/play-nas`, { path: item.nasPath })
 }
 
 async function loadPlay() {
@@ -2018,6 +2122,11 @@ function renderPlay() {
   if (!grid) return
   const q = playState.search.trim().toLowerCase()
   const cat = playState.category
+  renderNasCrumbs()
+  if (cat === 'nas') {
+    renderNas(grid, q)
+    return
+  }
   const filtered = playState.items
     .map((item, idx) => ({ item, idx }))
     .filter(({ item }) => {
@@ -2096,6 +2205,11 @@ function typeIcon(item) {
 async function playLibraryItem(idx) {
   const item = playState.items[idx]
   if (!item) return
+  await startPlayback(String(item.title_override ?? item.title ?? item.artist ?? t('play.newTrack')), `${API}/library/play`, { index: idx })
+}
+
+/** Starts something on the box (a library entry or a NAS album): asks first when something is playing. */
+async function startPlayback(newLabel, url, body) {
   // Wenn schon was läuft: kurze Bestätigung. Im Idle direkt loslegen.
   let playback
   try {
@@ -2104,7 +2218,6 @@ async function playLibraryItem(idx) {
   } catch { /* egal — wenn /playback hängt, fragen wir trotzdem nicht */ }
   if (playback?.playing) {
     const currentLabel = playback.title || playback.artist || t('play.currentTrack')
-    const newLabel = String(item.title_override ?? item.title ?? item.artist ?? t('play.newTrack'))
     const ok = await confirmDialog(
       t('play.overrideQ'),
       t('play.overrideBody', { current: currentLabel, next: newLabel }),
@@ -2112,7 +2225,7 @@ async function playLibraryItem(idx) {
     )
     if (!ok) return
   }
-  const res = await api(`${API}/library/play`, { method: 'POST', body: { index: idx } })
+  const res = await api(url, { method: 'POST', body })
   if (!res.ok) {
     const code = res.body?.error ?? ''
     const friendly = {
@@ -2122,6 +2235,7 @@ async function playLibraryItem(idx) {
       resume_entry_not_playable: t('err.resumeNotPlayable'),
       item_not_found: t('err.itemNotFound'),
       library_unavailable: t('err.libraryUnavailable'),
+      nas_path_not_selected: t('err.nasNotSelected'),
     }[code] ?? t('play.failed', { code: code || res.status })
     toast(code === 'playtime_limit_reached' || code === 'quiet_hours_active' ? 'warn' : 'error', friendly)
     return
@@ -3375,13 +3489,29 @@ function wire() {
     if (!pill) return
     playState.category = pill.dataset.cat ?? 'all'
     for (const p of $$('.play-pill')) p.classList.toggle('is-active', p === pill)
+    // the NAS is read live when it is opened (each time from the top: the selection may have changed)
+    if (playState.category === 'nas') {
+      playState.nasStack = []
+      loadNasLevel()
+      return
+    }
     renderPlay()
   })
   $('#play-grid')?.addEventListener('click', (e) => {
     const tile = e.target.closest('.play-tile')
     if (!tile) return
+    if (tile.dataset.nasIdx !== undefined) {
+      onNasTile(Number(tile.dataset.nasIdx))
+      return
+    }
     const idx = Number(tile.dataset.idx)
     if (Number.isInteger(idx)) playLibraryItem(idx)
+  })
+  $('#play-crumbs')?.addEventListener('click', (e) => {
+    const crumb = e.target.closest('.play-crumb[data-depth]')
+    if (!crumb) return
+    playState.nasStack = playState.nasStack.slice(0, Number(crumb.dataset.depth))
+    loadNasLevel()
   })
 
   // Confirm-Dialog (Welle 4) — OK/Cancel-Buttons + Backdrop-Click + Esc.

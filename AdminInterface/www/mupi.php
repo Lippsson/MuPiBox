@@ -83,10 +83,12 @@
 		if( strlen($newpwd) < 6 )
 			{
 			$CHANGE_TXT=$CHANGE_TXT."<li>Password not changed: at least 6 characters</li>";
+			$change = 3; // message only, nothing saved (else the refusal was not shown at all)
 			}
 		else if( $oldhash !== '' && !password_verify($curpwd, $oldhash) )
 			{
 			$CHANGE_TXT=$CHANGE_TXT."<li>Password not changed: current password is wrong</li>";
+			$change = 3;
 			}
 		else
 			{
@@ -502,6 +504,7 @@ if( isset($_POST['rotary_toggle']) || $rotary_save )
 			exec("sudo systemctl enable mupi_rotary.service");
 			exec("sudo systemctl restart mupi_rotary.service");
 			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder is active now.</li>";
+			$rotary_changed = true;
 			}
 		else
 			{
@@ -509,6 +512,7 @@ if( isset($_POST['rotary_toggle']) || $rotary_save )
 			exec("sudo systemctl stop mupi_rotary.service");
 			exec("sudo systemctl disable mupi_rotary.service");
 			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder is deactivated now.</li>";
+			$rotary_changed = true;
 			}
 		}
 	if( $rotary_save )
@@ -519,11 +523,13 @@ if( isset($_POST['rotary_toggle']) || $rotary_save )
 		if( ($data["rotary"]["button"] ?? null) !== $rotary_button || ($data["rotary"]["step"] ?? null) !== $rotary_step )
 			{
 			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder settings saved (volume step ".$rotary_step."%, push button: ".$rotary_button.").</li>";
+			$rotary_changed = true;
 			}
 		$data["rotary"]["button"] = $rotary_button;
 		$data["rotary"]["step"] = $rotary_step;
 		}
-	$change = 2;
+	// only a real change saves the config (and runs setting_update.sh): every audio "Submit" sends these fields
+	if( !empty($rotary_changed) ) { $change = 2; }
 	}
 
 if( $_POST['fan_control'] )
@@ -636,7 +642,6 @@ if( $_POST['fan_control'] )
   'parentsHint' => 'Parents QR code - hint',
   'parentsCountdown' => 'Parents QR code - countdown ({s} = seconds)',
   'parentsClose' => 'Parents QR code - close button',
-  'parentsTile' => 'Tile in the box settings',
  );
  $display_languages = array();
  $display_lang_file = @file_get_contents('/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/assets/i18n/display-texts.json');
@@ -1302,7 +1307,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 		<ul>
 			<li id="li_1">
 				<h2>About</h2>
-				<p>Texts the child sees on the box display when the daily limit is used up, during a quiet time, on the parents' QR code and on its tile in the box settings. Choose a language; any text can be replaced by your own. A quiet-time rule with a label (e.g. "Bedtime") shows that label as the heading.</p>
+				<p>Texts the child sees on the box display when the daily limit is used up, during a quiet time and on the parents' QR code. Choose a language; any text can be replaced by your own. A quiet-time rule with a label (e.g. "Bedtime") shows that label as the heading.</p>
 			</li>
 			<li id="li_1">
 				<?php

@@ -22,7 +22,6 @@ import { addIcons } from 'ionicons'
 import { arrowBackOutline } from 'ionicons/icons'
 import { Observable, of } from 'rxjs'
 import { ElternMagicLinkService } from '../eltern-magic-link.service'
-import { DisplayTextsService } from '../display-texts.service'
 import { MediaService } from '../media.service'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { WifiIconComponent } from '../wifi-icon/wifi-icon.component'
@@ -60,7 +59,6 @@ export interface SettingsMenuEntry {
 export class SettingsPage {
   private mediaService = inject(MediaService)
   private elternMagicLink = inject(ElternMagicLinkService)
-  private displayTexts = inject(DisplayTextsService)
   protected network = toSignal(this.mediaService.network$, { initialValue: null })
 
   protected menuEntries: Signal<SettingsMenuEntry[]> = computed(() => {
@@ -86,7 +84,7 @@ export class SettingsPage {
         data: 'shutdown',
       },
       {
-        name: this.displayTexts.text('parentsTile'),
+        name: 'Parent web app',
         imgSrc: of('../../assets/eltern.svg'),
         data: 'eltern-webapp',
       },
@@ -100,8 +98,6 @@ export class SettingsPage {
 
   public constructor() {
     addIcons({ arrowBackOutline })
-    // the tile names follow the display language chosen in the parents' web app
-    this.displayTexts.refresh()
   }
 
   protected entryClicked(entry: SettingsMenuEntry): void {

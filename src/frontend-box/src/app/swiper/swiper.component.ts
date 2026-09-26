@@ -91,6 +91,8 @@ export class SwiperComponent<T> {
   private cachedSwiperPosition = 0
   // Set when the page is shown again with a remembered position; cleared once the swiper went there.
   private pendingRestore = false
+  // positionKey of the list currently shown (to notice a folder level change within the page)
+  private shownKey: string | undefined
 
   // Lists with fewer covers than this are spread over the whole screen instead of scrolled.
   private static readonly FEW_COVERS = 10
@@ -103,6 +105,8 @@ export class SwiperComponent<T> {
   // for every theme. Both come from the MuPiBox config, which is loaded once.
   protected configLoaded: WritableSignal<boolean> = signal(false)
   protected coverflow: WritableSignal<boolean> = signal(false)
+  /** Width of one cover in the Cover Flow, measured on first use (0 = not yet). */
+  private coverflowCoverWidth = 0
   protected hideScrollbar: WritableSignal<boolean> = signal(false)
   // Coverflow theme only: shows currentData.name (album name, falling back to the folder name -
   // the same value the non-Coverflow list already shows under each cover) below the cover.
@@ -167,6 +171,32 @@ export class SwiperComponent<T> {
           this.pendingRestore = false
         }
       }, 0)
+    })
+
+    // A folder level opened inside the album list (NAS / local subfolder, or back up a level) is the same page with
+    // new data: the list kept the scroll position of the level before - TKKG, far down the alphabet in
+    // "Hörspiele", opened at its own end. On a level change the old level's position is remembered and the new
+    // one starts where it was left (a new level: at the start).
+    effect(() => {
+      const key = this.positionKey()
+      if (!untracked(() => this.pageIsShown())) {
+        this.shownKey = key
+        return
+      }
+      if (key === this.shownKey) return
+      untracked(() => {
+        if (this.shownKey) {
+          const sw = this.swiper()
+          SwiperComponent.positions.set(this.shownKey, this.isFewCovers() ? this.selectedIndex : (sw?.activeIndex ?? 0))
+        }
+        this.shownKey = key
+        const target = (key ? SwiperComponent.positions.get(key) : undefined) ?? 0
+        this.cachedSwiperPosition = target
+        this.selectedIndex = target
+        this.renderableLimit.set(Math.max(SwiperComponent.RENDER_INITIAL, target + 12))
+        this.swiper()?.slideTo(0, 0)
+        this.pendingRestore = target > 0
+      })
     })
 
     // New slides need their tilt as soon as they are rendered.
@@ -367,7 +397,10 @@ export class SwiperComponent<T> {
     if (!first) {
       return
     }
-    const coverWidth = first.offsetWidth || 300
+    // Measured once: this runs twice per frame while dragging, and reading offsetWidth between the transform
+    // writes forced a style recalculation every time. The cover size is fixed by the stylesheet.
+    if (!this.coverflowCoverWidth) this.coverflowCoverWidth = first.offsetWidth
+    const coverWidth = this.coverflowCoverWidth || 300
     const unit = coverWidth + (Number(swiper.params.spaceBetween) || 0) // distance of two neighbouring covers in the row
     const screenHalf = swiper.width / 2
     const step = (screenHalf - coverWidth / 2) / visibleSides

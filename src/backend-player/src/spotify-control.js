@@ -294,6 +294,8 @@ player.on('metadata', (val) => {
     if (track) {
       currentMeta.currentTrackname = track.cue ? track.name : track.name.replace(/\.[^./]+$/, '')
     }
+    // the file that plays: the display and the web app show its embedded picture (/api/track-cover)
+    currentMeta.trackFile = track ? `nas:${track.path}` : undefined
   } else if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio') {
     currentMeta.currentTrackname = val.Title
   }
@@ -344,6 +346,12 @@ player.on('track-change', () => player.getProps(['filename']))
 
 player.on('path', (val) => {
   console.log('track path is', val)
+  // A local file that plays (NAS: set from the track list, see 'metadata'): its embedded picture is shown.
+  const mediaRoot = '/home/dietpi/MuPiBox/media/'
+  if (currentMeta.currentType !== 'nas') {
+    currentMeta.trackFile =
+      typeof val === 'string' && val.startsWith(mediaRoot) ? `local:${val.slice(mediaRoot.length)}` : undefined
+  }
   if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio' && currentMeta.currentType !== 'nas') {
     // The folder holding the file, whatever the folder depth (was: fixed 7th segment).
     const pathParts = val.split('/')
@@ -457,6 +465,7 @@ setInterval(() => {
 }, 5000)
 
 let activeDevice = null
+let displaySpotifyDevice = null // the display's Web Playback SDK device, as reported by the display
 // AR5-4: was `const nowDate = new Date()` evaluated once at module-load.
 // All 86 log templates that used `${now()}` printed
 // the boot timestamp on every line, making production debugging useless.
@@ -1631,15 +1640,29 @@ function shuffleoff() {
   )
 }
 
+// Spotify's play on the chosen device; when that device is gone (404: the display reported it, then its page
+// was reloaded), once more without a device, i.e. on the currently active one - as before.
+function playOnDevice(playOptions) {
+  return spotifyApi.play(playOptions).catch((err) => {
+    if (!playOptions.device_id || err?.statusCode !== 404) throw err
+    log.debug(`${now()}: [Spotify Control] Device ${playOptions.device_id} not found, playing on the active device`)
+    if (activeDevice === playOptions.device_id) activeDevice = null
+    const { device_id: _gone, ...withoutDevice } = playOptions
+    return spotifyApi.play(withoutDevice)
+  })
+}
+
 function playMe() {
   log.debug(`${now()}: [Spotify Control] Spotify play ${currentMeta.activeSpotifyId}`)
-  resumeOffset = currentMeta.activeSpotifyId.split(':')[3]
+  // spotify:<kind>:<id>:<track 1-based>:<position ms>. These were undeclared (global) variables: two starts in quick
+  // succession could mix up each other's values.
+  const parts = currentMeta.activeSpotifyId.split(':')
+  let resumeOffset = Number.parseInt(parts[3], 10) || 0
   log.debug(`${now()}: [Spotify Control] Spotify resume ${resumeOffset}`)
   if (resumeOffset > 0) resumeOffset--
   log.debug(`${now()}: [Spotify Control] Spotify offset ${resumeOffset}`)
-  resumeProgess = currentMeta.activeSpotifyId.split(':')[4]
-  tmp = currentMeta.activeSpotifyId.split(':')
-  contextUri = `${tmp[0]}:${tmp[1]}:${tmp[2]}`
+  const resumeProgess = Number.parseInt(parts[4], 10) || 0
+  const contextUri = `${parts[0]}:${parts[1]}:${parts[2]}`
 
   // Prepare play options with device_id if available
   const playOptions = {
@@ -1655,7 +1678,7 @@ function playMe() {
 
   if (contextUri.split(':')[1] === 'episode') {
     playOptions.uris = [contextUri]
-    spotifyApi.play(playOptions).then(
+    playOnDevice(playOptions).then(
       (_data) => {
         counter.countplay++
         if (config.server.logLevel === 'debug') {
@@ -1682,7 +1705,7 @@ function playMe() {
     // });
   } else {
     playOptions.context_uri = contextUri
-    spotifyApi.play(playOptions).then(
+    playOnDevice(playOptions).then(
       (_data) => {
         log.debug(`${now()}: [Spotify Control] Playback started`)
         counter.countplay++
@@ -1791,6 +1814,7 @@ function playListAtTrack(playedList, trackNr, progressPct) {
 
 function playList(playedList) {
   playbackGeneration++
+  currentMeta.trackFile = undefined // the new album's first file sets it (see the path event)
   clearLibraryResumeTimers()
   //let playedTitel = playedList.split('album:').pop();
   playedTitelmod = decodeURI(playedList).replace(/:/g, '/')
@@ -1829,8 +1853,22 @@ async function playNasList(nasPath) {
   const generation = ++playbackGeneration
 
   try {
-    const response = await fetch(`http://localhost:8200/api/nas/tracklist?path=${encodeURIComponent(decodedPath)}`)
-    const tracks = await response.json()
+    // The NAS may not answer at the first try (waking up, WiFi hiccup): one more try after 3 s. An empty or failed
+    // list used to be played anyway - an empty playlist, "playing" set, and nothing to hear.
+    const loadTracks = async () => {
+      const response = await fetch(`http://localhost:8200/api/nas/tracklist?path=${encodeURIComponent(decodedPath)}`)
+      const list = response.ok ? await response.json() : []
+      return Array.isArray(list) ? list : []
+    }
+    let tracks = await loadTracks()
+    if (tracks.length === 0 && generation === playbackGeneration) {
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+      tracks = await loadTracks()
+    }
+    if (tracks.length === 0) {
+      console.warn(`${now()}: [Spotify Control] NAS playback of ${decodedPath} not started: no tracks (NAS not reachable?)`)
+      return
+    }
     // The track list can take seconds (NAS over WebDAV). A stop, another album, or a playtime /
     // quiet-hours block in the meantime used to be overtaken: the late answer started playback
     // anyway. Such a start is dropped now.
@@ -1851,10 +1889,14 @@ async function playNasList(nasPath) {
     currentMeta.currentTrackname = tracks[0]?.name?.replace(/\.[^./]+$/, '') || folderName
     currentMeta.album = folderName
     currentMeta.path = decodedPath
+    currentMeta.trackFile = undefined
 
-    const playlistLines = (cueMode ? [tracks[0]] : tracks).map(
-      (track) => `http://localhost:8200/api/nas/stream?path=${encodeURIComponent(track.path)}`,
-    )
+    // mplayer takes an http URL of a .wma file for a Windows Media stream server (STREAM_ASF) and stops at once;
+    // through ffmpeg's http reader it plays as the file it is.
+    const playlistLines = (cueMode ? [tracks[0]] : tracks).map((track) => {
+      const url = `http://localhost:8200/api/nas/stream?path=${encodeURIComponent(track.path)}`
+      return /\.wma$/i.test(track.path) ? `ffmpeg://${url}` : url
+    })
     const tmpPlaylistPath = '/tmp/nas_playlist.m3u'
     fs.writeFileSync(tmpPlaylistPath, playlistLines.join('\n'))
 
@@ -1888,16 +1930,23 @@ function playRadioURL(radioURL) {
   }
   const generation = ++playbackGeneration
   startLoading()
-  resolveStreamUrl(radioURL).then((streamURL) => {
-    if (generation !== playbackGeneration) {
-      log.debug(`${now()}: [Spotify Control] Playlist ${radioURL} dropped (stopped or replaced meanwhile)`)
-      return
-    }
-    if (streamURL !== radioURL) {
-      log.info(`${now()}: [Spotify Control] Opened playlist ${radioURL}: playing its first stream ${streamURL}`)
-    }
-    playURL(streamURL)
-  })
+  resolveStreamUrl(radioURL)
+    .then((streamURL) => {
+      // like the NAS path: playtime / quiet hours may have started a grace period while the playlist was read
+      if (generation !== playbackGeneration || isPlaybackBlocked()) {
+        log.debug(`${now()}: [Spotify Control] Playlist ${radioURL} dropped (stopped, replaced or blocked meanwhile)`)
+        if (generation === playbackGeneration) stopLoading()
+        return
+      }
+      if (streamURL !== radioURL) {
+        log.info(`${now()}: [Spotify Control] Opened playlist ${radioURL}: playing its first stream ${streamURL}`)
+      }
+      playURL(streamURL)
+    })
+    .catch((err) => {
+      log.error(`${now()}: [Spotify Control] Could not start ${radioURL}: ${err}`)
+      if (generation === playbackGeneration) stopLoading()
+    })
 }
 
 function playURL(playedURL) {
@@ -1974,7 +2023,8 @@ function seek(progress) {
         const index = Math.max(0, currentMeta.currentTracknr - 1)
         const track = currentCue.tracks[index]
         const end = cueTrackEnd(index)
-        cueSeek(track.startSeconds + ((end - track.startSeconds) * progress) / 100)
+        // the last track's end is only known once mplayer told the file length: until then no seek (it would go backwards)
+        if (end > track.startSeconds) cueSeek(track.startSeconds + ((end - track.startSeconds) * progress) / 100)
       } else {
         player.seekPercent(progress)
       }
@@ -2181,11 +2231,11 @@ async function useSpotify(command) {
     activeDevice = newdevice
     log.debug(`${now()}: [Spotify Control] Device set to: ${activeDevice}`)
   } else {
-    // Reset device to let Spotify use the currently active device
-    activeDevice = null
-    log.debug(
-      `${now()}: [Spotify Control] Using current active Spotify device (no device_id specified)`,
-    )
+    // Not from the display: play on the display's device when it reported one. Spotify's "currently active
+    // device" often is none (after a restart, or after the NAS or local media played) - then nothing played.
+    // If that device is gone, playMe() tries once more without a device (see playOnDevice()).
+    activeDevice = displaySpotifyDevice
+    log.debug(`${now()}: [Spotify Control] No device in the request, using the display's: ${activeDevice}`)
   }
 
   currentMeta.activeSpotifyId = command.name
@@ -2265,6 +2315,18 @@ app.get('/state', (_req, res) => {
     }
     res.send(state)
   }
+})
+
+// The display reports its Spotify device (the Web Playback SDK in the kiosk) when it connects. Starts that
+// don't come from the display (/current/..., e.g. the parents' web app or Telegram) play there.
+app.get('/display/spotify-device/:id', (req, res) => {
+  if (!/^[A-Za-z0-9]{20,64}$/.test(req.params.id)) {
+    res.status(400).json({ error: 'bad device id' })
+    return
+  }
+  displaySpotifyDevice = req.params.id
+  log.debug(`${now()}: [Spotify Control] Display device: ${displaySpotifyDevice}`)
+  res.json({ ok: true })
 })
 
 // Called by the backend on the box (the parents' web app's "reload the display now").

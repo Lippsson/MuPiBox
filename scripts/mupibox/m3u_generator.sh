@@ -10,7 +10,9 @@ HN=`hostname`
 # if the conversion is not possible, the file is copied as it is.
 copy_cover() {
 	case "$1" in
-		*.webp) python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).convert("RGB").save(sys.argv[2], "JPEG", quality=90)' "$1" "$2" 2>/dev/null || cp "$1" "$2" ;;
+		# converted only when the picture changed: this runs after every change in the media folder, and each
+		# conversion starts python + PIL (about a second on a Pi)
+		*.webp) [ "$2" -nt "$1" ] || python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).convert("RGB").save(sys.argv[2], "JPEG", quality=90)' "$1" "$2" 2>/dev/null || cp "$1" "$2" ;;
 		*) cp "$1" "$2" ;;
 	esac
 }

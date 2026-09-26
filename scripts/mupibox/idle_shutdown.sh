@@ -6,6 +6,15 @@ CONFIG="/etc/mupibox/mupiboxconfig.json"
 LOG="/tmp/idle_shutdown.log"
 current_idle_time=0
 PLAYERSTATE="/tmp/playerstate"
+# The log got one or two lines every 10 s ("CURRENT IDLE TIME = 0" over and over); now only when the idle minutes
+# change (and at start and shutdown).
+last_logged=""
+log_idle() {
+  if [ "$1" != "${last_logged}" ]; then
+    echo "$(date +'%d/%m/%Y %H:%M:%S')  # CURRENT IDLE TIME = $1" >> ${LOG}
+    last_logged="$1"
+  fi
+}
 
 touch ${PLAYERSTATE}
 chown dietpi:dietpi ${PLAYERSTATE}
@@ -35,16 +44,17 @@ do
       if [ "${TELEGRAM}" = "true" ] && [ ${#TELEGRAM_CHATID} -ge 1 ] && [ ${#TELEGRAM_TOKEN} -ge 1 ]; then
       	/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "MuPiBox is to long idle"
       fi
-      echo "$(date +'%d/%m/%Y %H:%M:%S')  # CURRENT IDLE TIME = ${idle}" >> ${LOG}
+      log_idle "${idle}"
 			echo "$(date +'%d/%m/%Y %H:%M:%S')  # MAX IDLE TIME REACHED - SHUTDOWN NOW" >> ${LOG}
 			sudo /usr/local/bin/mupibox/./shutdown.sh
 		  fi
     else
 		current_idle_time=0
-		echo "$(date +'%d/%m/%Y %H:%M:%S')  # CURRENT IDLE TIME = 0" >> ${LOG}
+		idle=0
     fi
   else
 		current_idle_time=0
+		idle=0
   fi
-  echo "$(date +'%d/%m/%Y %H:%M:%S')  # CURRENT IDLE TIME = ${idle}" >> ${LOG}
+  log_idle "${idle}"
 done

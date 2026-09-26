@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http'
 import { Injectable, signal } from '@angular/core'
-import { defer, firstValueFrom, forkJoin, from, iif, interval, Observable, of, Subject, timer } from 'rxjs'
+import { defer, firstValueFrom, forkJoin, from, iif, interval, Observable, of, Subject, throwError, timer } from 'rxjs'
 import {
   catchError,
   distinctUntilChanged,
@@ -430,9 +430,16 @@ export class MediaService {
     if (category === 'nas' && artist.coverMedia?.nasPath) {
       // NAS folders can be nested any number of levels deep; every level is
       // listed live from the NAS, one level at a time.
-      return this.http.get<Media[]>(
-        `${this.getApiBackendUrl()}/nas/children?path=${encodeURIComponent(artist.coverMedia.nasPath)}`,
-      )
+      // 503: the NAS could not be read just now (waking up, WiFi hiccup) - a few more tries before the level
+      // shows up empty or with albums missing.
+      return this.http
+        .get<Media[]>(`${this.getApiBackendUrl()}/nas/children?path=${encodeURIComponent(artist.coverMedia.nasPath)}`)
+        .pipe(
+          retry({
+            count: 3,
+            delay: (error: { status?: number }) => (error?.status === 503 ? timer(3000) : throwError(() => error)),
+          }),
+        )
     }
     // Fast path for Spotify artists: we already know the artistid from the
     // navigation state, so call getMediaByArtistID directly. Previously this

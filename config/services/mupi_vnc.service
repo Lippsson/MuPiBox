@@ -1,5 +1,6 @@
 [Unit]
 Description=MuPiBox VNC Service
+After=network.target
 
 [Install]
 WantedBy=multi-user.target
@@ -7,5 +8,12 @@ WantedBy=multi-user.target
 [Service]
 User=dietpi
 Group=dietpi
-ExecStart=/usr/bin/x11vnc -speeds modem -notruecolor -ncache 0 -forever -display :0
-ExecStop=sudo /usr/bin/kill $(/usr/bin/pgrep x11vnc)
+Environment=DISPLAY=:0
+# The kiosk display (X server :0) comes up after this service is started at boot: x11vnc failed with "cannot open
+# display" and the service stayed failed. Wait for the display (up to 3 minutes), and start again after a failure.
+# (chromium-autostart.sh used to start a second x11vnc of its own - also when VNC was switched off in the admin
+# interface; this service is the only one now.)
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 180); do [ -S /tmp/.X11-unix/X0 ] && exit 0; sleep 1; done; exit 1'
+ExecStart=/usr/bin/x11vnc -ncache 10 -forever -display :0
+Restart=on-failure
+RestartSec=10

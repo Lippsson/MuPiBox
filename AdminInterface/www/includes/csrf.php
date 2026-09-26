@@ -41,6 +41,16 @@ if (!function_exists('csrf_token')) {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
         $submitted = $_POST['csrf_token'] ?? '';
         if (!hash_equals(csrf_token(), $submitted)) {
+            // Mostly an expired session: the page was last opened by sending a form, and reloading it after the
+            // idle logout sends the form again with the old token. The form is dropped and the browser opens the
+            // page afresh (GET, without the query: that may name an action), which then asks for the login.
+            if (($_SERVER['HTTP_SEC_FETCH_MODE'] ?? '') === 'navigate' && !headers_sent()) {
+                $page = (string)parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+                // only a plain path of this site (no "//host" or "/\host" a browser would take as another site)
+                if (!preg_match('#^/(?![/\\\\])[A-Za-z0-9._/-]*$#', $page)) $page = '/';
+                header('Location: ' . $page, true, 303);
+                exit;
+            }
             http_response_code(403);
             header('Content-Type: text/plain; charset=utf-8');
             echo "CSRF token mismatch — please reload the page and try again.\n";

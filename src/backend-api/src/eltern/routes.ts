@@ -47,6 +47,12 @@ export interface ElternRouterDeps {
   activeDataPath: string
   /** Start (ms) of the track the play-log poller is timing right now, null when nothing plays. */
   currentPlayLogStart?: () => number | null
+  /** True when a NAS path lies in the folders the admin selected ("Show" / "Download") and is not hidden. */
+  nasPathSelected?: (path: string) => Promise<boolean>
+  /** Cover URL of the NAS ('nas') or local ('local') album folder mplayer plays, null if there is none. */
+  playingAlbumCover?: (type: string, folder: string) => Promise<string | null>
+  // The picture embedded in the file that plays (nas:<path> / local:<path>), if it has one
+  playingTrackCover?: (file: string) => Promise<string | null>
 }
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
@@ -61,7 +67,6 @@ const DISPLAY_TEXT_KEYS = [
   'parentsHint',
   'parentsCountdown',
   'parentsClose',
-  'parentsTile',
 ] as const
 
 function buildSessionCookie(sessionId: string, maxAgeSeconds: number): string {
@@ -1095,6 +1100,20 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         playing = local.playing === true
         title = String(local.currentTrackname ?? '')
         album = String(local.album ?? '')
+        // A NAS or local album: path is its folder (NAS path, or <category>/<artist>/<album> in the library);
+        // the artist is the folder above, the cover the one the box shows for it.
+        const source = String(local.currentType ?? '')
+        const folder = String(local.path ?? '')
+        if ((source === 'nas' || source === 'local') && folder) {
+          const parts = folder.split('/').filter(Boolean)
+          artist = parts[parts.length - 2] ?? ''
+          // the track's own picture (a playlist of different stories) before the album's
+          const trackFile = typeof local.trackFile === 'string' ? local.trackFile : ''
+          coverUrl =
+            (trackFile ? await deps.playingTrackCover?.(trackFile) : null) ??
+            (await deps.playingAlbumCover?.(source, folder)) ??
+            null
+        }
       } else if (player === 'spotify') {
         try {
           const stateRes = await fetch('http://127.0.0.1:5005/state', { signal: AbortSignal.timeout(3000) })
@@ -1265,6 +1284,34 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
           title: typeof item.title === 'string' ? item.title : null,
         },
       })
+    } catch (err) {
+      res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
+    }
+  })
+
+  /**
+   * POST /api/eltern/library/play-nas  { path }
+   * Plays a NAS album (a folder with audio files) on the box, as a tap in the box's NAS tab does. Only
+   * folders the admin selected ("Show in MuPiBox" / "Download local") and did not hide can be played,
+   * like everything else the box offers from the NAS.
+   */
+  router.post('/library/play-nas', requireSession, requireCsrf, async (req, res) => {
+    const nasPath = typeof (req.body as { path?: unknown } | undefined)?.path === 'string' ? (req.body as { path: string }).path : ''
+    if (!nasPath || !deps.nasPathSelected || !(await deps.nasPathSelected(nasPath))) {
+      res.status(403).json({ error: 'nas_path_not_selected' })
+      return
+    }
+    try {
+      const r = await fetch(`http://127.0.0.1:5005/current/musicsearch/nas/${encodeURIComponent(nasPath)}?src=eltern`, {
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!r.ok) {
+        const errBody = await r.json().catch(() => ({ error: `player rejected play (HTTP ${r.status})` }))
+        res.status(r.status).json(errBody)
+        return
+      }
+      const parts = nasPath.split('/').filter(Boolean)
+      res.json({ ok: true, item: { type: 'nas', artist: parts.at(-2) ?? null, title: parts.at(-1) ?? null } })
     } catch (err) {
       res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
     }

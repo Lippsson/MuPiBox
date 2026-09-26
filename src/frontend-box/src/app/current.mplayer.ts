@@ -24,4 +24,11 @@ export interface CurrentMPlayer {
   triggerAt?: number
   // Set when the parents' web app asks the display to show a newly chosen theme right away.
   themeReloadAt?: number
+  // What plays: the Spotify context (e.g. spotify:album:<id>:0:0), the kind of media (spotify, local, nas, radio,
+  // rss) and, for mplayer, its folder or path.
+  activeSpotifyId?: string
+  currentType?: string
+  path?: string
+  // The file that plays (nas:<NAS path> / local:<library path>): its embedded picture is shown (/api/track-cover).
+  trackFile?: string
 }

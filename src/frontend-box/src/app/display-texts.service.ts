@@ -16,7 +16,6 @@ export const DEFAULT_DISPLAY_TEXTS = {
   parentsHint: 'Scan with your phone or open in a browser:',
   parentsCountdown: 'Disappears in {s} s',
   parentsClose: 'Close',
-  parentsTile: 'Parent web app',
 }
 export type DisplayTextKey = keyof typeof DEFAULT_DISPLAY_TEXTS
 type TextSet = Partial<Record<DisplayTextKey, string>>

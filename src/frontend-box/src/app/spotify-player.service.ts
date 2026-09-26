@@ -554,6 +554,12 @@ export class SpotifyPlayerService {
       this.deviceId = device_id
       this.sdkState = 'ready'
       this.isConnected$.next(true)
+      // Tell the player which Spotify device the display is: a start that does not come from the display (the
+      // parents' web app, Telegram) plays here too, instead of on "the active device" - there is none after a
+      // restart or while the NAS/local media played, and then nothing played at all.
+      this.http
+        .get(`${environment.backend.playerUrl}/display/spotify-device/${encodeURIComponent(device_id)}`)
+        .subscribe({ error: () => {} })
     })
 
     // Not ready event - device disconnected

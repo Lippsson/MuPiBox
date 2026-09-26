@@ -15,13 +15,19 @@ swiper-container {
 
         ion-card {
             width: 230px;
+            // Square, whatever the picture: a portrait cover (cassette inlay, a NAS or local folder's own picture)
+            // made its card taller than the others and the list got a scrollbar. It is shown whole, with the
+            // card's dark background beside it; square covers (almost all) look as before.
+            height: 230px;
             --background: #262626;
             position: relative;
 
             img {
                 -user-select: none;
+                display: block;
                 height: 100%;
                 width: 100%;
+                object-fit: contain;
             }
 
             ion-card-title {
@@ -73,6 +79,11 @@ swiper-container {
     border-radius: 50%;
     border: 6px solid var(--ion-color-dark);
     margin-top: 32px;
+
+    // a round picture is filled completely (bars would show as a gap in the circle)
+    img {
+        object-fit: cover !important;
+    }
 }
 
 // --- Cover Flow theme ---------------------------------------------------------

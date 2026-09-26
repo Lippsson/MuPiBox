@@ -212,14 +212,14 @@ export class MedialistPage extends SwiperIonicEventsHelper {
 
   protected coverClicked(clickedMedia: Media): void {
     if (clickedMedia.type === 'library' && clickedMedia.libraryPath && clickedMedia.libraryIsContainer) {
-      // A local folder holding only subfolders: show its children as the next level.
+      // A local folder with subfolders: show its children as the next level (its own audio files, if any, are an entry there).
       this.levelsAbove.push(this.currentLevel)
       this.router.navigate(['/medialist'], { queryParams: { lib: clickedMedia.libraryPath }, replaceUrl: true })
       return
     }
 
     if (clickedMedia.type === 'nas' && clickedMedia.nasIsContainer) {
-      // A NAS folder holding only subfolders: show its children as the next level.
+      // A NAS folder with subfolders: show its children as the next level (its own audio files, if any, are an entry there).
       // The query param keeps the URL distinct so Angular doesn't ignore the navigation.
       this.levelsAbove.push(this.currentLevel)
       this.router.navigate(['/medialist'], { queryParams: { nas: clickedMedia.nasPath }, replaceUrl: true })
@@ -235,6 +235,11 @@ export class MedialistPage extends SwiperIonicEventsHelper {
   }
 
   private sortMedia(coverMedia: Media, media: Media[], defaultSorting: MediaSorting): Media[] {
+    // The folder's own audio files (next to its subfolders) stay in front, whatever the order of the rest.
+    const own = media.filter((m) => m.ownFiles)
+    if (own.length > 0) {
+      return [...own, ...this.sortMedia(coverMedia, media.filter((m) => !m.ownFiles), defaultSorting)]
+    }
     const sorting = coverMedia.sorting ?? defaultSorting
     switch (sorting) {
       case MediaSorting.AlphabeticalDescending:

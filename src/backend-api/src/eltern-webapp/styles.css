@@ -1317,6 +1317,32 @@ select:focus, textarea:focus {
   min-height: 44px;
 }
 .play-search:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+/* NAS: path of the opened folders, each part (but the last) goes back up */
+.play-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 14px;
+}
+.play-crumbs[hidden] { display: none; }
+.play-crumb {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--bg-overlay);
+  color: var(--text-muted, var(--text));
+  font: inherit;
+  cursor: pointer;
+}
+.play-crumb.is-current {
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  cursor: default;
+}
+.play-crumb-sep { opacity: 0.5; }
 .play-filter-pills {
   display: flex;
   gap: 6px;

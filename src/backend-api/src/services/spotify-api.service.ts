@@ -296,7 +296,25 @@ export class SpotifyApiService {
     }
   }
 
-  private async rateLimitedRequest<T>(operation: () => Promise<T>): Promise<T> {
+  // Spotify's "too many requests" (429) comes with how long to wait - a second, or hours. The request used to wait all
+  // of it and try again, without limit: with hours, it hung (and everything queued behind it), the lists never loaded.
+  // Now a short wait (up to RATE_LIMIT_WAIT_MAX_MS) is waited out and tried again at most twice; a longer one is
+  // remembered, and until then every request fails at once (the callers fall back to their cached data) instead of
+  // hanging or asking Spotify again, which only makes the block longer.
+  private static readonly RATE_LIMIT_WAIT_MAX_MS = 10000
+  private rateLimitedUntil = 0
+
+  /** Until when Spotify refuses requests (0: not blocked). */
+  public get spotifyBlockedUntil(): number {
+    return this.rateLimitedUntil > Date.now() ? this.rateLimitedUntil : 0
+  }
+
+  private async rateLimitedRequest<T>(operation: () => Promise<T>, attempt = 0): Promise<T> {
+    if (Date.now() < this.rateLimitedUntil) {
+      throw Object.assign(new Error(`Spotify API blocked (rate limit) until ${new Date(this.rateLimitedUntil).toLocaleString()}`), {
+        statusCode: 429,
+      })
+    }
     // Implement simple rate limiting
     const now = Date.now()
     const timeSinceLastRequest = now - this.lastRequestTime
@@ -310,13 +328,17 @@ export class SpotifyApiService {
       return await this.withTimeout(operation, SpotifyApiService.SPOTIFY_REQUEST_TIMEOUT_MS)
     } catch (error: any) {
       if (error.statusCode === 429) {
-        // Rate limited - wait and retry
-        const retryAfter = error.headers?.['retry-after']
-          ? Number.parseInt(error.headers['retry-after'], 10) * 1000
-          : 1000
-        console.warn(`Rate limited by Spotify API. Retrying after ${retryAfter}ms`)
-        await new Promise((resolve) => setTimeout(resolve, retryAfter))
-        return this.rateLimitedRequest(operation)
+        const seconds = Number.parseInt(error.headers?.['retry-after'] ?? '', 10)
+        const retryAfter = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 1000
+        if (retryAfter <= SpotifyApiService.RATE_LIMIT_WAIT_MAX_MS && attempt < 2) {
+          console.warn(`Rate limited by Spotify API. Retrying after ${retryAfter}ms`)
+          await new Promise((resolve) => setTimeout(resolve, retryAfter))
+          return this.rateLimitedRequest(operation, attempt + 1)
+        }
+        this.rateLimitedUntil = Date.now() + retryAfter
+        console.warn(
+          `Spotify API blocks requests for ${Math.round(retryAfter / 60000)} min (until ${new Date(this.rateLimitedUntil).toLocaleString()}) - using cached data meanwhile`,
+        )
       }
       // Let the library handle 401 errors and token refresh automatically
       throw error
@@ -466,6 +488,12 @@ export class SpotifyApiService {
 
     while (this.backgroundQueue.length > 0 || concurrentPromises.size > 0) {
       while (this.backgroundQueue.length > 0 && concurrentPromises.size < this.maxConcurrentBackground) {
+        if (this.spotifyBlockedUntil) {
+          // Spotify blocks requests: the cached data stays in use; stale entries are queued again when read later.
+          console.warn(`[BG] Spotify blocks requests - ${this.backgroundQueue.length} background updates dropped for now`)
+          this.backgroundQueue.length = 0
+          break
+        }
         const queueItem = this.backgroundQueue.shift()
         if (!queueItem) break
 

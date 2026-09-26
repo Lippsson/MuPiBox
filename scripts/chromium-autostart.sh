@@ -93,7 +93,7 @@ exec "$STARTX" "$FP_CHROMIUM" $CHROMIUM_OPTS --homepage "http://localhost:8200" 
 # BLUETOOTH
 pactl load-module module-bluetooth-discover
 
-x11vnc -ncache 10 -forever -display :0 &
+# VNC: started by mupi_vnc.service (switched on/off in the admin interface), no longer also here
 
 # START SOUND
 START_SOUND=$(/usr/bin/jq -r .mupibox.startSound ${CONFIG})
