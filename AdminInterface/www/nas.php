@@ -2,26 +2,6 @@
 
 $backendBase = 'http://localhost:8200/api/nas';
 
-// Login gate (and, for POSTs, CSRF check) of the JSON answers below: they come before header.php, which
-// does both for the HTML page, so without this the NAS tree, the profiles and the download control would
-// be reachable without signing in and from any foreign web page.
-//  - $post: the request changes something -> the token of the page must come in the X-CSRF-Token header
-//  - $poll: background polling -> must not count as activity (else an open tab never times out)
-// auth_check.php also releases the session lock again, so a slow answer does not block other pages.
-function nasAjaxGuard($post = false, $poll = false) {
-	if ($post) {
-		require_once __DIR__ . '/includes/csrf.php';
-		if (!hash_equals(csrf_token(), (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
-			http_response_code(403);
-			header('Content-Type: application/json');
-			echo json_encode(array('success' => false, 'error' => 'csrf'));
-			exit;
-		}
-	}
-	$AUTH_CHECK_NO_TOUCH = $poll;
-	require __DIR__ . '/includes/auth_check.php';
-}
-
 // Progress of a running "Download selected" (polled by the page below). Answers
 // before header.php so that no HTML is sent along with the JSON.
 // These JSON answers come before header.php, so they need a login gate and CSRF check of their
@@ -29,6 +9,8 @@ function nasAjaxGuard($post = false, $poll = false) {
 // the index or cancel a download through this page, without the admin login.
 $nasJsonActions = array('covers_refresh', 'download_cancel', 'download_status', 'browse', 'index_status', 'index_search', 'index_refresh', 'profile_api');
 if (count(array_intersect($nasJsonActions, array_keys($_GET))) > 0) {
+	// background polling of the page must not count as activity, else an open tab never times out
+	$AUTH_CHECK_NO_TOUCH = isset($_GET['download_status']) || isset($_GET['index_status']);
 	require __DIR__ . '/includes/auth_check.php';
 	if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 		// The page sends the token in an X-CSRF-Token header (NAS_CSRF below); a foreign page can't
@@ -44,19 +26,16 @@ if (count(array_intersect($nasJsonActions, array_keys($_GET))) > 0) {
 	}
 }
 if (isset($_GET['covers_refresh']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-	nasAjaxGuard(true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/covers/refresh", 'POST', new stdClass(), 240));
 	exit;
 }
 if (isset($_GET['download_cancel']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-	nasAjaxGuard(true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/download/cancel", 'POST', new stdClass(), 10));
 	exit;
 }
 if (isset($_GET['download_status'])) {
-	nasAjaxGuard(false, true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/download/status", 'GET', null, 5));
 	exit;
@@ -64,7 +43,6 @@ if (isset($_GET['download_status'])) {
 
 // Children of one folder for the tree view (loaded when a folder is expanded).
 if (isset($_GET['browse'])) {
-	nasAjaxGuard();
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/browse?path=" . urlencode($_GET['browse']), 'GET', null, 15));
 	exit;
@@ -72,19 +50,16 @@ if (isset($_GET['browse'])) {
 
 // Folder index (built by the backend) behind the "Filter folders" box.
 if (isset($_GET['index_status'])) {
-	nasAjaxGuard(false, true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/index/status", 'GET', null, 10));
 	exit;
 }
 if (isset($_GET['index_search'])) {
-	nasAjaxGuard();
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/index/search?q=" . urlencode((string)$_GET['index_search']), 'GET', null, 10));
 	exit;
 }
 if (isset($_GET['index_refresh']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-	nasAjaxGuard(true);
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/index/refresh", 'POST', new stdClass(), 10));
 	exit;
@@ -92,7 +67,6 @@ if (isset($_GET['index_refresh']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Profiles of the NAS tab (kept by the backend in the config).
 if (isset($_GET['profile_api'])) {
-	nasAjaxGuard($_SERVER['REQUEST_METHOD'] === 'POST');
 	header('Content-Type: application/json');
 	$profileAction = (string)$_GET['profile_api'];
 	if ($profileAction === 'list') {

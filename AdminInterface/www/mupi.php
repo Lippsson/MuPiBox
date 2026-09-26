@@ -502,6 +502,7 @@ if( isset($_POST['rotary_toggle']) || $rotary_save )
 			exec("sudo systemctl enable mupi_rotary.service");
 			exec("sudo systemctl restart mupi_rotary.service");
 			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder is active now.</li>";
+			$rotary_changed = true;
 			}
 		else
 			{
@@ -509,6 +510,7 @@ if( isset($_POST['rotary_toggle']) || $rotary_save )
 			exec("sudo systemctl stop mupi_rotary.service");
 			exec("sudo systemctl disable mupi_rotary.service");
 			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder is deactivated now.</li>";
+			$rotary_changed = true;
 			}
 		}
 	if( $rotary_save )
@@ -519,11 +521,13 @@ if( isset($_POST['rotary_toggle']) || $rotary_save )
 		if( ($data["rotary"]["button"] ?? null) !== $rotary_button || ($data["rotary"]["step"] ?? null) !== $rotary_step )
 			{
 			$CHANGE_TXT=$CHANGE_TXT."<li>Rotary encoder settings saved (volume step ".$rotary_step."%, push button: ".$rotary_button.").</li>";
+			$rotary_changed = true;
 			}
 		$data["rotary"]["button"] = $rotary_button;
 		$data["rotary"]["step"] = $rotary_step;
 		}
-	$change = 2;
+	// only a real change saves the config (and runs setting_update.sh): every audio "Submit" sends these fields
+	if( !empty($rotary_changed) ) { $change = 2; }
 	}
 
 if( $_POST['fan_control'] )
