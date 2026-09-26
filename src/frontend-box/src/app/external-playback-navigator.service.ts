@@ -28,6 +28,8 @@ export class ExternalPlaybackNavigatorService {
   /** An external start not followed yet: until when (ms) to wait for it to play, 0 = none. */
   private pendingExternalUntil = 0
   private pendingExternalSource = ''
+  /** What the open player page shows (see playingKey), so a pause/resume from the phone doesn't rebuild it. */
+  private playerPageKey = ''
   /** Same idea for "show the new theme now" from the parents' web app (see checkThemeReload). */
   private lastSeenThemeReloadAt: number | null = null
   /** Tick-Zähler für die gedrosselte Abfrage auf der Player-Page. */
@@ -109,15 +111,35 @@ export class ExternalPlaybackNavigatorService {
           this.pendingExternalUntil = src !== 'box' ? Date.now() + 30_000 : 0
           this.pendingExternalSource = src
         }
-        if (this.pendingExternalUntil && data.playing === true) {
+        const onPlayerPage = this.isCurrentlyOnPlayerPage()
+        if (this.pendingExternalUntil && this.isPlaying(data)) {
           const stillPending = Date.now() < this.pendingExternalUntil
           this.pendingExternalUntil = 0
-          if (stillPending && !this.isCurrentlyOnPlayerPage() && !this.isNavigatingToPlayer) {
+          const key = this.playingKey(data)
+          // On the player page only for something else than it shows: a pause/resume from the phone is no new
+          // album, but a NAS album replaced by Spotify (or another album) is.
+          const somethingElse = !onPlayerPage || key !== this.playerPageKey
+          if (stillPending && somethingElse && !this.isNavigatingToPlayer) {
             console.log(`🎵 External playback trigger from "${this.pendingExternalSource}" — navigating to /player`)
-            void this.navigateToPlayerExternal(data)
+            this.playerPageKey = key
+            void this.navigateToPlayerExternal(data, onPlayerPage)
           }
+        } else if (onPlayerPage && !this.pendingExternalUntil) {
+          this.playerPageKey = this.playingKey(data) // what the open player page shows
         }
       })
+  }
+
+  /** mplayer reports "playing"; for Spotify (in the display's Web Playback SDK) the player keeps "pause". */
+  private isPlaying(data: CurrentMPlayer): boolean {
+    return data.currentPlayer === 'spotify' ? data.pause === false : data.playing === true
+  }
+
+  /** Which media plays, to tell a new album from a pause/resume of the same one. */
+  private playingKey(data: CurrentMPlayer): string {
+    if (data.currentPlayer === 'spotify') return `spotify|${data.activeSpotifyId ?? ''}`
+    if (data.currentPlayer === 'mplayer') return `${data.currentType ?? ''}|${data.path ?? ''}|${data.album ?? ''}`
+    return ''
   }
 
   /** The parents' web app switched the theme and asked for it to show now. Rides on the /local poll
@@ -156,9 +178,14 @@ export class ExternalPlaybackNavigatorService {
    *  Radio) ein Media-Objekt aus den /local-Daten und gibt es als
    *  navigationExtras.state mit. Player-Page erkennt am `externalPlayback:
    *  true` Flag dass Track schon läuft und ruft NICHT playMedia() doppelt. */
-  private async navigateToPlayerExternal(data: CurrentMPlayer): Promise<void> {
+  private async navigateToPlayerExternal(data: CurrentMPlayer, replacePlayerPage = false): Promise<void> {
     const media = this.buildMediaFromLocal(data)
     this.isNavigatingToPlayer = true
+    // The player page shows something else: navigating to /player again would keep the old page, so it is
+    // left first (not shown) and opened fresh for what plays now.
+    if (replacePlayerPage) {
+      await this.router.navigateByUrl('/home', { skipLocationChange: true }).catch(() => false)
+    }
     // A NAS album: its cover is the one the NAS tab shows, found in the listing of the parent folder.
     if (media?.type === 'nas' && media.nasPath) {
       const parent = media.nasPath.split('/').slice(0, -1).join('/')
