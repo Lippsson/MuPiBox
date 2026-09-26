@@ -1654,13 +1654,15 @@ function playOnDevice(playOptions) {
 
 function playMe() {
   log.debug(`${now()}: [Spotify Control] Spotify play ${currentMeta.activeSpotifyId}`)
-  resumeOffset = currentMeta.activeSpotifyId.split(':')[3]
+  // spotify:<kind>:<id>:<track 1-based>:<position ms>. These were undeclared (global) variables: two starts in quick
+  // succession could mix up each other's values.
+  const parts = currentMeta.activeSpotifyId.split(':')
+  let resumeOffset = Number.parseInt(parts[3], 10) || 0
   log.debug(`${now()}: [Spotify Control] Spotify resume ${resumeOffset}`)
   if (resumeOffset > 0) resumeOffset--
   log.debug(`${now()}: [Spotify Control] Spotify offset ${resumeOffset}`)
-  resumeProgess = currentMeta.activeSpotifyId.split(':')[4]
-  tmp = currentMeta.activeSpotifyId.split(':')
-  contextUri = `${tmp[0]}:${tmp[1]}:${tmp[2]}`
+  const resumeProgess = Number.parseInt(parts[4], 10) || 0
+  const contextUri = `${parts[0]}:${parts[1]}:${parts[2]}`
 
   // Prepare play options with device_id if available
   const playOptions = {
