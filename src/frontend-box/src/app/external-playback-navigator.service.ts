@@ -1,5 +1,6 @@
 import { HttpClient } from '@angular/common/http'
-import { Injectable } from '@angular/core'
+import { Injectable, inject } from '@angular/core'
+import { NavController } from '@ionic/angular/standalone'
 import { NavigationExtras, Router } from '@angular/router'
 import { Subject, catchError, firstValueFrom, interval, merge, of, switchMap, timeout } from 'rxjs'
 import { filter, map } from 'rxjs/operators'
@@ -32,6 +33,7 @@ export class ExternalPlaybackNavigatorService {
   private playerPageKey = ''
   /** True while the player page is being left only to be opened again for a new start from the phone. */
   public replacingPlayerPage = false
+  private readonly navController = inject(NavController)
   /** Ask /local right now (outside the timer), e.g. when a Spotify track starts while on the player page. */
   private readonly pollNow$ = new Subject<void>()
   /** Same idea for "show the new theme now" from the parents' web app (see checkThemeReload). */
@@ -192,17 +194,8 @@ export class ExternalPlaybackNavigatorService {
   private async navigateToPlayerExternal(data: CurrentMPlayer, replacePlayerPage = false): Promise<void> {
     const media = this.buildMediaFromLocal(data)
     this.isNavigatingToPlayer = true
-    // The player page shows something else: navigating to /player again would keep the old page, so it is
-    // left first (not shown) and opened fresh for what plays now.
-    if (replacePlayerPage) {
-      // The old page must not stop the player on its way out (it would stop what just started) nor save
-      // its resume position (the progress already belongs to the new media): see PlayerPage.ionViewWillLeave.
-      // Stays set until shortly after the new player page is open: Ionic may call the leave hook during the
-      // page transition, i.e. after the first navigation already resolved.
-      this.replacingPlayerPage = true
-      await this.router.navigateByUrl('/home', { skipLocationChange: true }).catch(() => false)
-    }
-    // A NAS album: its cover is the one the NAS tab shows, found in the listing of the parent folder.
+    // A NAS album: its cover is the one the NAS tab shows, found in the listing of the parent folder. Looked up
+    // before the old page is left, so a replaced page is gone only for a moment.
     if (media?.type === 'nas' && media.nasPath) {
       const parent = media.nasPath.split('/').slice(0, -1).join('/')
       const siblings = await firstValueFrom(
@@ -221,8 +214,21 @@ export class ExternalPlaybackNavigatorService {
     }
     const extras: NavigationExtras = { state: { externalPlayback: true } }
     if (media) (extras.state as Record<string, unknown>).media = media
-    this.router
-      .navigate(['/player'], extras)
+
+    let navigation: Promise<boolean>
+    if (replacePlayerPage) {
+      // The player page shows something else: navigating to /player again would keep the old page, so it is
+      // left (not shown, no animation) and opened fresh for what plays now. The old page must not stop the
+      // player on its way out (it would stop what just started) nor save its resume position (the progress
+      // already belongs to the new media): see PlayerPage.ionViewWillLeave. The flag stays set until shortly
+      // after the new page is open, as Ionic may call the leave hook during the page transition.
+      this.replacingPlayerPage = true
+      await this.navController.navigateBack('/home', { animated: false, skipLocationChange: true }).catch(() => false)
+      navigation = this.navController.navigateForward('/player', { ...extras, animated: false })
+    } else {
+      navigation = this.router.navigate(['/player'], extras)
+    }
+    navigation
       .then((success) => {
         if (success) {
           console.log('✅ Navigated to /player after external trigger', media ? `(media: ${media.type})` : '(no media)')
