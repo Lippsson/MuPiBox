@@ -235,6 +235,11 @@ export class MedialistPage extends SwiperIonicEventsHelper {
   }
 
   private sortMedia(coverMedia: Media, media: Media[], defaultSorting: MediaSorting): Media[] {
+    // The folder's own audio files (next to its subfolders) stay in front, whatever the order of the rest.
+    const own = media.filter((m) => m.ownFiles)
+    if (own.length > 0) {
+      return [...own, ...this.sortMedia(coverMedia, media.filter((m) => !m.ownFiles), defaultSorting)]
+    }
     const sorting = coverMedia.sorting ?? defaultSorting
     switch (sorting) {
       case MediaSorting.AlphabeticalDescending:

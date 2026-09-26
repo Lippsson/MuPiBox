@@ -3862,6 +3862,7 @@ async function nasBuildMediaEntry(
     title,
     nasPath: folderPath,
     nasIsContainer: isContainer,
+    ...(ownFilesOnly ? { ownFiles: true } : {}),
     cover,
     artistcover: cover,
   }
@@ -5732,6 +5733,7 @@ async function libraryBuildEntry(
     libraryPath: relPath,
     // A folder with only subfolders (no audio files) opens the next level instead of playing.
     libraryIsContainer: isContainer,
+    ...(ownFilesOnly ? { ownFiles: true } : {}),
     cover,
     artistcover: cover,
   }
