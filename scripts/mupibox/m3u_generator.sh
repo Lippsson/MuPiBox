@@ -6,6 +6,15 @@ DATA="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json
 DATA_LOCK="/tmp/.data.lock"
 HN=`hostname`
 
+# Copies a cover picture to the cover folder. WebP is converted to JPEG (every cover is stored as cover.jpg);
+# if the conversion is not possible, the file is copied as it is.
+copy_cover() {
+	case "$1" in
+		*.webp) python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).convert("RGB").save(sys.argv[2], "JPEG", quality=90)' "$1" "$2" 2>/dev/null || cp "$1" "$2" ;;
+		*) cp "$1" "$2" ;;
+	esac
+}
+
 if [ "$EUID" -ne 0 ]
   then echo "Please run as root"
   exit
@@ -26,11 +35,11 @@ else
 	for topFolder in "/home/dietpi/MuPiBox/media/audiobook/"* ; do
 		artist=$(/usr/bin/basename "${topFolder}")
 		setArtistCover=0
-		test4images=$(ls -1v "${topFolder}" | grep -E '\.(jpe?g|jfif)$')
+		test4images=$(ls -1v "${topFolder}" | grep -E '\.(jpe?g|jfif|webp)$')
 		if [ ${#test4images} != 0 ]
 		then
 			/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/" > /dev/null
-			for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif; do [ -f "$i" ] && { cp "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/cover.jpg"; break; }; done
+			for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif "${topFolder}"/*.webp; do [ -f "$i" ] && { copy_cover "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/cover.jpg"; break; }; done
 			#/usr/bin/cp --update "${topFolder}"/*.jp*g "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/cover.jpg"
 			setArtistCover=1
 		fi	
@@ -42,11 +51,11 @@ else
 				title=$(/usr/bin/basename "${i}")
 				ls -1v "${i}" | grep '.mp3\|.flac\|.wav\|.wma\|.ogg\|.m4a' > /tmp/playlist.m3u
 				mv /tmp/playlist.m3u "${i}"
-				test4images=$(ls -1v "${i}" | grep -E '\.(jpe?g|jfif)$')
+				test4images=$(ls -1v "${i}" | grep -E '\.(jpe?g|jfif|webp)$')
 				if [ ${#test4images} != 0 ]
 				then
 					/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/${title}/" > /dev/null
-					for j in "${i}"/*.jp*g "${i}"/*.jfif; do [ -f "$j" ] && { cp "$j" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/${title}/cover.jpg"; break; }; done
+					for j in "${i}"/*.jp*g "${i}"/*.jfif "${i}"/*.webp; do [ -f "$j" ] && { copy_cover "$j" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/${title}/cover.jpg"; break; }; done
 					#/usr/bin/cp --update "${i}"/*.jp*g "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/${title}/cover.jpg"
 					searchStrTitleCover=`/usr/bin/cat ${DATA} | grep 'audiobook/'"${artist}"'/'"${title}"'/cover.jpg'`
 				else
@@ -60,7 +69,7 @@ else
 					if [ $setArtistCover == 1 ]
 					then
 						/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/${title}/" > /dev/null
-						for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif; do [ -f "$i" ] && { cp "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/${title}/cover.jpg"; break; }; done
+						for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif "${topFolder}"/*.webp; do [ -f "$i" ] && { copy_cover "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/${title}/cover.jpg"; break; }; done
 						searchStrTitleCover=`/usr/bin/cat ${DATA} | grep 'audiobook/'"${artist}"'/'"${title}"'/cover.jpg'`
 					else
 						/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/audiobook/${artist}/${title}/" > /dev/null
@@ -112,11 +121,11 @@ else
 	for topFolder in "/home/dietpi/MuPiBox/media/music/"* ; do
 		artist=$(/usr/bin/basename "${topFolder}")
 		setArtistCover=0
-		test4images=$(ls -1v "${topFolder}" | grep -E '\.(jpe?g|jfif)$')
+		test4images=$(ls -1v "${topFolder}" | grep -E '\.(jpe?g|jfif|webp)$')
 		if [ ${#test4images} != 0 ]
 		then
 			/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/" > /dev/null
-			for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif; do [ -f "$i" ] && { cp "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/cover.jpg"; break; }; done
+			for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif "${topFolder}"/*.webp; do [ -f "$i" ] && { copy_cover "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/cover.jpg"; break; }; done
 			#/usr/bin/cp --update "${topFolder}"/*.jp*g "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/cover.jpg"
 			setArtistCover=1
 		fi	
@@ -128,18 +137,18 @@ else
 				title=$(/usr/bin/basename "${i}")
 				ls -1v "${i}" | grep '.mp3\|.flac\|.wav\|.wma\|.ogg\|.m4a' > /tmp/playlist.m3u
 				mv /tmp/playlist.m3u "${i}"
-				test4images=$(ls -1v "${i}" | grep -E '\.(jpe?g|jfif)$')
+				test4images=$(ls -1v "${i}" | grep -E '\.(jpe?g|jfif|webp)$')
 				if [ ${#test4images} != 0 ]
 				then
 					/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/${title}/" > /dev/null
-					for j in "${i}"/*.jp*g "${i}"/*.jfif; do [ -f "$j" ] && { cp "$j" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/${title}/cover.jpg"; break; }; done
+					for j in "${i}"/*.jp*g "${i}"/*.jfif "${i}"/*.webp; do [ -f "$j" ] && { copy_cover "$j" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/${title}/cover.jpg"; break; }; done
 					#/usr/bin/cp --update "${i}"/*.jp*g "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/${title}/cover.jpg"
 					searchStrTitleCover=`/usr/bin/cat ${DATA} | grep 'music/'"${artist}"'/'"${title}"'/cover.jpg'`
 				else
 					if [ $setArtistCover == 1 ]
 					then
 						/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/${title}/" > /dev/null
-						for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif; do [ -f "$i" ] && { cp "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/${title}/cover.jpg"; break; }; done
+						for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif "${topFolder}"/*.webp; do [ -f "$i" ] && { copy_cover "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/${title}/cover.jpg"; break; }; done
 						searchStrTitleCover=`/usr/bin/cat ${DATA} | grep 'music/'"${artist}"'/'"${title}"'/cover.jpg'`
 					else
 						/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/music/${artist}/${title}/" > /dev/null
@@ -180,11 +189,11 @@ else
 	for topFolder in "/home/dietpi/MuPiBox/media/other/"* ; do
 		artist=$(/usr/bin/basename "${topFolder}")
 		setArtistCover=0
-		test4images=$(ls -1v "${topFolder}" | grep -E '\.(jpe?g|jfif)$')
+		test4images=$(ls -1v "${topFolder}" | grep -E '\.(jpe?g|jfif|webp)$')
 		if [ ${#test4images} != 0 ]
 		then
 			/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/" > /dev/null
-			for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif; do [ -f "$i" ] && { cp "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/cover.jpg"; break; }; done
+			for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif "${topFolder}"/*.webp; do [ -f "$i" ] && { copy_cover "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/cover.jpg"; break; }; done
 			#/usr/bin/cp --update "${topFolder}"/*.jp*g "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/cover.jpg"
 			setArtistCover=1
 		fi	
@@ -196,18 +205,18 @@ else
 				title=$(/usr/bin/basename "${i}")
 				ls -1v "${i}" | grep '.mp3\|.flac\|.wav\|.wma\|.ogg\|.m4a' > /tmp/playlist.m3u
 				mv /tmp/playlist.m3u "${i}"
-				test4images=$(ls -1v "${i}" | grep -E '\.(jpe?g|jfif)$')
+				test4images=$(ls -1v "${i}" | grep -E '\.(jpe?g|jfif|webp)$')
 				if [ ${#test4images} != 0 ]
 				then
 					/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/${title}/" > /dev/null
-					for j in "${i}"/*.jp*g "${i}"/*.jfif; do [ -f "$j" ] && { cp "$j" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/${title}/cover.jpg"; break; }; done
+					for j in "${i}"/*.jp*g "${i}"/*.jfif "${i}"/*.webp; do [ -f "$j" ] && { copy_cover "$j" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/${title}/cover.jpg"; break; }; done
 					#/usr/bin/cp --update "${i}"/*.jp*g "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/${title}/cover.jpg"
 					searchStrTitleCover=`/usr/bin/cat ${DATA} | grep 'other/'"${artist}"'/'"${title}"'/cover.jpg'`
 				else
 					if [ $setArtistCover == 1 ]
 					then
 						/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/${title}/" > /dev/null
-						for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif; do [ -f "$i" ] && { cp "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/${title}/cover.jpg"; break; }; done
+						for i in "${topFolder}"/*.jp*g "${topFolder}"/*.jfif "${topFolder}"/*.webp; do [ -f "$i" ] && { copy_cover "$i" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/${title}/cover.jpg"; break; }; done
 						searchStrTitleCover=`/usr/bin/cat ${DATA} | grep 'other/'"${artist}"'/'"${title}"'/cover.jpg'`
 					else
 						/usr/bin/mkdir -p "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/cover/other/${artist}/${title}/" > /dev/null
