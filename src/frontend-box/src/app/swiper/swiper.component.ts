@@ -355,14 +355,28 @@ export class SwiperComponent<T> {
       return
     }
     this.resetFewCoversMode(swiper)
-    const angle = 65
-    const centerGap = 193 // extra space between the centered cover and its neighbours (px)
+    // Three covers on each side of the centered one. The space between the edge of the centered cover and the
+    // edge of the screen is divided into three equal steps (each side cover shows a strip of one step), and
+    // all side covers have the same tilt.
+    const visibleSides = 3
+    const maxAngle = 65
     const depth = 100
-    for (const slide of Array.from(swiper.slides) as (HTMLElement & { progress: number })[]) {
+    const perspective = 1000
+    const slides = Array.from(swiper.slides) as (HTMLElement & { progress: number })[]
+    const first = slides[0]
+    if (!first) {
+      return
+    }
+    const coverWidth = first.offsetWidth || 300
+    const unit = coverWidth + (Number(swiper.params.spaceBetween) || 0) // distance of two neighbouring covers in the row
+    const screenHalf = swiper.width / 2
+    const step = (screenHalf - coverWidth / 2) / visibleSides
+    for (const slide of slides) {
       const progress = slide.progress ?? 0
-      // Covers far away from the center are out of sight anyway. Long lists (a podcast can have
+      const t = Math.abs(progress)
+      // Covers beyond the third one are out of sight anyway. Long lists (a podcast can have
       // hundreds of episodes) would otherwise be restyled completely on every frame of a drag.
-      if (Math.abs(progress) > 7) {
+      if (t > visibleSides + 1) {
         if (slide.dataset['far'] !== '1') {
           slide.dataset['far'] = '1'
           slide.style.visibility = 'hidden'
@@ -374,14 +388,19 @@ export class SwiperComponent<T> {
         slide.dataset['far'] = ''
         slide.style.visibility = ''
       }
-      const side = Math.sign(progress)
-      const amount = Math.min(Math.abs(progress), 1)
-      const rotate = side * angle * amount
-      const shift = -side * centerGap * amount
-      const z = -depth * amount
-      slide.style.transform = `perspective(1000px) translateX(${shift}px) translateZ(${z}px) rotateY(${rotate}deg)`
+      // progress > 0: the cover is on the left of the centered one (as before), progress < 0: on the right.
+      const side = -Math.sign(progress) // -1 left, +1 right on the screen
+      const angle = maxAngle * Math.min(t, 1) // all side covers are tilted by the same angle (the first one turns in while it moves away from the center)
+      const radians = (angle * Math.PI) / 180
+      const z = -depth * Math.min(t, 1)
+      // The outer edge of the cover is turned towards the viewer: it is nearer, so it appears larger.
+      const outerZ = z + (coverWidth / 2) * Math.sin(radians)
+      const scale = perspective / (perspective - outerZ)
+      // Move the outer edge of the cover to its place: one step further out for every cover.
+      const shift = side * (((coverWidth / 2) + t * (step - unit)) / scale - (coverWidth / 2) * Math.cos(radians))
+      slide.style.transform = `perspective(${perspective}px) translateX(${shift}px) translateZ(${z}px) rotateY(${-side * angle}deg)`
       // Covers nearer to the center are drawn on top of the further ones.
-      slide.style.zIndex = String(1000 - Math.round(Math.abs(progress) * 10))
+      slide.style.zIndex = String(1000 - Math.round(t * 10))
     }
   }
 
