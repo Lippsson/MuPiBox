@@ -1644,7 +1644,6 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 						<span class="track"></span>
 						<span>Cover-Flow-Ansicht (Bühne)</span>
 					</label>
-					<p style="margin:4px 0 0 54px; color:#212529;">Großes Cover in der Mitte, Nachbarn kleiner. Wischen oder Nachbar antippen holt ihn in die Mitte.</p>
 					<div id="kmAutoReadWrap" style="<?= $kmStageOn ? '' : 'display:none;' ?>">
 						<label class="mupi-toggle" for="themeStageAutoRead" title="Bleibt die Bühne auf einem Cover stehen, liest die Box seinen Namen vor.">
 							<input type="checkbox" id="themeStageAutoRead" name="themeStageAutoRead" value="1" <?= (($data["mupibox"]["themeStageAutoRead"] ?? false) === true) ? 'checked="checked"' : '' ?> />
