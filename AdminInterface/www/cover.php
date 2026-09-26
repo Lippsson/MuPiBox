@@ -44,6 +44,7 @@
 
 	if (isset($_POST['online_covers_save'])) {
 		$ocSaveBefore = (($data['mupibox']['onlineCoversSave'] ?? false) === true);
+		$ocOnBefore = (($data['mupibox']['onlineCovers'] ?? false) === true);
 		$data['mupibox']['onlineCovers'] = isset($_POST['onlineCovers']);
 		$data['mupibox']['onlineCoversSave'] = isset($_POST['onlineCoversSave']);
 		$ocError = '';
@@ -57,6 +58,12 @@
 				if (!empty($ocResult['success'])) {
 					$CHANGE_TXT = $CHANGE_TXT . "<li>" . (int)($ocResult['queued'] ?? 0) . " covers found so far are being stored in their album folders.</li>";
 				}
+			}
+			if ($data['mupibox']['onlineCovers'] && !$ocOnBefore) {
+				// switched on: all albums are looked up, not only the ones shown on the box
+				sleep(1);
+				ocApiCall("$ocBackend/online-covers/scan", new stdClass());
+				$CHANGE_TXT = $CHANGE_TXT . "<li>All albums without a picture are being looked up in the background.</li>";
 			}
 		} else {
 			$CHANGE_TXT = $CHANGE_TXT . "<li>ERROR: the setting could not be saved: " . htmlspecialchars($ocError) . "</li>";
@@ -77,9 +84,17 @@
 	}
 	if (isset($_POST['online_covers_retry'])) {
 		$ocResult = ocApiCall("$ocBackend/online-covers/retry", array('alsoRejected' => isset($_POST['online_covers_retry_rejected'])));
+		if (!empty($ocResult['success'])) ocApiCall("$ocBackend/online-covers/scan", new stdClass());
 		$CHANGE_TXT = $CHANGE_TXT . (!empty($ocResult['success'])
-			? "<li>" . (int)($ocResult['cleared'] ?? 0) . " albums are looked up again the next time they are shown.</li>"
+			? "<li>" . (int)($ocResult['cleared'] ?? 0) . " albums are looked up again now, in the background (one after the other - with many albums this takes a while).</li>"
 			: "<li>ERROR: the MuPiBox backend could not be reached.</li>");
+		$change = 1;
+	}
+	if (isset($_POST['online_covers_scan'])) {
+		$ocResult = ocApiCall("$ocBackend/online-covers/scan", new stdClass());
+		$CHANGE_TXT = $CHANGE_TXT . (!empty($ocResult['success'])
+			? "<li>All albums without a picture are being looked up in the background. Reload this page later to see the covers found.</li>"
+			: "<li>ERROR: " . htmlspecialchars((string)($ocResult['error'] ?? 'the MuPiBox backend could not be reached.')) . "</li>");
 		$change = 1;
 	}
 
@@ -196,6 +211,8 @@
 	$ocEnabled = (($data['mupibox']['onlineCovers'] ?? false) === true);
 	$ocList = ocApiCall("$ocBackend/online-covers");
 	$ocEntries = is_array($ocList['entries'] ?? null) ? $ocList['entries'] : array();
+	$ocPending = (int)($ocList['pending'] ?? 0);
+	$ocScanning = !empty($ocList['scanning']);
 	$ocSaveEnabled = (($data['mupibox']['onlineCoversSave'] ?? false) === true);
 	$ocCount = array('found' => 0, 'none' => 0, 'rejected' => 0);
 	$ocSavedCount = 0;
@@ -212,9 +229,9 @@
 		<li class="li_norm"><h2>Online covers for NAS and local albums</h2>
 			<p>Albums on the NAS or on the box without a picture of their own get their cover from iTunes or Deezer.
 			A cover is only taken when title and episode number or series clearly match, otherwise the album keeps
-			the picture of the folder above. Albums are looked up in the background the first time they are shown on
-			the box or in the Parent Web App; the cover appears the next time. The folder names are sent to Apple and
-			Deezer for this.</p>
+			the picture of the folder above. All albums on the NAS (the folders shown in the MuPiBox) and on the box are
+			looked up in the background, one after the other - when switched on, a few minutes after every start and
+			once a day for new folders. The folder names are sent to Apple and Deezer for this.</p>
 			<label class="labelchecked" for="onlineCovers">Look up covers online:&nbsp; &nbsp;
 				<input type="checkbox" id="onlineCovers" name="onlineCovers" value="1" <?= $ocEnabled ? 'checked="checked"' : '' ?> />
 			</label>
@@ -225,7 +242,7 @@
 			permission for the MuPiBox account on that shared folder; without it the cover stays on the box only.
 			Discarding a cover removes the cover.jpg the box stored.</small></p>
 			<input type="submit" class="button_text" value="Save" name="online_covers_save">
-			<p>Found: <?= $ocCount['found'] ?> &nbsp;|&nbsp; No match: <?= $ocCount['none'] ?> &nbsp;|&nbsp; Discarded: <?= $ocCount['rejected'] ?></p>
+			<p>Found: <?= $ocCount['found'] ?> &nbsp;|&nbsp; No match: <?= $ocCount['none'] ?> &nbsp;|&nbsp; Discarded: <?= $ocCount['rejected'] ?><?= ($ocPending > 0 || $ocScanning) ? ' &nbsp;|&nbsp; <b>Still to look up: ' . $ocPending . ($ocScanning ? ' (reading folders ...)' : '') . '</b>' : '' ?></p>
 		</li>
 		<li class="li_norm">
 			<label class="labelchecked" for="online_covers_retry_rejected">Also discarded ones:&nbsp;
@@ -233,6 +250,11 @@
 			</label>
 			<input type="submit" class="button_text" value="Look up albums without a match again" name="online_covers_retry">
 		</li>
+		<?php if ($ocEnabled) { ?>
+		<li class="li_norm">
+			<input type="submit" class="button_text" value="Search all albums now" name="online_covers_scan">
+		</li>
+		<?php } ?>
 		<?php if ($ocSaveEnabled && $ocCount['found'] > $ocSavedCount) { ?>
 		<li class="li_norm">
 			<p>Stored in the album folder: <?= $ocSavedCount ?> of <?= $ocCount['found'] ?><?= $ocDeniedCount > 0 ? ' &nbsp;|&nbsp; NAS without write permission: ' . $ocDeniedCount : '' ?></p>

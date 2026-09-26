@@ -1147,8 +1147,82 @@ app.get('/api/online-cover/:file', (req, res) => {
 })
 
 // For the admin interface (Cover page): what was found, throw away a wrong one, look up the misses again.
+// All albums without a picture of their own are looked up, not only the ones shown on the box: every selected NAS
+// folder and the local library are walked through (listings are cached, the lookups themselves stay one at a time).
+// When switched on, after "look up again", a few minutes after the start and then once a day (new folders on the NAS).
+const onlineCoverScan = { running: false, folders: 0, finishedAt: 0 }
+
+async function scanAlbumsForOnlineCovers(): Promise<void> {
+  if (onlineCoverScan.running || !onlineCovers.isOn()) return
+  onlineCoverScan.running = true
+  onlineCoverScan.folders = 0
+  try {
+    const visit = async (
+      type: 'nas' | 'local',
+      folder: string,
+      listFiles: (f: string) => Promise<NasFileEntry[]>,
+      skip: (f: string) => boolean,
+      depth: number,
+    ): Promise<void> => {
+      if (depth > 8 || skip(folder)) return
+      // One failed listing (WiFi hiccup) marks the NAS offline for 30 s, and every folder after it failed at once -
+      // the first scan stopped after 164 of about 2100 folders. So: wait for that to pass, and try up to 3 times.
+      let files: NasFileEntry[] | undefined
+      for (let attempt = 1; attempt <= 3 && !files; attempt++) {
+        try {
+          files = await listFiles(folder)
+        } catch (error) {
+          if (attempt === 3) {
+            console.warn(`${new Date().toLocaleString()}: [OnlineCovers] album scan: cannot read ${folder}: ${error}`)
+            return
+          }
+          await new Promise((resolve) => setTimeout(resolve, Math.max(0, nasOfflineUntil - Date.now()) + 5000))
+        }
+      }
+      if (!files) return
+      onlineCoverScan.folders++
+      // an album (or a folder with titles of its own next to subfolders) without a picture
+      if (nasHasAudio(files) && !pickCoverImage(files)) onlineAlbumCover(type, folder)
+      for (const sub of nasRealSubfolders(files)) {
+        await visit(type, sub.path, listFiles, skip, depth + 1)
+      }
+    }
+    const nas = nasSettings(await getMupiboxConfig())
+    const hidden = (nas?.hiddenFolders ?? []).map(normalizeNasPath)
+    for (const folder of nas?.artistFolders ?? []) {
+      await visit('nas', normalizeNasPath(folder), nasListFiles, (f) => nasIsHidden(normalizeNasPath(f), hidden), 0)
+    }
+    for (const category of libraryCategories) {
+      await visit('local', category, libraryListFiles, () => false, 0)
+    }
+  } catch (error) {
+    console.warn(`${new Date().toLocaleString()}: [OnlineCovers] album scan failed: ${error}`)
+  } finally {
+    onlineCoverScan.running = false
+    onlineCoverScan.finishedAt = Date.now()
+    console.log(
+      `${new Date().toLocaleString()}: [OnlineCovers] album scan: ${onlineCoverScan.folders} folders, ${onlineCovers.pending()} albums waiting for their lookup`,
+    )
+  }
+}
+setTimeout(() => void scanAlbumsForOnlineCovers(), 5 * 60 * 1000).unref()
+setInterval(() => void scanAlbumsForOnlineCovers(), 24 * 3600 * 1000).unref()
+
 app.get('/api/online-covers', localOnly, (_req, res) => {
-  res.json({ success: true, entries: onlineCovers.list() })
+  res.json({
+    success: true,
+    entries: onlineCovers.list(),
+    pending: onlineCovers.pending(),
+    scanning: onlineCoverScan.running,
+  })
+})
+app.post('/api/online-covers/scan', localOnly, (_req, res) => {
+  if (!onlineCovers.isOn()) {
+    res.json({ success: false, error: 'Online covers are switched off.' })
+    return
+  }
+  void scanAlbumsForOnlineCovers()
+  res.json({ success: true })
 })
 app.post('/api/online-covers/reject', localOnly, async (req, res) => {
   const key = typeof req.body?.key === 'string' ? req.body.key : ''

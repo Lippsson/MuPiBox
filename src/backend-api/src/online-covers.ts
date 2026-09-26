@@ -184,6 +184,15 @@ export class OnlineCovers {
     return undefined
   }
 
+  isOn(): boolean {
+    return this.isEnabled()
+  }
+
+  /** Albums still waiting for their lookup. */
+  pending(): number {
+    return this.queued.size
+  }
+
   list(): Array<OnlineCoverEntry & { key: string; url?: string }> {
     return Object.entries(this.index)
       .map(([key, e]) => ({ key, ...e, url: e.file ? coverUrl(e.file) : undefined }))
