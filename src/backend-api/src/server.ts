@@ -1994,44 +1994,6 @@ async function wifiWriteBandEntries(entries: WifiBandEntry[]): Promise<void> {
   }
 }
 
-// The band of a network is chosen by hand (Auto | 2.4 GHz | 5 GHz on the WiFi page): 'Auto' takes the better band
-// when the connection is made and stays on it. The wpa_supplicant.conf of older installations has a global
-// bgscan ("simple:30:-70:60"): while connected, wpa_supplicant scans every 30-60 s and moves to a better access
-// point, also to the other band of the same network, without being asked. It is switched off here (in the
-// running wpa_supplicant and in the file); the installation scripts no longer write it.
-async function wifiStopBackgroundRoaming(): Promise<void> {
-  try {
-    const text = await readWpaConf()
-    if (!/^[ \t]*bgscan=/m.test(text)) {
-      return
-    }
-    const adapters = (await readdir('/sys/class/net')).filter((name) => /^wl[\w.-]+$/.test(name))
-    for (const adapter of adapters) {
-      try {
-        await execFileAsync('sudo', ['wpa_cli', '-i', adapter, 'set', 'bgscan', ''])
-      } catch {
-        // no wpa_supplicant on this adapter
-      }
-    }
-    const updated = text.replace(/^[ \t]*bgscan=.*\n?/gm, '')
-    const tmpPath = `/tmp/.wpa_supplicant.${process.pid}.${Date.now()}.conf`
-    const nextPath = `${WPA_CONF}.mupibox-new`
-    await writeFile(tmpPath, updated, { mode: 0o600 })
-    try {
-      // replaced like in wifiWriteBandEntries: a new file next to it (same owner and mode), then a rename
-      await execFileAsync('sudo', ['cp', tmpPath, nextPath])
-      await execFileAsync('sudo', ['chown', '--reference', WPA_CONF, nextPath])
-      await execFileAsync('sudo', ['chmod', '--reference', WPA_CONF, nextPath])
-      await execFileAsync('sudo', ['mv', '-f', nextPath, WPA_CONF])
-    } finally {
-      await fs.promises.rm(tmpPath, { force: true })
-    }
-    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Switched off the background scan (bgscan) of wpa_supplicant: the WiFi band changes only when it is chosen`)
-  } catch (error) {
-    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Could not switch off bgscan: ${error}`)
-  }
-}
-
 // wpa_cli save_config, keeping the band choices. adjust() changes the entries first (a network removed, a band set).
 // One save at a time: two requests at once (a double tap, delete + band) read and wrote the file over each other.
 let wifiSaveChain: Promise<unknown> = Promise.resolve()
@@ -2205,9 +2167,9 @@ app.post('/api/wifi/configured/:id/band', async (req, res) => {
       return
     }
     const frequencies = band === 'auto' ? [] : WIFI_BAND_FREQUENCIES[band]
-    // The choice belongs to the network, not to one profile: a network saved twice (added again, or with and
-    // without a leading space) would otherwise stay usable on the other band through the profile that was not
-    // changed - wpa_supplicant simply connects with the better one.
+    // The choice belongs to the network, not to one profile: a network saved twice under the same name (added
+    // again) would otherwise stay usable on the other band through the profile that was not changed -
+    // wpa_supplicant simply connects with the better one. (Only the exact same name counts.)
     const sameNetwork = saved.map((network, index) => ({ network, index })).filter(({ network }) => network.ssid === saved[position].ssid)
     for (const { network } of sameNetwork) {
       // In effect at once (an empty value lifts the limit) ...
@@ -5907,7 +5869,6 @@ process.on('uncaughtException', (err) => {
 
 if (!testServe) {
   app.listen(8200)
-  void wifiStopBackgroundRoaming()
   console.log(`${new Date().toLocaleString()}: [mupibox-backend-api] Server started at http://localhost:8200`)
   // Spotify-sync scheduler — only in production / dev, not under tests.
   // Boot-after-60s lead-in inside startScheduler so initial config load
