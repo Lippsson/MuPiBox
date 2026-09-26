@@ -195,6 +195,32 @@
         "parentsCountdown": "Исчезнет через {s} с",
         "parentsClose": "Закрыть"
       }
+    },
+    "cs": {
+      "name": "Čeština",
+      "texts": {
+        "blockedHeading": "Na dnešek už bylo hudby dost",
+        "blockedSubheading": "Zítra se hraje dál",
+        "quietHeading": "Čas na odpočinek",
+        "quietSubheading": "Hudba bude brzy zpátky",
+        "parentsTitle": "Nastavení pro rodiče",
+        "parentsHint": "Naskenujte telefonem nebo otevřete v prohlížeči:",
+        "parentsCountdown": "Zmizí za {s} s",
+        "parentsClose": "Zavřít"
+      }
+    },
+    "el": {
+      "name": "Ελληνικά",
+      "texts": {
+        "blockedHeading": "Για σήμερα φτάνει η μουσική",
+        "blockedSubheading": "Αύριο συνεχίζουμε",
+        "quietHeading": "Ώρα ησυχίας",
+        "quietSubheading": "Η μουσική θα επιστρέψει σύντομα",
+        "parentsTitle": "Ρυθμίσεις γονέων",
+        "parentsHint": "Σαρώστε με το κινητό ή ανοίξτε σε πρόγραμμα περιήγησης:",
+        "parentsCountdown": "Εξαφανίζεται σε {s} δευτ.",
+        "parentsClose": "Κλείσιμο"
+      }
     }
   }
 }
