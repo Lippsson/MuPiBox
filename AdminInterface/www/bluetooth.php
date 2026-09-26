@@ -84,6 +84,15 @@
 		{
 		$command = "timeout -k 1 60 sudo -u dietpi /usr/local/bin/mupibox/./start_bt.sh";
 		exec($command, $output, $result );
+		// The controller switches on a moment after bluetoothctl returned: wait for it (at most 5 s), else the
+		// page below still showed "OFF" until it was reloaded.
+		for( $i = 0; $i < 10; $i++ )
+			{
+			$powered = array();
+			exec("timeout -k 1 3 sudo -u dietpi bluetoothctl show | grep 'Powered: yes'", $powered);
+			if( !empty($powered) ) { break; }
+			usleep(500000);
+			}
 		$CHANGE_TXT=$CHANGE_TXT."<li>Bluetooth is ready now</li>";
 		$change=1;
 		}
