@@ -49,8 +49,11 @@ update_config 'del(.mupibox.AudioDevices)'
 update_config '.mupibox.googlettslanguages = [{"iso639-1": "ar", "Language": "Arabic"},{"iso639-1": "zh", "Language": "Chinese"},{"iso639-1": "cs","Language": "Czech"},{"iso639-1": "da","Language": "Danish"},{"iso639-1": "nl","Language": "Dutch"},{"iso639-1": "en","Language": "English"},{"iso639-1": "fi","Language": "Finnish"},{"iso639-1": "fr","Language": "French"},{"iso639-1": "de","Language": "German"},{"iso639-1": "el","Language": "Greek"},{"iso639-1": "hi","Language": "Hindi"},{"iso639-1": "it","Language": "Italian"},{"iso639-1": "ja","Language": "Japanese"},{"iso639-1": "no","Language": "Norwegian"},{"iso639-1": "pl","Language": "Polish"},{"iso639-1": "pt","Language": "Portuguese"},{"iso639-1": "ru","Language": "Russian"},{"iso639-1": "es","Language": "Spanish, Castilian"},{"iso639-1": "sv","Language": "Swedish"},{"iso639-1": "tr","Language": "Turkish"},{"iso639-1": "uk","Language": "Ukrainian"}]'
 
 # 1.0.8
-DEVICE=$(/usr/bin/jq -r .spotify.physicalDevice ${CONFIG})
-if [ "$DEVICE" == "null" ]; then
+# Default soundcard only for a config that has none yet. This checked .spotify.physicalDevice, a field that is long
+# gone: it was always null, so every update set the soundcard to "hifiberry-dac" - on a box with another card (e.g.
+# the MuPiHAT's MAX98357A) the admin interface then showed the wrong one, and saving the audio settings switched it.
+DEVICE=$(/usr/bin/jq -r '.mupibox.physicalDevice // empty' ${CONFIG})
+if [ -z "$DEVICE" ]; then
 	update_config '.mupibox.physicalDevice = $v' --arg v "hifiberry-dac"
 fi
 
