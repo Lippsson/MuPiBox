@@ -5577,6 +5577,36 @@ function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
 }
 
 // Covers are asked for as small thumbnails (see above).
+// Cover of the NAS or local album mplayer plays (the parents' web app shows it in "now playing"): the album
+// folder's picture, else its parent's - as the NAS tab and the library show them. Kept 10 minutes per folder,
+// as the web app asks every few seconds and a NAS listing is a network round trip.
+const playingCoverCache = new Map<string, { cover: string | null; at: number }>()
+async function playingAlbumCover(type: string, folder: string): Promise<string | null> {
+  const key = `${type}|${folder}`
+  const cached = playingCoverCache.get(key)
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.cover
+  let cover: string | null = null
+  try {
+    const parent = folder.split('/').slice(0, -1).join('/')
+    if (type === 'nas' && (await nasPathSelected(folder))) {
+      const image =
+        nasFindCoverImage(await nasListFiles(folder)) ??
+        ((await nasPathSelected(parent)) ? nasFindCoverImage(await nasListFiles(parent)) : undefined)
+      cover = image ? nasStreamUrl(image) : null
+    } else if (type === 'local' && libraryRel(folder)) {
+      const image =
+        libraryFindCover(await libraryListFiles(folder)) ??
+        (libraryRel(parent) ? libraryFindCover(await libraryListFiles(parent)) : undefined)
+      cover = image ? libraryFileUrl(image) : null
+    }
+  } catch {
+    cover = null
+  }
+  if (playingCoverCache.size > 50) playingCoverCache.clear()
+  playingCoverCache.set(key, { cover, at: Date.now() })
+  return cover
+}
+
 function libraryFileUrl(relPath: string): string {
   return `/api/library/file?path=${encodeURIComponent(relPath)}&w=400`
 }
@@ -5834,6 +5864,7 @@ app.use(
     activeDataPath: activedataFile,
     currentPlayLogStart,
     nasPathSelected,
+    playingAlbumCover,
   }),
 )
 // The web app lives at /parents; /eltern (its first address) keeps working for bookmarks, home-screen

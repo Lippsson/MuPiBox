@@ -49,6 +49,8 @@ export interface ElternRouterDeps {
   currentPlayLogStart?: () => number | null
   /** True when a NAS path lies in the folders the admin selected ("Show" / "Download") and is not hidden. */
   nasPathSelected?: (path: string) => Promise<boolean>
+  /** Cover URL of the NAS ('nas') or local ('local') album folder mplayer plays, null if there is none. */
+  playingAlbumCover?: (type: string, folder: string) => Promise<string | null>
 }
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
@@ -1096,6 +1098,15 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         playing = local.playing === true
         title = String(local.currentTrackname ?? '')
         album = String(local.album ?? '')
+        // A NAS or local album: path is its folder (NAS path, or <category>/<artist>/<album> in the library);
+        // the artist is the folder above, the cover the one the box shows for it.
+        const source = String(local.currentType ?? '')
+        const folder = String(local.path ?? '')
+        if ((source === 'nas' || source === 'local') && folder) {
+          const parts = folder.split('/').filter(Boolean)
+          artist = parts[parts.length - 2] ?? ''
+          coverUrl = (await deps.playingAlbumCover?.(source, folder)) ?? null
+        }
       } else if (player === 'spotify') {
         try {
           const stateRes = await fetch('http://127.0.0.1:5005/state', { signal: AbortSignal.timeout(3000) })

@@ -1891,7 +1891,9 @@ function renderPlayback(b) {
   // via Opacity damit das Bild nicht flackert.
   if (b.coverUrl) {
     if (cover) {
-      if (cover.src !== b.coverUrl) {
+      // getAttribute: cover.src is the absolute URL, a relative coverUrl (NAS/local album) would differ on every
+      // refresh and make the picture flicker
+      if (cover.getAttribute('src') !== b.coverUrl) {
         cover.style.opacity = '0'
         cover.src = b.coverUrl
         cover.onload = () => { cover.style.opacity = '1' }
