@@ -91,6 +91,7 @@ const onlineCovers = new OnlineCovers(
 const onlineCoversSaveEnabled = () =>
   (getMupiboxConfigSync()?.mupibox as { onlineCoversSave?: boolean } | undefined)?.onlineCoversSave === true
 const ONLINE_COVER_FILE_NAME = 'cover.jpg'
+const ONLINE_COVER_NEXT_TO_SCAN = 'cover-online.jpg'
 
 // Stores a found online cover as cover.jpg in its album folder - only when the folder has no picture of its own, never
 // over an existing file (WebDAV "Overwrite: F", local "wx"). Then the album has its cover on the NAS / on disk for
@@ -105,14 +106,18 @@ async function saveOnlineCoverToFolder(key: string, evenIfDenied = false): Promi
   const data = await readFile(source)
   const type = key.slice(0, key.indexOf(':'))
   const folder = key.slice(key.indexOf(':') + 1)
+  // next to a picture of the folder's own that is not square: as cover-online.jpg (the scan stays)
+  const name = entry.reason === 'notSquare' ? ONLINE_COVER_NEXT_TO_SCAN : ONLINE_COVER_FILE_NAME
+  const mayWrite = (files: NasFileEntry[]) =>
+    entry.reason === 'notSquare' ? !files.some((f) => f.name.toLowerCase() === name) : !pickCoverImage(files)
 
   if (type === 'nas') {
     if (!(await nasPathSelected(folder))) return
     const session = await getActiveNasSession()
     if (!session) return
     const files = await withNasSession((s) => nasListFilesLive(s, folder))
-    if (!files || pickCoverImage(files)) return // not readable now, or it has a picture meanwhile
-    const response = await nasFetch(session, `${nasUrl(session, folder)}/${ONLINE_COVER_FILE_NAME}`, {
+    if (!files || !mayWrite(files)) return // not readable now, or it has a picture meanwhile
+    const response = await nasFetch(session, `${nasUrl(session, folder)}/${name}`, {
       method: 'PUT',
       headers: { Authorization: session.auth, 'Content-Type': 'image/jpeg', Overwrite: 'F' },
       body: data,
@@ -120,9 +125,9 @@ async function saveOnlineCoverToFolder(key: string, evenIfDenied = false): Promi
     })
     await response.arrayBuffer().catch(() => undefined)
     if (response.ok) {
-      onlineCovers.update(key, { savedTo: 'nas' })
+      onlineCovers.update(key, { savedTo: 'nas', savedName: name })
       nasListCache.delete(normalizeNasPath(folder))
-      console.log(`${new Date().toLocaleString()}: [OnlineCovers] saved ${folder}/${ONLINE_COVER_FILE_NAME} on the NAS`)
+      console.log(`${new Date().toLocaleString()}: [OnlineCovers] saved ${folder}/${name} on the NAS`)
     } else if (response.status === 401 || response.status === 403 || response.status === 405) {
       onlineCovers.update(key, { savedTo: 'denied' })
       console.log(`${new Date().toLocaleString()}: [OnlineCovers] no write permission on the NAS for ${folder} (${response.status})`)
@@ -134,11 +139,11 @@ async function saveOnlineCoverToFolder(key: string, evenIfDenied = false): Promi
 
   if (type === 'local') {
     const rel = libraryRel(folder)
-    if (!rel || libraryFindCover(await libraryListFiles(rel))) return
+    if (!rel || !mayWrite(await libraryListFiles(rel))) return
     try {
-      await writeFile(path.join(libraryRoot, rel, ONLINE_COVER_FILE_NAME), data, { flag: 'wx' })
-      onlineCovers.update(key, { savedTo: 'local' })
-      console.log(`${new Date().toLocaleString()}: [OnlineCovers] saved ${rel}/${ONLINE_COVER_FILE_NAME}`)
+      await writeFile(path.join(libraryRoot, rel, name), data, { flag: 'wx' })
+      onlineCovers.update(key, { savedTo: 'local', savedName: name })
+      console.log(`${new Date().toLocaleString()}: [OnlineCovers] saved ${rel}/${name}`)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EACCES') onlineCovers.update(key, { savedTo: 'denied' })
       else console.warn(`${new Date().toLocaleString()}: [OnlineCovers] saving ${rel}/${ONLINE_COVER_FILE_NAME} failed: ${error}`)
@@ -159,7 +164,7 @@ async function removeSavedOnlineCover(key: string): Promise<void> {
     const session = await getActiveNasSession()
     if (!session) return
     const files = await withNasSession((s) => nasListFilesLive(s, folder))
-    const ours = files?.find((f) => f.name === ONLINE_COVER_FILE_NAME && f.additional?.size === size)
+    const ours = files?.find((f) => f.name === (entry.savedName ?? ONLINE_COVER_FILE_NAME) && f.additional?.size === size)
     if (!ours) return
     const response = await nasFetch(session, nasUrl(session, ours.path), {
       method: 'DELETE',
@@ -172,7 +177,7 @@ async function removeSavedOnlineCover(key: string): Promise<void> {
   }
   const rel = libraryRel(folder)
   if (!rel) return
-  const localFile = path.join(libraryRoot, rel, ONLINE_COVER_FILE_NAME)
+  const localFile = path.join(libraryRoot, rel, entry.savedName ?? ONLINE_COVER_FILE_NAME)
   if ((await stat(localFile).catch(() => undefined))?.size === size) await rm(localFile, { force: true })
 }
 
@@ -1206,7 +1211,10 @@ async function nasIndexWalk(folder: string, version: string | undefined, depth: 
   const facts: NasFolderFacts = { v: version, audio, container, own: own?.path, ownV: own?.version, below, at: Date.now() }
   nasFolderIndexStore(normalizeNasPath(folder), facts)
   if (own) {
-    await nasCoverThumbnail(own.path, NAS_COVER_THUMB_SIZE, own.version).catch(() => undefined)
+    const thumb = await nasCoverThumbnail(own.path, NAS_COVER_THUMB_SIZE, own.version).catch(() => undefined)
+    await measureCoverShape(`nas:${own.path}`, thumb)
+    // an album whose picture is far from square (scanned cassette inlay): its online cover is shown instead
+    if (audio && !container && coverIsNotSquare(`nas:${own.path}`)) onlineAlbumCover('nas', folder, 'notSquare')
   }
   // an album (or a folder with titles of its own next to subfolders) without a picture
   if (audio && !own) onlineAlbumCover('nas', folder)
@@ -1231,7 +1239,18 @@ async function scanAlbumsForOnlineCovers(): Promise<void> {
         const files = await listForWalk(folder, libraryListFiles)
         if (!files) return
         onlineCoverScan.folders++
-        if (nasHasAudio(files) && !pickCoverImage(files)) onlineAlbumCover('local', folder)
+        const own = pickCoverImage(files)
+        if (nasHasAudio(files) && !own) onlineAlbumCover('local', folder)
+        if (own && nasHasAudio(files)) {
+          // measured on its thumbnail (the one the lists show); not square: its online cover is shown instead
+          const absolute = path.join(libraryRoot, own.path)
+          const info = await stat(absolute).catch(() => undefined)
+          const thumb = info
+            ? await getThumbnail(absolute, NAS_COVER_THUMB_SIZE, `lib|${absolute}|${info.mtimeMs}|${info.size}`)
+            : undefined
+          await measureCoverShape(`local:${own.path}`, thumb)
+          if (coverIsNotSquare(`local:${own.path}`)) onlineAlbumCover('local', folder, 'notSquare')
+        }
         for (const sub of nasRealSubfolders(files)) await visitLocal(sub.path, depth + 1)
       }
       for (const category of libraryCategories) await visitLocal(category, 0)
@@ -1292,6 +1311,15 @@ app.post('/api/online-covers/save-all', localOnly, (_req, res) => {
   })().finally(() => {
     onlineCoversSaving = false
   })
+})
+// Single albums looked up afresh (e.g. after the matching got stricter): a cover the box stored in the album folder
+// is removed first.
+app.post('/api/online-covers/forget', localOnly, async (req, res) => {
+  const keys = Array.isArray(req.body?.keys) ? (req.body.keys as unknown[]).filter((k): k is string => typeof k === 'string') : []
+  for (const key of keys) {
+    await removeSavedOnlineCover(key).catch(() => undefined)
+  }
+  res.json({ success: true, forgotten: onlineCovers.forget(keys) })
 })
 app.post('/api/online-covers/retry', localOnly, (req, res) => {
   res.json({ success: true, cleared: onlineCovers.retry(req.body?.alsoRejected === true) })
@@ -4218,6 +4246,8 @@ function pickCoverImage(files: NasFileEntry[]): NasFileEntry | undefined {
   const images = files.filter((f) => !f.isdir && /\.(jpe?g|jfif|png|webp)$/i.test(f.name))
   const base = (f: NasFileEntry) => f.name.replace(/\.[^.]+$/, '').toLowerCase()
   return (
+    // stored by the box next to a picture that is not square (see saveOnlineCoverToFolder)
+    images.find((f) => base(f) === 'cover-online') ??
     images.find((f) => /^(cover|folder|front|albumart\w*)$/.test(base(f))) ??
     images.find((f) => /cover|front/.test(base(f)) && !/back/.test(base(f))) ??
     images.find((f) => !/back|rueck|rück|inlay|booklet|cd\d?$|disc/.test(base(f))) ??
@@ -4398,7 +4428,9 @@ function nasEntryFromFacts(
   const ownCoverPath = facts.own ?? (ownFilesOnly ? undefined : facts.below)
   const isContainer = !ownFilesOnly && facts.container
   // An album without a picture: its own cover from the internet beats the series' picture from the folder above.
+  // An album whose picture is not square (scanned cassette inlay): its online cover, if one was found.
   const cover =
+    (facts.own && !isContainer ? onlineInsteadOfOwn('nas', folderPath, facts.own) : undefined) ??
     (ownCoverPath ? nasStreamUrl(ownCoverPath) : undefined) ??
     (isContainer ? undefined : onlineAlbumCover('nas', folderPath)) ??
     (fallbackCoverPath ? nasStreamUrl(fallbackCoverPath) : undefined)
@@ -4417,11 +4449,81 @@ function nasEntryFromFacts(
 
 // Online cover of an album folder (NAS path or library path), see online-covers.ts; asks for a lookup when there is
 // none yet. The folder above names the series ("Pumuckl/029 Originalmusik").
-function onlineAlbumCover(type: 'nas' | 'local', folderPath: string): string | undefined {
+function onlineAlbumCover(
+  type: 'nas' | 'local',
+  folderPath: string,
+  reason: 'missing' | 'notSquare' = 'missing',
+): string | undefined {
   const parts = folderPath.split('/').filter(Boolean)
   const album = parts.at(-1)
   if (!album) return undefined
-  return onlineCovers.coverFor(type, folderPath, parts.at(-2) ?? '', album)
+  return onlineCovers.coverFor(type, folderPath, parts.at(-2) ?? '', album, reason)
+}
+
+// --- Cover shapes -------------------------------------------------------------------------------------------------
+// Width / height of the albums' own pictures, measured on their thumbnails (made by the library walk). A picture far
+// from square - mostly a scanned cassette inlay - gets the album's online cover in its place (when one is found and
+// not discarded); the picture on the NAS / on disk stays as it is. Keys: nas:<NAS path> / local:<library path>.
+const coverShapesFile = path.join(process.cwd(), 'cache', 'cover-shapes.json')
+let coverShapes: Record<string, number> = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(coverShapesFile, 'utf8')) as Record<string, number>
+  } catch {
+    return {}
+  }
+})()
+let coverShapesTimer: NodeJS.Timeout | undefined
+
+function coverShapeStore(key: string, ratio: number): void {
+  if (coverShapes[key] === ratio) return
+  coverShapes[key] = ratio
+  if (coverShapesTimer) return
+  coverShapesTimer = setTimeout(() => {
+    coverShapesTimer = undefined
+    void (async () => {
+      try {
+        const tmp = `${coverShapesFile}.tmp`
+        await writeFile(tmp, JSON.stringify(coverShapes))
+        await rename(tmp, coverShapesFile)
+      } catch (error) {
+        console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] saving the cover shapes failed: ${error}`)
+      }
+    })()
+  }, 60 * 1000)
+}
+
+function coverIsNotSquare(key: string): boolean {
+  const ratio = coverShapes[key]
+  return ratio !== undefined && (ratio < 0.85 || ratio > 1.18)
+}
+
+// Width / height of a JPEG (the thumbnails are JPEGs): from its SOF marker.
+function jpegRatio(b: Buffer): number | undefined {
+  if (b[0] !== 0xff || b[1] !== 0xd8) return undefined
+  let p = 2
+  while (p + 9 < b.length) {
+    if (b[p] !== 0xff) return undefined
+    const marker = b[p + 1]
+    const length = b.readUInt16BE(p + 2)
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      const height = b.readUInt16BE(p + 5)
+      const width = b.readUInt16BE(p + 7)
+      return height > 0 ? Math.round((width / height) * 1000) / 1000 : undefined
+    }
+    p += 2 + length
+  }
+  return undefined
+}
+
+async function measureCoverShape(key: string, thumb: string | undefined): Promise<void> {
+  if (!thumb) return
+  const ratio = jpegRatio(await readFileRange(thumb, 0, 65535).catch(() => Buffer.alloc(0)))
+  if (ratio !== undefined) coverShapeStore(key, ratio)
+}
+
+// The online cover shown instead of an album's own picture that is not square (asks for it when not known yet).
+function onlineInsteadOfOwn(type: 'nas' | 'local', folderPath: string, ownPicture: string): string | undefined {
+  return coverIsNotSquare(`${type}:${ownPicture}`) ? onlineAlbumCover(type, folderPath, 'notSquare') : undefined
 }
 
 // The NAS login password is kept in the config file encrypted (AES-256-GCM), so the configuration
@@ -6458,7 +6560,13 @@ function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
 // network round trip.
 const playingCoverCache = new Map<
   string,
-  { album?: { type: 'nas' | 'local'; path: string }; own: string | null; parent: string | null; at: number }
+  {
+    album?: { type: 'nas' | 'local'; path: string }
+    own: string | null
+    ownPicture?: string
+    parent: string | null
+    at: number
+  }
 >()
 async function playingAlbumCover(type: string, folder: string): Promise<string | null> {
   const key = `${type}|${folder}`
@@ -6466,6 +6574,7 @@ async function playingAlbumCover(type: string, folder: string): Promise<string |
   if (!cached || Date.now() - cached.at >= 10 * 60 * 1000) {
     let album: { type: 'nas' | 'local'; path: string } | undefined
     let own: string | null = null
+    let ownPicture: string | undefined
     let parentCover: string | null = null
     try {
       const parent = folder.split('/').slice(0, -1).join('/')
@@ -6475,12 +6584,14 @@ async function playingAlbumCover(type: string, folder: string): Promise<string |
         const parentImage =
           !image && (await nasPathSelected(parent)) ? nasFindCoverImage(await nasListFiles(parent)) : undefined
         own = image ? nasStreamUrl(image) : null
+        ownPicture = image
         parentCover = parentImage ? nasStreamUrl(parentImage) : null
       } else if (type === 'local' && libraryRel(folder)) {
         album = { type: 'local', path: libraryRel(folder) ?? folder }
         const image = libraryFindCover(await libraryListFiles(folder))
         const parentImage = !image && libraryRel(parent) ? libraryFindCover(await libraryListFiles(parent)) : undefined
         own = image ? libraryFileUrl(image) : null
+        ownPicture = image
         parentCover = parentImage ? libraryFileUrl(parentImage) : null
       }
     } catch {
@@ -6488,10 +6599,17 @@ async function playingAlbumCover(type: string, folder: string): Promise<string |
       parentCover = null
     }
     if (playingCoverCache.size > 50) playingCoverCache.clear()
-    cached = { album, own, parent: parentCover, at: Date.now() }
+    cached = { album, own, ownPicture, parent: parentCover, at: Date.now() }
     playingCoverCache.set(key, cached)
   }
-  if (cached.own) return cached.own
+  if (cached.own) {
+    // a picture far from square: the album's online cover, as in the lists
+    const replaced =
+      cached.album && cached.ownPicture
+        ? onlineInsteadOfOwn(cached.album.type, cached.album.path, cached.ownPicture)
+        : undefined
+    return replaced ?? cached.own
+  }
   const online = cached.album ? onlineAlbumCover(cached.album.type, cached.album.path) : undefined
   return online ?? cached.parent
 }
@@ -6509,8 +6627,10 @@ async function libraryBuildEntry(
 ): Promise<Record<string, unknown>> {
   const files = await libraryListFiles(relPath)
   const isContainer = !ownFilesOnly && (await folderIsContainer(files, libraryListFiles))
-  const ownCoverPath = libraryFindCover(files) ?? (isContainer ? await libraryFindCoverBelow(files, 2) : undefined)
+  const ownPicture = libraryFindCover(files)
+  const ownCoverPath = ownPicture ?? (isContainer ? await libraryFindCoverBelow(files, 2) : undefined)
   const cover =
+    (ownPicture && !isContainer ? onlineInsteadOfOwn('local', relPath, ownPicture) : undefined) ??
     (ownCoverPath ? libraryFileUrl(ownCoverPath) : undefined) ??
     (isContainer ? undefined : onlineAlbumCover('local', relPath)) ??
     (fallbackCoverPath ? libraryFileUrl(fallbackCoverPath) : undefined)

@@ -30,7 +30,15 @@ export interface OnlineCoverEntry {
   // Stored as cover.jpg in the album folder itself (mupibox.onlineCoversSave): 'nas' / 'local', or 'denied' when the
   // NAS account may not write there.
   savedTo?: 'nas' | 'local' | 'denied'
+  // the file name it was stored under (cover.jpg, or cover-online.jpg next to a picture of the folder's own)
+  savedName?: string
+  // why it was looked up: the album has no picture, or only one that is not square (e.g. a scanned cassette inlay)
+  reason?: 'missing' | 'notSquare'
+  score?: number // how well the result fit (see scoreCandidate)
 }
+
+// Folder names that name no album of their own ("CD 01", "Teil 2"): nothing to look up.
+const PART_FOLDER = /^(cd|disc|disk|teil|part|seite|side|kassette|mc)\s*\d+$/i
 
 interface Candidate {
   source: 'itunes' | 'deezer'
@@ -144,7 +152,7 @@ function coverUrl(file: string): string {
 export class OnlineCovers {
   private index: Record<string, OnlineCoverEntry> = {}
   private readonly indexPath: string
-  private queue: Array<{ key: string; series: string; album: string }> = []
+  private queue: Array<{ key: string; series: string; album: string; reason: 'missing' | 'notSquare' }> = []
   private queued = new Set<string>()
   private running = false
   private lastRequest = { itunes: 0, deezer: 0 }
@@ -172,13 +180,21 @@ export class OnlineCovers {
    * The online cover's URL for an album without a picture of its own, or undefined. Unknown albums are queued for
    * a lookup (when switched on), so the cover shows the next time.
    */
-  coverFor(type: 'nas' | 'local', folderPath: string, series: string, album: string): string | undefined {
+  coverFor(
+    type: 'nas' | 'local',
+    folderPath: string,
+    series: string,
+    album: string,
+    reason: 'missing' | 'notSquare' = 'missing',
+  ): string | undefined {
     const key = OnlineCovers.key(type, folderPath)
     const entry = this.index[key]
     if (entry?.status === 'found' && entry.file) return coverUrl(entry.file)
     if (!entry && this.isEnabled() && !this.queued.has(key)) {
       this.queued.add(key)
-      this.queue.push({ key, series, album })
+      // a scanned picture is on show already, a missing one is not: those go first
+      if (reason === 'notSquare') this.queue.unshift({ key, series, album, reason })
+      else this.queue.push({ key, series, album, reason })
       void this.work()
     }
     return undefined
@@ -221,6 +237,20 @@ export class OnlineCovers {
   }
 
   /** Forget the misses (and, with `alsoRejected`, the rejected ones), so they are looked up again. */
+  /** These albums are looked up again (when shown or at the next library walk). */
+  forget(keys: string[]): number {
+    let n = 0
+    for (const key of keys) {
+      const entry = this.index[key]
+      if (!entry) continue
+      if (entry.file) fs.rmSync(path.join(this.dir, entry.file), { force: true })
+      delete this.index[key]
+      n++
+    }
+    this.scheduleSave()
+    return n
+  }
+
   retry(alsoRejected = false): number {
     let n = 0
     for (const [key, e] of Object.entries(this.index)) {
@@ -245,7 +275,7 @@ export class OnlineCovers {
         const job = this.queue.shift()
         if (!job) break
         try {
-          this.index[job.key] = await this.lookUp(job.series, job.album)
+          this.index[job.key] = { ...(await this.lookUp(job.series, job.album, job.reason)), reason: job.reason }
           if (this.index[job.key].status === 'found' && this.onFound) {
             await this.onFound(job.key).catch((error) =>
               console.warn(`${new Date().toLocaleString()}: [OnlineCovers] storing ${job.album}: ${(error as Error).message}`),
@@ -264,19 +294,28 @@ export class OnlineCovers {
     }
   }
 
-  private async lookUp(folderAbove: string, album: string): Promise<OnlineCoverEntry> {
+  private async lookUp(
+    folderAbove: string,
+    album: string,
+    reason: 'missing' | 'notSquare' = 'missing',
+  ): Promise<OnlineCoverEntry> {
+    const base = { series: folderAbove, album, at: Date.now() }
+    if (PART_FOLDER.test(album.trim())) return { ...base, status: 'none' }
     const series = usefulSeries(folderAbove)
     const { name } = splitEpisode(album)
     const queries = [...new Set([`${series} ${name}`.trim(), name])].filter((q) => q.length >= 3)
+    // In place of a picture the album has (a scanned inlay) only a confirmed result: episode number or series -
+    // a title that merely matches (a podcast episode "Aus der Tiefe" for a children's story of that name) would
+    // replace the right picture with a wrong one.
+    const minScore = reason === 'notSquare' ? 3 : 2
     let best: { c: Candidate; score: number } | undefined
     for (const q of queries) {
       for (const c of [...(await this.itunes(q)), ...(await this.deezer(q))]) {
         const score = scoreCandidate(series, album, c)
-        if (score >= 2 && (!best || score > best.score)) best = { c, score }
+        if (score >= minScore && (!best || score > best.score)) best = { c, score }
       }
       if (best && best.score >= 3) break
     }
-    const base = { series: folderAbove, album, at: Date.now() }
     if (!best) return { ...base, status: 'none' }
     const file = `${crypto.createHash('sha1').update(best.c.imageUrl).digest('hex')}.jpg`
     await this.download(best.c.imageUrl, path.join(this.dir, file))
@@ -284,6 +323,7 @@ export class OnlineCovers {
     return {
       ...base,
       status: 'found',
+      score: best.score,
       file,
       source: best.c.source,
       matchedTitle: best.c.title,

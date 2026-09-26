@@ -277,6 +277,7 @@
 			print "<p style='margin:4px 0;'><b>" . htmlspecialchars((string)($ocEntry['album'] ?? '')) . "</b><br>";
 			print "<small>" . $ocWhere . ": " . htmlspecialchars((string)($ocEntry['series'] ?? '')) . "<br>";
 			print $ocSource . ": " . htmlspecialchars((string)($ocEntry['matchedArtist'] ?? '')) . " - " . htmlspecialchars((string)($ocEntry['matchedTitle'] ?? '')) . "</small>";
+			if (($ocEntry['reason'] ?? '') === 'notSquare') print "<br><small style='color:#555;'>shown instead of the album's own picture (not square, e.g. a scanned cassette inlay) - discard to get that back</small>";
 			$ocSaved = (string)($ocEntry['savedTo'] ?? '');
 			if ($ocSaved === 'nas' || $ocSaved === 'local') print "<br><small style='color:#2a7a3a;'>&#10003; stored as cover.jpg in the album folder</small>";
 			elseif ($ocSaved === 'denied') print "<br><small style='color:#a05a00;'>no write permission - kept on the box only</small>";
