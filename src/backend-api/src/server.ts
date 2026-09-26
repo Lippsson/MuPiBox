@@ -3797,25 +3797,59 @@ function nasStreamUrl(filePath: string): string {
   return `/api/nas/stream?path=${encodeURIComponent(filePath)}&w=400&v=${nasCoverVersion}`
 }
 
-// A folder that holds no audio files but only subfolders is a "container": the
-// kids' UI drills into it like an artist level instead of trying to play it.
-// This allows any number of nesting levels.
-function nasIsContainer(files: NasFileEntry[]): boolean {
-  const hasAudio = files.some((f) => !f.isdir && nasAudioExtensions.some((ext) => f.name.toLowerCase().endsWith(ext)))
-  const hasSubfolders = files.some((f) => f.isdir)
-  return !hasAudio && hasSubfolders
+// Subfolders that hold no album: DSM's "@eaDir", recycle bin and snapshots, and picture folders next to the audio.
+const nasPictureFolder = /^(covers?|scans?|artworks?|booklet|bilder|images?|pictures?)$/i
+function nasHasAudio(files: NasFileEntry[]): boolean {
+  return files.some((f) => !f.isdir && nasAudioExtensions.some((ext) => f.name.toLowerCase().endsWith(ext)))
 }
 
-// Builds the ready-to-use Media entry for one NAS folder (live listing).
+// A folder with subfolders is a "container": the kids' UI drills into it like an artist level instead of trying to
+// play it. This allows any number of nesting levels. Audio files lying next to the subfolders are not lost: the
+// folder's listing starts with an entry that plays just them (see ownFilesOnly below). Before, such a folder counted
+// as an album, and its subfolders could not be reached.
+// With audio files of its own, a folder is a container only when one of its subfolders holds audio, in it or one
+// level below ("Staffel 1/Folge 1"): an "eBook" folder next to an audiobook's files leaves it an album. Checked for
+// such mixed folders only; it stops at the first audio found and looks at no more than 10 × 6 folders.
+function nasRealSubfolders(files: NasFileEntry[]): NasFileEntry[] {
+  return files.filter((f) => f.isdir && !nasIndexSkip(f.name) && !nasPictureFolder.test(f.name))
+}
+
+async function folderIsContainer(
+  files: NasFileEntry[],
+  listFiles: (folder: string) => Promise<NasFileEntry[]>,
+): Promise<boolean> {
+  const subfolders = nasRealSubfolders(files)
+  if (subfolders.length === 0) return false
+  if (!nasHasAudio(files)) return true
+  const list = async (folder: string) => {
+    try {
+      return await listFiles(folder)
+    } catch {
+      return [] // unreadable: look at the next one
+    }
+  }
+  for (const sub of subfolders.slice(0, 10)) {
+    const inner = await list(sub.path)
+    if (nasHasAudio(inner)) return true
+    for (const deeper of nasRealSubfolders(inner).slice(0, 5)) {
+      if (nasHasAudio(await list(deeper.path))) return true
+    }
+  }
+  return false
+}
+
+// Builds the ready-to-use Media entry for one NAS folder (live listing). ownFilesOnly: the entry that plays the audio
+// files of a container folder itself (first in its listing).
 async function nasBuildMediaEntry(
   folderPath: string,
   artistName: string,
   title: string,
   fallbackCoverPath?: string,
+  ownFilesOnly = false,
 ): Promise<Record<string, unknown>> {
   const files = await nasListFiles(folderPath)
-  const ownCoverPath = nasFindCoverImage(files) ?? (await nasFindCoverBelow(files))
-  const isContainer = nasIsContainer(files)
+  const ownCoverPath = nasFindCoverImage(files) ?? (ownFilesOnly ? undefined : await nasFindCoverBelow(files))
+  const isContainer = !ownFilesOnly && (await folderIsContainer(files, nasListFiles))
   // An album without a picture: its own cover from the internet beats the series' picture from the folder above.
   const cover =
     (ownCoverPath ? nasStreamUrl(ownCoverPath) : undefined) ??
@@ -4544,6 +4578,10 @@ app.get('/api/nas/children', nasPathWithinSelection, async (req, res) => {
         }
       },
     )
+    // Audio files next to the subfolders: first comes an entry that plays them.
+    if (nasHasAudio(files) && (await folderIsContainer(files, nasListFiles))) {
+      entries.unshift(await nasBuildMediaEntry(folderPath, parentName, parentName, undefined, true))
+    }
     res.json(entries.filter((entry) => entry !== undefined))
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to list NAS children of ${folderPath}: ${error}`)
@@ -5677,9 +5715,10 @@ async function libraryBuildEntry(
   artistName: string,
   title: string,
   fallbackCoverPath?: string,
+  ownFilesOnly = false, // as in nasBuildMediaEntry
 ): Promise<Record<string, unknown>> {
   const files = await libraryListFiles(relPath)
-  const isContainer = nasIsContainer(files)
+  const isContainer = !ownFilesOnly && (await folderIsContainer(files, libraryListFiles))
   const ownCoverPath = libraryFindCover(files) ?? (isContainer ? await libraryFindCoverBelow(files, 2) : undefined)
   const cover =
     (ownCoverPath ? libraryFileUrl(ownCoverPath) : undefined) ??
@@ -5752,6 +5791,10 @@ app.get('/api/library/children', async (req, res) => {
           }
         }),
     )
+    // Audio files next to the subfolders: first comes an entry that plays them.
+    if (nasHasAudio(files) && (await folderIsContainer(files, libraryListFiles))) {
+      entries.unshift(await libraryBuildEntry(libraryRel(folderPath) ?? folderPath, parentName, parentName, undefined, true))
+    }
     res.json(entries.filter((entry) => entry !== undefined))
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to list library folder ${folderPath}: ${error}`)
