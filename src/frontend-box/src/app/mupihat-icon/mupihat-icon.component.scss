@@ -7,10 +7,12 @@
   line-height: 1;
 }
 
+// All in the toolbar's text colour (currentColor), like the WiFi symbol next to it, so it follows the theme
+// (white on most themes, dark on light ones).
 .battery {
   display: inline-flex;
   align-items: center;
-  color: #fff;
+  color: inherit;
 }
 
 .body {
@@ -18,9 +20,9 @@
   box-sizing: border-box;
   width: 40px;
   height: 22px;
-  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  border: 1.5px solid color-mix(in srgb, currentColor 75%, transparent);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, currentColor 12%, transparent);
   overflow: hidden;
   // the number is blended with what is behind it inside the battery: dark on the filled part, light on the empty part
   isolation: isolate;
@@ -34,7 +36,7 @@
   top: 0;
   bottom: 0;
   left: 0;
-  background: rgba(255, 255, 255, 0.88);
+  background: color-mix(in srgb, currentColor 88%, transparent);
   transition: width 0.6s ease;
 }
 
@@ -61,10 +63,11 @@
   height: 9px;
   margin-left: 1px;
   border-radius: 0 2px 2px 0;
-  background: rgba(255, 255, 255, 0.75);
+  background: color-mix(in srgb, currentColor 75%, transparent);
 }
 
-// nearly empty: red, the number stays white on the red fill
+// nearly empty: only the fill turns red - the outline keeps the toolbar colour, so the battery stays visible on
+// themes with a red toolbar; the number stays white on the red fill
 .low {
   .fill {
     background: #ff5252;
@@ -72,11 +75,5 @@
   .label {
     mix-blend-mode: normal;
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
-  }
-  .body {
-    border-color: #ff5252;
-  }
-  .nub {
-    background: #ff5252;
   }
 }

@@ -1,14 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
-import { catchError, of, switchMap, timer } from 'rxjs'
 import { MediaService } from '../media.service'
-import { WifiService } from '../wifi.service'
 
 // The WiFi symbol of the status bar as on a phone: a dot and three arcs, as many lit as the reception is good.
 //   - not connected to a WiFi and no internet: all dimmed, with a red "x" badge
 //   - connected, but no internet: the arcs as they are, with a red "!" badge
-// The reception comes from the live link (/api/wifi/status), asked for every 10 seconds.
-const POLL_MS = 10_000
+// The reception comes from the box's network state (network.json: WiFi name and signal in dBm).
 
 // dBm -> 0..4 lit parts (dot, then the arcs from the inside out)
 export function wifiLevelOf(signalDbm: number | undefined): number {
@@ -67,6 +64,9 @@ export function wifiLevelOf(signalDbm: number | undefined): number {
     }
     .badge {
       fill: #ff5252;
+      /* a ring in the toolbar colour keeps it visible on themes with a red toolbar */
+      stroke: currentColor;
+      stroke-width: 1;
     }
     .mark {
       stroke: #fff;
@@ -79,23 +79,27 @@ export function wifiLevelOf(signalDbm: number | undefined): number {
   `,
 })
 export class WifiIconComponent {
-  private readonly wifi = inject(WifiService)
   private readonly media = inject(MediaService)
 
-  private readonly status = toSignal(
-    timer(0, POLL_MS).pipe(switchMap(() => this.wifi.getStatus().pipe(catchError(() => of(undefined))))),
-    { initialValue: undefined },
-  )
-  // 'offline' only when the network state file says so (not while it is still starting or not asked yet)
+  // Everything comes from the network state the app polls anyway (one shared request every 5 s; the box
+  // refreshes the file every 30 s). A poll of its own per symbol - one on every page Ionic keeps mounted -
+  // started `sudo wpa_cli` twice a request, tens of thousands of times a day.
   private readonly network = toSignal(this.media.network$, { initialValue: undefined })
-  private readonly onlineState = computed(() => this.network()?.onlinestate !== 'offline')
 
-  protected readonly connected = computed(() => this.status()?.state === 'COMPLETED')
-  protected readonly online = computed(() => this.onlineState())
+  // 'offline' only when the network state file says so (not while it is still starting or not asked yet)
+  protected readonly online = computed(() => this.network()?.onlinestate !== 'offline')
+  // connected to a WiFi: the file names its network
+  protected readonly connected = computed(() => !!this.network()?.wifi)
   protected readonly level = computed(() => {
-    const status = this.status()
-    if (!status) return 4 // not asked yet: no flicker of an empty symbol at start
-    if (status.state !== 'COMPLETED') return this.onlineState() ? 4 : 0 // e.g. a cable connection
-    return wifiLevelOf(status.signalDbm)
+    const network = this.network()
+    if (!network) return 0 // not known yet: dimmed rather than full bars
+    if (!network.wifi) return this.online() ? 4 : 0 // online without a WiFi: a cable connection
+    return wifiLevelOf(signalDbmOf(network.wifisignal))
   })
+}
+
+// "-61 dBm" -> -61
+function signalDbmOf(text: string | undefined): number | undefined {
+  const value = Number.parseInt(String(text ?? ''), 10)
+  return Number.isFinite(value) && value < 0 ? value : undefined
 }

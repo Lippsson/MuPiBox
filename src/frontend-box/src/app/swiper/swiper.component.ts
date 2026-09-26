@@ -103,6 +103,8 @@ export class SwiperComponent<T> {
   // for every theme. Both come from the MuPiBox config, which is loaded once.
   protected configLoaded: WritableSignal<boolean> = signal(false)
   protected coverflow: WritableSignal<boolean> = signal(false)
+  /** Width of one cover in the Cover Flow, measured on first use (0 = not yet). */
+  private coverflowCoverWidth = 0
   protected hideScrollbar: WritableSignal<boolean> = signal(false)
   // Coverflow theme only: shows currentData.name (album name, falling back to the folder name -
   // the same value the non-Coverflow list already shows under each cover) below the cover.
@@ -367,7 +369,10 @@ export class SwiperComponent<T> {
     if (!first) {
       return
     }
-    const coverWidth = first.offsetWidth || 300
+    // Measured once: this runs twice per frame while dragging, and reading offsetWidth between the transform
+    // writes forced a style recalculation every time. The cover size is fixed by the stylesheet.
+    if (!this.coverflowCoverWidth) this.coverflowCoverWidth = first.offsetWidth
+    const coverWidth = this.coverflowCoverWidth || 300
     const unit = coverWidth + (Number(swiper.params.spaceBetween) || 0) // distance of two neighbouring covers in the row
     const screenHalf = swiper.width / 2
     const step = (screenHalf - coverWidth / 2) / visibleSides
