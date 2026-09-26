@@ -208,13 +208,13 @@
 </form>
 <?php
 	if ($ocCount['found'] > 0) {
-		print "<div style='margin:30px;overflow:hidden;'>";
+		print "<div style='margin:30px;'>";
 		foreach ($ocEntries as $ocEntry) {
 			if (($ocEntry['status'] ?? '') !== 'found' || !preg_match('/^[a-f0-9]{40}\.jpg$/', (string)($ocEntry['file'] ?? ''))) continue;
 			$ocKey = (string)($ocEntry['key'] ?? '');
 			$ocWhere = strpos($ocKey, 'nas:') === 0 ? 'NAS' : 'local';
 			$ocSource = ($ocEntry['source'] ?? '') === 'itunes' ? 'iTunes' : 'Deezer';
-			print "<div style='float:left;width:200px;margin:0 15px 20px 0;' align='center'>";
+			print "<div style='display:inline-block;vertical-align:top;width:200px;margin:0 15px 20px 0;' align='center'>";
 			print "<form method=\"post\" action=\"cover.php\">";
 			print "<img src='cover.php?online_cover=" . $ocEntry['file'] . "' style='width:180px;height:180px;object-fit:cover;' loading='lazy' alt=''>";
 			print "<p style='margin:4px 0;'><b>" . htmlspecialchars((string)($ocEntry['album'] ?? '')) . "</b><br>";

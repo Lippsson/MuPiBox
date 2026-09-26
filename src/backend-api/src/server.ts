@@ -1048,7 +1048,8 @@ app.get('/api/online-cover/:file', (req, res) => {
     return
   }
   res.set('Cache-Control', 'public, max-age=86400')
-  res.sendFile(file, (err) => {
+  // dotfiles: the cache lies below /home/dietpi/.mupibox, which sendFile refuses by default (404)
+  res.sendFile(file, { dotfiles: 'allow' }, (err) => {
     if (err && !res.headersSent) res.status(404).type('text/plain').send('cover not available')
   })
 })
