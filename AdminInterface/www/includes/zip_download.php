@@ -14,6 +14,32 @@
 // $sources is a fixed, caller-supplied list of paths (may contain shell globs); it must never
 // contain request data.
 
+// The files of the configuration backup that hold the settings (used by the config and the full backup).
+// Besides mupiboxconfig.json and data.json these are the settings that live in the system itself: the WiFi
+// networks (wpa_supplicant.conf, wlan.json), the paired Bluetooth devices and a small file with the boot,
+// driver and service settings, which is written just now (see scripts/mupibox/system_settings.sh).
+function mupibox_settings_backup_sources(): string {
+	exec('sudo /usr/local/bin/mupibox/system_settings.sh export /etc/mupibox/system-settings.json');
+	$sources = array(
+		'/etc/mupibox/mupiboxconfig.json',
+		'/etc/mupibox/system-settings.json',
+		'/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json',
+		'/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json',
+		'/etc/wpa_supplicant/wpa_supplicant.conf',
+		'/var/lib/bluetooth',
+	);
+	// a file that does not exist (no Bluetooth, no wlan.json yet) is left out instead of making zip fail
+	$existing = array();
+	foreach ($sources as $source) {
+		$check = 'sudo test -e ' . escapeshellarg($source);
+		exec($check, $ignored, $missing);
+		if ($missing === 0) {
+			$existing[] = escapeshellarg($source);
+		}
+	}
+	return implode(' ', $existing);
+}
+
 function mupibox_send_zip(string $downloadName, string $zipOptions, string $sources): void {
 	$path = '/var/tmp/mupibox-download-' . bin2hex(random_bytes(12)) . '.zip';
 	ignore_user_abort(true);

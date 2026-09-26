@@ -86,11 +86,16 @@
 				$allowedExactFiles = [
 					'etc/mupibox/mupiboxconfig.json',
 					'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json',
+					// settings that live in the system: added to the backup with V. DEV 2026-09-26
+					'etc/mupibox/system-settings.json',
+					'etc/wpa_supplicant/wpa_supplicant.conf',
+					'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json',
 				];
 				$allowedExactDirs = ['etc/', 'etc/mupibox/', 'home/', 'home/dietpi/', 'home/dietpi/MuPiBox/',
 					'home/dietpi/.mupibox/', 'home/dietpi/.mupibox/Sonos-Kids-Controller-master/',
 					'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/',
-					'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/'];
+					'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/',
+					'etc/wpa_supplicant/', 'var/', 'var/lib/', 'var/lib/bluetooth/'];
 				// Types lighttpd executes or a browser runs as a page on the admin origin. Everything
 				// else below media/ is fine (audio, covers, playlists, but also .DS_Store, booklets).
 				$forbiddenMediaTypes = '/(\.(php\d?|phtml|phar|pht|pl|py|cgi|fcgi|sh|shtml|s?html?|xhtml|xht|svgz?|js|mjs|xml|xsl)|\/\.htaccess|\/\.user\.ini)$/i';
@@ -114,9 +119,12 @@
 						$zip->getExternalAttributesIndex($i, $opsys, $attr);
 						$isSymlink = $opsys === ZipArchive::OPSYS_UNIX && ((($attr >> 16) & 0170000) === 0120000);
 						$inMedia = strpos($norm, 'home/dietpi/MuPiBox/media/') === 0 || $norm === 'home/dietpi/MuPiBox/media/';
+						// the paired Bluetooth devices: folders and files of /var/lib/bluetooth (per adapter and device)
+						$inBluetooth = strpos($norm, 'var/lib/bluetooth/') === 0;
 						$matched = !$isSymlink && $stat !== false && (
 							in_array($norm, $allowedExactFiles, true)
-							|| ($isDir && (in_array($norm, $allowedExactDirs, true) || $inMedia))
+							|| ($isDir && (in_array($norm, $allowedExactDirs, true) || $inMedia || $inBluetooth))
+							|| (!$isDir && $inBluetooth && preg_match('#^var/lib/bluetooth/[0-9A-Fa-f:]{17}(/[A-Za-z0-9:._ -]+){1,3}$#', $norm))
 							|| (!$isDir && $inMedia && !preg_match($forbiddenMediaTypes, $norm))
 						);
 						if (!$matched) {
@@ -136,12 +144,22 @@
 				$data = mupibox_config(true);
 				$old_version = $data["mupibox"]["version"];
 
+				// a settings file of an older backup must not be replaced by the one written by the last backup download
+				exec("sudo rm -f /etc/mupibox/system-settings.json");
 				$command = "sudo unzip -o -a " . escapeshellarg($target_file) . " -d / >> /tmp/restore.log";
 				exec($command, $output, $result );
 				exec("sudo chown root:www-data /etc/mupibox/mupiboxconfig.json");
 				exec("sudo chmod 644 /etc/mupibox/mupiboxconfig.json");
 				exec("sudo chown dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json");
 				exec("sudo chmod 644 /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json");
+				// WiFi networks, Bluetooth pairings and the system settings: owner and mode as the system expects them
+				exec("[ -f /etc/wpa_supplicant/wpa_supplicant.conf ] && sudo chown root:root /etc/wpa_supplicant/wpa_supplicant.conf && sudo chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf");
+				exec("[ -f /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json ] && sudo chown dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json");
+				exec("[ -d /var/lib/bluetooth ] && sudo chown -R root:root /var/lib/bluetooth");
+				if (is_file('/etc/mupibox/system-settings.json')) {
+					exec("sudo chown root:root /etc/mupibox/system-settings.json && sudo chmod 600 /etc/mupibox/system-settings.json");
+					exec("sudo /usr/local/bin/mupibox/system_settings.sh apply /etc/mupibox/system-settings.json >> /tmp/restore.log 2>&1");
+				}
 
 				// The installed copy first: piping a script fetched live from the upstream repo into a root
 				// shell ran whatever that repo holds at that moment (and not this fork's version).
@@ -440,10 +458,10 @@
 		<summary><i class="fa-solid fa-download"></i> Backup and restore settings</summary>			
 		<ul>
 			<li class="li_norm"><h2>Backup MuPiBox-settings</h2>
-				<p>Backup MuPiBox-Data (cover, mupiboxconfig.json and data.json):</p>
+				<p>Backup MuPiBox-Data (cover, mupiboxconfig.json, data.json and the settings of the system: WiFi networks with their passwords, paired Bluetooth devices, display rotation and other boot settings, driver and service settings). Not included: downloaded NAS files, listening history and resume positions. Keep the file safe, it contains passwords.</p>
 
 				<input id="saveForm" class="button_text" type="submit" name="backupdownload" value="Download Configuration-Backup" onclick="window.open('./backup.php', '_blank');" />
-				<p>Backup all MuPiBox-Data (media-files, cover, mupiboxconfig.json and data.json):</p>
+				<p>Backup all MuPiBox-Data (media-files and everything of the Configuration-Backup):</p>
 
 				<input id="saveForm" class="button_text" type="submit" name="fullbackupdownload" value="Download Full-Backup" onclick="window.open('./fullbackup.php', '_blank');" />
 			</li>
