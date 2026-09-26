@@ -14,9 +14,13 @@ ion-back-button {
 }
 
 .cover-card img {
+    display: block;
     width: 350px;
     max-width: 350px !important;
     min-width: 350px !important;
+    // square like the card: a portrait cover was cut off at the bottom; now it is shown whole
+    height: 350px;
+    object-fit: contain;
     margin: 0 auto !important;
 }
 
