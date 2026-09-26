@@ -84,7 +84,96 @@ const coverCacheService = new CoverCacheService(path.join(process.cwd(), 'cache'
 const onlineCovers = new OnlineCovers(
   path.join(process.cwd(), 'cache', 'online-covers'),
   () => (getMupiboxConfigSync()?.mupibox as { onlineCovers?: boolean } | undefined)?.onlineCovers === true,
+  (key) => saveOnlineCoverToFolder(key),
 )
+// mupibox.onlineCoversSave: a found cover is also stored as cover.jpg in the album folder (NAS: needs write permission)
+const onlineCoversSaveEnabled = () =>
+  (getMupiboxConfigSync()?.mupibox as { onlineCoversSave?: boolean } | undefined)?.onlineCoversSave === true
+const ONLINE_COVER_FILE_NAME = 'cover.jpg'
+
+// Stores a found online cover as cover.jpg in its album folder - only when the folder has no picture of its own, never
+// over an existing file (WebDAV "Overwrite: F", local "wx"). Then the album has its cover on the NAS / on disk for
+// every player, not just in this box's cache. A NAS account without write permission is noted ('denied').
+async function saveOnlineCoverToFolder(key: string, evenIfDenied = false): Promise<void> {
+  if (!onlineCoversSaveEnabled()) return
+  const entry = onlineCovers.get(key)
+  if (entry?.status !== 'found' || !entry.file) return
+  if (entry.savedTo === 'nas' || entry.savedTo === 'local' || (entry.savedTo === 'denied' && !evenIfDenied)) return
+  const source = onlineCovers.filePath(entry.file)
+  if (!source) return
+  const data = await readFile(source)
+  const type = key.slice(0, key.indexOf(':'))
+  const folder = key.slice(key.indexOf(':') + 1)
+
+  if (type === 'nas') {
+    if (!(await nasPathSelected(folder))) return
+    const session = await getActiveNasSession()
+    if (!session) return
+    const files = await withNasSession((s) => nasListFilesLive(s, folder))
+    if (!files || pickCoverImage(files)) return // not readable now, or it has a picture meanwhile
+    const response = await nasFetch(session, `${nasUrl(session, folder)}/${ONLINE_COVER_FILE_NAME}`, {
+      method: 'PUT',
+      headers: { Authorization: session.auth, 'Content-Type': 'image/jpeg', Overwrite: 'F' },
+      body: data,
+      signal: AbortSignal.timeout(20000),
+    })
+    await response.arrayBuffer().catch(() => undefined)
+    if (response.ok) {
+      onlineCovers.update(key, { savedTo: 'nas' })
+      nasListCache.delete(normalizeNasPath(folder))
+      console.log(`${new Date().toLocaleString()}: [OnlineCovers] saved ${folder}/${ONLINE_COVER_FILE_NAME} on the NAS`)
+    } else if (response.status === 401 || response.status === 403 || response.status === 405) {
+      onlineCovers.update(key, { savedTo: 'denied' })
+      console.log(`${new Date().toLocaleString()}: [OnlineCovers] no write permission on the NAS for ${folder} (${response.status})`)
+    } else {
+      console.warn(`${new Date().toLocaleString()}: [OnlineCovers] saving ${folder}/${ONLINE_COVER_FILE_NAME} failed: HTTP ${response.status}`)
+    }
+    return
+  }
+
+  if (type === 'local') {
+    const rel = libraryRel(folder)
+    if (!rel || libraryFindCover(await libraryListFiles(rel))) return
+    try {
+      await writeFile(path.join(libraryRoot, rel, ONLINE_COVER_FILE_NAME), data, { flag: 'wx' })
+      onlineCovers.update(key, { savedTo: 'local' })
+      console.log(`${new Date().toLocaleString()}: [OnlineCovers] saved ${rel}/${ONLINE_COVER_FILE_NAME}`)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EACCES') onlineCovers.update(key, { savedTo: 'denied' })
+      else console.warn(`${new Date().toLocaleString()}: [OnlineCovers] saving ${rel}/${ONLINE_COVER_FILE_NAME} failed: ${error}`)
+    }
+  }
+}
+
+// Discarding a cover that was stored in its album folder removes that file again - only our own: same size as the
+// cover we stored (a picture put there by hand meanwhile stays).
+async function removeSavedOnlineCover(key: string): Promise<void> {
+  const entry = onlineCovers.get(key)
+  if (!entry?.file || (entry.savedTo !== 'nas' && entry.savedTo !== 'local')) return
+  const source = onlineCovers.filePath(entry.file)
+  const size = source ? (await stat(source).catch(() => undefined))?.size : undefined
+  if (size === undefined) return
+  const folder = key.slice(key.indexOf(':') + 1)
+  if (entry.savedTo === 'nas') {
+    const session = await getActiveNasSession()
+    if (!session) return
+    const files = await withNasSession((s) => nasListFilesLive(s, folder))
+    const ours = files?.find((f) => f.name === ONLINE_COVER_FILE_NAME && f.additional?.size === size)
+    if (!ours) return
+    const response = await nasFetch(session, nasUrl(session, ours.path), {
+      method: 'DELETE',
+      headers: { Authorization: session.auth },
+      signal: AbortSignal.timeout(15000),
+    })
+    await response.arrayBuffer().catch(() => undefined)
+    nasListCache.delete(normalizeNasPath(folder))
+    return
+  }
+  const rel = libraryRel(folder)
+  if (!rel) return
+  const localFile = path.join(libraryRoot, rel, ONLINE_COVER_FILE_NAME)
+  if ((await stat(localFile).catch(() => undefined))?.size === size) await rm(localFile, { force: true })
+}
 
 const mupiboxConfigPath = '/etc/mupibox/mupiboxconfig.json'
 const mupiboxConfigDir = path.dirname(mupiboxConfigPath)
@@ -1061,9 +1150,37 @@ app.get('/api/online-cover/:file', (req, res) => {
 app.get('/api/online-covers', localOnly, (_req, res) => {
   res.json({ success: true, entries: onlineCovers.list() })
 })
-app.post('/api/online-covers/reject', localOnly, (req, res) => {
+app.post('/api/online-covers/reject', localOnly, async (req, res) => {
   const key = typeof req.body?.key === 'string' ? req.body.key : ''
+  await removeSavedOnlineCover(key).catch((error) =>
+    console.warn(`${new Date().toLocaleString()}: [OnlineCovers] removing the stored cover of ${key} failed: ${error}`),
+  )
   res.json({ success: onlineCovers.reject(key) })
+})
+// Stores every found cover not stored yet (e.g. after switching the option on, or after write permission was given
+// on the NAS) - in the background, one after the other.
+let onlineCoversSaving = false
+app.post('/api/online-covers/save-all', localOnly, (_req, res) => {
+  if (!onlineCoversSaveEnabled()) {
+    res.json({ success: false, error: 'Saving covers into the album folders is switched off.' })
+    return
+  }
+  const keys = onlineCovers
+    .list()
+    .filter((e) => e.status === 'found' && e.savedTo !== 'nas' && e.savedTo !== 'local')
+    .map((e) => e.key)
+  res.json({ success: true, queued: onlineCoversSaving ? 0 : keys.length })
+  if (onlineCoversSaving) return
+  onlineCoversSaving = true
+  void (async () => {
+    for (const key of keys) {
+      await saveOnlineCoverToFolder(key, true).catch((error) =>
+        console.warn(`${new Date().toLocaleString()}: [OnlineCovers] storing ${key}: ${error}`),
+      )
+    }
+  })().finally(() => {
+    onlineCoversSaving = false
+  })
 })
 app.post('/api/online-covers/retry', localOnly, (req, res) => {
   res.json({ success: true, cleared: onlineCovers.retry(req.body?.alsoRejected === true) })
@@ -3502,11 +3619,11 @@ function nasPeekCertificate(base: string, timeoutMs = 8000): Promise<NasCertific
 async function nasFetch(
   session: NasSession,
   url: string,
-  init: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal } = {},
+  init: { method?: string; headers?: Record<string, string>; body?: string | Buffer; signal?: AbortSignal } = {},
 ): Promise<Response> {
   const target = new URL(url)
   if (!session.fingerprint || target.protocol !== 'https:') {
-    return await fetch(url, init)
+    return await fetch(url, { ...init, body: init.body as RequestInit['body'] })
   }
   const fingerprint = session.fingerprint
   const socket = await new Promise<tls.TLSSocket>((resolve, reject) => {

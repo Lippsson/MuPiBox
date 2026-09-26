@@ -27,6 +27,9 @@ export interface OnlineCoverEntry {
   series: string
   album: string
   at: number
+  // Stored as cover.jpg in the album folder itself (mupibox.onlineCoversSave): 'nas' / 'local', or 'denied' when the
+  // NAS account may not write there.
+  savedTo?: 'nas' | 'local' | 'denied'
 }
 
 interface Candidate {
@@ -150,6 +153,8 @@ export class OnlineCovers {
   constructor(
     private readonly dir: string,
     private readonly isEnabled: () => boolean,
+    // called after a cover was found (stores it in the album folder, when switched on)
+    private readonly onFound?: (key: string) => Promise<void>,
   ) {
     this.indexPath = path.join(dir, 'index.json')
     try {
@@ -185,12 +190,23 @@ export class OnlineCovers {
       .sort((a, b) => b.at - a.at)
   }
 
+  get(key: string): OnlineCoverEntry | undefined {
+    return this.index[key]
+  }
+
+  update(key: string, change: Partial<OnlineCoverEntry>): void {
+    const entry = this.index[key]
+    if (!entry) return
+    this.index[key] = { ...entry, ...change }
+    this.scheduleSave()
+  }
+
   /** A wrong cover: the picture goes, and this album is never looked up again. */
   reject(key: string): boolean {
     const entry = this.index[key]
     if (!entry) return false
     if (entry.file) fs.rmSync(path.join(this.dir, entry.file), { force: true })
-    this.index[key] = { ...entry, status: 'rejected', file: undefined, at: Date.now() }
+    this.index[key] = { ...entry, status: 'rejected', file: undefined, savedTo: undefined, at: Date.now() }
     this.scheduleSave()
     return true
   }
@@ -221,6 +237,11 @@ export class OnlineCovers {
         if (!job) break
         try {
           this.index[job.key] = await this.lookUp(job.series, job.album)
+          if (this.index[job.key].status === 'found' && this.onFound) {
+            await this.onFound(job.key).catch((error) =>
+              console.warn(`${new Date().toLocaleString()}: [OnlineCovers] storing ${job.album}: ${(error as Error).message}`),
+            )
+          }
         } catch (error) {
           // network trouble: not remembered, it is tried again the next time the album is shown
           console.warn(`${new Date().toLocaleString()}: [OnlineCovers] ${job.album}: ${(error as Error).message}`)

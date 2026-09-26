@@ -43,10 +43,21 @@
 	include ('includes/header.php');
 
 	if (isset($_POST['online_covers_save'])) {
+		$ocSaveBefore = (($data['mupibox']['onlineCoversSave'] ?? false) === true);
 		$data['mupibox']['onlineCovers'] = isset($_POST['onlineCovers']);
+		$data['mupibox']['onlineCoversSave'] = isset($_POST['onlineCoversSave']);
 		$ocError = '';
 		if (save_mupiboxconfig($data, $ocError)) {
 			$CHANGE_TXT = $CHANGE_TXT . "<li>Online covers " . ($data['mupibox']['onlineCovers'] ? 'switched on' : 'switched off') . "</li>";
+			$CHANGE_TXT = $CHANGE_TXT . "<li>Saving them into the album folders " . ($data['mupibox']['onlineCoversSave'] ? 'switched on' : 'switched off') . "</li>";
+			if ($data['mupibox']['onlineCoversSave'] && !$ocSaveBefore) {
+				// switched on: the covers found so far are stored too (the backend sees the new setting a moment later)
+				sleep(1);
+				$ocResult = ocApiCall("$ocBackend/online-covers/save-all", new stdClass());
+				if (!empty($ocResult['success'])) {
+					$CHANGE_TXT = $CHANGE_TXT . "<li>" . (int)($ocResult['queued'] ?? 0) . " covers found so far are being stored in their album folders.</li>";
+				}
+			}
 		} else {
 			$CHANGE_TXT = $CHANGE_TXT . "<li>ERROR: the setting could not be saved: " . htmlspecialchars($ocError) . "</li>";
 		}
@@ -55,6 +66,13 @@
 	if (isset($_POST['online_cover_reject'])) {
 		$ocResult = ocApiCall("$ocBackend/online-covers/reject", array('key' => (string)($_POST['online_cover_key'] ?? '')));
 		$CHANGE_TXT = $CHANGE_TXT . (!empty($ocResult['success']) ? "<li>Cover discarded - this album is not looked up again.</li>" : "<li>ERROR: the cover could not be discarded.</li>");
+		$change = 1;
+	}
+	if (isset($_POST['online_covers_save_all'])) {
+		$ocResult = ocApiCall("$ocBackend/online-covers/save-all", new stdClass());
+		$CHANGE_TXT = $CHANGE_TXT . (!empty($ocResult['success'])
+			? "<li>" . (int)($ocResult['queued'] ?? 0) . " covers are being stored in their album folders. Reload this page in a moment to see the result.</li>"
+			: "<li>ERROR: " . htmlspecialchars((string)($ocResult['error'] ?? 'the MuPiBox backend could not be reached.')) . "</li>");
 		$change = 1;
 	}
 	if (isset($_POST['online_covers_retry'])) {
@@ -178,10 +196,15 @@
 	$ocEnabled = (($data['mupibox']['onlineCovers'] ?? false) === true);
 	$ocList = ocApiCall("$ocBackend/online-covers");
 	$ocEntries = is_array($ocList['entries'] ?? null) ? $ocList['entries'] : array();
+	$ocSaveEnabled = (($data['mupibox']['onlineCoversSave'] ?? false) === true);
 	$ocCount = array('found' => 0, 'none' => 0, 'rejected' => 0);
+	$ocSavedCount = 0;
+	$ocDeniedCount = 0;
 	foreach ($ocEntries as $ocEntry) {
 		$ocStatus = $ocEntry['status'] ?? '';
 		if (isset($ocCount[$ocStatus])) $ocCount[$ocStatus]++;
+		if ($ocStatus === 'found' && in_array($ocEntry['savedTo'] ?? '', array('nas', 'local'), true)) $ocSavedCount++;
+		if ($ocStatus === 'found' && ($ocEntry['savedTo'] ?? '') === 'denied') $ocDeniedCount++;
 	}
 ?>
 <form class="appnitro" method="post" action="cover.php">
@@ -195,6 +218,12 @@
 			<label class="labelchecked" for="onlineCovers">Look up covers online:&nbsp; &nbsp;
 				<input type="checkbox" id="onlineCovers" name="onlineCovers" value="1" <?= $ocEnabled ? 'checked="checked"' : '' ?> />
 			</label>
+			<label class="labelchecked" for="onlineCoversSave">Also save them as cover.jpg in the album folder:&nbsp; &nbsp;
+				<input type="checkbox" id="onlineCoversSave" name="onlineCoversSave" value="1" <?= $ocSaveEnabled ? 'checked="checked"' : '' ?> />
+			</label>
+			<p><small>Only into folders without any picture, an existing file is never replaced. On the NAS this needs write
+			permission for the MuPiBox account on that shared folder; without it the cover stays on the box only.
+			Discarding a cover removes the cover.jpg the box stored.</small></p>
 			<input type="submit" class="button_text" value="Save" name="online_covers_save">
 			<p>Found: <?= $ocCount['found'] ?> &nbsp;|&nbsp; No match: <?= $ocCount['none'] ?> &nbsp;|&nbsp; Discarded: <?= $ocCount['rejected'] ?></p>
 		</li>
@@ -204,6 +233,12 @@
 			</label>
 			<input type="submit" class="button_text" value="Look up albums without a match again" name="online_covers_retry">
 		</li>
+		<?php if ($ocSaveEnabled && $ocCount['found'] > $ocSavedCount) { ?>
+		<li class="li_norm">
+			<p>Stored in the album folder: <?= $ocSavedCount ?> of <?= $ocCount['found'] ?><?= $ocDeniedCount > 0 ? ' &nbsp;|&nbsp; NAS without write permission: ' . $ocDeniedCount : '' ?></p>
+			<input type="submit" class="button_text" value="Store the other found covers now" name="online_covers_save_all">
+		</li>
+		<?php } ?>
 	</ul>
 </form>
 <?php
@@ -219,7 +254,11 @@
 			print "<img src='cover.php?online_cover=" . $ocEntry['file'] . "' style='width:180px;height:180px;object-fit:cover;' loading='lazy' alt=''>";
 			print "<p style='margin:4px 0;'><b>" . htmlspecialchars((string)($ocEntry['album'] ?? '')) . "</b><br>";
 			print "<small>" . $ocWhere . ": " . htmlspecialchars((string)($ocEntry['series'] ?? '')) . "<br>";
-			print $ocSource . ": " . htmlspecialchars((string)($ocEntry['matchedArtist'] ?? '')) . " - " . htmlspecialchars((string)($ocEntry['matchedTitle'] ?? '')) . "</small></p>";
+			print $ocSource . ": " . htmlspecialchars((string)($ocEntry['matchedArtist'] ?? '')) . " - " . htmlspecialchars((string)($ocEntry['matchedTitle'] ?? '')) . "</small>";
+			$ocSaved = (string)($ocEntry['savedTo'] ?? '');
+			if ($ocSaved === 'nas' || $ocSaved === 'local') print "<br><small style='color:#2a7a3a;'>&#10003; stored as cover.jpg in the album folder</small>";
+			elseif ($ocSaved === 'denied') print "<br><small style='color:#a05a00;'>no write permission - kept on the box only</small>";
+			print "</p>";
 			print "<input type=\"hidden\" name=\"online_cover_key\" value=\"" . htmlspecialchars($ocKey, ENT_QUOTES) . "\">";
 			print "<input type=\"submit\" class=\"button_text\" value=\"Discard (wrong cover)\" name=\"online_cover_reject\">";
 			print "</form></div>";
