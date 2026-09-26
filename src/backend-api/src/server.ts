@@ -1147,66 +1147,106 @@ app.get('/api/online-cover/:file', (req, res) => {
 })
 
 // For the admin interface (Cover page): what was found, throw away a wrong one, look up the misses again.
-// All albums without a picture of their own are looked up, not only the ones shown on the box: every selected NAS
-// folder and the local library are walked through (listings are cached, the lookups themselves stay one at a time).
-// When switched on, after "look up again", a few minutes after the start and then once a day (new folders on the NAS).
+//
+// The library walk goes through every selected NAS folder (and, for online covers, the local library):
+//  - NAS: it renews the folder index (see nasFolderFacts) bottom-up from the listings it reads anyway, makes the
+//    thumbnail of every album's own cover (so a list of 200 albums shows its covers at once, from the SD), and
+//  - asks for an online cover for albums without a picture (when switched on) - not only the albums shown.
+// A few minutes after every start of the box and every 6 hours while it runs (the box is usually off at night).
+// Reading ~3700 folders takes a few minutes; thumbnails and online lookups are only made for what is new or changed.
 const onlineCoverScan = { running: false, folders: 0, finishedAt: 0 }
 
+// A listing for the walk: one failed request (WiFi hiccup) marks the NAS offline for 30 s, and every folder after it
+// failed at once - the first scan stopped after 164 of about 2100 folders. So: wait for that to pass, try 3 times.
+async function listForWalk(
+  folder: string,
+  listFiles: (f: string) => Promise<NasFileEntry[]>,
+): Promise<NasFileEntry[] | undefined> {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await listFiles(folder)
+    } catch (error) {
+      if (attempt === 3) {
+        console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] library walk: cannot read ${folder}: ${error}`)
+        return undefined
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, nasOfflineUntil - Date.now()) + 5000))
+    }
+  }
+  return undefined
+}
+
+// One NAS folder and everything below it; returns the folder's facts (stored in the index).
+async function nasIndexWalk(folder: string, version: string | undefined, depth: number, hidden: string[]): Promise<NasFolderFacts | undefined> {
+  if (depth > 8 || nasIsHidden(normalizeNasPath(folder), hidden)) return undefined
+  const files = await listForWalk(folder, nasListFiles)
+  if (!files) return undefined
+  onlineCoverScan.folders++
+  const subfolders = nasRealSubfolders(files)
+  const childFacts = new Map<string, NasFolderFacts>()
+  for (const sub of subfolders) {
+    const facts = await nasIndexWalk(sub.path, sub.version, depth + 1, hidden)
+    if (facts) childFacts.set(sub.path, facts)
+  }
+  const audio = nasHasAudio(files)
+  // as folderIsContainer(): with titles of its own only when a subfolder holds audio (or albums) itself
+  const container =
+    subfolders.length > 0 && (!audio || [...childFacts.values()].some((f) => f.audio || f.container))
+  const own = pickCoverImage(files)
+  let below: string | undefined
+  if (!own) {
+    // as nasFindCoverBelow(): the first picture in one of the first five subfolders (a "Scans" folder too)
+    for (const sub of files.filter((f) => f.isdir).slice(0, 5)) {
+      const known = childFacts.get(sub.path)
+      below = known ? known.own : pickCoverImage((await listForWalk(sub.path, nasListFiles)) ?? [])?.path
+      if (below) break
+    }
+  }
+  const facts: NasFolderFacts = { v: version, audio, container, own: own?.path, ownV: own?.version, below, at: Date.now() }
+  nasFolderIndexStore(normalizeNasPath(folder), facts)
+  if (own) {
+    await nasCoverThumbnail(own.path, NAS_COVER_THUMB_SIZE, own.version).catch(() => undefined)
+  }
+  // an album (or a folder with titles of its own next to subfolders) without a picture
+  if (audio && !own) onlineAlbumCover('nas', folder)
+  return facts
+}
+
 async function scanAlbumsForOnlineCovers(): Promise<void> {
-  if (onlineCoverScan.running || !onlineCovers.isOn()) return
+  if (onlineCoverScan.running) return
   onlineCoverScan.running = true
   onlineCoverScan.folders = 0
   try {
-    const visit = async (
-      type: 'nas' | 'local',
-      folder: string,
-      listFiles: (f: string) => Promise<NasFileEntry[]>,
-      skip: (f: string) => boolean,
-      depth: number,
-    ): Promise<void> => {
-      if (depth > 8 || skip(folder)) return
-      // One failed listing (WiFi hiccup) marks the NAS offline for 30 s, and every folder after it failed at once -
-      // the first scan stopped after 164 of about 2100 folders. So: wait for that to pass, and try up to 3 times.
-      let files: NasFileEntry[] | undefined
-      for (let attempt = 1; attempt <= 3 && !files; attempt++) {
-        try {
-          files = await listFiles(folder)
-        } catch (error) {
-          if (attempt === 3) {
-            console.warn(`${new Date().toLocaleString()}: [OnlineCovers] album scan: cannot read ${folder}: ${error}`)
-            return
-          }
-          await new Promise((resolve) => setTimeout(resolve, Math.max(0, nasOfflineUntil - Date.now()) + 5000))
-        }
-      }
-      if (!files) return
-      onlineCoverScan.folders++
-      // an album (or a folder with titles of its own next to subfolders) without a picture
-      if (nasHasAudio(files) && !pickCoverImage(files)) onlineAlbumCover(type, folder)
-      for (const sub of nasRealSubfolders(files)) {
-        await visit(type, sub.path, listFiles, skip, depth + 1)
-      }
-    }
     const nas = nasSettings(await getMupiboxConfig())
     const hidden = (nas?.hiddenFolders ?? []).map(normalizeNasPath)
-    for (const folder of nas?.artistFolders ?? []) {
-      await visit('nas', normalizeNasPath(folder), nasListFiles, (f) => nasIsHidden(normalizeNasPath(f), hidden), 0)
+    if ((nas?.artistFolders ?? []).length > 0 && (await getActiveNasSession())) {
+      for (const folder of nas?.artistFolders ?? []) {
+        await nasIndexWalk(normalizeNasPath(folder), undefined, 0, hidden)
+      }
     }
-    for (const category of libraryCategories) {
-      await visit('local', category, libraryListFiles, () => false, 0)
+    if (onlineCovers.isOn()) {
+      const visitLocal = async (folder: string, depth: number): Promise<void> => {
+        if (depth > 8) return
+        const files = await listForWalk(folder, libraryListFiles)
+        if (!files) return
+        onlineCoverScan.folders++
+        if (nasHasAudio(files) && !pickCoverImage(files)) onlineAlbumCover('local', folder)
+        for (const sub of nasRealSubfolders(files)) await visitLocal(sub.path, depth + 1)
+      }
+      for (const category of libraryCategories) await visitLocal(category, 0)
     }
   } catch (error) {
-    console.warn(`${new Date().toLocaleString()}: [OnlineCovers] album scan failed: ${error}`)
+    console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] library walk failed: ${error}`)
   } finally {
     onlineCoverScan.running = false
     onlineCoverScan.finishedAt = Date.now()
     console.log(
-      `${new Date().toLocaleString()}: [OnlineCovers] album scan: ${onlineCoverScan.folders} folders, ${onlineCovers.pending()} albums waiting for their lookup`,
+      `${new Date().toLocaleString()}: [MuPiBox-Server] library walk: ${onlineCoverScan.folders} folders, ${onlineCovers.pending()} albums waiting for an online cover`,
     )
   }
 }
-setTimeout(() => void scanAlbumsForOnlineCovers(), 5 * 60 * 1000).unref()
-setInterval(() => void scanAlbumsForOnlineCovers(), 24 * 3600 * 1000).unref()
+setTimeout(() => void scanAlbumsForOnlineCovers(), 3 * 60 * 1000).unref()
+setInterval(() => void scanAlbumsForOnlineCovers(), 6 * 3600 * 1000).unref()
 
 app.get('/api/online-covers', localOnly, (_req, res) => {
   res.json({
@@ -1217,10 +1257,6 @@ app.get('/api/online-covers', localOnly, (_req, res) => {
   })
 })
 app.post('/api/online-covers/scan', localOnly, (_req, res) => {
-  if (!onlineCovers.isOn()) {
-    res.json({ success: false, error: 'Online covers are switched off.' })
-    return
-  }
   void scanAlbumsForOnlineCovers()
   res.json({ success: true })
 })
@@ -4262,18 +4298,104 @@ async function folderIsContainer(
   return false
 }
 
-// Builds the ready-to-use Media entry for one NAS folder (live listing). ownFilesOnly: the entry that plays the audio
-// files of a container folder itself (first in its listing).
+// --- Folder index ------------------------------------------------------------------------------------------------
+// What a folder list needs of each subfolder - does it hold audio, is it a folder of albums, which picture - is kept
+// here together with the subfolder's ETag/date on the NAS, on the SD card (survives a restart). Opening a folder then
+// reads just that one folder live (so new or removed folders show at once) and takes every unchanged subfolder from
+// the index; only new or changed ones are read. Before, every subfolder was read (and below it looked for covers
+// and albums): an artist with 200 albums needed 200+ requests and several seconds. The library walk (see
+// scanAlbumsForOnlineCovers) renews the index in the background.
+interface NasFolderFacts {
+  v?: string // the folder's ETag/date on the NAS when these facts were read
+  audio: boolean
+  container: boolean // see folderIsContainer()
+  own?: string // its own picture
+  ownV?: string // that picture's ETag/date (thumbnail cache key)
+  below?: string // without an own picture: one found in a subfolder (see nasFindCoverBelow)
+  at: number
+}
+const nasFolderIndexFile = path.join(process.cwd(), 'cache', 'nas-folders.json')
+let nasFolderIndex: Record<string, NasFolderFacts> = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(nasFolderIndexFile, 'utf8')) as Record<string, NasFolderFacts>
+  } catch {
+    return {}
+  }
+})()
+let nasFolderIndexTimer: NodeJS.Timeout | undefined
+
+function nasFolderIndexStore(key: string, facts: NasFolderFacts): void {
+  nasFolderIndex[key] = facts
+  nasFolderIndexSaveSoon()
+}
+
+function nasFolderIndexClear(): void {
+  nasFolderIndex = {}
+  nasFolderIndexSaveSoon()
+}
+
+// Written at most once a minute (SD card), atomically.
+function nasFolderIndexSaveSoon(): void {
+  if (nasFolderIndexTimer) return
+  nasFolderIndexTimer = setTimeout(() => {
+    nasFolderIndexTimer = undefined
+    void (async () => {
+      try {
+        await mkdir(path.dirname(nasFolderIndexFile), { recursive: true })
+        const tmp = `${nasFolderIndexFile}.tmp`
+        await writeFile(tmp, JSON.stringify(nasFolderIndex))
+        await rename(tmp, nasFolderIndexFile)
+      } catch (error) {
+        console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] saving the NAS folder index failed: ${error}`)
+      }
+    })()
+  }, 60 * 1000)
+}
+
+// The facts of one folder: from the index when its ETag/date (from the listing of the folder above) is unchanged,
+// else read now. Without a version (the marked top folders) always read now.
+async function nasFolderFacts(folderPath: string, version?: string): Promise<NasFolderFacts> {
+  const key = normalizeNasPath(folderPath)
+  const known = nasFolderIndex[key]
+  if (known && version !== undefined && known.v === version) return known
+  const files = await nasListFiles(folderPath)
+  const own = pickCoverImage(files)
+  const facts: NasFolderFacts = {
+    v: version,
+    audio: nasHasAudio(files),
+    container: await folderIsContainer(files, nasListFiles),
+    own: own?.path,
+    ownV: own?.version,
+    below: own ? undefined : await nasFindCoverBelow(files),
+    at: Date.now(),
+  }
+  nasFolderIndexStore(key, facts)
+  return facts
+}
+
+// Builds the ready-to-use Media entry for one NAS folder. ownFilesOnly: the entry that plays the audio files of a
+// container folder itself (first in its listing).
 async function nasBuildMediaEntry(
   folderPath: string,
   artistName: string,
   title: string,
   fallbackCoverPath?: string,
   ownFilesOnly = false,
+  version?: string,
 ): Promise<Record<string, unknown>> {
-  const files = await nasListFiles(folderPath)
-  const ownCoverPath = nasFindCoverImage(files) ?? (ownFilesOnly ? undefined : await nasFindCoverBelow(files))
-  const isContainer = !ownFilesOnly && (await folderIsContainer(files, nasListFiles))
+  return nasEntryFromFacts(folderPath, artistName, title, await nasFolderFacts(folderPath, version), fallbackCoverPath, ownFilesOnly)
+}
+
+function nasEntryFromFacts(
+  folderPath: string,
+  artistName: string,
+  title: string,
+  facts: NasFolderFacts,
+  fallbackCoverPath?: string,
+  ownFilesOnly = false,
+): Record<string, unknown> {
+  const ownCoverPath = facts.own ?? (ownFilesOnly ? undefined : facts.below)
+  const isContainer = !ownFilesOnly && facts.container
   // An album without a picture: its own cover from the internet beats the series' picture from the folder above.
   const cover =
     (ownCoverPath ? nasStreamUrl(ownCoverPath) : undefined) ??
@@ -5003,18 +5125,21 @@ app.get('/api/nas/children', nasPathWithinSelection, async (req, res) => {
     const parentName = folderPath.split('/').filter(Boolean).pop() ?? folderPath
     const parentCoverPath = nasFindCoverImage(files)
 
+    const subfolders = files.filter((f) => f.isdir && !nasIsHidden(f.path, hiddenFolders))
+    const factsOf = new Map<string, NasFolderFacts>()
     const entries = await mapWithConcurrency(
-      files.filter((f) => f.isdir && !nasIsHidden(f.path, hiddenFolders)),
+      subfolders,
       4,
       async (sub) => {
         try {
-          // A folder with nothing to play (only pictures, an eBook, ...) is no tile. The listing is cached, so
-          // nasBuildMediaEntry() does not ask the NAS again.
-          const subFiles = await nasListFiles(sub.path)
-          if (!nasHasAudio(subFiles) && !(await folderIsContainer(subFiles, nasListFiles))) {
+          // from the folder index when the subfolder is unchanged (its ETag/date in this listing)
+          const facts = await nasFolderFacts(sub.path, sub.version)
+          factsOf.set(sub.path, facts)
+          // A folder with nothing to play (only pictures, an eBook, ...) is no tile.
+          if (!facts.audio && !facts.container) {
             return null
           }
-          return await nasBuildMediaEntry(sub.path, parentName, sub.name, parentCoverPath)
+          return nasEntryFromFacts(sub.path, parentName, sub.name, facts, parentCoverPath)
         } catch (error) {
           console.error(
             `${new Date().toLocaleString()}: [MuPiBox-Server] Skipping unreadable NAS folder ${sub.path}: ${error}`,
@@ -5029,9 +5154,11 @@ app.get('/api/nas/children', nasPathWithinSelection, async (req, res) => {
       res.status(503).json([])
       return
     }
-    // Audio files next to the subfolders: first comes an entry that plays them.
-    if (nasHasAudio(files) && (await folderIsContainer(files, nasListFiles))) {
-      entries.unshift(await nasBuildMediaEntry(folderPath, parentName, parentName, undefined, true))
+    // Audio files next to subfolders with albums: first comes an entry that plays them.
+    if (nasHasAudio(files) && subfolders.some((sub) => factsOf.get(sub.path)?.audio || factsOf.get(sub.path)?.container)) {
+      const own = pickCoverImage(files)
+      const ownFacts: NasFolderFacts = { audio: true, container: false, own: own?.path, ownV: own?.version, at: Date.now() }
+      entries.unshift(nasEntryFromFacts(folderPath, parentName, parentName, ownFacts, undefined, true))
     }
     res.json(entries.filter((entry) => entry))
   } catch (error) {
@@ -5404,26 +5531,8 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
   }
 
   try {
-    const headers: Record<string, string> = { Authorization: session.auth }
-    if (req.headers.range) {
-      headers.Range = req.headers.range as string
-    }
-
     if (thumbSize && isThumbnailable(filePath) && !req.headers.range) {
-      // The picture's ETag / date from the (cached) listing of its folder: the thumbnail is made again only when
-      // the picture changed. The day as key made every shown cover again each day, as a new file on the SD.
-      const parentFiles = await nasListFiles(filePath.split('/').slice(0, -1).join('/') || '/').catch(() => [])
-      const version = parentFiles.find((f) => f.path === normalizeNasPath(filePath))?.version
-      const seed = `nas|${filePath}|${version ?? Math.floor(Date.now() / 86400000)}`
-      const thumb = await getThumbnail(`nas:${filePath}`, thumbSize, seed, async () => {
-        const full = await nasFetch(session, nasUrl(session, filePath), { headers, signal: AbortSignal.timeout(20000) })
-        if (!full.ok) {
-          return undefined
-        }
-        const tmp = path.join('/tmp', `.nasthumb-${crypto.randomBytes(6).toString('hex')}${path.extname(filePath)}`)
-        await writeFile(tmp, Buffer.from(await full.arrayBuffer()))
-        return tmp
-      })
+      const thumb = await nasCoverThumbnail(filePath, thumbSize, await nasPictureVersion(filePath), session)
       if (thumb) {
         await sendThumbnail(res, thumb)
         return
@@ -5436,6 +5545,45 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
     res.status(502).send('Failed to fetch file from NAS.')
   }
 })
+
+// The size the lists ask their covers in (nasStreamUrl: &w=400) - the library walk makes these in advance.
+const NAS_COVER_THUMB_SIZE = 400
+
+// A picture's ETag/date: from the folder index (its folder's own cover), else from the (cached) listing of its
+// folder. The thumbnail is made again only when the picture changed (the day as key made every shown cover again each
+// day, as a new file on the SD).
+async function nasPictureVersion(filePath: string): Promise<string | undefined> {
+  const normalized = normalizeNasPath(filePath)
+  const folder = normalized.split('/').slice(0, -1).join('/') || '/'
+  const facts = nasFolderIndex[folder]
+  if (facts?.own === normalized && facts.ownV) return facts.ownV
+  const files = await nasListFiles(folder).catch(() => [] as NasFileEntry[])
+  return files.find((f) => f.path === normalized)?.version
+}
+
+// The thumbnail of a NAS picture (made once, kept on the SD, see getThumbnail).
+async function nasCoverThumbnail(
+  filePath: string,
+  size: number,
+  version: string | undefined,
+  session?: NasSession,
+): Promise<string | undefined> {
+  const seed = `nas|${filePath}|${version ?? Math.floor(Date.now() / 86400000)}`
+  return await getThumbnail(`nas:${filePath}`, size, seed, async () => {
+    const active = session ?? (await getActiveNasSession()) ?? nasLastSession
+    if (!active) return undefined
+    const full = await nasFetch(active, nasUrl(active, filePath), {
+      headers: { Authorization: active.auth },
+      signal: AbortSignal.timeout(20000),
+    })
+    if (!full.ok) {
+      return undefined
+    }
+    const tmp = path.join('/tmp', `.nasthumb-${crypto.randomBytes(6).toString('hex')}${path.extname(filePath)}`)
+    await writeFile(tmp, Buffer.from(await full.arrayBuffer()))
+    return tmp
+  })
+}
 
 // --- Download local ("Download selected") ---------------------------------
 
@@ -5960,6 +6108,7 @@ app.post('/api/nas/covers/refresh', localOnly, async (_req, res) => {
   try {
     nasCoverVersion = Date.now()
     nasListCacheClear()
+    nasFolderIndexClear()
     const thumbnails = await clearThumbnails()
     const local = await nasRefreshLocalCovers()
     res.json({ success: true, thumbnails, covers: local.updated, nasReachable: local.reachable })
