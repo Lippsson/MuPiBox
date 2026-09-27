@@ -10,6 +10,7 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
+  IonInput,
   IonItem,
   IonLabel,
   IonList,
@@ -20,10 +21,11 @@ import {
 import { addIcons } from 'ionicons'
 import { Subscription, catchError, EMPTY, switchMap, timer } from 'rxjs'
 import { addOutline, arrowBackOutline, lockClosedOutline, refresh, scanOutline, wifiOutline } from 'ionicons/icons'
+import Keyboard from 'simple-keyboard'
 import { MediaService } from '../media.service'
 import { PlayerCmds, PlayerService } from '../player.service'
 import { WifiService } from '../wifi.service'
-import type { WifiBandChoice, WifiNetwork, WifiStatus } from '../wifi-network'
+import type { EthernetConfig, NetworkLink, WifiBandChoice, WifiNetwork, WifiStatus } from '../wifi-network'
 
 @Component({
   selector: 'app-wifi',
@@ -43,6 +45,7 @@ import type { WifiBandChoice, WifiNetwork, WifiStatus } from '../wifi-network'
     IonItem,
     IonLabel,
     IonSpinner,
+    IonInput,
   ],
 })
 export class WifiPage {
@@ -81,6 +84,22 @@ export class WifiPage {
   protected loading = signal(true)
   protected readonly signalBars = [1, 2, 3, 4]
 
+  // Which link carries the default route: WiFi (the view above) or ethernet (a LAN cable), in which case
+  // "Networks in range" is hidden and a DHCP/STATIC form is shown instead, modeled on dietpi-config's network
+  // adapter screen.
+  protected linkType = signal<'wifi' | 'ethernet' | 'none' | null>(null)
+  private linkPolling?: Subscription
+  protected ethernet = signal<EthernetConfig | null>(null)
+  protected ethernetLoading = signal(true)
+  protected ethernetSaving = signal(false)
+  protected lanDhcp = signal(true)
+  protected lanIp = signal('')
+  protected lanMask = signal('')
+  protected lanGateway = signal('')
+  protected lanDns = signal('')
+  private lanKeyboard?: Keyboard
+  private lanSelectedInput: any
+
   constructor(
     private mediaService: MediaService,
     private wifiService: WifiService,
@@ -96,10 +115,140 @@ export class WifiPage {
     this.statusPolling = timer(0, 3000)
       .pipe(switchMap(() => this.wifiService.getStatus().pipe(catchError(() => EMPTY))))
       .subscribe((status) => this.status.set(status))
+    this.linkPolling = timer(0, 3000)
+      .pipe(switchMap(() => this.wifiService.getLink().pipe(catchError(() => EMPTY))))
+      .subscribe((link) => {
+        const wasEthernet = this.linkType() === 'ethernet'
+        this.linkType.set(link.type)
+        if (link.type === 'ethernet' && !wasEthernet) {
+          this.loadEthernetConfig()
+        }
+      })
   }
 
   ionViewWillLeave() {
     this.statusPolling?.unsubscribe()
+    this.linkPolling?.unsubscribe()
+    this.lanKeyboard?.destroy()
+    this.lanKeyboard = undefined
+  }
+
+  // Reads the ethernet DHCP/STATIC config and fills the form with it (a running edit is discarded, same as
+  // the WiFi networks list is reloaded from scratch after a change).
+  protected loadEthernetConfig() {
+    this.ethernetLoading.set(true)
+    this.wifiService.getEthernetConfig().subscribe({
+      next: (config) => {
+        this.ethernet.set(config)
+        this.lanDhcp.set(config.dhcp)
+        this.lanIp.set(config.ip)
+        this.lanMask.set(config.mask)
+        this.lanGateway.set(config.gateway)
+        this.lanDns.set(config.dns)
+        this.ethernetLoading.set(false)
+      },
+      error: () => this.ethernetLoading.set(false),
+    })
+  }
+
+  protected async saveEthernetConfig() {
+    this.ethernetSaving.set(true)
+    this.wifiService
+      .setEthernetConfig({
+        dhcp: this.lanDhcp(),
+        ip: this.lanIp().trim(),
+        mask: this.lanMask().trim(),
+        gateway: this.lanGateway().trim(),
+        dns: this.lanDns().trim(),
+      })
+      .subscribe({
+        next: () => {
+          this.ethernetSaving.set(false)
+          this.loadEthernetConfig()
+        },
+        error: async (error) => {
+          this.ethernetSaving.set(false)
+          const alert = await this.alertController.create({
+            cssClass: 'alert',
+            header: 'Could not save',
+            message: typeof error?.error === 'string' && error.error ? error.error : 'The network settings could not be saved.',
+            buttons: ['OK'],
+          })
+          await alert.present()
+        },
+      })
+  }
+
+  async ethernetRestartButtonPressed() {
+    const alert = await this.alertController.create({
+      cssClass: 'alert',
+      header: 'Restart network',
+      message: 'Apply the settings and restart the network connection? The box may briefly lose network access.',
+      buttons: [
+        {
+          text: 'Restart',
+          handler: () => {
+            this.wifiService.restartEthernet().subscribe(() => setTimeout(() => this.loadEthernetConfig(), 3000))
+          },
+        },
+        {
+          text: 'Cancel',
+        },
+      ],
+    })
+
+    await alert.present()
+  }
+
+  // Onscreen keyboard for the Static IP/Mask/Gateway/DNS fields (the kiosk has no physical keyboard), built
+  // only once the user actually taps into one of them: its container only exists in the DOM once STATIC is
+  // chosen, and simple-keyboard needs it present when constructed.
+  private ensureLanKeyboard() {
+    if (this.lanKeyboard) {
+      return
+    }
+    this.lanKeyboard = new Keyboard('.lan-simple-keyboard', {
+      onChange: (input) => {
+        if (this.lanSelectedInput) {
+          this.lanSelectedInput.value = input
+        }
+        this.applyLanField(this.lanSelectedInput?.name, input)
+      },
+      theme: 'hg-theme-default hg-theme-ios',
+      layout: {
+        default: ['1 2 3', '4 5 6', '7 8 9', '{bksp} 0 .'],
+      },
+      display: { '{bksp}': '⌫' },
+    })
+  }
+
+  private applyLanField(name: string | undefined, value: string) {
+    switch (name) {
+      case 'lan_ip':
+        this.lanIp.set(value)
+        break
+      case 'lan_mask':
+        this.lanMask.set(value)
+        break
+      case 'lan_gateway':
+        this.lanGateway.set(value)
+        break
+      case 'lan_dns':
+        this.lanDns.set(value)
+        break
+    }
+  }
+
+  protected lanFocusChanged(event: any) {
+    this.ensureLanKeyboard()
+    this.lanSelectedInput = event.target
+    this.lanKeyboard?.setOptions({ inputName: event.target.name })
+    this.lanKeyboard?.setInput(event.target.value ?? '', event.target.name)
+  }
+
+  protected lanInputChanged(event: any) {
+    this.lanKeyboard?.setInput(event.target.value ?? '', event.target.name)
+    this.applyLanField(event.target.name, event.target.value ?? '')
   }
 
   // Scans for networks in range (takes a few seconds) and merges them with the saved ones.
