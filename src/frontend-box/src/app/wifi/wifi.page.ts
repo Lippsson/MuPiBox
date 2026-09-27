@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core'
+import { Component, computed, effect, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
 import {
@@ -121,6 +121,18 @@ export class WifiPage {
     private router: Router,
   ) {
     addIcons({ refresh, wifiOutline, addOutline, arrowBackOutline, lockClosedOutline, scanOutline, gitNetworkOutline })
+    // Built as soon as the Static form appears (not just on first focus) - otherwise reloading straight
+    // into STATIC mode, or switching STATIC -> DHCP -> STATIC again, left the keypad panel empty until
+    // the user happened to tap a field. The setTimeout defers past the current change detection pass, so
+    // the .lan-simple-keyboard container (just added by the @if) is guaranteed to exist in the DOM first.
+    effect(() => {
+      if (this.showStaticLayout()) {
+        setTimeout(() => this.ensureLanKeyboard())
+      } else {
+        this.lanKeyboard?.destroy()
+        this.lanKeyboard = undefined
+      }
+    })
   }
 
   ionViewWillEnter() {

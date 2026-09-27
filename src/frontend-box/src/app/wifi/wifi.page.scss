@@ -36,6 +36,13 @@ ion-toolbar {
     --padding-top: 16px;
 }
 
+// Hides the visible scrollbar track/thumb only - the content stays scrollable by finger/drag as before.
+// scrollbar-width is a real CSS property applied straight to the exposed "scroll" part; chaining
+// ::-webkit-scrollbar after ::part() does not actually hide anything in this Chromium build.
+ion-content.wifi-content::part(scroll) {
+    scrollbar-width: none;
+}
+
 .status-card {
     --background: #16202a;
     padding: 20px;
@@ -258,8 +265,9 @@ ion-toolbar {
             --padding-end: 10px;
             font-size: 14px;
 
+            // Same size as "Mode" above (this item's own font-size, inherited by ion-label there).
             ion-label {
-                font-size: 11px;
+                font-size: 18px;
                 margin-bottom: 1px;
             }
 
@@ -316,7 +324,7 @@ ion-toolbar {
     // evenly across the 4 rows, so the row height in .lan-static-row is the only number to tune.
     .lan-simple-keyboard {
         flex: 1;
-        background-color: rgba(220, 220, 220, 1.0);
+        background-color: #1a1a1a;
         padding: 5px;
         border-radius: 5px;
         display: flex;
@@ -324,7 +332,7 @@ ion-toolbar {
     }
 
     .lan-simple-keyboard .hg-button {
-        color: var(--ion-color-light);
+        color: #ffffff;
     }
 
     .lan-simple-keyboard.hg-theme-default {
@@ -366,8 +374,8 @@ ion-toolbar {
         border-radius: 5px;
         box-sizing: border-box;
         padding: 0;
-        background: white;
-        border-bottom: 1px solid #b5b5b5;
+        background: #2a2a2a;
+        border-bottom: 1px solid #444444;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -375,14 +383,15 @@ ion-toolbar {
         box-shadow: none;
         font-weight: 400;
         font-size: 18px;
+        color: #ffffff;
     }
 
     .lan-simple-keyboard.hg-theme-ios.hg-theme-default .hg-button:active,
     .lan-simple-keyboard.hg-theme-ios.hg-theme-default .hg-button:focus {
-        background: #e4e4e4;
+        background: #3a3a3a;
     }
 
     .lan-simple-keyboard.hg-theme-ios.hg-theme-default .hg-button.hg-functionBtn {
-        background-color: #adb5bb;
+        background-color: #555555;
     }
 }
