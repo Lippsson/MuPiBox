@@ -37,3 +37,22 @@ export interface WifiConfiguredNetwork {
   ssid: string
   current: boolean
 }
+
+/** Which link carries the default route right now. */
+export interface NetworkLink {
+  type: 'wifi' | 'ethernet' | 'none'
+  interface?: string
+}
+
+/** The ethernet stanza of /etc/network/interfaces, for the LAN view of the WiFi settings page. */
+export interface EthernetConfig {
+  interface: string
+  dhcp: boolean
+  ip: string
+  mask: string
+  gateway: string
+  dns: string
+  /** The live address/gateway, may differ from ip/gateway right after a config change until restart. */
+  currentIp?: string
+  currentGateway?: string
+}
