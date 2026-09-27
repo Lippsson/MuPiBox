@@ -263,9 +263,13 @@ ion-content.wifi-content::part(scroll) {
             --min-height: 0;
             --padding-start: 10px;
             --padding-end: 10px;
-            // Equal breathing room above the label and below the input, same distance both sides.
-            --padding-top: 6px;
-            --padding-bottom: 6px;
+            // Equal breathing room above the label and below the input, same distance both sides. The
+            // label's own line-height adds ~3px above the box-model padding that the input's line does
+            // not add below it, so top is set 3px lower than bottom to end up visually even (measured
+            // pixel-for-pixel on real screenshots: 6/6 rendered as 10px top vs 6-7px bottom; 3/9 rendered
+            // as 6px top vs 9px bottom - both confirm the same +3px top bias).
+            --padding-top: 5px;
+            --padding-bottom: 8px;
             font-size: 14px;
 
             // Same rendered size as "Mode" above (18px). Ionic scales a position="stacked" label to 75%
