@@ -246,7 +246,7 @@ ion-content.wifi-content::part(scroll) {
     .lan-static-row {
         display: flex;
         gap: 12px;
-        height: 216px;
+        height: 260px;
     }
 
     .lan-fields {
@@ -263,10 +263,18 @@ ion-content.wifi-content::part(scroll) {
             --min-height: 0;
             --padding-start: 10px;
             --padding-end: 10px;
+            // Equal breathing room above the label and below the input, same distance both sides.
+            --padding-top: 6px;
+            --padding-bottom: 6px;
             font-size: 14px;
 
-            // Same size as "Mode" above (this item's own font-size, inherited by ion-label there).
+            // Same rendered size as "Mode" above (18px). Ionic scales a position="stacked" label to 75%
+            // via a CSS transform - transform does not shrink the space it reserves in layout, so with
+            // font-size alone compensated for that (a bigger 24px), the label pushed the input below it
+            // out of the item entirely. Turning the transform off is the only way to get both a normal
+            // font-size and normal (not oversized) label height at once.
             ion-label {
+                transform: none !important;
                 font-size: 18px;
                 margin-bottom: 1px;
             }
@@ -353,6 +361,10 @@ ion-content.wifi-content::part(scroll) {
 
     .lan-simple-keyboard.hg-theme-ios.hg-theme-default .hg-row .hg-button {
         flex-grow: 1;
+        // simple-keyboard's own CSS gives plain character keys (hg-standardBtn) an explicit width that
+        // {bksp} does not get, so with the default flex-basis: auto the last row's 3 buttons started
+        // from different sizes before growing - basis: 0 makes every button in every row start equal.
+        flex-basis: 0;
         cursor: pointer;
         max-width: initial;
     }
