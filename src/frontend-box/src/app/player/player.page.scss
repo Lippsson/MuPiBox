@@ -188,19 +188,38 @@ ion-back-button {
 ion-content.player-content.tracklist-active {
     --background: #000000 !important;
     --ion-background-color: #000000 !important;
+    // the list scrolls itself (see .km-tl-wrap / .tracklist below) - no visible scrollbar of ion-content's own
+    --overflow: hidden;
 }
 
 .tracklist {
     background: #000000;
     font-size: 2rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    // touch/wheel scrolling stays, only the scrollbar itself is invisible (Firefox, then Chromium - the kiosk browser)
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
 
     ion-item {
-        --background: transparent;
-        --border-color: #d3d3d3 !important;
+        // rows as pills, like the kids' themes: a plain grey background instead of a divider line
+        --background: #565656;
+        --border-width: 0 !important;
+        --inner-border-width: 0 !important;
         --align-items: center;
+        --padding-top: 10px;
+        --padding-bottom: 10px;
         font-size: 2rem;
+        margin: 0 0 8px;
+        border-radius: 20px;
 
         &.current-track {
+            // the playing row: the same grey, only lighter
+            --background: color-mix(in srgb, #565656, white 30%);
             --color: var(--ion-color-primary, #2dd6c7);
         }
     }
@@ -241,9 +260,14 @@ ion-content.player-content.tracklist-active {
     padding: 40px;
 }
 
-// Wrapper of the track list: only the km themes lay it out (mini cover and "Zu" on the left), else it is not there.
+// Wrapper of the track list. The km themes also place a mini cover and "Zu" beside it (see the override below);
+// here it just takes the content's full space (ion-content's own scroll is off, see .tracklist-active above) so
+// the list itself can scroll without a visible scrollbar.
 .km-tl-wrap {
-    display: contents;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 // --- km themes (children's themes, body.km - see theme/km-theme.service.ts) ------------------------------------
