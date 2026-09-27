@@ -36,6 +36,16 @@ reaches_router() {
 	[ -n "${gw}" ] && ping -nqc 2 -W 2 -I "$1" "${gw}" > /dev/null 2>&1
 }
 
+# LAN takes priority over WiFi for the default route. Without this check, a WiFi adapter that just
+# connected always grabbed the default route below (ip route replace default ... dev "${usb}"), even
+# while eth0 already had a working connection - found on a live box where WiFi silently took over
+# routing every time it (re)connected, with LAN plugged in and working the whole time. WiFi is still
+# brought up and connected as normal by the rest of this script either way, so it is an immediate,
+# already-connected fallback the moment LAN actually goes down.
+lan_connected() {
+	has_ip eth0 && reaches_router eth0
+}
+
 wait_for_ip() {
 	local i="$1" seconds="$2" n
 	for ((n = 0; n < seconds; n += 2)); do
@@ -111,26 +121,35 @@ if ! { has_ip "${usb}" && reaches_router "${usb}"; }; then
 fi
 
 if [ -n "${onboard}" ] && [ "${onboard}" != "${usb}" ] && has_ip "${onboard}"; then
-	gw=$(router_address)
-	log "${usb} is connected - default route to ${gw} via ${usb}, taking ${onboard} down"
-	ip route replace default via "${gw}" dev "${usb}" >> "${LOG}" 2>&1
-	ifdown "${onboard}" >> "${LOG}" 2>&1 9>&-
-	# The onboard link is gone: is the box still reachable through the USB adapter? A short outage
-	# (something else may restart the link right now) is waited for before the onboard WiFi is brought back.
-	reachable=0
-	for ((i = 0; i < 20; i += 2)); do
-		sleep 2
-		if reaches_router "${usb}"; then
-			reachable=1
-			break
+	if lan_connected; then
+		# LAN already handles all traffic: onboard is taken down for USB's sake as usual, but USB does
+		# not need to prove it survives alone (the "make before break" check below) - LAN is the safety
+		# net here, not USB, so there is nothing to revive onboard for if USB alone were to fail.
+		log "${usb} is connected - LAN is up, leaving it as the default route; taking ${onboard} down"
+		ifdown "${onboard}" >> "${LOG}" 2>&1 9>&-
+	else
+		gw=$(router_address)
+		log "${usb} is connected - default route to ${gw} via ${usb}, taking ${onboard} down"
+		ip route replace default via "${gw}" dev "${usb}" >> "${LOG}" 2>&1
+		ifdown "${onboard}" >> "${LOG}" 2>&1 9>&-
+		# The onboard link is gone: is the box still reachable through the USB adapter? A short outage
+		# (something else may restart the link right now) is waited for before the onboard WiFi is brought back.
+		reachable=0
+		for ((i = 0; i < 20; i += 2)); do
+			sleep 2
+			if reaches_router "${usb}"; then
+				reachable=1
+				break
+			fi
+		done
+		if [ "${reachable}" -ne 1 ]; then
+			log "${usb} does not reach the router without ${onboard} - bringing ${onboard} back"
+			bring_up "${onboard}"
 		fi
-	done
-	if [ "${reachable}" -ne 1 ]; then
-		log "${usb} does not reach the router without ${onboard} - bringing ${onboard} back"
-		bring_up "${onboard}"
 	fi
-elif [ -n "${gw:=$(router_address)}" ] && ! ip -4 route show default dev "${usb}" | grep -q default; then
-	# Only the USB adapter is up: it needs the default route itself.
+elif [ -n "${gw:=$(router_address)}" ] && ! ip -4 route show default dev "${usb}" | grep -q default && ! lan_connected; then
+	# Only the USB adapter is up (no onboard fallback) and LAN is not already handling it: it needs
+	# the default route itself.
 	ip route replace default via "${gw}" dev "${usb}" >> "${LOG}" 2>&1
 fi
 exit 0
