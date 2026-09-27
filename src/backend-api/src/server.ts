@@ -2185,6 +2185,32 @@ app.get('/api/network/link', async (_req, res) => {
   }
 })
 
+// Turns the onboard WiFi radio on or off via rfkill (mupi_onboard_wifi.sh), independent of a USB WiFi
+// adapter that may also be plugged in. Immediate, no reboot needed.
+const ONBOARD_WIFI_SCRIPT = '/usr/local/bin/mupibox/mupi_onboard_wifi.sh'
+
+app.get('/api/network/onboard-wifi', async (_req, res) => {
+  try {
+    const { stdout } = await execFileAsync(ONBOARD_WIFI_SCRIPT, ['status'])
+    const status = stdout.trim()
+    res.json({ available: status !== 'unavailable', enabled: status === 'on' })
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error reading onboard WiFi state: ${error}`)
+    res.status(500).send('error')
+  }
+})
+
+app.post('/api/network/onboard-wifi', async (req, res) => {
+  try {
+    const enabled = Boolean(req.body?.enabled)
+    await execFileAsync('sudo', [ONBOARD_WIFI_SCRIPT, enabled ? 'on' : 'off'])
+    res.send('ok')
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error toggling onboard WiFi: ${error}`)
+    res.status(500).send('error')
+  }
+})
+
 app.get('/api/wifi/configured', async (_req, res) => {
   try {
     const { stdout } = await execFileAsync('sudo', ['wpa_cli', '-i', await wifiInterface(), 'list_networks'])
@@ -2534,6 +2560,13 @@ app.get('/api/network/ethernet', async (_req, res) => {
     } catch {
       // no default route on this interface
     }
+    let linkUp = false
+    try {
+      const { stdout } = await execFileAsync('ip', ['link', 'show', parsed.iface])
+      linkUp = /<[^>]*\bUP\b[^>]*>/.test(stdout)
+    } catch {
+      // interface unknown
+    }
     res.json({
       interface: parsed.iface,
       dhcp: parsed.dhcp,
@@ -2543,6 +2576,7 @@ app.get('/api/network/ethernet', async (_req, res) => {
       dns: parsed.dns,
       currentIp,
       currentGateway,
+      linkUp,
     })
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error reading ethernet config: ${error}`)
@@ -2583,6 +2617,25 @@ app.post('/api/network/ethernet', async (req, res) => {
     res.send('ok')
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error saving ethernet config: ${error}`)
+    res.status(500).send('error')
+  }
+})
+
+// Brings the ethernet port itself up or down (administratively), independent of its DHCP/STATIC config.
+// Immediate - unlike /restart above, this can cut a connection that is currently going over this same
+// interface (e.g. the admin page reached through the LAN cable) with no way to undo it remotely.
+app.post('/api/network/ethernet/power', async (req, res) => {
+  try {
+    const enabled = Boolean(req.body?.enabled)
+    const parsed = parseEthernetStanza(await readInterfacesFile())
+    if (!parsed) {
+      res.status(404).send('no ethernet interface configured')
+      return
+    }
+    await execFileAsync('sudo', ['ip', 'link', 'set', parsed.iface, enabled ? 'up' : 'down'])
+    res.send('ok')
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error powering ethernet ${req.body?.enabled ? 'up' : 'down'}: ${error}`)
     res.status(500).send('error')
   }
 })

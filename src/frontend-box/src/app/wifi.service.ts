@@ -2,7 +2,15 @@ import { HttpClient } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import { Observable } from 'rxjs'
 import { environment } from '../environments/environment'
-import type { EthernetConfig, NetworkLink, WifiBandChoice, WifiConfiguredNetwork, WifiNetwork, WifiStatus } from './wifi-network'
+import type {
+  EthernetConfig,
+  NetworkLink,
+  OnboardWifiStatus,
+  WifiBandChoice,
+  WifiConfiguredNetwork,
+  WifiNetwork,
+  WifiStatus,
+} from './wifi-network'
 
 @Injectable({
   providedIn: 'root',
@@ -56,5 +64,18 @@ export class WifiService {
 
   public restartEthernet(): Observable<string> {
     return this.http.post(`${environment.backend.apiUrl}/network/ethernet/restart`, {}, { responseType: 'text' })
+  }
+
+  /** Brings the ethernet port itself up or down - independent of its DHCP/STATIC config. */
+  public setEthernetPower(enabled: boolean): Observable<string> {
+    return this.http.post(`${environment.backend.apiUrl}/network/ethernet/power`, { enabled }, { responseType: 'text' })
+  }
+
+  public getOnboardWifi(): Observable<OnboardWifiStatus> {
+    return this.http.get<OnboardWifiStatus>(`${environment.backend.apiUrl}/network/onboard-wifi`)
+  }
+
+  public setOnboardWifi(enabled: boolean): Observable<string> {
+    return this.http.post(`${environment.backend.apiUrl}/network/onboard-wifi`, { enabled }, { responseType: 'text' })
   }
 }
