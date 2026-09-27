@@ -216,7 +216,7 @@ ion-content.player-content.tracklist-active {
         --padding-bottom: 10px;
         --padding-start: 20px;
         --padding-end: 20px;
-        font-size: 1.5rem;
+        font-size: 1rem;
         margin: 0 0 8px;
         border-radius: 20px;
 
@@ -228,7 +228,7 @@ ion-content.player-content.tracklist-active {
     }
 
     ion-label h2 {
-        font-size: 1.5rem;
+        font-size: 1rem;
         white-space: nowrap;
     }
 
@@ -243,18 +243,54 @@ ion-content.player-content.tracklist-active {
         border-radius: 50%;
         // the number badge: a few shades darker than the row itself (also on the lighter, playing row)
         background: color-mix(in srgb, #565656, black 20%);
-        font-size: 1.2rem;
+        font-size: 1rem;
         color: rgba(255, 255, 255, 0.85);
 
         ion-icon {
-            font-size: 1.2rem;
+            font-size: 1rem;
             color: var(--ion-color-primary, #2dd6c7);
         }
     }
 
     .track-duration {
         opacity: 0.7;
-        font-size: 1.2rem;
+        font-size: 1rem;
+    }
+}
+
+// Cover (75x75) and "Back" button to the left of the normal (non-km) track list. Tapping "Back" goes back to
+// the player, same as closeTrackList() everywhere else.
+.tl-side {
+    flex: 0 0 auto;
+    width: 75px;
+    padding: 16px 0 0 16px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+
+    img {
+        width: 75px;
+        height: 75px;
+        border-radius: 8px;
+        object-fit: cover;
+        background: #565656;
+    }
+}
+
+.tl-back {
+    width: 75px;
+    height: 34px;
+    border: 0;
+    border-radius: 17px;
+    background: #565656;
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.9rem;
+
+    &:active {
+        background: color-mix(in srgb, #565656, white 20%);
     }
 }
 
@@ -268,14 +304,14 @@ ion-content.player-content.tracklist-active {
     padding: 40px;
 }
 
-// Wrapper of the track list. The km themes also place a mini cover and "Zu" beside it (see the override below);
-// here it just takes the content's full space (ion-content's own scroll is off, see .tracklist-active above) so
-// the list itself can scroll without a visible scrollbar.
+// Wrapper of the track list: the cover + "Back" button (.tl-side) on the left, the list on the right. It takes
+// the content's full space (ion-content's own scroll is off, see .tracklist-active above) so the list itself can
+// scroll without a visible scrollbar. The km themes lay out their own side panel and list sizing (see below).
 .km-tl-wrap {
     position: absolute;
     inset: 0;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
 }
 
 // --- km themes (children's themes, body.km - see theme/km-theme.service.ts) ------------------------------------
