@@ -198,6 +198,8 @@ ion-content.player-content.tracklist-active {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    padding-right: 20px; // the same 20px gap as on the left (screen edge to cover, cover to list), now on the right
+
     // touch/wheel scrolling stays, only the scrollbar itself is invisible (Firefox, then Chromium - the kiosk browser)
     scrollbar-width: none;
 
@@ -221,9 +223,9 @@ ion-content.player-content.tracklist-active {
         border-radius: 20px;
 
         &.current-track {
-            // the playing row: the same grey, only lighter
+            // the playing row: the same grey, only lighter - the text itself stays white, only the row and the
+            // play icon in the badge (below) mark it as the one playing
             --background: color-mix(in srgb, #565656, white 30%);
-            --color: var(--ion-color-primary, #2dd6c7);
         }
     }
 
