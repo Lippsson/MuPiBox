@@ -13,8 +13,19 @@ ion-toolbar {
     }
     ion-button {
         height: 70px !important;
-        width: 70px !important;
+        width: 60px !important;
         font-size: 20px !important;
+    }
+
+    // Onboard-WiFi / LAN on-off indicators: gray when off, glowing green when on.
+    .power-icon {
+        color: #6b6f76;
+        transition: color 0.2s ease, filter 0.2s ease;
+
+        &.on {
+            color: var(--ion-color-success, #2dd36f);
+            filter: drop-shadow(0 0 4px var(--ion-color-success, #2dd36f));
+        }
     }
 }
 
@@ -210,7 +221,6 @@ ion-toolbar {
 // LAN mode: DHCP/STATIC form modeled on dietpi-config's network adapter screen.
 .lan-config {
     background: transparent;
-    padding-bottom: 260px; // room for the onscreen keyboard docked at the bottom
 
     ion-item {
         --background: #16202a;
@@ -220,7 +230,45 @@ ion-toolbar {
     }
 
     .mode-item {
-        --min-height: 60px;
+        --min-height: 46px;
+        margin-bottom: 4px;
+    }
+
+    // Static IP/Mask/Gateway/DNS in the left third, the onscreen keypad filling the other two thirds -
+    // sized to fit in one screen with no scrolling (ion-content's scrollY is off while this is shown).
+    .lan-static-row {
+        display: flex;
+        gap: 12px;
+        height: 216px;
+    }
+
+    .lan-fields {
+        flex: 0 0 33%;
+        max-width: 33%;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        ion-item {
+            flex: 1;
+            min-height: 0;
+            margin-bottom: 0;
+            --min-height: 0;
+            --padding-start: 10px;
+            --padding-end: 10px;
+            font-size: 14px;
+
+            ion-label {
+                font-size: 11px;
+                margin-bottom: 1px;
+            }
+
+            ion-input {
+                font-size: 16px;
+                --padding-top: 0;
+                --padding-bottom: 0;
+            }
+        }
     }
 
     // DHCP | STATIC, same look as the WiFi band toggle
@@ -263,16 +311,16 @@ ion-toolbar {
 // encapsulated styles never reach them - ::ng-deep is needed here, unlike the WiFi add page which turns
 // encapsulation off for the whole component.
 :host ::ng-deep {
+    // Fills the right two thirds of .lan-static-row, next to .lan-fields on the left third. Its height
+    // comes from the row (flex child, stretches by default); hg-row/hg-button below divide that height
+    // evenly across the 4 rows, so the row height in .lan-static-row is the only number to tune.
     .lan-simple-keyboard {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 9999;
+        flex: 1;
         background-color: rgba(220, 220, 220, 1.0);
         padding: 5px;
-        max-width: 400px;
-        margin: 0 auto;
+        border-radius: 5px;
+        display: flex;
+        flex-direction: column;
     }
 
     .lan-simple-keyboard .hg-button {
@@ -287,6 +335,14 @@ ion-toolbar {
         width: 100%;
     }
 
+    // simple-keyboard wraps the rows in this element; without it stretching, the rows keep their
+    // natural height and leave the rest of the keyboard's flex-column height empty below them.
+    .lan-simple-keyboard .hg-rows {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+    }
+
     .lan-simple-keyboard.hg-theme-ios.hg-theme-default .hg-row .hg-button {
         flex-grow: 1;
         cursor: pointer;
@@ -295,6 +351,7 @@ ion-toolbar {
 
     .lan-simple-keyboard.hg-theme-ios .hg-row {
         display: flex;
+        flex: 1;
     }
 
     .lan-simple-keyboard.hg-theme-ios .hg-row:not(:last-child) {
@@ -303,12 +360,6 @@ ion-toolbar {
 
     .lan-simple-keyboard.hg-theme-ios .hg-row .hg-button:not(:last-child) {
         margin-right: 5px;
-    }
-
-    .lan-simple-keyboard.hg-theme-ios.hg-theme-default {
-        background-color: rgba(220, 220, 220, 1.0);
-        padding: 5px;
-        border-radius: 5px;
     }
 
     .lan-simple-keyboard.hg-theme-ios.hg-theme-default .hg-button {
@@ -324,8 +375,6 @@ ion-toolbar {
         box-shadow: none;
         font-weight: 400;
         font-size: 18px;
-        height: 48px;
-        min-height: 48px;
     }
 
     .lan-simple-keyboard.hg-theme-ios.hg-theme-default .hg-button:active,

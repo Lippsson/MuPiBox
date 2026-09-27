@@ -55,4 +55,13 @@ export interface EthernetConfig {
   /** The live address/gateway, may differ from ip/gateway right after a config change until restart. */
   currentIp?: string
   currentGateway?: string
+  /** Whether the port itself is administratively up (see /api/network/ethernet/power). */
+  linkUp?: boolean
+}
+
+/** Whether the onboard WiFi radio is on or off (rfkill), independent of a USB WiFi adapter. */
+export interface OnboardWifiStatus {
+  /** False when the box has no onboard WiFi adapter at all. */
+  available: boolean
+  enabled: boolean
 }

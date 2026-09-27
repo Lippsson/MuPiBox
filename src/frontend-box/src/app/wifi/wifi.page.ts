@@ -19,13 +19,13 @@ import {
   IonToolbar,
 } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons'
-import { Subscription, catchError, EMPTY, switchMap, timer } from 'rxjs'
-import { addOutline, arrowBackOutline, lockClosedOutline, refresh, scanOutline, wifiOutline } from 'ionicons/icons'
+import { Subscription, catchError, EMPTY, map, of, switchMap, timer } from 'rxjs'
+import { addOutline, arrowBackOutline, gitNetworkOutline, lockClosedOutline, refresh, scanOutline, wifiOutline } from 'ionicons/icons'
 import Keyboard from 'simple-keyboard'
 import { MediaService } from '../media.service'
 import { PlayerCmds, PlayerService } from '../player.service'
 import { WifiService } from '../wifi.service'
-import type { EthernetConfig, NetworkLink, WifiBandChoice, WifiNetwork, WifiStatus } from '../wifi-network'
+import type { EthernetConfig, NetworkLink, OnboardWifiStatus, WifiBandChoice, WifiNetwork, WifiStatus } from '../wifi-network'
 
 @Component({
   selector: 'app-wifi',
@@ -89,9 +89,22 @@ export class WifiPage {
   // adapter screen.
   protected linkType = signal<'wifi' | 'ethernet' | 'none' | null>(null)
   private linkPolling?: Subscription
+  // The Static IP/Mask/Gateway/DNS form is laid out to fit one screen exactly (fields + keypad side by
+  // side), so the page's own scrolling is turned off only while it is shown.
+  protected showStaticLayout = computed(() => this.linkType() === 'ethernet' && !this.lanDhcp())
   protected ethernet = signal<EthernetConfig | null>(null)
   protected ethernetLoading = signal(true)
   protected ethernetSaving = signal(false)
+
+  // Header icons: onboard WiFi on/off (rfkill) and the ethernet port on/off, both shown regardless of
+  // which link is currently active. Polled separately from `ethernet` above so a running edit in the
+  // LAN form below is never overwritten by this poll.
+  protected onboardWifi = signal<OnboardWifiStatus | null>(null)
+  private onboardWifiPolling?: Subscription
+  protected ethernetAvailable = signal(false)
+  protected ethernetLinkUp = signal(false)
+  protected ethernetInterfaceName = signal<string | undefined>(undefined)
+  private ethernetPowerPolling?: Subscription
   protected lanDhcp = signal(true)
   protected lanIp = signal('')
   protected lanMask = signal('')
@@ -107,7 +120,7 @@ export class WifiPage {
     private playerService: PlayerService,
     private router: Router,
   ) {
-    addIcons({ refresh, wifiOutline, addOutline, arrowBackOutline, lockClosedOutline, scanOutline })
+    addIcons({ refresh, wifiOutline, addOutline, arrowBackOutline, lockClosedOutline, scanOutline, gitNetworkOutline })
   }
 
   ionViewWillEnter() {
@@ -124,11 +137,32 @@ export class WifiPage {
           this.loadEthernetConfig()
         }
       })
+    this.onboardWifiPolling = timer(0, 3000)
+      .pipe(switchMap(() => this.wifiService.getOnboardWifi().pipe(catchError(() => EMPTY))))
+      .subscribe((status) => this.onboardWifi.set(status))
+    this.ethernetPowerPolling = timer(0, 3000)
+      .pipe(
+        switchMap(() =>
+          this.wifiService.getEthernetConfig().pipe(
+            map((config) => ({ ok: true as const, config })),
+            catchError(() => of({ ok: false as const })),
+          ),
+        ),
+      )
+      .subscribe((result) => {
+        this.ethernetAvailable.set(result.ok)
+        if (result.ok) {
+          this.ethernetLinkUp.set(result.config.linkUp ?? false)
+          this.ethernetInterfaceName.set(result.config.interface)
+        }
+      })
   }
 
   ionViewWillLeave() {
     this.statusPolling?.unsubscribe()
     this.linkPolling?.unsubscribe()
+    this.onboardWifiPolling?.unsubscribe()
+    this.ethernetPowerPolling?.unsubscribe()
     this.lanKeyboard?.destroy()
     this.lanKeyboard = undefined
   }
@@ -363,17 +397,34 @@ export class WifiPage {
     await alert.present()
   }
 
-  async enableWifiOnButtonPressed() {
+  // Onboard WiFi radio on/off (rfkill, immediate) - independent of a USB WiFi adapter that may also be
+  // plugged in. Turning it on is harmless so it needs no confirmation; turning it off can disconnect
+  // WiFi right away if the onboard adapter is the one currently in use.
+  protected onboardWifiTooltip = computed(() => {
+    const status = this.onboardWifi()
+    if (!status || !status.available) {
+      return 'Onboard WiFi'
+    }
+    return status.enabled ? 'Onboard WiFi is on - tap to turn it off' : 'Onboard WiFi is off - tap to turn it on'
+  })
+
+  async onboardWifiButtonPressed() {
+    const status = this.onboardWifi()
+    if (!status?.available) {
+      return
+    }
+    if (!status.enabled) {
+      this.setOnboardWifi(true)
+      return
+    }
     const alert = await this.alertController.create({
       cssClass: 'alert',
-      header: 'OnBoard-Wifi',
-      message: 'Enable OnBoard-Wifi.',
+      header: 'Turn off onboard WiFi',
+      message: 'Turn off the onboard WiFi radio? If it is the adapter currently in use, this disconnects WiFi immediately.',
       buttons: [
         {
-          text: 'Enable',
-          handler: () => {
-            this.playerService.sendCmd(PlayerCmds.ENABLEWIFI)
-          },
+          text: 'Turn off',
+          handler: () => this.setOnboardWifi(false),
         },
         {
           text: 'Cancel',
@@ -382,5 +433,46 @@ export class WifiPage {
     })
 
     await alert.present()
+  }
+
+  private setOnboardWifi(enabled: boolean) {
+    this.wifiService.setOnboardWifi(enabled).subscribe(() => {
+      this.wifiService.getOnboardWifi().subscribe((status) => this.onboardWifi.set(status))
+    })
+  }
+
+  // Ethernet port on/off (administrative link state, immediate) - independent of its DHCP/STATIC config.
+  // Turning it off while connected through that same cable cuts the connection with no way to undo it
+  // remotely, so it always asks first.
+  protected lanTooltip = computed(() =>
+    this.ethernetLinkUp() ? 'LAN (ethernet) is on - tap to turn it off' : 'LAN (ethernet) is off - tap to turn it on',
+  )
+
+  async lanPowerButtonPressed() {
+    if (!this.ethernetLinkUp()) {
+      this.setLanPower(true)
+      return
+    }
+    const alert = await this.alertController.create({
+      cssClass: 'alert',
+      header: 'Turn off LAN',
+      message:
+        'Turn off the ethernet port? If the box is connected through this cable right now, you will lose that connection immediately and need physical access to the box to turn it back on.',
+      buttons: [
+        {
+          text: 'Turn off',
+          handler: () => this.setLanPower(false),
+        },
+        {
+          text: 'Cancel',
+        },
+      ],
+    })
+
+    await alert.present()
+  }
+
+  private setLanPower(enabled: boolean) {
+    this.wifiService.setEthernetPower(enabled).subscribe(() => this.ethernetLinkUp.set(enabled))
   }
 }

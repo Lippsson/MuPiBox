@@ -15,15 +15,24 @@
         <ion-icon slot="icon-only" name="refresh"></ion-icon>
       </ion-button>
     </ion-buttons>
-    <ion-buttons slot="end">
-      <ion-button (click)="enableWifiOnButtonPressed()">
-        <ion-icon slot="icon-only" name="wifi-outline"></ion-icon>
-      </ion-button>
-    </ion-buttons>
+    @if (onboardWifi()?.available) {
+      <ion-buttons slot="end">
+        <ion-button (click)="onboardWifiButtonPressed()" [title]="onboardWifiTooltip()">
+          <ion-icon slot="icon-only" name="wifi-outline" class="power-icon" [class.on]="onboardWifi()?.enabled"></ion-icon>
+        </ion-button>
+      </ion-buttons>
+    }
+    @if (ethernetAvailable()) {
+      <ion-buttons slot="end">
+        <ion-button (click)="lanPowerButtonPressed()" [title]="lanTooltip()">
+          <ion-icon slot="icon-only" name="git-network-outline" class="power-icon" [class.on]="ethernetLinkUp()"></ion-icon>
+        </ion-button>
+      </ion-buttons>
+    }
   </ion-toolbar>
 </ion-header>
 
-<ion-content class="wifi-content">
+<ion-content class="wifi-content" [scrollY]="!showStaticLayout()">
   @if (linkType() === 'ethernet') {
     <ion-card class="status-card">
       <div class="status-row">
@@ -55,55 +64,59 @@
         </ion-item>
 
         @if (!lanDhcp()) {
-          <ion-item>
-            <ion-label position="stacked">Static IP</ion-label>
-            <ion-input
-              name="lan_ip"
-              type="text"
-              inputmode="decimal"
-              placeholder="192.168.1.100"
-              [value]="lanIp()"
-              (ionInput)="lanInputChanged($event)"
-              (ionFocus)="lanFocusChanged($event)"
-            ></ion-input>
-          </ion-item>
-          <ion-item>
-            <ion-label position="stacked">Static Mask</ion-label>
-            <ion-input
-              name="lan_mask"
-              type="text"
-              inputmode="decimal"
-              placeholder="255.255.255.0"
-              [value]="lanMask()"
-              (ionInput)="lanInputChanged($event)"
-              (ionFocus)="lanFocusChanged($event)"
-            ></ion-input>
-          </ion-item>
-          <ion-item>
-            <ion-label position="stacked">Static Gateway</ion-label>
-            <ion-input
-              name="lan_gateway"
-              type="text"
-              inputmode="decimal"
-              placeholder="192.168.1.1"
-              [value]="lanGateway()"
-              (ionInput)="lanInputChanged($event)"
-              (ionFocus)="lanFocusChanged($event)"
-            ></ion-input>
-          </ion-item>
-          <ion-item>
-            <ion-label position="stacked">Static DNS</ion-label>
-            <ion-input
-              name="lan_dns"
-              type="text"
-              inputmode="decimal"
-              placeholder="192.168.1.1"
-              [value]="lanDns()"
-              (ionInput)="lanInputChanged($event)"
-              (ionFocus)="lanFocusChanged($event)"
-            ></ion-input>
-          </ion-item>
-          <div class="lan-simple-keyboard"></div>
+          <div class="lan-static-row">
+            <div class="lan-fields">
+              <ion-item>
+                <ion-label position="stacked">Static IP</ion-label>
+                <ion-input
+                  name="lan_ip"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="192.168.1.100"
+                  [value]="lanIp()"
+                  (ionInput)="lanInputChanged($event)"
+                  (ionFocus)="lanFocusChanged($event)"
+                ></ion-input>
+              </ion-item>
+              <ion-item>
+                <ion-label position="stacked">Static Mask</ion-label>
+                <ion-input
+                  name="lan_mask"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="255.255.255.0"
+                  [value]="lanMask()"
+                  (ionInput)="lanInputChanged($event)"
+                  (ionFocus)="lanFocusChanged($event)"
+                ></ion-input>
+              </ion-item>
+              <ion-item>
+                <ion-label position="stacked">Static Gateway</ion-label>
+                <ion-input
+                  name="lan_gateway"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="192.168.1.1"
+                  [value]="lanGateway()"
+                  (ionInput)="lanInputChanged($event)"
+                  (ionFocus)="lanFocusChanged($event)"
+                ></ion-input>
+              </ion-item>
+              <ion-item>
+                <ion-label position="stacked">Static DNS</ion-label>
+                <ion-input
+                  name="lan_dns"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="192.168.1.1"
+                  [value]="lanDns()"
+                  (ionInput)="lanInputChanged($event)"
+                  (ionFocus)="lanFocusChanged($event)"
+                ></ion-input>
+              </ion-item>
+            </div>
+            <div class="lan-simple-keyboard"></div>
+          </div>
         }
 
         <div class="lan-actions">
