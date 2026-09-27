@@ -227,6 +227,12 @@ ion-content.player-content.tracklist-active {
         }
     }
 
+    ion-label {
+        // Ionic gives ion-label its own 10px top/bottom margin by default; on top of the item's own
+        // --padding-top/--padding-bottom that doubled the space between the text and the edge of the pill.
+        margin: 0 !important;
+    }
+
     ion-label h2 {
         font-size: 1rem;
         white-space: nowrap;
@@ -258,12 +264,13 @@ ion-content.player-content.tracklist-active {
     }
 }
 
-// Cover (75x75) and "Back" button to the left of the normal (non-km) track list. Tapping "Back" goes back to
-// the player, same as closeTrackList() everywhere else.
+// Cover (160x160) and "Back" button to the left of the normal (non-km) track list: 20px from the left edge of
+// the screen to the cover, 20px from the cover to the list. Tapping "Back" goes back to the player, same as
+// closeTrackList() everywhere else.
 .tl-side {
     flex: 0 0 auto;
-    width: 75px;
-    padding: 16px 0 0 16px;
+    margin-inline-end: 20px; // cover to list
+    padding: 16px 0 0 20px; // 20px from the left edge of the screen to the cover; width follows the 160px cover
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -271,8 +278,8 @@ ion-content.player-content.tracklist-active {
     gap: 12px;
 
     img {
-        width: 75px;
-        height: 75px;
+        width: 160px;
+        height: 160px;
         border-radius: 8px;
         object-fit: cover;
         background: #565656;
@@ -280,7 +287,7 @@ ion-content.player-content.tracklist-active {
 }
 
 .tl-back {
-    width: 75px;
+    width: 160px;
     height: 34px;
     border: 0;
     border-radius: 17px;
