@@ -46,6 +46,13 @@ lan_connected() {
 	has_ip eth0 && reaches_router eth0
 }
 
+# eth0's own gateway, from its own DHCP lease - needed to give it back the default route below while
+# some other interface still holds it (router_address only reads the CURRENT default route, or a lease
+# file if none exists at all; it cannot name eth0's gateway specifically once WiFi already has the route).
+eth0_gateway() {
+	grep -h "option routers" /var/lib/dhcp/dhclient.eth0.leases* 2>/dev/null | tail -n 1 | awk '{gsub(";", "", $3); print $3}'
+}
+
 wait_for_ip() {
 	local i="$1" seconds="$2" n
 	for ((n = 0; n < seconds; n += 2)); do
@@ -89,6 +96,19 @@ sleep 3 # let the driver finish setting up the adapter
 usb=$("${IFACE_TOOL}" usb)
 onboard=$("${IFACE_TOOL}" onboard)
 log "usb='${usb}' onboard='${onboard}'"
+
+# LAN takes priority: reclaim the default route for eth0 first, before any USB-vs-onboard WiFi
+# arbitration below, whenever eth0 is already connected but something else (WiFi, from before eth0 came
+# back up) currently holds the route. lan_connected() elsewhere in this script only ever stops WiFi from
+# taking the route away from an already-default eth0 - it does not hand the route back on its own once
+# WiFi has it, which left LAN sitting there connected but unused after eth0 reconnected.
+if lan_connected && ! ip -4 route show default dev eth0 | grep -q default; then
+	gw=$(eth0_gateway)
+	if [ -n "${gw}" ]; then
+		log "eth0 is connected - reclaiming the default route for LAN"
+		ip route replace default via "${gw}" dev eth0 >> "${LOG}" 2>&1
+	fi
+fi
 
 if [ -z "${usb}" ]; then
 	# No USB adapter: the onboard WiFi has to be up.
