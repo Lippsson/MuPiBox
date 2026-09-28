@@ -37,7 +37,13 @@
     <ion-card class="status-card">
       <div class="status-row">
         <div class="status-ssid">
-          <ion-icon name="wifi-outline"></ion-icon>
+          <svg class="lan-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="1" y="4" width="13" height="9" rx="1"></rect>
+            <path d="M5.5 13v2.5M6 18h3"></path>
+            <path d="M14 8.5h3"></path>
+            <rect x="17" y="6" width="6" height="5" rx="1"></rect>
+            <path d="M18.5 11v1.5M21.5 11v1.5"></path>
+          </svg>
           <div>
             <div class="ssid-name">LAN</div>
             <div class="ssid-detail">{{ ethernet()?.interface }}@if (ethernet(); as eth) { &middot; {{ eth.dhcp ? 'DHCP' : 'STATIC' }}}</div>

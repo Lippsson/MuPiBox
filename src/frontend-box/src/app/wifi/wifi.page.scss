@@ -66,6 +66,19 @@ ion-content.wifi-content::part(scroll) {
             color: var(--ion-color-primary, #2dd6c7);
         }
 
+        // A monitor connected to a small network switch - shown in the status card instead of the WiFi
+        // icon while on LAN, so the icon matches what "LAN" actually says next to it.
+        .lan-icon {
+            width: 32px;
+            height: 32px;
+            flex-shrink: 0;
+            fill: none;
+            stroke: var(--ion-color-primary, #2dd6c7);
+            stroke-width: 1.6;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
         .ssid-name {
             font-size: 20px;
             font-weight: 600;
