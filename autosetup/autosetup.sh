@@ -578,8 +578,12 @@ rm -Rf /home/dietpi/mupibox.zip /home/dietpi/MuPiBox-* >&3 2>&3
 	udevadm control --reload >&3 2>&3
 	mv -f ${MUPI_SRC}/config/services/mupi_mqtt.service /etc/systemd/system/mupi_mqtt.service >&3 2>&3
 	mv -f ${MUPI_SRC}/config/services/mupi_rotary.service /etc/systemd/system/mupi_rotary.service >&3 2>&3
+	# Some boards' onboard ethernet driver never emits a udev event for a carrier change, so
+	# 99-mupibox-eth.rules above does not fire there - this service reacts to the same event via
+	# "ip monitor link" (rtnetlink) instead, confirmed to work where the udev rule does not.
+	mv -f ${MUPI_SRC}/config/services/mupi_eth_watch.service /etc/systemd/system/mupi_eth_watch.service >&3 2>&3
 	systemctl daemon-reload >&3 2>&3
-	for service in mupi_wifi mupi_check_internet mupi_check_monitor mupi_idle_shutdown librespot smbd mupi_startstop pulseaudio mupi_splash mupi_powerled dietpi-dashboard; do
+	for service in mupi_wifi mupi_check_internet mupi_check_monitor mupi_idle_shutdown librespot smbd mupi_startstop pulseaudio mupi_splash mupi_powerled dietpi-dashboard mupi_eth_watch; do
 		systemctl enable ${service}.service >&3 2>&3
 		systemctl start ${service}.service >&3 2>&3
 	done

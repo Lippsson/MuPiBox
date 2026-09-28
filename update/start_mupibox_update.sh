@@ -696,6 +696,12 @@ rm -f /tmp/mupibox-update-failed
 		cp -f ${MUPI_SRC}/config/udev/99-mupibox-eth.rules /etc/udev/rules.d/99-mupibox-eth.rules >&3 2>&3
 		udevadm control --reload >&3 2>&3
 	fi
+	# Some boards' onboard ethernet driver never emits a udev event for a carrier change, so the rule
+	# above does not fire there - this service reacts to the same event via "ip monitor link" (rtnetlink)
+	# instead, confirmed to work where the udev rule does not: only versions that ship it
+	if [ "$RELEASE" = "dev" ] && [ -f ${MUPI_SRC}/config/services/mupi_eth_watch.service ]; then
+		mv -f ${MUPI_SRC}/config/services/mupi_eth_watch.service /etc/systemd/system/mupi_eth_watch.service >&3 2>&3
+	fi
 
 	systemctl daemon-reload >&3 2>&3
 	if systemctl list-unit-files dietpi-wifi-monitor.service 2>/dev/null | grep -q dietpi-wifi-monitor; then
@@ -709,6 +715,10 @@ rm -f /tmp/mupibox-update-failed
 	systemctl start mupi_powerled.service >&3 2>&3
 	systemctl enable dietpi-dashboard.service >&3 2>&3
 	systemctl start dietpi-dashboard.service >&3 2>&3
+	if [ -f /etc/systemd/system/mupi_eth_watch.service ]; then
+		systemctl enable mupi_eth_watch.service >&3 2>&3
+		systemctl restart mupi_eth_watch.service >&3 2>&3
+	fi
 	after=$(date +%s)
 	echo -e "## Restarting services  ##  finished after $((after - $before)) seconds" >&3 2>&3
 	STEP=$(($STEP + 1))

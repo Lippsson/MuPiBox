@@ -1,0 +1,12 @@
+[Unit]
+Description=Watches the ethernet cable (link/carrier) and re-evaluates LAN vs WiFi priority
+After=local-fs.target sysinit.target network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mupibox/mupi_eth_watch.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
