@@ -105,6 +105,11 @@
         <img [src]="shownCover()" alt="" (error)="coverFailed()">
         <button class="km-tl-close" (click)="closeTrackList()"><ion-icon name="close"></ion-icon>{{ displayTexts.text('closeShort') }}</button>
       </div>
+    } @else {
+      <div class="tl-side">
+        <img [src]="shownCover()" alt="" (error)="coverFailed()">
+        <button class="tl-back" (click)="closeTrackList()">Back</button>
+      </div>
     }
     <ion-list class="tracklist" [style.font-family]="listFontFamily" [style.--ion-font-family]="listFontFamily">
       @if (loadingTrackList) {

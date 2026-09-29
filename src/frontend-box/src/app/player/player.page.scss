@@ -188,6 +188,8 @@ ion-back-button {
 ion-content.player-content.tracklist-active {
     --background: #000000 !important;
     --ion-background-color: #000000 !important;
+    // the list scrolls itself (see .km-tl-wrap / .tracklist below) - no visible scrollbar of ion-content's own
+    --overflow: hidden;
 }
 
 .tracklist {
@@ -231,6 +233,43 @@ ion-content.player-content.tracklist-active {
     }
 }
 
+// Cover (160x160) and "Back" button to the left of the normal (non-km) track list: 20px from the left edge of
+// the screen to the cover, 20px from the cover to the list. Tapping "Back" goes back to the player, same as
+// closeTrackList() everywhere else.
+.tl-side {
+    flex: 0 0 auto;
+    margin-inline-end: 20px; // cover to list
+    padding: 16px 0 0 20px; // 20px from the left edge of the screen to the cover; width follows the 160px cover
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+
+    img {
+        width: 160px;
+        height: 160px;
+        border-radius: 8px;
+        object-fit: cover;
+        background: #565656;
+    }
+}
+
+.tl-back {
+    width: 160px;
+    height: 34px;
+    border: 0;
+    border-radius: 17px;
+    background: #565656;
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.9rem;
+
+    &:active {
+        background: color-mix(in srgb, #565656, white 20%);
+    }
+}
+
 :host ::ng-deep .tracklist .button-native::after {
     display: none !important;
 }
@@ -241,9 +280,14 @@ ion-content.player-content.tracklist-active {
     padding: 40px;
 }
 
-// Wrapper of the track list: only the km themes lay it out (mini cover and "Zu" on the left), else it is not there.
+// Wrapper of the track list: the cover + "Back" button (.tl-side) on the left, the list on the right. It takes
+// the content's full space (ion-content's own scroll is off, see .tracklist-active above) so the list itself can
+// scroll without a visible scrollbar. The km themes lay out their own side panel and list sizing (see below).
 .km-tl-wrap {
-    display: contents;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: row;
 }
 
 // --- km themes (children's themes, body.km - see theme/km-theme.service.ts) ------------------------------------
