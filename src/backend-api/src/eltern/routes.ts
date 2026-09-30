@@ -58,7 +58,7 @@ import { registerTlsRoutes, tlsOf } from './tls'
 import { type LocalLibraryDeps, registerLocalUploadRoutes } from './upload'
 import { registerPodcastRoutes } from './podcasts'
 import { registerHealthRoutes } from './health'
-import { registerPinnedItemsRoutes } from './pinned-items'
+import { registerPinnedSectionsRoutes } from './pinned-sections'
 import { playlogSummary } from './playlog'
 import { weeklySummaryOn } from './weekly-summary'
 import { isArdFeed } from '../ard-sounds'
@@ -377,7 +377,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   registerUpdateRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig })
   registerTlsRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerHealthRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig })
-  registerPinnedItemsRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
+  registerPinnedSectionsRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerPodcastRoutes(router, {
     activeDataPath: deps.activeDataPath,
     podcastOffline: deps.podcastOffline,

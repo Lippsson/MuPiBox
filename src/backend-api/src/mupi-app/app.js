@@ -355,7 +355,7 @@ async function renderPage(page, reload = true) {
     const sections = ctrl?.sections?.(page) ?? page.sections ?? []
     // (kept for the handlers: a select's options may come from the box, see findItem)
     state.shown = { id: page.id, sections }
-    for (const sec of sections) parts.push(renderSection(sec))
+    for (const sec of sections) parts.push(renderSection(sec, page.id))
   } catch (err) {
     // the box's values did not come (the page cannot be drawn without them): say so, instead of "Lade …" for ever
     console.error(err)
@@ -492,7 +492,10 @@ function navRow(target, title, subtitle, ic, badge = '') {
     <span class="lbl"><b>${esc(title)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</span>${badge}<span class="chev">${icon(ext ? 'ext' : 'chevron', 18)}</span></button>`
 }
 
-function renderSection(sec) {
+// pageId: the page this section is drawn on (renderPage passes page.id; a copy on the Start page passes
+// the section's ORIGINAL owning page, so its pin button keeps pointing at the same page+title identity
+// either way). Needed only for the pin button - a section with no title gets none (nothing to pin "next to").
+function renderSection(sec, pageId) {
   const items = (sec.items || []).map(renderItem).join('')
   // (the page's save button under its cards, over both columns - not in the last card, as if it saved only that)
   if (sec.bar) return `<div class="btns save-bar wide">${items}</div>`
@@ -500,12 +503,130 @@ function renderSection(sec) {
   const onlyNav = (sec.items || []).length > 0 && sec.items.every((i) => i.type === 'nav')
   // sec.col: the column on the PC (1 left, 2 right; see balanceCols), sec.badge: a chip beside the title
   const head = sec.title
-    ? sec.badge
-      ? `<div class="card-head"><h2>${esc(sec.title)}</h2><span class="chip ${esc(sec.badge.kind ?? '')}">${esc(sec.badge.text)}</span></div>`
-      : `<h2>${esc(sec.title)}</h2>`
+    ? `<div class="card-head"><span class="card-head-title"><h2>${esc(sec.title)}</h2>${sec.badge ? `<span class="chip ${esc(sec.badge.kind ?? '')}">${esc(sec.badge.text)}</span>` : ''}</span>${pinSectionBtnHtml(pageId, sec.title)}</div>`
     : ''
   return `<section class="card${wide ? ' wide' : ''}${onlyNav && !sec.title ? ' nav-card' : ''}${sec.cls ? ` ${esc(sec.cls)}` : ''}"${sec.col ? ` data-col="${sec.col}"` : ''}>
     ${head}${sec.help ? `<p class="help">${esc(sec.help)}</p>` : ''}${items}</section>`
+}
+
+/* ---------- an den Startbildschirm anheften ----------
+ * Eine Karte aus schema.json hat dort keine eigene id - identifiziert wird sie deshalb über die Seite,
+ * auf der sie steht, plus ihre (auf einer Seite eindeutige) Überschrift. Eine angepinnte Karte wird auf
+ * der Startseite als vollständige, weiterhin bedienbare Kopie erneut gezeichnet (siehe drawPinnedSections),
+ * nicht nur als Vorschau. */
+
+let pinnedSections = [] // [{pageId, title}], wie der Server sie liefert
+let pinnedSectionKeys = new Set() // dieselben Paare als Vergleichsschlüssel
+
+const sectionKey = (pageId, title) => `${pageId}\u0000${title}`
+
+async function loadPinnedSections() {
+  const r = await api(`${API}/pinned-sections`)
+  pinnedSections = Array.isArray(r.body?.items) ? r.body.items : []
+  pinnedSectionKeys = new Set(pinnedSections.map((p) => sectionKey(p.pageId, p.title)))
+}
+
+// pageId is undefined for a section drawn before any page context exists (there is none - renderSection
+// always has one) - guarded anyway so a stray call never throws.
+function pinSectionBtnHtml(pageId, title) {
+  if (!pageId || !title) return ''
+  const pinned = pinnedSectionKeys.has(sectionKey(pageId, title))
+  const label = pinned ? 'Vom Startbildschirm entfernen' : 'An den Startbildschirm anheften'
+  return `<button type="button" class="icon-btn pin${pinned ? ' is-pinned' : ''}" data-pin-page="${esc(pageId)}" data-pin-title="${esc(title)}" aria-pressed="${pinned}" aria-label="${esc(label)}">${icon('pin', 18)}</button>`
+}
+
+function applyPinnedSectionLocally(pageId, title, pin) {
+  const key = sectionKey(pageId, title)
+  if (pin) {
+    if (!pinnedSectionKeys.has(key)) {
+      pinnedSectionKeys.add(key)
+      pinnedSections.push({ pageId, title })
+    }
+  } else {
+    pinnedSectionKeys.delete(key)
+    pinnedSections = pinnedSections.filter((p) => sectionKey(p.pageId, p.title) !== key)
+  }
+}
+
+function syncSectionPinButtons(pageId, title, pinned) {
+  const label = pinned ? 'Vom Startbildschirm entfernen' : 'An den Startbildschirm anheften'
+  for (const btn of document.querySelectorAll(`.icon-btn.pin[data-pin-page="${CSS.escape(pageId)}"][data-pin-title="${CSS.escape(title)}"]`)) {
+    btn.classList.toggle('is-pinned', pinned)
+    btn.setAttribute('aria-pressed', String(pinned))
+    btn.setAttribute('aria-label', label)
+  }
+}
+
+async function togglePinnedSection(pageId, title) {
+  const pin = !pinnedSectionKeys.has(sectionKey(pageId, title))
+  applyPinnedSectionLocally(pageId, title, pin)
+  syncSectionPinButtons(pageId, title, pin)
+  const r = await api(`${API}/pinned-sections`, { method: 'POST', body: { pageId, title, pinned: pin } })
+  if (!r.ok) {
+    applyPinnedSectionLocally(pageId, title, !pin)
+    syncSectionPinButtons(pageId, title, !pin)
+    toast('Das hat nicht geklappt', 'info')
+    return
+  }
+  if (currentPage()?.id === 'start') drawPinnedSections($('#content'))
+}
+
+// The pin button sits in a plain .card-head, never inside another <button> - a normal delegated listener
+// (not attached per-button) is enough, no stopPropagation subtleties like the cover-tile pin had to deal with.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest?.('.icon-btn.pin[data-pin-page]')
+  if (!btn) return
+  togglePinnedSection(btn.dataset.pinPage, btn.dataset.pinTitle)
+})
+
+// The section as schema.json (or the page's own controller) currently defines it, found by title. Used to
+// redraw a pinned copy without keeping a stale snapshot of its markup around.
+function resolveSection(pageId, title) {
+  const page = state.pages.get(pageId)
+  if (!page) return null
+  let sections
+  try {
+    sections = ctrlOf(page)?.sections?.(page) ?? page.sections ?? []
+  } catch (err) {
+    console.error(err)
+    sections = page.sections ?? []
+  }
+  const sec = sections.find((s) => s.title === title)
+  return sec ? { page, sec } : null
+}
+
+// Start page: draws every pinned section as a full, working copy (its own toggles/sliders/buttons wired
+// against its ORIGINAL owning page, so a change still saves correctly) - not merely a preview. A pinned
+// section whose page or title no longer exists (renamed, removed) is silently skipped.
+function drawPinnedSections(root) {
+  const box = $('#pinned-sections', root)
+  if (!box) return
+  const resolved = pinnedSections.map(({ pageId, title }) => resolveSection(pageId, title)).filter(Boolean)
+  if (resolved.length === 0) {
+    box.hidden = true
+    box.innerHTML = ''
+    return
+  }
+  box.hidden = false
+  box.innerHTML = `<div class="section-label">Angepinnt</div><div id="pinned-sections-list"></div>`
+  const list = $('#pinned-sections-list', box)
+  for (const { page, sec } of resolved) {
+    const wrap = document.createElement('div')
+    wrap.innerHTML = renderSection(sec, page.id)
+    const el = wrap.firstElementChild
+    if (!el) continue
+    list.appendChild(el)
+    try {
+      wire(el, page)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+}
+
+async function loadPinned(root) {
+  await loadPinnedSections()
+  if (root.isConnected) drawPinnedSections(root)
 }
 
 function value(item) {
@@ -850,12 +971,9 @@ function sessionGone() {
 function startSkeleton() {
   return [
     `<section class="card hero now" id="now"><div class="now-idle">${icon('music')}<span>Verbinde …</span></div></section>`,
-    // Angepinnte Inhalte: per 📌 auf einer Hören-Kachel hierher geholt. Bleibt versteckt, solange
-    // nichts angepinnt ist (siehe loadPinned/drawPinned).
-    `<section class="card wide hear pinned-card" id="pinned-card" hidden>
-      <div class="section-label">Angepinnt</div>
-      <div class="covers" id="pinned-grid"></div>
-    </section>`,
+    // Angepinnte Karten: per 📌 neben ihrer Überschrift hierher geholt, als volle, weiterhin bedienbare
+    // Kopie. Bleibt versteckt, solange nichts angepinnt ist (siehe loadPinned/drawPinnedSections).
+    `<div id="pinned-sections" hidden></div>`,
     `<div class="start-side">
       <div id="notices"></div>
       <div class="tiles" id="tiles">
@@ -1675,7 +1793,6 @@ async function loadHear() {
   hear.nasTop = Array.isArray(nas.body) ? nas.body : []
   hear.nasError = nas.status === 503 ? 'Das NAS ist gerade nicht erreichbar.' : ''
   ;['audiobook', 'music', 'other'].forEach((c, i) => (hear.local[c] = Array.isArray(local[i].body) ? local[i].body : []))
-  await loadPinnedItems()
 }
 
 // The tiles of the top level: library entries grouped by artist (like the box), local folders and NAS folders
@@ -1812,19 +1929,16 @@ function drawHear() {
     grid.innerHTML = `<p class="help covers-empty">${esc(err || (hear.q ? 'Nichts gefunden.' : hear.cat === 'nas' ? 'Im Admin-Bereich sind keine NAS-Ordner freigegeben.' : 'Hier ist noch nichts.'))}</p>`
     return
   }
-  grid.innerHTML = hearTiles.map((t, i) => tileHtml(t, i)).join('')
+  grid.innerHTML = hearTiles
+    .map(
+      (t, i) => `<button class="cover-tile" data-i="${i}" aria-label="${esc(`${t.folder ? 'Öffnen' : 'Abspielen'}: ${t.title}`)}">
+        <span class="cover-img">${t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : ''}<span class="cover-ph">${icon(t.folder ? 'folder' : 'music', 28)}</span>
+          ${t.badge ? `<span class="cover-badge">${esc(t.badge)}</span>` : ''}${t.folder ? `<span class="cover-folder">${icon('folder', 14)}</span>` : ''}</span>
+        <b translate="no">${esc(t.title)}</b>${t.sub ? `<small${t.subIsName ? ' translate="no"' : ''}>${esc(t.sub)}</small>` : ''}</button>`,
+    )
+    .join('')
   for (const img of grid.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
   for (const b of grid.querySelectorAll('.cover-tile')) b.onclick = () => onTile(hearTiles[Number(b.dataset.i)])
-  wirePinButtons(grid)
-}
-
-// One .cover-tile: cover + title/sub + (on a playable entry, not a folder) a pin toggle. Shared by the
-// Hören grid and the Start page's "Angepinnt" row so both look and behave identically.
-function tileHtml(t, i) {
-  return `<button class="cover-tile" data-i="${i}" aria-label="${esc(`${t.folder ? 'Öffnen' : 'Abspielen'}: ${t.title}`)}">
-    <span class="cover-img">${t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : ''}<span class="cover-ph">${icon(t.folder ? 'folder' : 'music', 28)}</span>
-      ${t.badge ? `<span class="cover-badge">${esc(t.badge)}</span>` : ''}${t.folder ? `<span class="cover-folder">${icon('folder', 14)}</span>` : ''}${t.ident ? pinBtnHtml(t.ident) : ''}</span>
-    <b translate="no">${esc(t.title)}</b>${t.sub ? `<small${t.subIsName ? ' translate="no"' : ''}>${esc(t.sub)}</small>` : ''}</button>`
 }
 
 function onTile(t) {
@@ -1843,124 +1957,6 @@ function onTile(t) {
   if (t.kind === 'spalbum') return startPlay(t.title, `${API}/library/play`, { index: t.index, albumId: t.albumId })
   if (t.kind === 'nas') return startPlay(t.title, `${API}/library/play-nas`, { path: t.path })
   return startPlay(t.title, `${API}/library/play-local`, { path: t.path })
-}
-
-/* ---------- an den Startbildschirm anheften ----------
- * Ein Elternteil tippt auf das 📌 einer Hören-Kachel; eine Kopie erscheint auf der Startseite unter
- * "Angepinnt", nochmal antippen entfernt sie wieder. Der Index eines Eintrags in active_data.json
- * verschiebt sich bei jedem Sync/Edit/Delete (siehe ENTRY_IDENT oben) - angeheftet wird deshalb per
- * natürlichem Schlüssel (entryIdent), nicht per Index. */
-
-let pinnedItems = [] // die Idents, wie der Server sie liefert
-let pinnedKeys = new Set() // dieselben Idents als Vergleichsschlüssel (identKey)
-
-const identKey = (ident) => JSON.stringify(ENTRY_IDENT.map((k) => ident?.[k] ?? null))
-
-async function loadPinnedItems() {
-  const r = await api(`${API}/pinned-items`)
-  pinnedItems = Array.isArray(r.body?.items) ? r.body.items : []
-  pinnedKeys = new Set(pinnedItems.map(identKey))
-}
-
-function pinBtnHtml(ident) {
-  const pinned = pinnedKeys.has(identKey(ident))
-  const label = pinned ? 'Vom Startbildschirm entfernen' : 'An den Startbildschirm anheften'
-  return `<span class="pin-btn${pinned ? ' is-pinned' : ''}" role="button" tabindex="0" data-ident="${esc(JSON.stringify(ident))}" aria-pressed="${pinned}" aria-label="${esc(label)}">${icon('pin')}</span>`
-}
-
-// .pin-btn sits inside a .cover-tile <button> as a <span role="button"> (nesting a real <button>/<a> there
-// would get reparented out by the HTML parser). The listener goes on the span itself, not delegated further
-// up: stopPropagation only keeps a bubbling click from also reaching an *ancestor's* onclick (the tile's,
-// which would play it) when it runs before that ancestor sees the event - i.e. attached at or below it.
-function wirePinButtons(grid) {
-  for (const btn of grid.querySelectorAll('.pin-btn')) {
-    const activate = (e) => {
-      e.stopPropagation()
-      e.preventDefault()
-      let ident
-      try {
-        ident = JSON.parse(btn.dataset.ident)
-      } catch {
-        return
-      }
-      togglePinned(ident)
-    }
-    btn.addEventListener('click', activate)
-    btn.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') activate(e)
-    })
-  }
-}
-
-function applyPinnedLocally(ident, pin) {
-  const key = identKey(ident)
-  if (pin) {
-    if (!pinnedKeys.has(key)) {
-      pinnedKeys.add(key)
-      pinnedItems.push(ident)
-    }
-  } else {
-    pinnedKeys.delete(key)
-    pinnedItems = pinnedItems.filter((i) => identKey(i) !== key)
-  }
-}
-
-// Redraws whichever screen currently shows pin buttons, so they (and the Start page's pinned row) reflect
-// the change right away - both after the optimistic update and again if the request then fails.
-function refreshPinnedUi() {
-  const page = currentPage()?.id
-  if (page === 'hoeren') drawHear()
-  else if (page === 'start') loadPinned($('#content'))
-}
-
-async function togglePinned(ident) {
-  const pin = !pinnedKeys.has(identKey(ident))
-  applyPinnedLocally(ident, pin)
-  refreshPinnedUi()
-  const r = await api(`${API}/pinned-items`, { method: 'POST', body: { ident, pinned: pin } })
-  if (!r.ok) {
-    applyPinnedLocally(ident, !pin)
-    refreshPinnedUi()
-    toast('Das hat nicht geklappt', 'info')
-  }
-}
-
-let pinnedTiles = []
-
-// Start page: resolves the pinned idents against the library and draws them as ordinary cover-tiles.
-// Fetches /api/data itself rather than reusing hear.items, so opening "Hören" afterwards still runs its
-// own full load (NAS/local folders included) instead of finding hear.items already set and skipping it.
-async function loadPinned(root) {
-  await loadPinnedItems()
-  if (pinnedItems.length === 0) {
-    drawPinned(root, [])
-    return
-  }
-  const data = await api('/api/data')
-  const items = Array.isArray(data.body) ? data.body.map((it, index) => ({ ...it, _index: index })) : []
-  if (!root.isConnected) return
-  const tiles = pinnedItems
-    .map((ident) => items.find((it) => identKey(entryIdent(it)) === identKey(ident)))
-    .filter(Boolean)
-    .map(entryTile)
-  drawPinned(root, tiles)
-}
-
-function drawPinned(root, tiles) {
-  if (tiles) pinnedTiles = tiles
-  const card = $('#pinned-card', root)
-  const grid = $('#pinned-grid', root)
-  if (!card || !grid) return
-  if (pinnedTiles.length === 0) {
-    card.hidden = true
-    grid.innerHTML = ''
-    return
-  }
-  card.hidden = false
-  grid.innerHTML = pinnedTiles.map((t, i) => tileHtml(t, i)).join('')
-  for (const img of grid.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
-  for (const b of grid.querySelectorAll('.cover-tile')) b.onclick = () => onTile(pinnedTiles[Number(b.dataset.i)])
-  wirePinButtons(grid)
 }
 
 // An episode's length as a feed gives it - seconds ("697") or h:mm:ss ("00:24:09") - in minutes
