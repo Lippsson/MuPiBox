@@ -54,6 +54,7 @@ export const ICONS = {
   logout: "M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3",
   close: "M6 6l12 12M18 6L6 18",
   check: "M5 12l5 5 9-10",
+  pin: "M12 21s-7-7.5-7-12a7 7 0 0 1 14 0c0 4.5-7 12-7 12zM12 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
 }
 
 export function icon(name, size = 20) {

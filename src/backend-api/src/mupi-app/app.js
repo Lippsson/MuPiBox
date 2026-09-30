@@ -850,6 +850,12 @@ function sessionGone() {
 function startSkeleton() {
   return [
     `<section class="card hero now" id="now"><div class="now-idle">${icon('music')}<span>Verbinde …</span></div></section>`,
+    // Angepinnte Inhalte: per 📌 auf einer Hören-Kachel hierher geholt. Bleibt versteckt, solange
+    // nichts angepinnt ist (siehe loadPinned/drawPinned).
+    `<section class="card wide hear pinned-card" id="pinned-card" hidden>
+      <div class="section-label">Angepinnt</div>
+      <div class="covers" id="pinned-grid"></div>
+    </section>`,
     `<div class="start-side">
       <div id="notices"></div>
       <div class="tiles" id="tiles">
@@ -896,6 +902,7 @@ function mountStart(root) {
   loadStatus(root)
   loadVolumeCap(root)
   loadNotices(root)
+  loadPinned(root)
   every(5000, () => loadNow(root))
   every(30000, () => loadStatus(root))
   $('#q-plus', root).onclick = async () => {
@@ -1668,6 +1675,7 @@ async function loadHear() {
   hear.nasTop = Array.isArray(nas.body) ? nas.body : []
   hear.nasError = nas.status === 503 ? 'Das NAS ist gerade nicht erreichbar.' : ''
   ;['audiobook', 'music', 'other'].forEach((c, i) => (hear.local[c] = Array.isArray(local[i].body) ? local[i].body : []))
+  await loadPinnedItems()
 }
 
 // The tiles of the top level: library entries grouped by artist (like the box), local folders and NAS folders
@@ -1804,16 +1812,19 @@ function drawHear() {
     grid.innerHTML = `<p class="help covers-empty">${esc(err || (hear.q ? 'Nichts gefunden.' : hear.cat === 'nas' ? 'Im Admin-Bereich sind keine NAS-Ordner freigegeben.' : 'Hier ist noch nichts.'))}</p>`
     return
   }
-  grid.innerHTML = hearTiles
-    .map(
-      (t, i) => `<button class="cover-tile" data-i="${i}" aria-label="${esc(`${t.folder ? 'Öffnen' : 'Abspielen'}: ${t.title}`)}">
-        <span class="cover-img">${t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : ''}<span class="cover-ph">${icon(t.folder ? 'folder' : 'music', 28)}</span>
-          ${t.badge ? `<span class="cover-badge">${esc(t.badge)}</span>` : ''}${t.folder ? `<span class="cover-folder">${icon('folder', 14)}</span>` : ''}</span>
-        <b translate="no">${esc(t.title)}</b>${t.sub ? `<small${t.subIsName ? ' translate="no"' : ''}>${esc(t.sub)}</small>` : ''}</button>`,
-    )
-    .join('')
+  grid.innerHTML = hearTiles.map((t, i) => tileHtml(t, i)).join('')
   for (const img of grid.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
   for (const b of grid.querySelectorAll('.cover-tile')) b.onclick = () => onTile(hearTiles[Number(b.dataset.i)])
+  wirePinButtons(grid)
+}
+
+// One .cover-tile: cover + title/sub + (on a playable entry, not a folder) a pin toggle. Shared by the
+// Hören grid and the Start page's "Angepinnt" row so both look and behave identically.
+function tileHtml(t, i) {
+  return `<button class="cover-tile" data-i="${i}" aria-label="${esc(`${t.folder ? 'Öffnen' : 'Abspielen'}: ${t.title}`)}">
+    <span class="cover-img">${t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : ''}<span class="cover-ph">${icon(t.folder ? 'folder' : 'music', 28)}</span>
+      ${t.badge ? `<span class="cover-badge">${esc(t.badge)}</span>` : ''}${t.folder ? `<span class="cover-folder">${icon('folder', 14)}</span>` : ''}${t.ident ? pinBtnHtml(t.ident) : ''}</span>
+    <b translate="no">${esc(t.title)}</b>${t.sub ? `<small${t.subIsName ? ' translate="no"' : ''}>${esc(t.sub)}</small>` : ''}</button>`
 }
 
 function onTile(t) {
@@ -1832,6 +1843,124 @@ function onTile(t) {
   if (t.kind === 'spalbum') return startPlay(t.title, `${API}/library/play`, { index: t.index, albumId: t.albumId })
   if (t.kind === 'nas') return startPlay(t.title, `${API}/library/play-nas`, { path: t.path })
   return startPlay(t.title, `${API}/library/play-local`, { path: t.path })
+}
+
+/* ---------- an den Startbildschirm anheften ----------
+ * Ein Elternteil tippt auf das 📌 einer Hören-Kachel; eine Kopie erscheint auf der Startseite unter
+ * "Angepinnt", nochmal antippen entfernt sie wieder. Der Index eines Eintrags in active_data.json
+ * verschiebt sich bei jedem Sync/Edit/Delete (siehe ENTRY_IDENT oben) - angeheftet wird deshalb per
+ * natürlichem Schlüssel (entryIdent), nicht per Index. */
+
+let pinnedItems = [] // die Idents, wie der Server sie liefert
+let pinnedKeys = new Set() // dieselben Idents als Vergleichsschlüssel (identKey)
+
+const identKey = (ident) => JSON.stringify(ENTRY_IDENT.map((k) => ident?.[k] ?? null))
+
+async function loadPinnedItems() {
+  const r = await api(`${API}/pinned-items`)
+  pinnedItems = Array.isArray(r.body?.items) ? r.body.items : []
+  pinnedKeys = new Set(pinnedItems.map(identKey))
+}
+
+function pinBtnHtml(ident) {
+  const pinned = pinnedKeys.has(identKey(ident))
+  const label = pinned ? 'Vom Startbildschirm entfernen' : 'An den Startbildschirm anheften'
+  return `<span class="pin-btn${pinned ? ' is-pinned' : ''}" role="button" tabindex="0" data-ident="${esc(JSON.stringify(ident))}" aria-pressed="${pinned}" aria-label="${esc(label)}">${icon('pin')}</span>`
+}
+
+// .pin-btn sits inside a .cover-tile <button> as a <span role="button"> (nesting a real <button>/<a> there
+// would get reparented out by the HTML parser). The listener goes on the span itself, not delegated further
+// up: stopPropagation only keeps a bubbling click from also reaching an *ancestor's* onclick (the tile's,
+// which would play it) when it runs before that ancestor sees the event - i.e. attached at or below it.
+function wirePinButtons(grid) {
+  for (const btn of grid.querySelectorAll('.pin-btn')) {
+    const activate = (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      let ident
+      try {
+        ident = JSON.parse(btn.dataset.ident)
+      } catch {
+        return
+      }
+      togglePinned(ident)
+    }
+    btn.addEventListener('click', activate)
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') activate(e)
+    })
+  }
+}
+
+function applyPinnedLocally(ident, pin) {
+  const key = identKey(ident)
+  if (pin) {
+    if (!pinnedKeys.has(key)) {
+      pinnedKeys.add(key)
+      pinnedItems.push(ident)
+    }
+  } else {
+    pinnedKeys.delete(key)
+    pinnedItems = pinnedItems.filter((i) => identKey(i) !== key)
+  }
+}
+
+// Redraws whichever screen currently shows pin buttons, so they (and the Start page's pinned row) reflect
+// the change right away - both after the optimistic update and again if the request then fails.
+function refreshPinnedUi() {
+  const page = currentPage()?.id
+  if (page === 'hoeren') drawHear()
+  else if (page === 'start') loadPinned($('#content'))
+}
+
+async function togglePinned(ident) {
+  const pin = !pinnedKeys.has(identKey(ident))
+  applyPinnedLocally(ident, pin)
+  refreshPinnedUi()
+  const r = await api(`${API}/pinned-items`, { method: 'POST', body: { ident, pinned: pin } })
+  if (!r.ok) {
+    applyPinnedLocally(ident, !pin)
+    refreshPinnedUi()
+    toast('Das hat nicht geklappt', 'info')
+  }
+}
+
+let pinnedTiles = []
+
+// Start page: resolves the pinned idents against the library and draws them as ordinary cover-tiles.
+// Fetches /api/data itself rather than reusing hear.items, so opening "Hören" afterwards still runs its
+// own full load (NAS/local folders included) instead of finding hear.items already set and skipping it.
+async function loadPinned(root) {
+  await loadPinnedItems()
+  if (pinnedItems.length === 0) {
+    drawPinned(root, [])
+    return
+  }
+  const data = await api('/api/data')
+  const items = Array.isArray(data.body) ? data.body.map((it, index) => ({ ...it, _index: index })) : []
+  if (!root.isConnected) return
+  const tiles = pinnedItems
+    .map((ident) => items.find((it) => identKey(entryIdent(it)) === identKey(ident)))
+    .filter(Boolean)
+    .map(entryTile)
+  drawPinned(root, tiles)
+}
+
+function drawPinned(root, tiles) {
+  if (tiles) pinnedTiles = tiles
+  const card = $('#pinned-card', root)
+  const grid = $('#pinned-grid', root)
+  if (!card || !grid) return
+  if (pinnedTiles.length === 0) {
+    card.hidden = true
+    grid.innerHTML = ''
+    return
+  }
+  card.hidden = false
+  grid.innerHTML = pinnedTiles.map((t, i) => tileHtml(t, i)).join('')
+  for (const img of grid.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
+  for (const b of grid.querySelectorAll('.cover-tile')) b.onclick = () => onTile(pinnedTiles[Number(b.dataset.i)])
+  wirePinButtons(grid)
 }
 
 // An episode's length as a feed gives it - seconds ("697") or h:mm:ss ("00:24:09") - in minutes
