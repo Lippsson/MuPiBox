@@ -1052,10 +1052,12 @@ function startSkeleton() {
         <button class="qbtn" id="q-sleep">${icon('time', 22)}<span id="q-sleep-label">Schlaftimer</span></button>
         <button class="qbtn" id="q-say">${icon('vol', 22)}<span>Durchsage</span></button>
       </div>
-      <!-- Angepinnte Karten: per 📌 neben ihrer Überschrift hierher geholt, als volle, weiterhin bedienbare
-           Kopie. Bleibt versteckt, solange nichts angepinnt ist (siehe loadPinned/drawPinnedSections). -->
-      <div id="pinned-sections" hidden></div>
     </div>`,
+    // Angepinnte Karten: per 📌 neben ihrer Überschrift hierher geholt, als volle, weiterhin bedienbare
+    // Kopie, zu zweit nebeneinander wenn Platz ist. Eigene Grid-Zelle (nicht Teil von .start-side) - darin
+    // würde sie die "Jetzt läuft"-Karte daneben in die Höhe ziehen (siehe .content.start's align-items:
+    // stretch). Bleibt versteckt, solange nichts angepinnt ist (siehe loadPinned/drawPinnedSections).
+    `<div id="pinned-sections" hidden></div>`,
     `<div class="update-note" id="update-note"></div>`,
     `<section class="card nav-card start-more"><div class="navlist">
       ${navRow('g-aussehen', 'Aussehen des Displays', 'Theme, Start- und Wartungsbilder', 'pal')}

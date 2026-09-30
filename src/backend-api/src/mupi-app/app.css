@@ -277,7 +277,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   /* (the player and the column beside it as high as each other: the tiles flush with its top, the quick actions with
      its bottom) */
   .content.start { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: stretch; }
-  .content.start .start-more, .content.start .update-note { grid-column: 1 / -1; }
+  .content.start .start-more, .content.start .update-note, .content.start #pinned-sections { grid-column: 1 / -1; }
   .start-side > .section-label { margin-top: auto; }
 }
 .now { gap: 16px; }
@@ -838,7 +838,9 @@ details.legal .legal-text { height: auto; max-height: 60vh; margin-top: 8px; }
 .card-head .icon-btn { width: 36px; height: 36px; flex: none; }
 /* An den Startbildschirm anheften/lösen (siehe renderSection/pinSectionBtnHtml) - amber wenn angepinnt. */
 .icon-btn.pin.is-pinned { background: var(--mp-accent); border-color: transparent; color: var(--mp-on-accent); }
-#pinned-sections { display: flex; flex-direction: column; gap: 12px; }
+#pinned-sections { display: flex; flex-direction: column; gap: var(--mp-gap); }
+#pinned-sections-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (min-width: 700px) { #pinned-sections-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .save-bar { margin: 0; }
 .pair { display: grid; grid-template-columns: var(--cols); gap: 12px; }
 .pair > * + * { border-top: 0 !important; padding-top: 0 !important; }
