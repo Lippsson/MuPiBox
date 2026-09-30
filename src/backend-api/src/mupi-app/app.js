@@ -355,7 +355,7 @@ async function renderPage(page, reload = true) {
     const sections = ctrl?.sections?.(page) ?? page.sections ?? []
     // (kept for the handlers: a select's options may come from the box, see findItem)
     state.shown = { id: page.id, sections }
-    for (const sec of sections) parts.push(renderSection(sec, page.id))
+    for (const sec of sections) parts.push(renderSection(sec))
   } catch (err) {
     // the box's values did not come (the page cannot be drawn without them): say so, instead of "Lade …" for ever
     console.error(err)
@@ -379,6 +379,9 @@ async function renderPage(page, reload = true) {
     console.error(err)
     toast('Ein Teil der Seite ließ sich nicht einrichten', 'info')
   }
+  // Every card with a heading gets its 📌, regardless of whether schema.json's renderSection or the
+  // page's own top()/mount() built it - see injectSectionPins.
+  injectSectionPins(main, page)
   balanceCols(main)
   if (keepScroll != null) window.scrollTo(0, keepScroll)
 }
@@ -492,10 +495,7 @@ function navRow(target, title, subtitle, ic, badge = '') {
     <span class="lbl"><b>${esc(title)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</span>${badge}<span class="chev">${icon(ext ? 'ext' : 'chevron', 18)}</span></button>`
 }
 
-// pageId: the page this section is drawn on (renderPage passes page.id; a copy on the Start page passes
-// the section's ORIGINAL owning page, so its pin button keeps pointing at the same page+title identity
-// either way). Needed only for the pin button - a section with no title gets none (nothing to pin "next to").
-function renderSection(sec, pageId) {
+function renderSection(sec) {
   const items = (sec.items || []).map(renderItem).join('')
   // (the page's save button under its cards, over both columns - not in the last card, as if it saved only that)
   if (sec.bar) return `<div class="btns save-bar wide">${items}</div>`
@@ -503,17 +503,29 @@ function renderSection(sec, pageId) {
   const onlyNav = (sec.items || []).length > 0 && sec.items.every((i) => i.type === 'nav')
   // sec.col: the column on the PC (1 left, 2 right; see balanceCols), sec.badge: a chip beside the title
   const head = sec.title
-    ? `<div class="card-head"><span class="card-head-title"><h2>${esc(sec.title)}</h2>${sec.badge ? `<span class="chip ${esc(sec.badge.kind ?? '')}">${esc(sec.badge.text)}</span>` : ''}</span>${pinSectionBtnHtml(pageId, sec.title)}</div>`
+    ? sec.badge
+      ? `<div class="card-head"><h2>${esc(sec.title)}</h2><span class="chip ${esc(sec.badge.kind ?? '')}">${esc(sec.badge.text)}</span></div>`
+      : `<h2>${esc(sec.title)}</h2>`
     : ''
   return `<section class="card${wide ? ' wide' : ''}${onlyNav && !sec.title ? ' nav-card' : ''}${sec.cls ? ` ${esc(sec.cls)}` : ''}"${sec.col ? ` data-col="${sec.col}"` : ''}>
     ${head}${sec.help ? `<p class="help">${esc(sec.help)}</p>` : ''}${items}</section>`
 }
 
 /* ---------- an den Startbildschirm anheften ----------
- * Eine Karte aus schema.json hat dort keine eigene id - identifiziert wird sie deshalb über die Seite,
- * auf der sie steht, plus ihre (auf einer Seite eindeutige) Überschrift. Eine angepinnte Karte wird auf
- * der Startseite als vollständige, weiterhin bedienbare Kopie erneut gezeichnet (siehe drawPinnedSections),
- * nicht nur als Vorschau. */
+ * Injiziert generisch in JEDE Karte mit Überschrift, egal ob sie von renderSection (schema.json) oder der
+ * eigenen top()/mount()-Funktion einer Seite gebaut wurde (die meisten Seiten - Bluetooth, Sprachausgabe,
+ * WLAN, … - malen ihre Karten von Hand, nicht über renderSection). Eine Karte aus schema.json hat dort
+ * keine eigene id - identifiziert wird sie deshalb über die Seite, auf der sie steht, plus ihre (auf einer
+ * Seite eindeutige) Überschrift.
+ *
+ * Eine angepinnte Karte erscheint auf der Startseite als vollständige, weiterhin bedienbare Kopie: statt
+ * ihr Markup nachzubauen, wird ihre Original-Seite unsichtbar komplett neu gerendert UND verdrahtet
+ * (renderCardStandalone), die gesuchte Karte per DOM-Move (nicht cloneNode - das würde alle Event-Listener
+ * verlieren) herausgelöst und auf der Startseite eingehängt. Funktioniert dadurch mit jeder noch so
+ * speziellen Verdrahtung einer Seite, mit zwei bekannten Einschränkungen: (1) eine Karte, deren Verdrahtung
+ * Elemente AUSSERHALB ihrer selbst voraussetzt, verliert diesen Teil; (2) eigene Live-Polling-Timer
+ * (every()) der Original-Seite laufen nur bis zur nächsten Navigation - stopPageTimers() in renderPage()
+ * kennt keine Seiten, nur einen einzigen globalen Topf. */
 
 let pinnedSections = [] // [{pageId, title}], wie der Server sie liefert
 let pinnedSectionKeys = new Set() // dieselben Paare als Vergleichsschlüssel
@@ -526,13 +538,42 @@ async function loadPinnedSections() {
   pinnedSectionKeys = new Set(pinnedSections.map((p) => sectionKey(p.pageId, p.title)))
 }
 
-// pageId is undefined for a section drawn before any page context exists (there is none - renderSection
-// always has one) - guarded anyway so a stray call never throws.
-function pinSectionBtnHtml(pageId, title) {
-  if (!pageId || !title) return ''
-  const pinned = pinnedSectionKeys.has(sectionKey(pageId, title))
-  const label = pinned ? 'Vom Startbildschirm entfernen' : 'An den Startbildschirm anheften'
-  return `<button type="button" class="icon-btn pin${pinned ? ' is-pinned' : ''}" data-pin-page="${esc(pageId)}" data-pin-title="${esc(title)}" aria-pressed="${pinned}" aria-label="${esc(label)}">${icon('pin', 18)}</button>`
+// Walks every top-level card of a just-rendered page and adds a pin button next to its heading (skipping
+// cards without one - nothing to put a pin "next to"). Normalizes both markup shapes so far in use -
+// a bare <h2> (most hand-built cards, and a schema section without a badge), or an existing
+// <div class="card-head"> holding <h2> (+ a <span class="chip">, schema's badge or a hand-built status
+// chip) - into <div class="card-head"><span class="card-head-title">…</span><button class="icon-btn pin">
+// so the pin always ends up at the far end of the header row via .card-head's space-between.
+function injectSectionPins(root, page) {
+  for (const card of root.querySelectorAll(':scope > section.card, :scope > .card')) {
+    if (card.querySelector(':scope > .card-head > .icon-btn.pin')) continue // already has one (a redraw)
+    let head = card.querySelector(':scope > .card-head')
+    const h2 = head ? head.querySelector(':scope > h2, :scope > .card-head-title > h2') : card.querySelector(':scope > h2')
+    if (!h2) continue
+    const title = h2.textContent.trim()
+    if (!title) continue
+    if (!head) {
+      head = document.createElement('div')
+      head.className = 'card-head'
+      h2.replaceWith(head)
+      head.appendChild(h2)
+    } else if (!head.querySelector(':scope > .card-head-title')) {
+      const titleWrap = document.createElement('span')
+      titleWrap.className = 'card-head-title'
+      while (head.firstChild) titleWrap.appendChild(head.firstChild)
+      head.appendChild(titleWrap)
+    }
+    const pinned = pinnedSectionKeys.has(sectionKey(page.id, title))
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = `icon-btn pin${pinned ? ' is-pinned' : ''}`
+    btn.dataset.pinPage = page.id
+    btn.dataset.pinTitle = title
+    btn.setAttribute('aria-pressed', String(pinned))
+    btn.setAttribute('aria-label', pinned ? 'Vom Startbildschirm entfernen' : 'An den Startbildschirm anheften')
+    btn.innerHTML = icon('pin', 18)
+    head.appendChild(btn)
+  }
 }
 
 function applyPinnedSectionLocally(pageId, title, pin) {
@@ -579,30 +620,54 @@ document.addEventListener('click', (e) => {
   togglePinnedSection(btn.dataset.pinPage, btn.dataset.pinTitle)
 })
 
-// The section as schema.json (or the page's own controller) currently defines it, found by title. Used to
-// redraw a pinned copy without keeping a stale snapshot of its markup around.
-function resolveSection(pageId, title) {
+// Renders pageId's page in a hidden (but document-attached, so ids inside it resolve like normal) container
+// - awaiting its load() first, then wiring and mounting it exactly like a real visit - and moves the card
+// matching title out of it (DOM move, not cloneNode: a clone would carry none of the listeners mount() just
+// attached). Returns null if the page, or a card with that title on it, no longer exists.
+async function renderCardStandalone(pageId, title) {
   const page = state.pages.get(pageId)
   if (!page) return null
-  let sections
-  try {
-    sections = ctrlOf(page)?.sections?.(page) ?? page.sections ?? []
-  } catch (err) {
-    console.error(err)
-    sections = page.sections ?? []
+  const ctrl = ctrlOf(page)
+  if (ctrl?.load) {
+    try {
+      await ctrl.load(page)
+    } catch (err) {
+      console.error(err)
+      return null
+    }
   }
-  const sec = sections.find((s) => s.title === title)
-  return sec ? { page, sec } : null
+  const container = document.createElement('div')
+  container.hidden = true
+  document.body.appendChild(container)
+  try {
+    const parts = [...customTop(page)]
+    const sections = ctrl?.sections?.(page) ?? page.sections ?? []
+    for (const sec of sections) parts.push(renderSection(sec))
+    container.innerHTML = parts.join('')
+    wire(container, page)
+    try {
+      ctrl?.mount?.(container, page)
+    } catch (err) {
+      console.error(err)
+    }
+    injectSectionPins(container, page)
+    const card = [...container.querySelectorAll(':scope > section.card, :scope > .card')].find(
+      (c) => c.querySelector(':scope > .card-head h2')?.textContent.trim() === title,
+    )
+    if (!card) return null
+    card.remove()
+    return card
+  } finally {
+    container.remove()
+  }
 }
 
-// Start page: draws every pinned section as a full, working copy (its own toggles/sliders/buttons wired
-// against its ORIGINAL owning page, so a change still saves correctly) - not merely a preview. A pinned
-// section whose page or title no longer exists (renamed, removed) is silently skipped.
-function drawPinnedSections(root) {
+// Start page: draws every pinned card as a full, working copy - not merely a preview. A pinned card whose
+// page or title no longer exists (renamed, removed) is silently skipped.
+async function drawPinnedSections(root) {
   const box = $('#pinned-sections', root)
   if (!box) return
-  const resolved = pinnedSections.map(({ pageId, title }) => resolveSection(pageId, title)).filter(Boolean)
-  if (resolved.length === 0) {
+  if (pinnedSections.length === 0) {
     box.hidden = true
     box.innerHTML = ''
     return
@@ -610,23 +675,26 @@ function drawPinnedSections(root) {
   box.hidden = false
   box.innerHTML = `<div class="section-label">Angepinnt</div><div id="pinned-sections-list"></div>`
   const list = $('#pinned-sections-list', box)
-  for (const { page, sec } of resolved) {
-    const wrap = document.createElement('div')
-    wrap.innerHTML = renderSection(sec, page.id)
-    const el = wrap.firstElementChild
-    if (!el) continue
-    list.appendChild(el)
+  // sequential, not Promise.all: renderCardStandalone briefly renders another page's DOM into the document
+  // to wire it - doing that for several pinned cards at once would let their temporary containers collide.
+  for (const { pageId, title } of pinnedSections) {
+    let card = null
     try {
-      wire(el, page)
+      card = await renderCardStandalone(pageId, title)
     } catch (err) {
       console.error(err)
     }
+    if (card && list.isConnected) list.appendChild(card)
+  }
+  if (list.children.length === 0) {
+    box.hidden = true
+    box.innerHTML = ''
   }
 }
 
 async function loadPinned(root) {
   await loadPinnedSections()
-  if (root.isConnected) drawPinnedSections(root)
+  if (root.isConnected) await drawPinnedSections(root)
 }
 
 function value(item) {
