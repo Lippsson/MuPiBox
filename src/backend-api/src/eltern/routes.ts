@@ -1290,6 +1290,44 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * GET /api/eltern/pinned
+   * Indices (into active_data.json) that a parent pinned onto the hub's
+   * home-screen shortcut grid. Just the index list — the WebApp already
+   * has (or fetches) the full library via /api/data and resolves title/
+   * cover/type from that, so this stays a single small config read.
+   */
+  router.get('/pinned', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    const raw = Array.isArray(cfg?.pinnedItems) ? (cfg!.pinnedItems as unknown[]) : []
+    const indices = raw.map(Number).filter((n) => Number.isInteger(n) && n >= 0)
+    res.json({ indices })
+  })
+
+  /**
+   * POST /api/eltern/pinned  { index, pinned }
+   * Adds or removes a library index from the home-screen pin list.
+   */
+  router.post('/pinned', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { index?: unknown; pinned?: unknown } | undefined) ?? {}
+    const index = Number(body.index)
+    if (!Number.isInteger(index) || index < 0) {
+      res.status(400).json({ error: 'invalid_index' })
+      return
+    }
+    const pin = body.pinned !== false
+    await deps.updateMupiboxConfig((cfg) => {
+      const list = Array.isArray(cfg.pinnedItems)
+        ? (cfg.pinnedItems as unknown[]).map(Number).filter((n) => Number.isInteger(n) && n >= 0)
+        : []
+      const set = new Set(list)
+      if (pin) set.add(index)
+      else set.delete(index)
+      cfg.pinnedItems = Array.from(set)
+    })
+    res.json({ ok: true })
+  })
+
+  /**
    * POST /api/eltern/library/play-nas  { path }
    * Plays a NAS album (a folder with audio files) on the box, as a tap in the box's NAS tab does. Only
    * folders the admin selected ("Show in MuPiBox" / "Download local") and did not hide can be played,

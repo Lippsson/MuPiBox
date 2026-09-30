@@ -313,6 +313,7 @@ const libraryState = {
 }
 
 async function loadLibrary() {
+  await loadPinnedIndices()
   try {
     const res = await fetch('/api/data', { credentials: 'same-origin' })
     if (!res.ok) {
@@ -347,21 +348,25 @@ function spotifyCoverUrl(item) {
 
 function renderLibrary() {
   const list = $('#library-list')
-  // Filter pipeline
+  // Filter pipeline — idx is the item's index into libraryState.items (== the
+  // active_data.json index the backend expects), kept alongside the item so
+  // filtering doesn't lose it.
   const q = libraryState.search.trim().toLowerCase()
-  let filtered = libraryState.items.filter((m) => {
-    // Skip resume entries — they're internal, not parent-managed.
-    if (!m || m.isResume === true || m.category === 'resume') return false
-    if (libraryState.categoryFilter !== 'all' && m.category !== libraryState.categoryFilter) return false
-    const source = m.source ?? 'manual'
-    if (libraryState.sourceFilter !== 'all' && source !== libraryState.sourceFilter) return false
-    if (q) {
-      const a = (m.artist_override ?? m.artist ?? '').toLowerCase()
-      const t = (m.title_override ?? m.title ?? '').toLowerCase()
-      if (!a.includes(q) && !t.includes(q)) return false
-    }
-    return true
-  })
+  let filtered = libraryState.items
+    .map((item, idx) => ({ item, idx }))
+    .filter(({ item: m }) => {
+      // Skip resume entries — they're internal, not parent-managed.
+      if (!m || m.isResume === true || m.category === 'resume') return false
+      if (libraryState.categoryFilter !== 'all' && m.category !== libraryState.categoryFilter) return false
+      const source = m.source ?? 'manual'
+      if (libraryState.sourceFilter !== 'all' && source !== libraryState.sourceFilter) return false
+      if (q) {
+        const a = (m.artist_override ?? m.artist ?? '').toLowerCase()
+        const t = (m.title_override ?? m.title ?? '').toLowerCase()
+        if (!a.includes(q) && !t.includes(q)) return false
+      }
+      return true
+    })
 
   setText('#library-count', tn('library.count', filtered.length))
 
@@ -371,7 +376,7 @@ function renderLibrary() {
   }
 
   list.innerHTML = ''
-  for (const item of filtered) {
+  for (const { item, idx } of filtered) {
     const el = document.createElement('div')
     el.className = 'library-item'
     el.addEventListener('click', () => openLibraryEditSheet(item))
@@ -411,7 +416,7 @@ function renderLibrary() {
       badges.appendChild(b)
     }
 
-    el.append(cover, meta, badges)
+    el.append(cover, meta, badges, pinRowBtn(idx))
     list.appendChild(el)
   }
 }
@@ -2141,6 +2146,7 @@ async function loadPlay() {
   const grid = $('#play-grid')
   if (!grid) return
   grid.innerHTML = skeletonLines(6)
+  await loadPinnedIndices()
   try {
     const res = await fetch('/api/data', { credentials: 'same-origin' })
     if (!res.ok) {
@@ -2198,25 +2204,8 @@ function renderPlay() {
     grid.innerHTML = emptyStateHtml('🎧', q ? t('play.noSearchResults') : t('play.emptyCategory'))
     return
   }
-  grid.innerHTML = filtered.map(({ item, idx }) => {
-    const artist = escapeHtml(String(item.artist_override ?? item.artist ?? ''))
-    const title = escapeHtml(String(item.title_override ?? item.title ?? item.artist ?? '—'))
-    const coverUrl = item.cover_override ?? item.cover ?? spotifyCoverUrl(item)
-    const cover = coverUrl ? escapeHtml(String(coverUrl)) : ''
-    const typeLabel = playTypeLabel(item)
-    const coverEl = cover
-      ? `<img class="play-tile-cover" src="${cover}" alt="" loading="lazy">`
-      : `<div class="play-tile-cover-placeholder">${typeIcon(item)}</div>`
-    return `
-      <button class="play-tile" data-idx="${idx}" aria-label="${t('play.playAria', { title })}">
-        ${coverEl}
-        ${typeLabel ? `<span class="play-tile-badge">${typeLabel}</span>` : ''}
-        <div class="play-tile-overlay">
-          <div class="play-tile-title">${title}</div>
-          <div class="play-tile-artist">${artist}</div>
-        </div>
-      </button>`
-  }).join('') + nasTop.map(({ item, idx }) => nasTileHtml(item, `data-nas-top-idx="${idx}"`)).join('')
+  grid.innerHTML = filtered.map(({ item, idx }) => playTileHtml(item, idx)).join('')
+    + nasTop.map(({ item, idx }) => nasTileHtml(item, `data-nas-top-idx="${idx}"`)).join('')
   nasCoverFallbacks(grid)
   // a cover that can't be loaded (no picture on Spotify, box offline) becomes the placeholder
   for (const img of grid.querySelectorAll('.play-tile[data-idx] img.play-tile-cover')) {
@@ -2246,6 +2235,141 @@ function typeIcon(item) {
   if (t === 'radio' || item.category === 'radio') return '📻'
   if (t === 'rss') return '🎙️'
   return '🎧'
+}
+
+/* ---------- pinned items (home-screen shortcuts) ----------
+ * A parent can pin any Play-tile or Library-row onto the hub via the 📌
+ * next to its heading. Pinning just remembers the item's index into
+ * active_data.json (server-side, see /api/eltern/pinned) — the hub then
+ * resolves those indices against the same /api/data the Play screen
+ * already fetches and renders them as ordinary play-tiles. */
+
+const pinnedState = {
+  indices: new Set(), // library indices currently pinned to the hub
+}
+
+/** Refreshes pinnedState from the server. Called before any screen that
+ *  shows pin buttons renders, so their pressed-state is current. */
+async function loadPinnedIndices() {
+  try {
+    const res = await api(`${API}/pinned`)
+    const list = res.ok && Array.isArray(res.body?.indices) ? res.body.indices : []
+    pinnedState.indices = new Set(list.map(Number).filter((n) => Number.isInteger(n) && n >= 0))
+  } catch { /* keep the previous state — buttons just won't reflect a change made elsewhere */ }
+}
+
+/** Markup for one pin toggle, absolutely positioned inside a .play-tile. */
+function pinTileBtnHtml(idx) {
+  const isPinned = pinnedState.indices.has(idx)
+  const label = t(isPinned ? 'pin.remove' : 'pin.add')
+  return `<span class="pin-btn${isPinned ? ' is-pinned' : ''}" data-idx="${idx}" role="button" tabindex="0" aria-pressed="${isPinned}" aria-label="${escapeHtml(label)}">${isPinned ? '📍' : '📌'}</span>`
+}
+
+/** Same toggle, sized/styled for a .library-item row instead of a tile overlay. */
+function pinRowBtn(idx) {
+  const isPinned = pinnedState.indices.has(idx)
+  const btn = document.createElement('span')
+  btn.className = `library-pin-btn${isPinned ? ' is-pinned' : ''}`
+  btn.dataset.idx = String(idx)
+  btn.setAttribute('role', 'button')
+  btn.tabIndex = 0
+  btn.setAttribute('aria-pressed', String(isPinned))
+  btn.setAttribute('aria-label', t(isPinned ? 'pin.remove' : 'pin.add'))
+  btn.textContent = isPinned ? '📍' : '📌'
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    togglePinned(idx)
+  })
+  return btn
+}
+
+/** Flips the pinned state of a library index (optimistic UI, reverts on
+ *  a failed request), updates every matching button on screen, and — when
+ *  the hub is currently visible — refreshes its pinned tiles. */
+async function togglePinned(idx) {
+  const pin = !pinnedState.indices.has(idx)
+  if (pin) pinnedState.indices.add(idx); else pinnedState.indices.delete(idx)
+  syncPinButtons(idx, pin)
+  const res = await api(`${API}/pinned`, { method: 'POST', body: { index: idx, pinned: pin } })
+  if (!res.ok) {
+    if (pin) pinnedState.indices.delete(idx); else pinnedState.indices.add(idx)
+    syncPinButtons(idx, !pin)
+    return
+  }
+  if (state.currentSection === 'hub') loadPinned()
+}
+
+/** Updates every pin button for this index that is currently in the DOM
+ *  (a play-tile's overlay button and/or a library row's button). */
+function syncPinButtons(idx, isPinned) {
+  for (const btn of $$(`.pin-btn[data-idx="${idx}"], .library-pin-btn[data-idx="${idx}"]`)) {
+    btn.classList.toggle('is-pinned', isPinned)
+    btn.textContent = isPinned ? '📍' : '📌'
+    btn.setAttribute('aria-pressed', String(isPinned))
+    btn.setAttribute('aria-label', t(isPinned ? 'pin.remove' : 'pin.add'))
+  }
+}
+
+/** Hub loader: fetches the pinned indices + the library, renders pinned
+ *  items as play-tiles in #hub-pinned-grid, and hides the whole card when
+ *  nothing is pinned (or the library/pin fetch fails). */
+async function loadPinned() {
+  const card = $('#hub-pinned-card')
+  const grid = $('#hub-pinned-grid')
+  if (!card || !grid) return
+  await loadPinnedIndices()
+  if (pinnedState.indices.size === 0) {
+    card.hidden = true
+    grid.innerHTML = ''
+    return
+  }
+  let library = []
+  try {
+    const res = await fetch('/api/data', { credentials: 'same-origin' })
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data)) library = data
+    }
+  } catch { /* falls through to the empty-library check below */ }
+  // playLibraryItem() (tapping a tile to play it) reads playState.items by
+  // index — keep it filled even if the parent never opened the Play screen
+  // this session, so a tap on a pinned hub tile always works.
+  playState.items = library
+  const items = Array.from(pinnedState.indices)
+    .map((idx) => ({ item: library[idx], idx }))
+    .filter(({ item }) => item && typeof item === 'object')
+  if (items.length === 0) {
+    // every pinned index pointed at an item that no longer exists
+    card.hidden = true
+    grid.innerHTML = ''
+    return
+  }
+  card.hidden = false
+  grid.innerHTML = items.map(({ item, idx }) => playTileHtml(item, idx)).join('')
+}
+
+/** Renders one .play-tile (cover + title/artist overlay + pin button),
+ *  shared by the Play grid and the hub's pinned-items grid so both always
+ *  look and behave identically. */
+function playTileHtml(item, idx) {
+  const artist = escapeHtml(String(item.artist_override ?? item.artist ?? ''))
+  const title = escapeHtml(String(item.title_override ?? item.title ?? item.artist ?? '—'))
+  const coverUrl = item.cover_override ?? item.cover ?? spotifyCoverUrl(item)
+  const cover = coverUrl ? escapeHtml(String(coverUrl)) : ''
+  const typeLabel = playTypeLabel(item)
+  const coverEl = cover
+    ? `<img class="play-tile-cover" src="${cover}" alt="" loading="lazy">`
+    : `<div class="play-tile-cover-placeholder">${typeIcon(item)}</div>`
+  return `
+    <button class="play-tile" data-idx="${idx}" aria-label="${t('play.playAria', { title })}">
+      ${coverEl}
+      ${pinTileBtnHtml(idx)}
+      ${typeLabel ? `<span class="play-tile-badge">${typeLabel}</span>` : ''}
+      <div class="play-tile-overlay">
+        <div class="play-tile-title">${title}</div>
+        <div class="play-tile-artist">${artist}</div>
+      </div>
+    </button>`
 }
 
 async function playLibraryItem(idx) {
@@ -2906,6 +3030,7 @@ async function loadHub() {
   loadPlayback() // Phase 18 Item 5: top Now-Playing card
   loadPlaybackVolume() // Volume-Slider im Hero (Phase 19 follow-up)
   loadStatusBand() // Phase 19 Welle 2: 4-Chip Live-Status oberhalb Grid
+  loadPinned() // pinned Play/Library items as home-screen shortcuts
   // Sync-Card sub: last sync + counts. Fail silently — hub overview
   // shouldn't break if the sync endpoint hiccups.
   try {
@@ -3578,6 +3703,12 @@ function wire() {
     renderPlay()
   })
   $('#play-grid')?.addEventListener('click', (e) => {
+    const pinBtn = e.target.closest('.pin-btn')
+    if (pinBtn) {
+      const idx = Number(pinBtn.dataset.idx)
+      if (Number.isInteger(idx)) togglePinned(idx)
+      return
+    }
     const tile = e.target.closest('.play-tile')
     if (!tile) return
     if (tile.dataset.nasIdx !== undefined) {
@@ -3590,6 +3721,36 @@ function wire() {
     }
     const idx = Number(tile.dataset.idx)
     if (Number.isInteger(idx)) playLibraryItem(idx)
+  })
+  // Space/Enter on a pin-btn (a <span role="button">, not a real button —
+  // it sits inside a .play-tile <button> and a nested real button/anchor
+  // would get reparented out by the HTML parser).
+  $('#play-grid')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    const pinBtn = e.target.closest('.pin-btn')
+    if (!pinBtn) return
+    e.preventDefault()
+    const idx = Number(pinBtn.dataset.idx)
+    if (Number.isInteger(idx)) togglePinned(idx)
+  })
+  $('#hub-pinned-grid')?.addEventListener('click', (e) => {
+    const pinBtn = e.target.closest('.pin-btn')
+    if (pinBtn) {
+      const idx = Number(pinBtn.dataset.idx)
+      if (Number.isInteger(idx)) togglePinned(idx)
+      return
+    }
+    const tile = e.target.closest('.play-tile')
+    const idx = Number(tile?.dataset.idx)
+    if (Number.isInteger(idx)) playLibraryItem(idx)
+  })
+  $('#hub-pinned-grid')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    const pinBtn = e.target.closest('.pin-btn')
+    if (!pinBtn) return
+    e.preventDefault()
+    const idx = Number(pinBtn.dataset.idx)
+    if (Number.isInteger(idx)) togglePinned(idx)
   })
   $('#play-crumbs')?.addEventListener('click', (e) => {
     const crumb = e.target.closest('.play-crumb[data-depth]')

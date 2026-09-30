@@ -146,6 +146,13 @@
         </a>
       </nav>
 
+      <!-- Angepinnte Inhalte: per 📌 aus Play/Library auf die Startseite geholt. Card bleibt
+           versteckt, solange nichts angepinnt ist (siehe loadPinned() in app.js). -->
+      <div class="card-flat" id="hub-pinned-card" hidden>
+        <div class="section-label" data-i18n="hub.groupPinned"></div>
+        <div class="play-grid" id="hub-pinned-grid"></div>
+      </div>
+
       <!-- Drei semantische Gruppen statt eine flache Liste mit 10 Karten. -->
       <div class="card-flat">
         <div class="section-label" data-i18n="hub.groupToday"></div>

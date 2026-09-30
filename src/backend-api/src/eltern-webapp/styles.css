@@ -1453,6 +1453,50 @@ select:focus, textarea:focus {
   text-transform: uppercase;
 }
 
+/* Pin-Button: oben links auf jeder Kachel (Play-Grid + angepinnte Kacheln
+   im Hub), zusätzlich als Icon-Button in der Library-Zeile neben dem Titel.
+   📌 = nicht angepinnt, 📍 (amber, is-pinned) = angepinnt. */
+.pin-btn {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  color: #f6efe0;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 50%;
+  cursor: pointer;
+  user-select: none;
+}
+.pin-btn.is-pinned {
+  background: var(--brand);
+  color: #2d1d05;
+}
+.library-pin-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-elevated);
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 50%;
+  cursor: pointer;
+  user-select: none;
+}
+.library-pin-btn.is-pinned {
+  background: var(--brand);
+  color: #2d1d05;
+}
+
 /* Theme-Switcher grid (Phase 18 Item 3) */
 .theme-grid {
   display: grid;
