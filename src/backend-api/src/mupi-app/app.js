@@ -1039,9 +1039,6 @@ function sessionGone() {
 function startSkeleton() {
   return [
     `<section class="card hero now" id="now"><div class="now-idle">${icon('music')}<span>Verbinde …</span></div></section>`,
-    // Angepinnte Karten: per 📌 neben ihrer Überschrift hierher geholt, als volle, weiterhin bedienbare
-    // Kopie. Bleibt versteckt, solange nichts angepinnt ist (siehe loadPinned/drawPinnedSections).
-    `<div id="pinned-sections" hidden></div>`,
     `<div class="start-side">
       <div id="notices"></div>
       <div class="tiles" id="tiles">
@@ -1055,6 +1052,9 @@ function startSkeleton() {
         <button class="qbtn" id="q-sleep">${icon('time', 22)}<span id="q-sleep-label">Schlaftimer</span></button>
         <button class="qbtn" id="q-say">${icon('vol', 22)}<span>Durchsage</span></button>
       </div>
+      <!-- Angepinnte Karten: per 📌 neben ihrer Überschrift hierher geholt, als volle, weiterhin bedienbare
+           Kopie. Bleibt versteckt, solange nichts angepinnt ist (siehe loadPinned/drawPinnedSections). -->
+      <div id="pinned-sections" hidden></div>
     </div>`,
     `<div class="update-note" id="update-note"></div>`,
     `<section class="card nav-card start-more"><div class="navlist">
