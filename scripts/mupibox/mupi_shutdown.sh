@@ -13,8 +13,15 @@ PLAYERSTATE="/tmp/playerstate"
 # the goodbye picture first (the display's window is hidden, the picture drawn over it)
 /usr/local/bin/mupibox/show_goodbye.sh "$1"
 
+# Playback ends before anything else is heard: the shutdown sound sets the volume to the start volume, and music that
+# still plays then jumps to it for a moment. So paused first and waited for (up to 3 s) until the player says it is.
 if [ "$(head -n1 ${PLAYERSTATE} 2>/dev/null)" = "play" ]; then
-  curl -s http://127.0.0.1:5005/pause
+  curl -s -m 3 -o /dev/null http://127.0.0.1:5005/pause
+  i=0
+  while [ "$(head -n1 ${PLAYERSTATE} 2>/dev/null)" = "play" ] && [ $i -lt 30 ]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
 fi
 
 # The goodbye sound starts right away and plays while Chromium is ended and the goodbye picture is shown (ending
