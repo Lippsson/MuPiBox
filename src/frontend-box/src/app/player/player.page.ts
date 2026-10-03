@@ -294,6 +294,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
   trackListTitle = ''
   pressingCover = false
   listViewTimerMs = 2500
+  // The Cover Flow theme (Mupi-conf > Theme) mirrors the cover below it, as its lists do
+  protected coverflowTheme = false
   listFontFamily = ''
   private longPressTimer: ReturnType<typeof setTimeout> | undefined
   private shuffleTimer: ReturnType<typeof setTimeout> | undefined
@@ -365,6 +367,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
         if (typeof configuredSeconds === 'number' && configuredSeconds > 0) {
           this.listViewTimerMs = configuredSeconds * 1000
         }
+        this.coverflowTheme = config?.mupibox?.theme === 'coverflow'
       },
       error: () => {
         // Keep default listViewTimerMs if config could not be loaded.
