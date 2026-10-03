@@ -278,6 +278,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
   trackListTitle = ''
   pressingCover = false
   listViewTimerMs = 2500
+  // The Cover Flow theme (Mupi-conf > Theme) mirrors the cover below it, as its lists do
+  protected coverflowTheme = false
   // Settings > Audio > Volume: leaving the page does not stop what plays (the start page then shows the "Läuft gerade" bar)
   private continuePlayOnLeave = false
   listFontFamily = ''
@@ -353,6 +355,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
           this.listViewTimerMs = configuredSeconds * 1000
         }
         this.continuePlayOnLeave = config?.mupibox?.continuePlayOnLeave === true
+        this.coverflowTheme = config?.mupibox?.theme === 'coverflow'
       },
       error: () => {
         // Keep default listViewTimerMs if config could not be loaded.
