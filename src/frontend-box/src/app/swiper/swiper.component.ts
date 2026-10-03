@@ -478,7 +478,8 @@ export class SwiperComponent<T> {
     this.loadNearCovers(swiper, 9)
     // Three covers on each side of the centered one. The space between the edge of the centered cover and the
     // edge of the screen is divided into three equal steps (each side cover shows a strip of one step), and
-    // all side covers have the same tilt.
+    // all side covers have the same tilt. With three covers or fewer there are less than three on a side: the space
+    // is divided among those that are there, so the outermost one reaches the edge of the screen all the same.
     const visibleSides = 3
     const maxAngle = 65
     const depth = 100
@@ -494,7 +495,14 @@ export class SwiperComponent<T> {
     const coverWidth = this.coverflowCoverWidth || 300
     const unit = coverWidth + (Number(swiper.params.spaceBetween) || 0) // distance of two neighbouring covers in the row
     const screenHalf = swiper.width / 2
-    const step = (screenHalf - coverWidth / 2) / visibleSides
+    const room = screenHalf - coverWidth / 2 // from the edge of the centered cover to the edge of the screen
+    const total = (this.shownData() ?? []).length
+    // Where the list stands (the index of the cover in the middle, fractional while it moves): slide 0 has it as its progress.
+    const position = slides[0].progress ?? 0
+    // How many covers there are on the side of the screen `side` points to (-1 left, +1 right), at least 1 and at most
+    // 3 - kept steady while the list moves, so the covers glide instead of jumping when another one reaches the middle.
+    const coversOnSide = (side: number): number =>
+      total > 3 ? visibleSides : Math.min(visibleSides, Math.max(1, side > 0 ? total - 1 - position : position))
     for (const slide of slides) {
       const progress = slide.progress ?? 0
       const t = Math.abs(progress)
@@ -521,6 +529,7 @@ export class SwiperComponent<T> {
       const outerZ = z + (coverWidth / 2) * Math.sin(radians)
       const scale = perspective / (perspective - outerZ)
       // Move the outer edge of the cover to its place: one step further out for every cover.
+      const step = room / coversOnSide(side)
       const shift = side * (((coverWidth / 2) + t * (step - unit)) / scale - (coverWidth / 2) * Math.cos(radians))
       slide.style.transform = `perspective(${perspective}px) translateX(${shift}px) translateZ(${z}px) rotateY(${-side * angle}deg)`
       // Covers nearer to the center are drawn on top of the further ones.
