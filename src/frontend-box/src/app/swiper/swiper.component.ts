@@ -493,7 +493,6 @@ export class SwiperComponent<T> {
     const target = found >= 0 ? found : Math.min(position, data.length - 1)
     this.cachedSwiperPosition = target
     if (key) SwiperComponent.positions.set(key, target)
-    this.selectedIndex = target
     this.stageIndex.set(target)
     if (!shown || this.pendingRestore) return
     this.renderableLimit.set(Math.max(this.renderableLimit(), target + 12))
@@ -502,7 +501,7 @@ export class SwiperComponent<T> {
       const sw = this.swiper()
       if (!sw || !this.pageIsShown()) return
       ;(sw as unknown as { update?: () => void }).update?.()
-      if (!this.kmStage() && !this.isFewCovers() && sw.activeIndex !== target) sw.slideTo(target, 0)
+      if (!this.kmStage() && sw.activeIndex !== target) sw.slideTo(target, 0)
       this.applyCoverflow()
     }, 0)
   }
