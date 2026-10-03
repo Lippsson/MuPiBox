@@ -1,4 +1,4 @@
-<ion-header class="home-header">
+<ion-header class="home-header" [class.header-hidden]="headerHidden()">
   <ion-toolbar color="light">
     <ion-buttons slot="start">
       <ion-button (click)="resume()">
@@ -34,5 +34,5 @@
   @if (unavailable()) {
     <mupi-media-unavailable [nas]="category() === 'nas'"></mupi-media-unavailable>
   }
-  <mupi-swiper [data]="swiperData()" roundImages="true" (elementClicked)="this.artistCoverClicked($event.data)"></mupi-swiper>
+  <mupi-swiper [data]="swiperData()" [compact]="headerHidden()" roundImages="true" (elementClicked)="this.artistCoverClicked($event.data)"></mupi-swiper>
 </ion-content>
