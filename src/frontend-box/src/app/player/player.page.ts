@@ -54,6 +54,7 @@ import { KmThemeService } from '../theme/km-theme.service'
 import { LogService } from '../log.service'
 import { isResumeEntry, type Media } from '../media'
 import { MediaService } from '../media.service'
+import { noCoverStyle } from '../no-cover'
 import type { MupiboxConfig } from '../mupibox-config.model'
 import { StatusComponent } from '../status/status.component'
 import { PlayerCmds, PlayerService } from '../player.service'
@@ -192,6 +193,9 @@ export class PlayerPage implements OnInit, AfterViewInit {
   protected coverMissing(): boolean {
     return !this.km() && (!this.cover || this.cover.includes('nocover') || this.failedCovers.has(this.cover))
   }
+
+  // (the colours of the card: one per folder name, the same as in the lists - see no-cover.ts)
+  protected readonly noCoverStyle = noCoverStyle
 
   protected coverTitle(): string {
     return this.media?.title || this.media?.artist || ''
