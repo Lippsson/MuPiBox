@@ -6,6 +6,17 @@ Unter **Einstellungen › Akku & Strom** findest du alles zur Stromversorgung.
 
 **Einstellungen › Akku & Strom › Akku** zeigt den Ladestand, die Spannung und den Verlauf der letzten 24 Stunden. Das Display zeigt den Stand in der Statusanzeige.
 
+### Laden und die Zeit bis voll
+
+Während der Akku lädt, hält der Lader die Spannung hoch. Aus der Spannung allein wäre der Akku deshalb sofort „voll“. Die Box rechnet beim Laden anders:
+
+- Sie merkt sich den Stand **vor dem Anstecken** und zählt die **geladene Menge** (Strom mal Zeit) dazu. Die Prozentanzeige steigt dann mit der Ladung, statt gleich auf 100 % zu springen. Erst wenn der Lade-Chip die Ladung selbst für beendet erklärt, steht dort 100 %.
+- Die **Zeit bis voll** steht unter der Prozentzahl („voll in etwa 2 h 10 min“) und als eigene Zeile. Sie ist die Rest-Ladung geteilt durch den aktuellen Ladestrom. Gegen Ende, wenn der Strom langsam abfällt (Spannungsphase), wird sie aus dem gemessenen Abfall berechnet.
+- Zum Rechnen braucht die Box die **Kapazität** des Akkus. Bei den fertigen Profilen liest sie die Größe aus dem Namen (zum Beispiel „10.000mAh“). Beim eigenen Profil trägst du sie unter **Laden › Kapazität** ein. Ohne Kapazität gibt es keine Zeit bis voll.
+
+> [!NOTE]
+> Die Zeit ist eine Schätzung. Sie ändert sich mit dem Ladestrom: Läuft die Box beim Laden (Display, Musik), bleibt weniger Strom für den Akku übrig, und die Zeit wird länger. Ein alter Akku fasst weniger als aufgedruckt. Wird der Strom sehr klein, nennt die Box keine Zeit.
+
 ## MuPiHAT und Akku-Profil
 
 Der **MuPiHAT** ist eine Platine mit Akku-Verwaltung, die auf den Raspberry Pi gesteckt wird. Unter **MuPiHAT & Akku-Profil** stellst du ein:
