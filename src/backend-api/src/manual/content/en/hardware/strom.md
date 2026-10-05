@@ -12,6 +12,7 @@ While the battery charges, the charger holds the voltage up. From the voltage al
 
 - It remembers the level **from before the cable was plugged in** and adds the **charge that has gone in** (current times time). The percentage then rises with the charge instead of jumping to 100 % at once. Only when the charger chip declares the charge finished itself does it show 100 %.
 - The **time until full** is shown under the percentage (“full in about 2 h 10 min”) and as a row of its own. It is the remaining charge divided by the current charging current. Towards the end, when the current slowly falls off (constant-voltage phase), it is calculated from the measured fall.
+- If the charge was already running when the box (the service) started, it does not know the level from before. A note under the percentage then says the **starting value is only estimated from the voltage**. It is corrected at the change to the constant-voltage phase (about 85 %) and at the end of the charge.
 - For the calculation the box needs the battery's **capacity**. For the ready-made profiles it reads the size from the name (for example “10.000mAh”). For a custom profile you enter it under **Charging › Capacity**. Without a capacity there is no time until full.
 
 > [!NOTE]

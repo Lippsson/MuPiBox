@@ -12,6 +12,7 @@ Während der Akku lädt, hält der Lader die Spannung hoch. Aus der Spannung all
 
 - Sie merkt sich den Stand **vor dem Anstecken** und zählt die **geladene Menge** (Strom mal Zeit) dazu. Die Prozentanzeige steigt dann mit der Ladung, statt gleich auf 100 % zu springen. Erst wenn der Lade-Chip die Ladung selbst für beendet erklärt, steht dort 100 %.
 - Die **Zeit bis voll** steht unter der Prozentzahl („voll in etwa 2 h 10 min“) und als eigene Zeile. Sie ist die Rest-Ladung geteilt durch den aktuellen Ladestrom. Gegen Ende, wenn der Strom langsam abfällt (Spannungsphase), wird sie aus dem gemessenen Abfall berechnet.
+- Lief die Ladung schon, als die Box (der Dienst) startete, kennt sie den Stand davor nicht. Dann steht unter der Prozentzahl der Hinweis, dass der **Startwert nur aus der Spannung geschätzt** ist. Beim Übergang in die Spannungsphase (etwa 85 %) und am Ende der Ladung wird er korrigiert.
 - Zum Rechnen braucht die Box die **Kapazität** des Akkus. Bei den fertigen Profilen liest sie die Größe aus dem Namen (zum Beispiel „10.000mAh“). Beim eigenen Profil trägst du sie unter **Laden › Kapazität** ein. Ohne Kapazität gibt es keine Zeit bis voll.
 
 > [!NOTE]
