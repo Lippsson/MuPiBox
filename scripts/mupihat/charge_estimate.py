@@ -19,6 +19,15 @@ import os
 import time
 from collections import deque
 
+def _system_uptime():
+    """Seconds since the system started (a huge number where it cannot be told: nothing is restored then)."""
+    try:
+        with open("/proc/uptime") as f:
+            return float(f.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return 1e12
+
+
 CHARGING_PHASES = ("precharge", "cc", "cv", "topoff")
 
 
@@ -59,13 +68,21 @@ class ChargeEstimator:
     # the constant-voltage phase counts when the voltage is within this of the charge limit, for this many readings in a row
     CV_NEAR_LIMIT_MV = 250
     CV_CONFIRM_READINGS = 3
+    # a charge that was running when the box was restarted goes on where it was, for this many seconds after the start of
+    # the system (the state in /tmp is gone after a restart, so it is also kept on the memory card, at most this often)
+    REBOOT_WINDOW_S = 900
+    PERSIST_EVERY_S = 60
 
-    def __init__(self, capacity_mah=None, iterm_ma=200, clock=time.monotonic, wall=time.time, state_file=None):
+    def __init__(self, capacity_mah=None, iterm_ma=200, clock=time.monotonic, wall=time.time, state_file=None, persist_file=None, uptime=None):
         self.capacity = capacity_mah if capacity_mah and capacity_mah > 0 else None
         self.iterm = max(50, iterm_ma or 200)
         self._clock = clock
         self._wall = wall
         self._state_file = state_file
+        self._persist_file = persist_file
+        self._uptime = uptime or _system_uptime
+        self._persist_active = None
+        self._persist_wall = 0.0
         self._rest = deque()  # (t, percent by voltage) while not charging
         self._last_t = None
         self._cv_streak = 0
@@ -231,31 +248,62 @@ class ChargeEstimator:
         return int(round(seconds / 60.0 / 5.0) * 5)
 
     # --- a restart of the service in the middle of a charge goes on where it was
+    def _state(self):
+        return {"wall": self._wall(), "active": self.active, "start_pct": self.start_pct, "charged_mah": self.charged_mah, "cc_peak": self.cc_peak, "cv_i0": self.cv_i0, "percent": self.percent, "start_uncertain": self.start_uncertain}
+
+    def _write(self, path, data):
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+
     def _save(self):
-        if not self._state_file:
-            return
+        data = self._state()
+        if self._state_file:
+            try:
+                self._write(self._state_file, data)
+            except OSError:
+                pass
+        # (also on the memory card, for a restart of the whole box: when a charge starts or ends, else once a minute)
+        if self._persist_file and (data["active"] != self._persist_active or data["wall"] - self._persist_wall >= self.PERSIST_EVERY_S):
+            try:
+                os.makedirs(os.path.dirname(self._persist_file), exist_ok=True)
+                self._write(self._persist_file, data)
+                self._persist_active = data["active"]
+                self._persist_wall = data["wall"]
+            except OSError:
+                pass
+
+    @staticmethod
+    def _read(path):
+        if not path:
+            return None
         try:
-            data = {"wall": self._wall(), "active": self.active, "start_pct": self.start_pct, "charged_mah": self.charged_mah, "cc_peak": self.cc_peak, "cv_i0": self.cv_i0, "percent": self.percent, "start_uncertain": self.start_uncertain}
-            tmp = self._state_file + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump(data, f)
-            os.replace(tmp, self._state_file)
-        except OSError:
-            pass
+            with open(path) as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) and data.get("active") else None
+        except (OSError, ValueError, TypeError):
+            return None
+
+    def _apply(self, data):
+        self.active = True
+        self.start_pct = float(data["start_pct"])
+        self.charged_mah = float(data["charged_mah"])
+        self.cc_peak = float(data.get("cc_peak") or 0.0)
+        self.cv_i0 = data.get("cv_i0")
+        self.percent = data.get("percent")
+        self.start_uncertain = bool(data.get("start_uncertain", False))
 
     def _restore(self):
-        if not self._state_file:
-            return
         try:
-            with open(self._state_file) as f:
-                data = json.load(f)
-            if data.get("active") and self._wall() - float(data.get("wall", 0)) < 120:
-                self.active = True
-                self.start_pct = float(data["start_pct"])
-                self.charged_mah = float(data["charged_mah"])
-                self.cc_peak = float(data.get("cc_peak") or 0.0)
-                self.cv_i0 = data.get("cv_i0")
-                self.percent = data.get("percent")
-                self.start_uncertain = bool(data.get("start_uncertain", False))
-        except (OSError, ValueError, KeyError, TypeError):
+            data = self._read(self._state_file)
+            if data and self._wall() - float(data.get("wall", 0)) < 120:
+                self._apply(data)
+                return
+            # the state in /tmp is gone (the box was restarted): the one on the memory card counts for a short while after
+            # the start of the system - a charge that was running goes on, it does not start from a guess of the voltage
+            data = self._read(self._persist_file)
+            if data and self._uptime() < self.REBOOT_WINDOW_S:
+                self._apply(data)
+        except (ValueError, KeyError, TypeError):
             pass

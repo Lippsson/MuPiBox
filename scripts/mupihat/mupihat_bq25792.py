@@ -417,7 +417,7 @@ class bq25792:
                     iterm = int(self.REG09_Termination_Control.get_ITERM())
                 except Exception:
                     pass
-                self._charge = ChargeEstimator(capacity_mah=cap, iterm_ma=iterm or 200, state_file="/tmp/mupihat_charge.json")
+                self._charge = ChargeEstimator(capacity_mah=cap, iterm_ma=iterm or 200, state_file="/tmp/mupihat_charge.json", persist_file="/var/lib/mupihat/charge_state.json")
             if cap != self._charge_capacity:
                 self._charge.set_capacity(cap)
                 self._charge_capacity = cap

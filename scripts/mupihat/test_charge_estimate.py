@@ -139,3 +139,46 @@ for _ in range(5):
 assert slow.eta_min is None
 
 print("ok")
+
+
+# --- the box is restarted in the middle of a charge: the state in /tmp is gone, the one on the memory card goes on
+import tempfile
+
+with tempfile.TemporaryDirectory() as tmp:
+    tmp_state = os.path.join(tmp, "tmp_state.json")
+    persist = os.path.join(tmp, "var", "lib", "mupihat", "charge_state.json")
+    clk = [0.0]
+
+    def make(state, uptime):
+        return ChargeEstimator(capacity_mah=CAP, iterm_ma=ITERM, clock=lambda: clk[0], wall=lambda: clk[0], state_file=state, persist_file=persist, uptime=lambda: uptime)
+
+    a = make(tmp_state, 5000)
+    for _ in range(60):  # at rest: 30 %
+        clk[0] += STEP
+        a.update(-600, "Not Charging", START)
+    for _ in range(360):  # 30 minutes at 2 A
+        clk[0] += STEP
+        a.update(ICC, "Fast charge (CC mode)", START)
+    before = a.percent
+    assert before is not None and before > START + 5, before
+    assert os.path.exists(persist), "nothing was kept on the memory card"
+
+    # restart of the box 3 minutes later: /tmp is empty, the system has been up for 60 s
+    clk[0] += 180
+    b = make(os.path.join(tmp, "gone.json"), 60)
+    assert b.active and abs(b.percent - before) < 1.0 and not b.start_uncertain, (b.active, b.percent, before)
+    b.update(ICC, "Fast charge (CC mode)", 90.0)  # the voltage of the charge says "90 %": it is not taken as the start
+    assert b.percent < before + 3, b.percent
+
+    # the same state file, but the system has been up for hours (the service was started by hand long after): a guess
+    c = make(os.path.join(tmp, "gone2.json"), 7200)
+    assert not c.active, "an old state on the card was taken up long after the start"
+
+    # the cable was pulled while the box was restarting: the session ends at the first reading, what was reached stays
+    d = make(os.path.join(tmp, "gone3.json"), 60)
+    d.update(-500, "Not Charging", 40.0)
+    assert not d.active and d.percent is None
+    clk[0] += 30
+    d.update(ICC, "Fast charge (CC mode)", 90.0)  # plugged in again: starts from what was reached, not from the voltage of the charge
+    assert abs(d.start_pct - before) < 1.5, (d.start_pct, before)
+print("restart in the middle of a charge: ok")
