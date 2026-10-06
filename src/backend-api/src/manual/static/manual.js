@@ -99,13 +99,13 @@
       // where the choice is kept for the next visit (the page itself only knows this browser)
       const KEY = 'mupi-manual-gpio'
       try {
-        for (const id of JSON.parse(localStorage.getItem(KEY) || '[]')) if (data.optional.some((a) => a.id === id)) chosen.add(id)
+        for (const id of JSON.parse(localStorage.getItem(KEY) || '[]')) if (data.accessories.some((a) => a.id === id)) chosen.add(id)
       } catch (_e) {
         // storage blocked: nothing is remembered
       }
       const paint = () => {
         const users = new Map() // gpio -> [{acc, pin}]
-        for (const acc of [...data.fixed, ...data.optional.filter((a) => chosen.has(a.id))]) {
+        for (const acc of data.accessories.filter((a) => chosen.has(a.id))) {
           for (const pin of acc.pins) users.set(pin.g, [...(users.get(pin.g) ?? []), { acc, pin }])
         }
         const clashes = new Map() // "who clashes" -> [gpio]: one entry per pair of accessories

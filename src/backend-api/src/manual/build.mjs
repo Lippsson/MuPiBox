@@ -288,9 +288,8 @@ function gpioMap(lang, t) {
       short: a.short ? loc(a.short) : loc(a.name),
       pins: a.pins.map((p) => ({ g: p.gpio, fn: loc(p.fn), bus: p.bus })),
     }))
-  const fixed = prepare(gpioData.fixed)
-  const optional = prepare(gpioData.optional)
-  const data = { fixed, optional, text: { none: t('gpio.none'), ok: t('gpio.ok'), conflict: t('gpio.conflict'), free: t('gpio.free') } }
+  const optional = prepare(gpioData.accessories)
+  const data = { accessories: optional, text: { none: t('gpio.none'), ok: t('gpio.ok'), conflict: t('gpio.conflict'), free: t('gpio.free') } }
   const pinList = (a) => a.pins.map((p) => `${p.g} (${esc(p.fn)})`).join(', ')
   const dot = (a) => `<i class="gpio-dot" style="--c:${a.color}"></i>`
   const buttons = optional.map((a) => `<button type="button" class="gpio-btn" aria-pressed="false" data-acc="${a.id}" style="--c:${a.color}">${dot(a)}<span>${esc(a.name)}</span></button>`).join('')
@@ -308,7 +307,6 @@ function gpioMap(lang, t) {
 <div class="gpio-pick" role="group" aria-label="${esc(t('gpio.pick'))}">${buttons}</div>
 <p class="gpio-status" role="status" aria-live="polite"></p>
 <div class="gpio-board" role="group" aria-label="${esc(t('gpio.board'))}">${cells}</div>
-<p class="gpio-fixed"><b>${esc(t('gpio.fixed'))}:</b> ${fixed.map((a) => `${dot(a)}${esc(a.name)}`).join(' · ')}</p>
 <h3 id="${slugify(t('gpio.optional'))}">${esc(t('gpio.optional'))}<a class="anchor" href="#${slugify(t('gpio.optional'))}" aria-label="#">#</a></h3>
 <div class="table-wrap"><table class="gpio-table"><thead><tr><th>${esc(t('gpio.colAccessory'))}</th><th>${esc(t('gpio.colPins'))}</th></tr></thead><tbody>${optional.map((a) => `<tr data-acc="${a.id}"><td>${dot(a)}<strong>${esc(a.name)}</strong></td><td>${pinList(a)}</td></tr>`).join('')}</tbody></table></div>
 <script type="application/json" class="gpio-data">${JSON.stringify(data).replace(/</g, '\u003c')}</script>

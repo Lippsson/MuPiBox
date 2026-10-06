@@ -250,12 +250,12 @@ footer a { color: var(--mp-muted); }
 .gpio-board .t small { overflow: hidden; color: var(--mp-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .gpio-board .n { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--mp-chip); color: var(--mp-muted); font-size: 11px; }
 .gpio-board .fixed-pin { color: var(--mp-muted); }
+.gpio-board { margin-bottom: 20px; }
 .gpio-board .pin.used { border-color: var(--c); background: var(--mp-primary-soft); background: color-mix(in srgb, var(--c) 22%, var(--mp-surface)); }
 .gpio-board .pin.used .n { background: var(--c); color: #0B1220; }
 .gpio-board .pin.used .t small { color: var(--mp-text); }
 .gpio-board .pin.clash { border: 2px solid var(--mp-danger); background: var(--mp-danger-soft); }
 .gpio-board .pin.clash .n { background: var(--mp-danger); color: #fff; }
-.gpio-fixed { margin: 8px 0 16px; color: var(--mp-muted); font-size: 14px; }
 .gpio-table .gpio-dot { margin-right: 8px; }
 .gpio-table tr.on td { background: var(--mp-primary-soft); }
 @media (max-width: 420px) {
