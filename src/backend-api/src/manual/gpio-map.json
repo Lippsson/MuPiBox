@@ -85,6 +85,28 @@
       }
     },
     {
+      "id": "led",
+      "color": "#B5C94A",
+      "name": {
+        "de": "Status-LED",
+        "en": "Status LED"
+      },
+      "short": {
+        "de": "Status-LED",
+        "en": "Status LED"
+      },
+      "pins": [
+        {
+          "gpio": 13,
+          "bus": "led",
+          "fn": {
+            "de": "Betriebs-LED (Pin einstellbar, 13 nach der Installation)",
+            "en": "Status LED (pin adjustable, 13 after installation)"
+          }
+        }
+      ]
+    },
+    {
       "id": "mupihat",
       "color": "#8E9AF0",
       "name": {
@@ -121,6 +143,7 @@
         },
         {
           "gpio": 13,
+          "bus": "led",
           "fn": {
             "de": "Status-LED (LED_POWER)",
             "en": "Status LED (LED_POWER)"
