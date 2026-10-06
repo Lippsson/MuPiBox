@@ -2,6 +2,8 @@
 
 Die **GPIO-Pins** sind die Anschlüsse auf der Stiftleiste des Raspberry Pi. Zubehör der MuPiBox nutzt sie nach den **BCM-Nummern** (GPIO 26 ist nicht Pin 26 der Leiste, sondern der Anschluss mit der Bezeichnung „GPIO26“).
 
+:::gpio-map
+
 ## Pins, die die Box nutzt
 
 | Zubehör | Funktion | GPIO (BCM) | Einstellbar |

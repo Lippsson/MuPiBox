@@ -2,6 +2,8 @@
 
 The **GPIO pins** are the connections on the Raspberry Pi's pin header. The MuPiBox's accessories use them by their **BCM numbers** (GPIO 26 is not pin 26 of the header, but the connection labelled “GPIO26”).
 
+:::gpio-map
+
 ## Pins the box uses
 
 | Accessory | Function | GPIO (BCM) | Adjustable |

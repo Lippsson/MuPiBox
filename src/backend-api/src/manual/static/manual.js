@@ -81,6 +81,65 @@
     }
   }
 
+  // GPIO map (page anhang/gpio): a button per accessory marks the pins it uses on the pin header; a pin that two
+  // accessories use (apart from a shared bus, like I2C) is shown as an overlap
+  const gpio = $('.gpio-map')
+  if (gpio) {
+    let data = null
+    try {
+      data = JSON.parse(gpio.querySelector('.gpio-data').textContent)
+    } catch (_e) {
+      // without the data the table below the map still tells the pins
+    }
+    if (data) {
+      const status = gpio.querySelector('.gpio-status')
+      const pins = new Map([...gpio.querySelectorAll('.pin[data-g]')].map((el) => [Number(el.dataset.g), el]))
+      const buttons = [...gpio.querySelectorAll('.gpio-btn')]
+      const chosen = new Set()
+      // where the choice is kept for the next visit (the page itself only knows this browser)
+      const KEY = 'mupi-manual-gpio'
+      try {
+        for (const id of JSON.parse(localStorage.getItem(KEY) || '[]')) if (data.optional.some((a) => a.id === id)) chosen.add(id)
+      } catch (_e) {
+        // storage blocked: nothing is remembered
+      }
+      const paint = () => {
+        const users = new Map() // gpio -> [{acc, pin}]
+        for (const acc of [...data.fixed, ...data.optional.filter((a) => chosen.has(a.id))]) {
+          for (const pin of acc.pins) users.set(pin.g, [...(users.get(pin.g) ?? []), { acc, pin }])
+        }
+        const clashes = new Map() // "who clashes" -> [gpio]: one entry per pair of accessories
+        for (const [g, el] of pins) {
+          const list = users.get(g) ?? []
+          const clash = list.length > 1 && !(list[0].pin.bus && list.every((u) => u.pin.bus === list[0].pin.bus))
+          el.classList.toggle('used', list.length > 0)
+          el.classList.toggle('clash', clash)
+          el.style.setProperty('--c', list[0]?.acc.color ?? 'transparent')
+          const label = list.map((u) => u.acc.short ?? u.acc.name).join(' + ')
+          el.querySelector('small').textContent = list.length ? label : ''
+          el.title = list.length ? list.map((u) => `${u.acc.name}: ${u.pin.fn}`).join('\n') : data.text.free
+          if (clash) clashes.set(label, [...(clashes.get(label) ?? []), g])
+        }
+        for (const b of buttons) b.setAttribute('aria-pressed', String(chosen.has(b.dataset.acc)))
+        for (const row of gpio.querySelectorAll('.gpio-table tr[data-acc]')) row.classList.toggle('on', chosen.has(row.dataset.acc))
+        gpio.classList.toggle('has-clash', clashes.size > 0)
+        status.textContent = clashes.size ? `${data.text.conflict} ${[...clashes].map(([who, gs]) => `GPIO ${gs.sort((a, b) => a - b).join(', ')} (${who})`).join('; ')}` : chosen.size ? data.text.ok : data.text.none
+      }
+      for (const b of buttons) {
+        b.addEventListener('click', () => {
+          if (!chosen.delete(b.dataset.acc)) chosen.add(b.dataset.acc)
+          try {
+            localStorage.setItem(KEY, JSON.stringify([...chosen]))
+          } catch (_e) {
+            // storage blocked: the choice then lasts for this page only
+          }
+          paint()
+        })
+      }
+      paint()
+    }
+  }
+
   // search
   const input = $('#q')
   const box = $('#results')

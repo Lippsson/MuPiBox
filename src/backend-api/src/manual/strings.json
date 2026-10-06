@@ -40,7 +40,19 @@
     "ref.colSetting": "Einstellung",
     "ref.colKind": "Art und Werte",
     "ref.colMeaning": "Bedeutung",
-    "ref.groupIntro": "Die Einstellungen dieser Gruppe:"
+    "ref.groupIntro": "Die Einstellungen dieser Gruppe:",
+    "gpio.pick": "Zubehör auswählen",
+    "gpio.hint": "Tippe auf ein Zubehör, das du anschließt. Die Pinleiste zeigt dann, welche Pins es belegt.",
+    "gpio.board": "Pinleiste des Raspberry Pi",
+    "gpio.none": "Noch kein Zubehör gewählt. Angezeigt werden nur die Pins der Standard-Ausstattung der Box.",
+    "gpio.ok": "Keine Überschneidung: Die gewählten Pins sind frei.",
+    "gpio.conflict": "Überschneidung: Diese Pins würden doppelt belegt:",
+    "gpio.fixed": "Immer belegt (Standard-Ausstattung der Box)",
+    "gpio.optional": "Pins des auswählbaren Zubehörs",
+    "gpio.colAccessory": "Zubehör",
+    "gpio.colPins": "Pins (BCM)",
+    "gpio.free": "frei",
+    "gpio.power": "Strom / Masse"
   },
   "en": {
     "languageName": "English",
@@ -83,6 +95,18 @@
     "ref.colSetting": "Setting",
     "ref.colKind": "Type and values",
     "ref.colMeaning": "Meaning",
-    "ref.groupIntro": "The settings of this group:"
+    "ref.groupIntro": "The settings of this group:",
+    "gpio.pick": "Choose accessories",
+    "gpio.hint": "Tap an accessory you connect. The pin header then shows which pins it uses.",
+    "gpio.board": "The Raspberry Pi's pin header",
+    "gpio.none": "No accessory chosen yet. Only the pins of the box's standard equipment are shown.",
+    "gpio.ok": "No overlap: the chosen pins are free.",
+    "gpio.conflict": "Overlap: these pins would be used twice:",
+    "gpio.fixed": "Always used (standard equipment of the box)",
+    "gpio.optional": "Pins of the accessories you can choose",
+    "gpio.colAccessory": "Accessory",
+    "gpio.colPins": "Pins (BCM)",
+    "gpio.free": "free",
+    "gpio.power": "Power / ground"
   }
 }
