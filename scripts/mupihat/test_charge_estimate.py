@@ -182,3 +182,55 @@ with tempfile.TemporaryDirectory() as tmp:
     d.update(ICC, "Fast charge (CC mode)", 90.0)  # plugged in again: starts from what was reached, not from the voltage of the charge
     assert abs(d.start_pct - before) < 1.5, (d.start_pct, before)
 print("restart in the middle of a charge: ok")
+
+
+# --- a pack of high resistance: the terminals are at the charge limit at 0.5 A, the chip says "CV", the cells are at 73 %
+hr = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    hr.update(-600, "Not Charging", 72.0)
+for _ in range(120):  # 10 minutes: 8280 mV at the terminals, VREG 8300, 0.5 A, the pack at rest would read 7940 mV (73 %)
+    clock[0] += STEP
+    hr.update(500, "Taper Charge (CV mode)", 73.0, 8280, 8300, 7940)
+assert hr.phase == "cc" and hr.percent is not None and hr.percent < 80, (hr.phase, hr.percent)
+# ... while the same report with a pack that really is near the limit still counts as the constant-voltage phase
+real = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    real.update(-600, "Not Charging", 80.0)
+for _ in range(10):
+    clock[0] += STEP
+    real.update(1500, "Taper Charge (CV mode)", 90.0, 8290, 8300, 8250)
+assert real.phase == "cv" and real.percent >= 85.0, (real.phase, real.percent)
+print("high resistance pack, false CV: ok")
+
+
+# --- "termination done" for a moment (the current fell below the termination current while the box took the input): not full
+fl = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    fl.update(-600, "Not Charging", 72.0)
+for k in range(120):
+    clock[0] += STEP
+    done_now = k % 20 in (5, 6)  # two readings in a row now and then
+    fl.update(500, "Charge Termination Done" if done_now else "Fast charge (CC mode)", 73.0, 8280, 8300, 7940)
+assert fl.phase == "cc" and fl.percent < 80, (fl.phase, fl.percent)
+# ... and a percent that was set far too high is taken back to the count while the charge runs in CC
+bad = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    bad.update(-600, "Not Charging", 72.0)
+bad.update(500, "Fast charge (CC mode)", 73.0, 8200, 8300, 7900)
+bad.percent = 99.0
+bad.update(500, "Fast charge (CC mode)", 73.0, 8200, 8300, 7900)
+assert bad.percent < 80, bad.percent
+# a real end of the charge still counts: terminals and rest voltage near the limit, the report stays
+fin = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    fin.update(-600, "Not Charging", 90.0)
+for _ in range(10):
+    clock[0] += STEP
+    fin.update(200, "Charge Termination Done", 99.0, 8300, 8300, 8280)
+assert fin.phase == "done" and fin.percent == 100.0, (fin.phase, fin.percent)
+print("termination flicker, heal, real end: ok")

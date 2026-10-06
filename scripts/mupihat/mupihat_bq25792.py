@@ -467,7 +467,7 @@ class bq25792:
                 vreg = int(self.REG01_Charge_Voltage_Limit.VREG)
             except Exception:
                 pass
-            self._charge.update(ibat_now, self.read_ChargerStatus(), self._percent_at(v_rest), self.read_Vbat(), vreg)
+            self._charge.update(ibat_now, self.read_ChargerStatus(), self._percent_at(v_rest), self.read_Vbat(), vreg, v_rest)
             if self._resistance is not None:
                 # (not while the charger holds the voltage: it does not follow the current then)
                 self._resistance.add(self.read_Vbat(), ibat_now, self._charge.phase not in ("cv", "topoff", "done"))
