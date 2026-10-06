@@ -38,9 +38,10 @@ import logging
 import re
 
 try:
-    from charge_estimate import ChargeEstimator
+    from charge_estimate import ChargeEstimator, ResistanceTracker
 except ImportError:  # an old install without the file: the percent then comes from the voltage alone
     ChargeEstimator = None
+    ResistanceTracker = None
 
 # Configure logging
 logging.basicConfig(
@@ -171,6 +172,9 @@ class bq25792:
             # 4s cycle = ~32s window, well below the timescale of real SoC
             # change but long enough to absorb the load-sag transients.
             self._vbat_history: list[int] = []
+            # the battery current in the same smoothing window, and the measured resistance of the pack (charge_estimate.py)
+            self._ibat_history: list[int] = []
+            self._resistance = None
             # percent while charging and time until full (charge_estimate.py), made when the profile is known
             self._charge = None
             self._charge_capacity = None
@@ -358,8 +362,31 @@ class bq25792:
             return self.read_Vbat()
         return sum(self._vbat_history) // len(self._vbat_history)
 
-    # the resistance of the pack and its wiring in ohms (2S: two cells and the cables): a current of 0.5 A is 60 mV
+    # the resistance between the HAT and the cells in ohms (cells, holders, wires, the BMS): until a step of the battery
+    # current has been seen (charger plugged in or pulled out) a typical 2S pack. Measured by ResistanceTracker.
     PACK_RESISTANCE_OHM = 0.12
+    # more than this many mV is never taken off or added: a wrong resistance must not move the percent by half a pack
+    MAX_COMPENSATION_MV = 1200
+
+    def pack_ohm(self) -> float:
+        '''The resistance of the pack in ohms: the measured one, else the typical one.'''
+        return self._resistance.ohm if self._resistance is not None else self.PACK_RESISTANCE_OHM
+
+    def smoothed_ibat(self) -> float:
+        '''The battery current (mA, + = charging) averaged over the same readings as smoothed_vbat().'''
+        if not self._ibat_history:
+            return 0.0
+        return sum(self._ibat_history) / len(self._ibat_history)
+
+    def compensated_vbat(self) -> int:
+        '''
+        The battery voltage as it would be at rest: the smoothed voltage less the drop the current causes in the pack
+        (while charging), or plus it (while the box takes current from the pack). This is what the percent comes from; the
+        shutdown limits stay on the real voltage.
+        '''
+        drop = self.smoothed_ibat() * self.pack_ohm()
+        drop = max(-self.MAX_COMPENSATION_MV, min(self.MAX_COMPENSATION_MV, drop))
+        return int(round(self.smoothed_vbat() - drop))
 
     def _voltage_percent(self):
         '''
@@ -376,7 +403,7 @@ class bq25792:
             return None
         if v_100 <= 10:
             return None
-        return self._percent_at(self.smoothed_vbat())
+        return self._percent_at(self.compensated_vbat())
 
     def _percent_at(self, v):
         '''The percent a rest voltage (mV) stands for on the profile's curve (float, 0-100); None without a curve.'''
@@ -410,6 +437,15 @@ class bq25792:
         if ChargeEstimator is None:
             return
         try:
+            # the current in the same window as the voltage, and the resistance measured from its steps
+            ibat_now = self.read_Ibat()
+            if ibat_now is None:
+                return
+            self._ibat_history.append(int(ibat_now))
+            if len(self._ibat_history) > self._vbat_history_max:
+                self._ibat_history.pop(0)
+            if self._resistance is None and ResistanceTracker is not None:
+                self._resistance = ResistanceTracker(persist_file="/var/lib/mupihat/pack_resistance.json")
             cap = self.battery_conf.get('capacity_mah')
             if self._charge is None:
                 iterm = None
@@ -425,19 +461,22 @@ class bq25792:
                 return
             # What the pack would read at rest: the voltage less the drop the current causes in the pack (charging) or
             # plus it (discharging). Only the estimate takes this value; the percent shown at rest is the plain voltage.
-            ibat = self.read_Ibat()
-            v_rest = self.smoothed_vbat() - ibat * self.PACK_RESISTANCE_OHM
+            v_rest = self.compensated_vbat()
             vreg = None
             try:
                 vreg = int(self.REG01_Charge_Voltage_Limit.VREG)
             except Exception:
                 pass
-            self._charge.update(ibat, self.read_ChargerStatus(), self._percent_at(v_rest), self.read_Vbat(), vreg)
+            self._charge.update(ibat_now, self.read_ChargerStatus(), self._percent_at(v_rest), self.read_Vbat(), vreg)
+            if self._resistance is not None:
+                # (not while the charger holds the voltage: it does not follow the current then)
+                self._resistance.add(self.read_Vbat(), ibat_now, self._charge.phase not in ("cv", "topoff", "done"))
             # The charge ended (cable out): the smoothing still holds the voltages of the charge - half a minute of
             # "80 %" - so it starts anew from the voltage the pack has now.
             charging = self._charge.percent is not None and self._charge.phase in ("precharge", "cc", "cv", "topoff")
             if self._was_charging and not charging:
                 self._vbat_history.clear()
+                self._ibat_history.clear()
             self._was_charging = charging
         except Exception as _error:
             logging.error("charge estimate failed: %s", str(_error))
@@ -480,7 +519,7 @@ class bq25792:
             # under this profile read as 0 % before)
             return (0, "none")
 
-        v = self.smoothed_vbat()
+        v = self.compensated_vbat()
 
         # Piecewise linear: each segment maps [v_lower, v_upper] to a
         # 25-percentage-point range linearly.
@@ -6248,6 +6287,9 @@ class bq25792:
             'Charge_Eta_Min' : self._charge.eta_min if self._charge is not None else None,
             'Bat_Capacity_mAh' : self.battery_conf.get('capacity_mah'),
             # True while the percent of a charge rests on a starting point that is only guessed from the voltage
+            # the resistance between the HAT and the cells in milliohms, and whether it was measured (else a typical value)
+            'Pack_Resistance_mOhm' : int(round(self.pack_ohm() * 1000)),
+            'Pack_Resistance_Measured' : bool(self._resistance is not None and self._resistance.measured),
             'Charge_Start_Uncertain' : bool(self._charge is not None and self._charge.percent is not None and self._charge.start_uncertain),
         }
     
