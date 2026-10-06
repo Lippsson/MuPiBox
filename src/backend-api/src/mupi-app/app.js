@@ -301,11 +301,13 @@ function renderChrome(page) {
   $('#topbar').innerHTML = `
     ${isArea ? `<div class="brand-dot">${mupiImg()}</div>` : `<button class="icon-btn" id="back" aria-label="Zurück">${icon('back')}</button>`}
     <div class="title">${esc(title)}</div>
+    ${manualButton()}
     ${langButton()}
     ${themeButton()}
     <button class="icon-btn soft" id="power-btn" aria-label="Neu starten oder ausschalten">${icon('power')}</button>
     ${state.open ? '' : `<button class="icon-btn" id="logout-btn" aria-label="Abmelden">${icon('logout')}</button>`}`
   $('#back')?.addEventListener('click', () => go(backTarget(page)))
+  $('#manual-btn').addEventListener('click', openManual)
   $('#lang-btn').addEventListener('click', openLangSheet)
   $('#theme-btn').addEventListener('click', toggleTheme)
   $('#power-btn').addEventListener('click', openPowerSheet)
@@ -328,6 +330,16 @@ function renderChrome(page) {
       ${a.id === 'einstellungen' ? groups.map((g) => `<button class="side-link sub" data-go="${g.id}" ${g.id === groupOf ? 'aria-current="page"' : ''}>${icon(g.icon, 18)}${esc(g.title)}</button>`).join('') : ''}`,
     ).join('')}`
   for (const el of document.querySelectorAll('[data-go]')) el.onclick = () => go(el.dataset.go)
+}
+
+// The manual on the box (/manual/, open without a login): in the app's language when it has it, else its own choice
+// (the language used there last, or the browser's)
+function manualButton() {
+  return `<button class="icon-btn soft" id="manual-btn" aria-label="Handbuch">${icon('book')}</button>`
+}
+function openManual() {
+  const lang = getLang()
+  window.open(['de', 'en'].includes(lang) ? `/manual/${lang}/index.html` : '/manual/', '_blank', 'noopener')
 }
 
 function themeButton() {
@@ -4851,7 +4863,7 @@ function nasTop() {
         <div class="rows">${nas.profiles
           .map(
             (p, i) => `<div class="entry"><span class="lbl"><b>${esc(p.name === 'standard' ? 'Standard' : p.name)}</b><small>${p.shown} angezeigt · ${p.hidden} ausgeblendet · ${p.download} laden${p.matchesLogin ? '' : ` · anderes NAS (${esc(p.account ?? '')}@${esc(p.address ?? '')})`}</small></span>
-              ${p.active ? '<span class="chip ok">aktiv</span>' : `<button class="btn sm" data-pload="${i}" ${p.matchesLogin ? '' : 'disabled'}>Laden</button>`}${p.name === 'standard' ? '' : `<button class="btn danger sm" data-pdel="${i}">Löschen</button>`}</div>`,
+              ${p.active ? '<span class="chip ok">aktiv</span>' : `<button class="btn sm" data-pload="${i}" ${p.matchesLogin ? '' : 'disabled'}>Übernehmen</button>`}${p.name === 'standard' ? '' : `<button class="btn danger sm" data-pdel="${i}">Löschen</button>`}</div>`,
           )
           .join('')}</div>
         <div class="btns"><button class="btn" id="n-pnew">${icon('plus', 18)}Auswahl als Profil speichern</button></div></section>`
@@ -5234,7 +5246,7 @@ function mountNas(root, page) {
   for (const b of root.querySelectorAll('[data-pload]')) {
     const p = nas.profiles[Number(b.dataset.pload)]
     b.onclick = () =>
-      confirmSheet('Laden', `Profil „${p.name === 'standard' ? 'Standard' : p.name}“ laden? Die aktuelle Ordner-Auswahl wird ersetzt${nas.edits.size ? ' (auch deine ungespeicherten Änderungen)' : ''}.`, async () => {
+      confirmSheet('Übernehmen', `Profil „${p.name === 'standard' ? 'Standard' : p.name}“ übernehmen? Die aktuelle Ordner-Auswahl wird ersetzt${nas.edits.size ? ' (auch deine ungespeicherten Änderungen)' : ''}.`, async () => {
         const r = await api('/api/nas/profiles/load', { method: 'POST', body: { name: p.name } })
         if (r.body?.error === 'different_login') return toast('Das Profil gehört zu einem anderen NAS oder Konto', 'info')
         if (!r.body?.success) return toast('Das hat nicht geklappt', 'info')
@@ -9440,7 +9452,9 @@ const CONTROLLERS = {
           if (it.key === 'stage') return { ...it, help: `Große Cover in der Mitte, für die Kinder-Themes${isKidsTheme(disp.theme?.current) ? '' : ` – das aktive Theme (${cur}) nutzt sie nicht`}.` }
           // (reading names out works only with the cover flow: shown under it while it is on)
           if (it.key === 'tts') return { ...it, dep: 'stage' }
-          if (it.key === 'names' || it.key === 'hideScroll') return { ...it, help: disp.theme?.current === 'coverflow' ? 'Nur beim Theme „coverflow“.' : `Nur beim Theme „coverflow“ – aktiv ist gerade „${cur}“.` }
+          // (the scroll bar is below the covers in every view - the cover flow's and the three side by side too)
+          if (it.key === 'hideScroll') return { ...it, help: 'Der Balken unter den Covern, in jeder Ansicht.' }
+          if (it.key === 'names') return { ...it, help: disp.theme?.current === 'coverflow' ? 'Nur beim Theme „coverflow“.' : `Nur beim Theme „coverflow“ – aktiv ist gerade „${cur}“.` }
           return it
         }),
       })),
@@ -9863,7 +9877,8 @@ const CONTROLLERS = {
           ],
         },
         {
-          title: 'Laden',
+          // ("Aufladen": "Laden" is the NAS's and the voices' download in the English app)
+          title: 'Aufladen',
           col: 1,
           items: [
             it('vreg', { label: 'Ladeschluss', sub: 'VREG', unit: 'mV', help: 'Leer = Standard des Lade-Chips. Bei zwei Zellen in Reihe höchstens 8400 mV (4,2 V je Zelle) – höher schadet dem Akku.' }),
@@ -10624,7 +10639,8 @@ function toast(text, kind = 'ok') {
 /* ---------- login ---------- */
 
 function renderLoginBar() {
-  $('#topbar').innerHTML = `<div class="login-bar">${langButton()}${themeButton()}</div>`
+  $('#topbar').innerHTML = `<div class="login-bar">${manualButton()}${langButton()}${themeButton()}</div>`
+  $('#manual-btn').addEventListener('click', openManual)
   $('#lang-btn').addEventListener('click', openLangSheet)
   $('#theme-btn').addEventListener('click', toggleTheme)
 }

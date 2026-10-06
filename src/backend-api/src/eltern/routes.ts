@@ -2084,7 +2084,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       available,
       labels,
       labelsDe,
-      stage: mb.themeStage === true,
+      stage: mb.themeStage !== false, // (on unless switched off: the default since 5.0.8)
       stageAutoRead: mb.themeStageAutoRead === true,
     })
   })
@@ -2148,7 +2148,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       const m = ((c.mupibox as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
       if (typeof body.stage === 'boolean') m.themeStage = body.stage
       if (typeof body.autoRead === 'boolean') m.themeStageAutoRead = body.autoRead
-      stage = m.themeStage === true
+      stage = m.themeStage !== false
       autoRead = m.themeStageAutoRead === true
       c.mupibox = m
     })
