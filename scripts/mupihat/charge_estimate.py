@@ -307,3 +307,111 @@ class ChargeEstimator:
                 self._apply(data)
         except (ValueError, KeyError, TypeError):
             pass
+
+
+class ResistanceTracker:
+    """Measures the resistance between the HAT and the cells (cells, holders, wires, the BMS) from the steps of the battery
+    current: V = OCV + I x R, and within a few seconds of a step (the charger plugged in or pulled, the box's load going up
+    or down) the open-circuit voltage OCV has not moved, so  R = (V after - V before) / (I after - I before).
+
+    The pack's rest voltage is then  V - I x R  (I positive = charging), in the charge as at the load of the music. Until a
+    step has been seen the value of before is used (a typical pack: 0.12 ohm); a measured value is kept on the memory card.
+    No I2C in here (see test_resistance.py)."""
+
+    DEFAULT_OHM = 0.12
+    MIN_OHM = 0.02
+    MAX_OHM = 2.0
+    # a step is a change of the current by at least this much between two readings ...
+    MIN_STEP_MA = 400
+    # ... with the current steady (within this) in the seconds before and after it
+    SPREAD_MA = 250
+    BEFORE_S = 25.0
+    AFTER_S = 8.0  # only the first seconds after the step: the polarisation of the cells is still small then
+    KEEP_S = 90.0
+    ALPHA = 0.3  # how much a new measurement counts against the old value
+
+    def __init__(self, clock=time.monotonic, wall=time.time, persist_file=None):
+        self._clock = clock
+        self._wall = wall
+        self._persist_file = persist_file
+        self._samples = deque()  # (t, mV, mA)
+        self._done_t = -1.0
+        self.ohm = self.DEFAULT_OHM
+        self.measured = False
+        self.count = 0
+        self._load()
+
+    def add(self, vbat_mv, ibat_ma, valid=True):
+        """One reading (every few seconds). valid=False while the charger holds the voltage (CV phase, top-off, done): the
+        voltage does not follow the current then, nothing can be measured and what was collected is dropped."""
+        if not valid or vbat_mv is None or ibat_ma is None:
+            self._samples.clear()
+            return
+        now = self._clock()
+        self._samples.append((now, float(vbat_mv), float(ibat_ma)))
+        while self._samples and now - self._samples[0][0] > self.KEEP_S:
+            self._samples.popleft()
+        self._evaluate()
+
+    @staticmethod
+    def _median(values):
+        v = sorted(values)
+        return v[len(v) // 2] if len(v) % 2 else (v[len(v) // 2 - 1] + v[len(v) // 2]) / 2.0
+
+    def _evaluate(self):
+        s = list(self._samples)
+        for k in range(len(s) - 1, 0, -1):
+            t1 = s[k][0]
+            if t1 <= self._done_t:
+                return
+            if abs(s[k][2] - s[k - 1][2]) < self.MIN_STEP_MA:
+                continue
+            if s[-1][0] - t1 < self.AFTER_S:
+                return  # the seconds after the step are not over yet
+            self._done_t = t1
+            before = [x for x in s[:k] if s[k - 1][0] - x[0] <= self.BEFORE_S]
+            after = [x for x in s[k:] if x[0] - t1 <= self.AFTER_S]
+            if len(before) < 3 or len(after) < 2:
+                return
+            if max(x[2] for x in before) - min(x[2] for x in before) > self.SPREAD_MA:
+                return
+            if max(x[2] for x in after) - min(x[2] for x in after) > self.SPREAD_MA:
+                return
+            d_i = self._median([x[2] for x in after]) - self._median([x[2] for x in before])
+            d_v = self._median([x[1] for x in after]) - self._median([x[1] for x in before])
+            if abs(d_i) < self.MIN_STEP_MA:
+                return
+            r = d_v / d_i
+            if not (self.MIN_OHM <= r <= self.MAX_OHM):
+                return  # a voltage that did not follow the current (or the wrong way): not a measurement of the pack
+            self.ohm = r if not self.measured else self.ohm + (r - self.ohm) * self.ALPHA
+            self.measured = True
+            self.count += 1
+            self._save()
+            return
+
+    def _save(self):
+        if not self._persist_file:
+            return
+        try:
+            os.makedirs(os.path.dirname(self._persist_file), exist_ok=True)
+            tmp = self._persist_file + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump({"ohm": self.ohm, "count": self.count, "wall": self._wall()}, f)
+            os.replace(tmp, self._persist_file)
+        except OSError:
+            pass
+
+    def _load(self):
+        if not self._persist_file:
+            return
+        try:
+            with open(self._persist_file) as f:
+                data = json.load(f)
+            ohm = float(data["ohm"])
+            if self.MIN_OHM <= ohm <= self.MAX_OHM:
+                self.ohm = ohm
+                self.measured = True
+                self.count = int(data.get("count", 1))
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
