@@ -14,6 +14,9 @@ export interface MupiboxConfig {
     hideScrollbar?: boolean
     // Coverflow theme only: shows the album/folder name under each cover (Admin > Mupi-conf > Theme)
     coverflowShowNames?: boolean
+    // Shape of the covers in the cover views (app: Aussehen > Ansicht > "Runde Cover"): true = round, false = square with a
+    // small rounding, not set = as the theme has it (the km themes' round artist covers, the Cover Flow's squares)
+    coverRound?: boolean
     // Theme "custom" (Eigenes): the parents' settings - the display adds their stylesheet and, with light, km-light
     customTheme?: { resolved?: 'light' | 'dark'; v?: number }
     // Add other mupibox properties if needed

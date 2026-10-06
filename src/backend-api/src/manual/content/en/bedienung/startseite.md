@@ -27,6 +27,7 @@ Under **Settings › Appearance › View** you set:
 - **Read the name aloud when the cover stops**: only with the cover flow view (voice and language: **Audio › Speech output**),
 - **Show folder and album names**: only with the theme coverflow,
 - **Hide horizontal scroll bar**: the bar below the covers, in every view.
+- **Round covers**: off = square covers with a small rounding, on = round covers (in the Cover Flow view and in the lists of the children's themes). Without a choice it stays as the theme looks.
 
 ## Folders and albums
 

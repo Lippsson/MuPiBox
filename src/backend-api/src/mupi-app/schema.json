@@ -1862,6 +1862,13 @@
       },
       {
        "type": "toggle",
+       "label": "Runde Cover",
+       "key": "coverRound",
+       "default": false,
+       "help": "Aus: quadratisch mit kleiner Rundung. An: runde Cover. Gilt für die Cover-Ansichten auf dem Display."
+      },
+      {
+       "type": "toggle",
        "label": "Horizontale Scrollleiste ausblenden",
        "key": "hideScroll",
        "default": true

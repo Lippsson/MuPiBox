@@ -207,6 +207,9 @@ export class SwiperComponent<T> {
   /** Width of one cover in the Cover Flow, measured on first use (0 = not yet). */
   private coverflowCoverWidth = 0
   protected hideScrollbar: WritableSignal<boolean> = signal(false)
+  // "Runde Cover" of the app: round | square (small rounding) | auto (not chosen: as the theme and the page have it)
+  protected coverShape: WritableSignal<'round' | 'square' | 'auto'> = signal('auto')
+  protected readonly roundCovers = computed(() => (this.coverShape() === 'round' ? true : this.coverShape() === 'square' ? false : this.roundImages()))
   // Coverflow theme only: shows currentData.name (album name, falling back to the folder name -
   // the same value the non-Coverflow list already shows under each cover) below the cover.
   protected coverflowShowNames: WritableSignal<boolean> = signal(false)
@@ -232,6 +235,8 @@ export class SwiperComponent<T> {
       next: (config) => {
         this.coverflow.set(config?.mupibox?.theme === 'coverflow')
         this.hideScrollbar.set(config?.mupibox?.hideScrollbar === true)
+        const round = config?.mupibox?.coverRound
+        this.coverShape.set(round === true ? 'round' : round === false ? 'square' : 'auto')
         this.coverflowShowNames.set(config?.mupibox?.coverflowShowNames === true)
         this.configLoaded.set(true)
       },

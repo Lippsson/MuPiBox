@@ -9443,6 +9443,7 @@ const CONTROLLERS = {
       state.values.set('tts', disp.theme.stageAutoRead === true)
       state.values.set('names', disp.opts.coverflowShowNames)
       state.values.set('hideScroll', disp.opts.hideScrollbar)
+      state.values.set('coverRound', disp.opts.coverRound === true)
     },
     sections: (page) =>
       page.sections.map((sec) => ({
@@ -9469,6 +9470,7 @@ const CONTROLLERS = {
       }
       if (key === 'names') return saveDisplayOptions({ coverflowShowNames: v })
       if (key === 'hideScroll') return saveDisplayOptions({ hideScrollbar: v })
+      if (key === 'coverRound') return saveDisplayOptions({ coverRound: v })
     },
   },
   startbilder: { load: loadBootscreens, top: bootTop, sections: () => [], ownNav: true, mount: mountBoot },

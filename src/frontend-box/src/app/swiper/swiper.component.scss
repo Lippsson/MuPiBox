@@ -150,7 +150,7 @@ swiper-container.coverflow {
         margin: 0 auto !important;
     }
 
-    // Rectangular covers without frame or shadow.
+    // Rectangular covers without frame or shadow, with a small rounding - or round (app: "Runde Cover", .cf-round).
     .img-row {
         padding-top: 20px; // 20px below the menu bar
         padding-bottom: 0;
@@ -158,10 +158,14 @@ swiper-container.coverflow {
         ion-card {
             width: 300px;
             height: 300px;
-            border-radius: 0;
+            border-radius: 10px;
             box-shadow: none;
             border: 0;
             --background: transparent;
+
+            &.cf-round {
+                border-radius: 50%;
+            }
 
             img {
                 -user-select: none;

@@ -27,6 +27,7 @@ Unter **Einstellungen › Aussehen › Ansicht** stellst du ein:
 - **Namen vorlesen, wenn das Cover stehen bleibt**: nur mit der Cover-Flow-Ansicht (Stimme und Sprache: **Audio › Sprachausgabe**),
 - **Ordner- und Albumnamen anzeigen**: nur beim Theme coverflow,
 - **Horizontale Scrollleiste ausblenden**: der Balken unter den Covern, in jeder Ansicht.
+- **Runde Cover**: aus = quadratische Cover mit kleiner Rundung, an = runde Cover (in der Cover-Flow-Ansicht und in den Listen der Kinder-Themes). Ohne eine Wahl bleibt es beim Look des Themes.
 
 ## Ordner und Alben
 

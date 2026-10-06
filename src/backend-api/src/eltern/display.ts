@@ -95,6 +95,8 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     res.json({
       coverflowShowNames: mb.coverflowShowNames === true,
       hideScrollbar: mb.hideScrollbar === true,
+      // the shape of the covers in the cover views: round (true), square with a small rounding (false); not set = as the theme has it
+      coverRound: mb.coverRound === true,
       hiddenCategories: Array.isArray(mb.hiddenCategories) ? (mb.hiddenCategories as unknown[]).filter((c) => CATEGORIES.includes(String(c))) : [],
       resume: num(mb.resume, 1, 99) ?? 9,
       listviewTimer: num(mb.listviewTimer, 0.5, 5, 0.5) ?? 2.5,
@@ -128,7 +130,7 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     const mb: Record<string, unknown> = {}
     const chromium: Record<string, unknown> = {}
     const bad = (what: string) => res.status(400).json({ error: `invalid ${what}` })
-    for (const key of ['coverflowShowNames', 'hideScrollbar', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker']) {
+    for (const key of ['coverflowShowNames', 'hideScrollbar', 'coverRound', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker']) {
       if (body[key] === undefined) continue
       if (typeof body[key] !== 'boolean') return bad(key)
       mb[key] = body[key]
@@ -224,7 +226,7 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       // (as the admin interface: with dietpi's login environment, so chromium finds its display)
       detached('sudo /usr/local/bin/mupibox/setting_update.sh >/dev/null 2>&1; sudo -i -u dietpi bash -c "setsid nohup /usr/local/bin/mupibox/restart_kiosk.sh >/dev/null 2>&1 < /dev/null &"')
       result.restartKiosk = true
-    } else if (['coverflowShowNames', 'hideScrollbar', 'hiddenCategories', 'listviewTimer', 'settingsAccessTimer'].some((k) => k in mb)) {
+    } else if (['coverflowShowNames', 'hideScrollbar', 'coverRound', 'hiddenCategories', 'listviewTimer', 'settingsAccessTimer'].some((k) => k in mb)) {
       result.reloaded = await reloadDisplayPage()
     }
     res.json(result)
