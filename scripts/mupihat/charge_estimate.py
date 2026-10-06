@@ -68,6 +68,8 @@ class ChargeEstimator:
     # the constant-voltage phase counts when the voltage is within this of the charge limit, for this many readings in a row
     CV_NEAR_LIMIT_MV = 250
     CV_CONFIRM_READINGS = 3
+    # in the CC phase a percent that is this much above the count of the charge is taken back to the count
+    HEAL_PCT = 10.0
     # a charge that was running when the box was restarted goes on where it was, for this many seconds after the start of
     # the system (the state in /tmp is gone after a restart, so it is also kept on the memory card, at most this often)
     REBOOT_WINDOW_S = 900
@@ -110,19 +112,24 @@ class ChargeEstimator:
         self.capacity = capacity_mah if capacity_mah and capacity_mah > 0 else None
 
     # --- feeding
-    def update(self, ibat_ma, status, voltage_pct, vbat_mv=None, vreg_mv=None):
+    def update(self, ibat_ma, status, voltage_pct, vbat_mv=None, vreg_mv=None, vrest_mv=None):
         """One reading (every few seconds): battery current in mA (+ = charging), the chip's charge state, and the percent
         the voltage alone says (a float, with the voltage drop of the charge current taken off). With the battery voltage
-        and the charge limit (VREG) the constant-voltage phase is told from a false report of it."""
+        and the charge limit (VREG) the constant-voltage phase is told from a false report of it. vrest_mv is the battery
+        voltage less the drop the current causes in the pack (what the pack would read at rest): with a pack of high
+        resistance the terminals reach the charge limit long before the cells are full, and the chip reports CV then."""
         now = self._clock()
         dt = 0.0 if self._last_t is None else min(30.0, max(0.0, now - self._last_t))
         self._last_t = now
         ph = phase_of(status)
         # The chip reports "Taper (CV mode)" for a moment now and then while it is still far from its charge limit (when
         # the input gives way, at a change of the cable ...). The CV phase is only taken for real when the voltage is near
-        # the limit and the report stays for a few readings - a single wrong one set the percent to 99 for good.
-        if ph == "cv":
-            near_limit = vbat_mv is None or vreg_mv is None or vbat_mv >= vreg_mv - self.CV_NEAR_LIMIT_MV
+        # the limit and the report stays for a few readings - a single wrong one set the percent to 99 for good. The same for
+        # "termination done": with a pack of high resistance and a box that takes most of the input, the charge current
+        # falls below the termination current for a moment, and the chip says "done" while the cells are far from full.
+        if ph in ("cv", "done"):
+            v_check = vrest_mv if vrest_mv is not None else vbat_mv
+            near_limit = v_check is None or vreg_mv is None or v_check >= vreg_mv - self.CV_NEAR_LIMIT_MV
             self._cv_streak = self._cv_streak + 1 if near_limit else 0
             if self._cv_streak < self.CV_CONFIRM_READINGS:
                 ph = "cc"
@@ -192,6 +199,9 @@ class ChargeEstimator:
                 self._cv.popleft()
         elif ph == "topoff":
             pct = max(pct, 97.0)
+        # a value far above what the charge counted comes from a false report of the chip: back to the count
+        if ph == "cc" and self.percent is not None and self.percent - pct > self.HEAL_PCT:
+            self.percent = pct
         # never backwards within a charge, never "full" before the charger says so
         pct = max(pct, self.percent or 0.0)
         self.percent = min(pct, 99.0)
