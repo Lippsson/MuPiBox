@@ -56,20 +56,6 @@
             "de": "Taster",
             "en": "Button"
           }
-        },
-        {
-          "gpio": 27,
-          "fn": {
-            "de": "Stromabschaltung",
-            "en": "Power cut"
-          }
-        },
-        {
-          "gpio": 13,
-          "fn": {
-            "de": "Betriebs-LED",
-            "en": "Status LED"
-          }
         }
       ],
       "short": {

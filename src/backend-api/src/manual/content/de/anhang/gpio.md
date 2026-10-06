@@ -5,7 +5,7 @@ Die **GPIO-Pins** sind die Anschlüsse auf der Stiftleiste des Raspberry Pi. Zub
 :::gpio-map
 
 > [!NOTE]
-> Die Belegung des **MuPiHAT** stammt aus dem offiziellen Pinout des Boards. Die acht Pins der Erweiterungsleiste **J5** (GPIO 5, 6, 8, 9, 10, 11, 12, 25) sind frei nutzbar; sie sind gestrichelt markiert und lösen keine Überschneidung aus. Das MuPiHAT hat den OnOff-SHIM schon an Bord und belegt deshalb dieselben Pins (4, 13, 17, 27). Beide zusammen gehen nicht.
+> Die Belegung des **MuPiHAT** stammt aus dem offiziellen Pinout des Boards. Die acht Pins der Erweiterungsleiste **J5** (GPIO 5, 6, 8, 9, 10, 11, 12, 25) sind frei nutzbar; sie sind gestrichelt markiert und lösen keine Überschneidung aus. Das MuPiHAT hat den OnOff-SHIM schon an Bord und belegt deshalb dieselben beiden Pins wie dieser (4 und 17). Beide zusammen gehen nicht.
 
 ## Pins, die die Box nutzt
 
@@ -16,8 +16,8 @@ Die **GPIO-Pins** sind die Anschlüsse auf der Stiftleiste des Raspberry Pi. Zub
 | Drehregler | Taster | 10 | nein |
 | OnOff SHIM | Signal zum Ausschalten (`gpio-poweroff`) | 4 | in der Konfiguration (`shim.poweroffPin`) |
 | OnOff SHIM | Taster (Trigger) | 17 | in der Konfiguration (`shim.triggerPin`) |
-| OnOff SHIM | Stromabschaltung | 27 | in der Konfiguration (`shim.cutPin`) |
-| OnOff SHIM | Betriebs-LED | 13 | ja, **Einstellungen › Akku & Strom › Ein-/Ausschalter und LED** |
+| Stromabschaltung (setzt die Box, nicht der SHIM) | Signal bei Ausschalten | 27 | in der Konfiguration (`shim.cutPin`) |
+| Betriebs-LED (eigene LED, nicht Teil des SHIM) | Status-LED | 13 | ja, **Einstellungen › Akku & Strom › Ein-/Ausschalter und LED** |
 | Lüfter | PWM-Signal | 12 | ja, **Einstellungen › Akku & Strom › Lüfter** |
 
 Die Pin-Nummern in der Tabelle sind die Werte, die nach der Installation eingetragen sind.
