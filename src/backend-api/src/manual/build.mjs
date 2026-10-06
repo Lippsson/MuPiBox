@@ -139,8 +139,12 @@ function markdown(src, ctx) {
       i += 2
       let rows = ''
       while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
-        rows += `<tr>${cells(lines[i]).map((c) => `<td>${inline(c, ctx)}</td>`).join('')}</tr>`
-        plain.push(cells(lines[i]).join(' '))
+        // a row may carry an id in front of its first cell ("{fan} Fan"): the page's script can then show/hide/update it
+        const row = cells(lines[i])
+        const rowId = /^\{([a-z0-9-]+)\}\s*/.exec(row[0])
+        if (rowId) row[0] = row[0].slice(rowId[0].length)
+        rows += `<tr${rowId ? ` data-pin="${rowId[1]}"` : ''}>${row.map((c) => `<td>${inline(c, ctx)}</td>`).join('')}</tr>`
+        plain.push(row.join(' '))
         i++
       }
       html += `<div class="table-wrap"><table><thead><tr>${head.map((c) => `<th>${inline(c, ctx)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`

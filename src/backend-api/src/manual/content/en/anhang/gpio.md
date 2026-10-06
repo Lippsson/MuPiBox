@@ -11,16 +11,16 @@ The **GPIO pins** are the connections on the Raspberry Pi's pin header. The MuPi
 
 | Accessory | Function | GPIO (BCM) | Adjustable |
 | --- | --- | --- | --- |
-| Rotary knob | A (CLK) | 26 | no |
-| Rotary knob | B (DT) | 24 | no |
-| Rotary knob | Button | 10 | no |
-| OnOff SHIM | signal to shut down (`gpio-poweroff`) | 4 | in the configuration (`shim.poweroffPin`) |
-| OnOff SHIM | button (trigger) | 17 | in the configuration (`shim.triggerPin`) |
-| Power cut (set by the box, not by the SHIM) | signal when switching off | 27 | in the configuration (`shim.cutPin`) |
-| Status LED (a separate LED, not part of the SHIM) | status LED | 13 | yes, **Settings › Battery & Power › Power switch and LED** |
-| Fan | PWM signal | 12 | yes, **Settings › Battery & Power › Fan** |
+| {rotary-a} Rotary knob | A (CLK) | 26 | no |
+| {rotary-b} Rotary knob | B (DT) | 24 | no |
+| {rotary-button} Rotary knob | Button | 10 | no |
+| {poweroff} OnOff SHIM (also the MuPiHAT) | signal to shut down (`gpio-poweroff`) | 4 | in the configuration (`shim.poweroffPin`) |
+| {trigger} OnOff SHIM (also the MuPiHAT) | button (trigger) | 17 | in the configuration (`shim.triggerPin`) |
+| {cut} Power cut (set by the box, not by the SHIM) | signal when switching off | 27 | in the configuration (`shim.cutPin`) |
+| {led} Status LED (a separate LED, not part of the SHIM) | status LED | 13 | yes, **Settings › Battery & Power › Power switch and LED** |
+| {fan} Fan | PWM signal | 12 | yes, **Settings › Battery & Power › Fan** |
 
-The pin numbers in the table are the values entered after installation.
+On your box this table shows **only the pins that are in use there** with the current settings: a fan that is switched off, or a rotary knob that is switched off, does not appear, and a pin you have changed shows its new number. Where the page cannot ask the box (for example on GitHub), it lists the pins as entered after installation.
 
 > [!WARNING]
 > Two devices must **not** share a pin. For LED and fan choose pins that are not otherwise used above. The app warns if you choose a pin for an accessory that another enabled accessory already uses.

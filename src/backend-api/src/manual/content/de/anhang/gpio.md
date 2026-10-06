@@ -11,16 +11,16 @@ Die **GPIO-Pins** sind die Anschlüsse auf der Stiftleiste des Raspberry Pi. Zub
 
 | Zubehör | Funktion | GPIO (BCM) | Einstellbar |
 | --- | --- | --- | --- |
-| Drehregler | A (CLK) | 26 | nein |
-| Drehregler | B (DT) | 24 | nein |
-| Drehregler | Taster | 10 | nein |
-| OnOff SHIM | Signal zum Ausschalten (`gpio-poweroff`) | 4 | in der Konfiguration (`shim.poweroffPin`) |
-| OnOff SHIM | Taster (Trigger) | 17 | in der Konfiguration (`shim.triggerPin`) |
-| Stromabschaltung (setzt die Box, nicht der SHIM) | Signal bei Ausschalten | 27 | in der Konfiguration (`shim.cutPin`) |
-| Betriebs-LED (eigene LED, nicht Teil des SHIM) | Status-LED | 13 | ja, **Einstellungen › Akku & Strom › Ein-/Ausschalter und LED** |
-| Lüfter | PWM-Signal | 12 | ja, **Einstellungen › Akku & Strom › Lüfter** |
+| {rotary-a} Drehregler | A (CLK) | 26 | nein |
+| {rotary-b} Drehregler | B (DT) | 24 | nein |
+| {rotary-button} Drehregler | Taster | 10 | nein |
+| {poweroff} OnOff SHIM (auch das MuPiHAT) | Signal zum Ausschalten (`gpio-poweroff`) | 4 | in der Konfiguration (`shim.poweroffPin`) |
+| {trigger} OnOff SHIM (auch das MuPiHAT) | Taster (Trigger) | 17 | in der Konfiguration (`shim.triggerPin`) |
+| {cut} Stromabschaltung (setzt die Box, nicht der SHIM) | Signal bei Ausschalten | 27 | in der Konfiguration (`shim.cutPin`) |
+| {led} Betriebs-LED (eigene LED, nicht Teil des SHIM) | Status-LED | 13 | ja, **Einstellungen › Akku & Strom › Ein-/Ausschalter und LED** |
+| {fan} Lüfter | PWM-Signal | 12 | ja, **Einstellungen › Akku & Strom › Lüfter** |
 
-Die Pin-Nummern in der Tabelle sind die Werte, die nach der Installation eingetragen sind.
+Auf deiner Box zeigt diese Tabelle **nur die Pins, die dort mit den aktuellen Einstellungen verwendet werden**: Ein ausgeschalteter Lüfter oder Drehregler erscheint nicht, und ein geänderter Pin zeigt seine neue Nummer. Wo die Seite die Box nicht fragen kann (zum Beispiel auf GitHub), stehen die Pins so, wie sie nach der Installation eingetragen sind.
 
 > [!WARNING]
 > Zwei Geräte dürfen sich **keinen** Pin teilen. Wähle für LED und Lüfter Pins, die oben nicht anderweitig stehen. Die App warnt, wenn du für ein Zubehör einen Pin wählst, den ein aktiviertes anderes Zubehör schon nutzt.

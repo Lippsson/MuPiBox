@@ -143,6 +143,35 @@
     }
   }
 
+  // GPIO page: the table "Pins the box uses" shows only what this box uses right now (its pins, its switched-on
+  // accessories); where the box cannot be asked (the manual somewhere else) it keeps listing everything
+  const pinRows = [...document.querySelectorAll('tr[data-pin]')]
+  if (pinRows.length) {
+    fetch('/api/app/pins-in-use', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((s) => {
+        const rows = {
+          'rotary-a': { on: s.rotary },
+          'rotary-b': { on: s.rotary },
+          'rotary-button': { on: s.rotary },
+          poweroff: { on: true, pin: s.shim.poweroffPin },
+          trigger: { on: true, pin: s.shim.triggerPin },
+          cut: { on: true, pin: s.shim.cutPin },
+          led: { on: true, pin: s.shim.ledPin },
+          fan: { on: s.fan.active, pin: s.fan.gpio },
+        }
+        for (const tr of pinRows) {
+          const r = rows[tr.dataset.pin]
+          if (!r) continue
+          tr.hidden = !r.on
+          if (r.pin) tr.children[2].textContent = r.pin
+        }
+      })
+      .catch(() => {
+        // not on a box (or an old one without the endpoint): the table stays as written
+      })
+  }
+
   // search
   const input = $('#q')
   const box = $('#results')
