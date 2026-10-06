@@ -18,6 +18,12 @@
 <li id='linews' class='linews'>Every page was checked against the box itself (menu paths, names of buttons, values); the pictures are made from the real display with a made-up demo library (tools/manual-shots/shots.mjs), in the Sonnenhof theme.</li>
 <li id='linews' class='linews'>The GPIO page (by Andreas): a button per accessory (rotary knob, OnOff SHIM, fan, status LED, MuPiHAT, sound cards, I2C module) marks its pins on the 40-pin header; pins two accessories would both need show up as an overlap. The table of the pins in use shows, on the box, only what this box uses right now (a switched-off fan or rotary knob is left out, changed pins show their number).</li>
 </ul>
+<b>MuPiHAT</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>The battery while charging (by Andreas): when the charging cable is plugged in the percentage no longer jumps to 100 % at once (the charger holds the voltage above the rest voltage of the pack). The box remembers the level from before and adds the charge that goes in; the display and the app show "full in about 2 h 10 min" under the percentage, and a note when the starting point is only a guess. A charge that is running goes on after a restart of the box (the state is kept on the memory card for 15 minutes after the start). For the calculation the profile has a capacity field (500 - 200000 mAh; the size in the name of a ready-made profile counts too).</li>
+<li id='linews' class='linews'>The resistance of the battery pack (cells, holders, wires, a BMS) is measured from the jump of the battery current when the charging cable is plugged in or pulled out, and used for the percentage while charging and while the box plays: under load the voltage of a pack with a high resistance sags and read far too low (0.7 ohm measured on one box: 45 % instead of 72 %). The shutdown limits stay on the real voltage. New fields in the status: Pack_Resistance_mOhm, Pack_Resistance_Measured.</li>
+</ul>
 <h3>DEV 5.0.8 - changes compared to 5.0.7</h3>
 <b>Themes</b>
 </ul>
