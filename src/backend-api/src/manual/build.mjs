@@ -286,7 +286,7 @@ function gpioMap(lang, t) {
       color: a.color,
       name: loc(a.name),
       short: a.short ? loc(a.short) : loc(a.name),
-      pins: a.pins.map((p) => ({ g: p.gpio, fn: loc(p.fn), bus: p.bus })),
+      pins: a.pins.map((p) => ({ g: p.gpio, fn: loc(p.fn), bus: p.bus, free: p.free })),
     }))
   const optional = prepare(gpioData.accessories)
   const data = { accessories: optional, text: { none: t('gpio.none'), ok: t('gpio.ok'), conflict: t('gpio.conflict'), free: t('gpio.free') } }

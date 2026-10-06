@@ -104,18 +104,21 @@
         // storage blocked: nothing is remembered
       }
       const paint = () => {
-        const users = new Map() // gpio -> [{acc, pin}]
+        // gpio -> [{acc, pin}]; "free" pins (routed to a header, but free to use) never clash with anything
+        const users = new Map()
         for (const acc of data.accessories.filter((a) => chosen.has(a.id))) {
           for (const pin of acc.pins) users.set(pin.g, [...(users.get(pin.g) ?? []), { acc, pin }])
         }
         const clashes = new Map() // "who clashes" -> [gpio]: one entry per pair of accessories
         for (const [g, el] of pins) {
           const list = users.get(g) ?? []
-          const clash = list.length > 1 && !(list[0].pin.bus && list.every((u) => u.pin.bus === list[0].pin.bus))
-          el.classList.toggle('used', list.length > 0)
+          const taken = list.filter((u) => !u.pin.free)
+          const clash = taken.length > 1 && !(taken[0].pin.bus && taken.every((u) => u.pin.bus === taken[0].pin.bus))
+          el.classList.toggle('used', taken.length > 0)
+          el.classList.toggle('reserved', taken.length === 0 && list.length > 0)
           el.classList.toggle('clash', clash)
-          el.style.setProperty('--c', list[0]?.acc.color ?? 'transparent')
-          const label = list.map((u) => u.acc.short ?? u.acc.name).join(' + ')
+          el.style.setProperty('--c', (taken[0] ?? list[0])?.acc.color ?? 'transparent')
+          const label = (taken.length ? taken : list).map((u) => u.acc.short ?? u.acc.name).join(' + ')
           el.querySelector('small').textContent = list.length ? label : ''
           el.title = list.length ? list.map((u) => `${u.acc.name}: ${u.pin.fn}`).join('\n') : data.text.free
           if (clash) clashes.set(label, [...(clashes.get(label) ?? []), g])

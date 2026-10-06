@@ -254,6 +254,8 @@ footer a { color: var(--mp-muted); }
 .gpio-board .pin.used { border-color: var(--c); background: var(--mp-primary-soft); background: color-mix(in srgb, var(--c) 22%, var(--mp-surface)); }
 .gpio-board .pin.used .n { background: var(--c); color: #0B1220; }
 .gpio-board .pin.used .t small { color: var(--mp-text); }
+.gpio-board .pin.reserved { border: 1px dashed var(--c); }
+.gpio-board .pin.reserved .n { background: var(--mp-chip); box-shadow: inset 0 0 0 2px var(--c); color: var(--mp-text); }
 .gpio-board .pin.clash { border: 2px solid var(--mp-danger); background: var(--mp-danger-soft); }
 .gpio-board .pin.clash .n { background: var(--mp-danger); color: #fff; }
 .gpio-table .gpio-dot { margin-right: 8px; }

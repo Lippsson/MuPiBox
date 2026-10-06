@@ -4,6 +4,9 @@ Die **GPIO-Pins** sind die Anschlüsse auf der Stiftleiste des Raspberry Pi. Zub
 
 :::gpio-map
 
+> [!NOTE]
+> Die Belegung des **MuPiHAT** stammt aus dem offiziellen Pinout des Boards. Die acht Pins der Erweiterungsleiste **J5** (GPIO 5, 6, 8, 9, 10, 11, 12, 25) sind frei nutzbar; sie sind gestrichelt markiert und lösen keine Überschneidung aus. Das MuPiHAT hat den OnOff-SHIM schon an Bord und belegt deshalb dieselben Pins (4, 13, 17, 27). Beide zusammen gehen nicht.
+
 ## Pins, die die Box nutzt
 
 | Zubehör | Funktion | GPIO (BCM) | Einstellbar |

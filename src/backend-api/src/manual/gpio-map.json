@@ -127,10 +127,31 @@
           }
         },
         {
+          "gpio": 4,
+          "fn": {
+            "de": "Signal zum Ausschalten (KILL_N)",
+            "en": "Shutdown signal (KILL_N)"
+          }
+        },
+        {
+          "gpio": 13,
+          "fn": {
+            "de": "Status-LED (LED_POWER)",
+            "en": "Status LED (LED_POWER)"
+          }
+        },
+        {
           "gpio": 16,
           "fn": {
-            "de": "Verstärker ein/aus",
-            "en": "Amplifier on/off"
+            "de": "Verstärker ein/aus (AUDIO_EN)",
+            "en": "Amplifier on/off (AUDIO_EN)"
+          }
+        },
+        {
+          "gpio": 17,
+          "fn": {
+            "de": "Ein/Aus-Taster (INT_N)",
+            "en": "On/off button (INT_N)"
           }
         },
         {
@@ -150,8 +171,79 @@
         {
           "gpio": 21,
           "fn": {
-            "de": "Daten Ausgang",
-            "en": "Data out"
+            "de": "Daten Ausgang (DOUT)",
+            "en": "Data out (DOUT)"
+          }
+        },
+        {
+          "gpio": 27,
+          "fn": {
+            "de": "Interrupt des Ladechips (INT_BQ_N)",
+            "en": "Charger chip interrupt (INT_BQ_N)"
+          }
+        },
+        {
+          "gpio": 5,
+          "free": true,
+          "fn": {
+            "de": "Erweiterungsleiste J5 (frei nutzbar)",
+            "en": "Extension header J5 (free to use)"
+          }
+        },
+        {
+          "gpio": 6,
+          "free": true,
+          "fn": {
+            "de": "Erweiterungsleiste J5 (frei nutzbar)",
+            "en": "Extension header J5 (free to use)"
+          }
+        },
+        {
+          "gpio": 8,
+          "free": true,
+          "fn": {
+            "de": "Erweiterungsleiste J5 (frei nutzbar)",
+            "en": "Extension header J5 (free to use)"
+          }
+        },
+        {
+          "gpio": 9,
+          "free": true,
+          "fn": {
+            "de": "Erweiterungsleiste J5 (frei nutzbar)",
+            "en": "Extension header J5 (free to use)"
+          }
+        },
+        {
+          "gpio": 10,
+          "free": true,
+          "fn": {
+            "de": "Erweiterungsleiste J5 (frei nutzbar)",
+            "en": "Extension header J5 (free to use)"
+          }
+        },
+        {
+          "gpio": 11,
+          "free": true,
+          "fn": {
+            "de": "Erweiterungsleiste J5 (frei nutzbar)",
+            "en": "Extension header J5 (free to use)"
+          }
+        },
+        {
+          "gpio": 12,
+          "free": true,
+          "fn": {
+            "de": "Erweiterungsleiste J5 (frei nutzbar)",
+            "en": "Extension header J5 (free to use)"
+          }
+        },
+        {
+          "gpio": 25,
+          "free": true,
+          "fn": {
+            "de": "Erweiterungsleiste J5 (frei nutzbar)",
+            "en": "Extension header J5 (free to use)"
           }
         }
       ]
@@ -268,41 +360,6 @@
           "fn": {
             "de": "HAT-ID (EEPROM, Takt)",
             "en": "HAT ID (EEPROM, clock)"
-          }
-        }
-      ]
-    },
-    {
-      "id": "max98357a",
-      "color": "#2FB8B0",
-      "name": {
-        "de": "MAX98357A-Verstärker (I²S, einzeln)",
-        "en": "MAX98357A amplifier (I²S, standalone)"
-      },
-      "short": {
-        "de": "MAX98357A",
-        "en": "MAX98357A"
-      },
-      "pins": [
-        {
-          "gpio": 18,
-          "fn": {
-            "de": "BCLK (Bit-Takt)",
-            "en": "BCLK (bit clock)"
-          }
-        },
-        {
-          "gpio": 19,
-          "fn": {
-            "de": "LRC (Wort-Takt)",
-            "en": "LRC (word clock)"
-          }
-        },
-        {
-          "gpio": 21,
-          "fn": {
-            "de": "DIN (Daten)",
-            "en": "DIN (data)"
           }
         }
       ]

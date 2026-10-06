@@ -4,6 +4,9 @@ The **GPIO pins** are the connections on the Raspberry Pi's pin header. The MuPi
 
 :::gpio-map
 
+> [!NOTE]
+> The **MuPiHAT** assignment is taken from the board's official pinout. The eight pins of the extension header **J5** (GPIO 5, 6, 8, 9, 10, 11, 12, 25) are free to use; they are marked with a dashed outline and cause no overlap. The MuPiHAT has the OnOff SHIM on board and therefore uses the same pins (4, 13, 17, 27). Both together do not work.
+
 ## Pins the box uses
 
 | Accessory | Function | GPIO (BCM) | Adjustable |
