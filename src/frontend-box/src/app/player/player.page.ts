@@ -76,7 +76,7 @@ import { SpotifyService } from '../spotify.service'
  */
 export interface AudioOutputState {
   current: string
-  devices: { mac: string; name: string; kind: 'headphones' | 'speaker'; connected: boolean }[]
+  devices: { mac: string; name: string; kind: 'headphones' | 'speaker'; connected: boolean; battery?: number }[]
   /** the box's sound cards (3.5 mm, HDMI, I2S amplifier, USB) - only when there is more than one, else empty */
   cards?: { id: string; name: string; desc: string; kind: 'jack' | 'hdmi' | 'amp' | 'usb' | 'card' }[]
   display: boolean
@@ -485,6 +485,12 @@ export class PlayerPage implements OnInit, AfterViewInit {
     this.mediaService.local$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((local) => {
       this.currentPlayedLocal = local
       this.followTrackCover(local?.trackFile)
+      // The bar also with every report of the player, not only in updateProgress's ticks: once (a NAS album paused at
+      // 59 %) the dot stood at the start while the time below it showed the right place - both come from this report
+      // now, so they cannot part.
+      if (this.media?.type === 'library' || this.media?.type === 'nas' || this.media?.type === 'rss') {
+        this.progress = this.heldProgress(Number(local?.progressTime) || 0)
+      }
     })
     this.mediaService.albumStop$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((albumStop) => {
       this.albumStop = albumStop
@@ -554,8 +560,9 @@ export class PlayerPage implements OnInit, AfterViewInit {
     const newValue = +this.range.value
     this.seekHold = { value: newValue, until: Date.now() + 3000 }
     if (this.media.type === 'spotify') {
-      const duration = this.currentPlayedSpotify?.item.duration_ms
-      this.playerService.seekPosition(duration * (newValue / 100))
+      // (no track loaded yet in the display's Spotify player - after a podcast, at the start: nothing to seek in)
+      const duration = this.currentPlayedSpotify?.item?.duration_ms
+      if (duration) this.playerService.seekPosition(duration * (newValue / 100))
     } else if (this.media.type === 'library' || this.media.type === 'nas' || this.media.type === 'rss') {
       this.playerService.seekPosition(newValue)
     }
@@ -957,9 +964,9 @@ export class PlayerPage implements OnInit, AfterViewInit {
       this.resumemedia.resumespotifyprogress_ms = this.currentPlayedSpotify?.progress_ms || 0
       this.resumemedia.resumespotifyduration_ms = this.currentPlayedSpotify?.item?.duration_ms || 0
     } else if (this.resumemedia.type === 'spotify') {
-      this.resumemedia.resumespotifytrack_number = this.currentPlayedSpotify?.item.track_number || 0
+      this.resumemedia.resumespotifytrack_number = this.currentPlayedSpotify?.item?.track_number || 0
       this.resumemedia.resumespotifyprogress_ms = this.currentPlayedSpotify?.progress_ms || 0
-      this.resumemedia.resumespotifyduration_ms = this.currentPlayedSpotify?.item.duration_ms || 0
+      this.resumemedia.resumespotifyduration_ms = this.currentPlayedSpotify?.item?.duration_ms || 0
     } else if (this.resumemedia.type === 'library') {
       // resumelocalalbum stays for downgrade-safety: an older client still
       // depends on it to recover the original category from a legacy-style

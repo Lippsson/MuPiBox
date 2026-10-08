@@ -12,6 +12,9 @@ export interface MupiboxConfig {
     hiddenCategories?: string[]
     // Hides the horizontal scrollbar of the cover lists (Admin > Mupi-conf > Theme)
     hideScrollbar?: boolean
+    // The scrollbar of the cover lists in every theme: 'standard' (the theme's own) or 'full' (across the width and
+    // thicker, easy to hit) - app > Aussehen > Ansicht; hideScrollbar still hides it
+    scrollbarStyle?: 'standard' | 'full'
     // Coverflow theme only: shows the album/folder name under each cover (Admin > Mupi-conf > Theme)
     coverflowShowNames?: boolean
     // Shape of the covers in the cover views (app: Aussehen > Ansicht > "Runde Cover"): true = round, false = square with a

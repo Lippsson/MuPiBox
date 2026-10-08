@@ -13,7 +13,7 @@
 
 <ng-template #albumTpl>
       @if (media.type ==='spotify' && currentPlayedSpotify?.currently_playing_type !== 'episode') {
-        <div>{{spotify?.item.album.name}}</div>
+        <div>{{spotify?.item?.album?.name}}</div>
       } @else {
         @if (media.showid && spotify?.show_details) {
           <div>{{spotify?.show_details?.name}}</div>
@@ -34,7 +34,7 @@
 </ng-template>
 <ng-template #trackTpl>
       @if (media.type ==='spotify' && currentPlayedSpotify?.currently_playing_type !== 'episode') {
-        <div>{{spotify?.item.name}}</div>
+        <div>{{spotify?.item?.name}}</div>
       } @else {
         @if (media.showid && spotify?.show_details) {
           <div>{{spotify?.item?.name}}</div>
@@ -67,9 +67,9 @@
           } @else if (media.audiobookid && spotify?.audiobook) {
             <!-- Audiobook -->
             <div>{{spotify?.audiobook?.current_chapter_position}}/{{spotify?.audiobook?.total_chapters}}</div>
-          } @else if (currentPlayedSpotify?.currently_playing_type !== 'episode' && spotify?.item.album.total_tracks > 0) {
+          } @else if (currentPlayedSpotify?.currently_playing_type !== 'episode' && spotify?.item?.album?.total_tracks > 0) {
             <!-- Regular album -->
-            <div>{{spotify?.item.track_number}}/{{spotify?.item.album.total_tracks}}</div>
+            <div>{{spotify?.item?.track_number}}/{{spotify?.item?.album?.total_tracks}}</div>
           } @else {
             <!-- Fallback - no track info available -->
             <div></div>
@@ -86,7 +86,7 @@
     <!-- km themes, design round 2 (§3): minimise/back, album and track, "Hören mit" (only with a paired headset),
          the volume, WiFi/battery with the listening time -->
     <div class="km-bar km-bar-player">
-      <button class="km-hbtn" type="button" (click)="backFromPlayer()">
+      <button class="km-hbtn" type="button" data-mupi-back (click)="backFromPlayer()">
         @if (backAction() === 'minimize') {
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 9l6.5 6.5L18.5 9" /></svg>
         } @else {
@@ -452,6 +452,10 @@
             }
             <b translate="no">{{ d.name }}</b>
             <small>{{ outputBusy() === d.mac ? displayTexts.text('outputConnecting') : outputMissing() === d.mac && r2() ? displayTexts.text('outputNotFound') : output()?.current === d.mac && km() ? '● ' + displayTexts.text('outputPlaying') : d.connected ? displayTexts.text('outputConnected') : displayTexts.text('outputOff') }}</small>
+            <!-- the headphones' battery, when they report it (backend-api btBattery) -->
+            @if (d.connected && d.battery != null) {
+              <span class="out-batt" [class.low]="d.battery <= 20"><svg viewBox="0 0 26 14" aria-hidden="true"><rect x="1" y="1" width="21" height="12" rx="2.5" /><path d="M24.5 5v4" /><rect class="fill" x="3.5" y="3.5" [attr.width]="16 * d.battery / 100" height="7" rx="1" /></svg>{{ d.battery }} %</span>
+            }
           </button>
         }
       </div>

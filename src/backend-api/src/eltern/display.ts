@@ -10,12 +10,12 @@ import { execFile, spawn } from 'node:child_process'
 import { promises as fsp } from 'node:fs'
 import type { Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
-import { enableOnboardAudio } from '../audio-output'
 import { imageSize } from './covers'
 import { requireCsrf, requireSession } from './middleware'
 import { episodeStateSettings } from '../episode-state'
 import { applyNightDim, nightDimmed, nightDimOf, parseNightDim } from './night-dim'
 import { CUSTOM_THEME_CSS, customThemeCss, customThemeOf } from './custom-theme'
+import { bootConfigPath } from './boot-paths'
 
 export interface DisplayDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -69,7 +69,7 @@ async function readBrightness(): Promise<number | null> {
 async function readRotations(): Promise<Record<string, string>> {
   let text = ''
   try {
-    text = await fsp.readFile('/boot/config.txt', 'utf8')
+    text = await fsp.readFile(await bootConfigPath(), 'utf8')
   } catch {
     // not a Raspberry Pi (development)
   }
@@ -96,8 +96,8 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     res.json({
       coverflowShowNames: mb.coverflowShowNames === true,
       hideScrollbar: mb.hideScrollbar === true,
-      // the shape of the covers in the cover views: round (true), square with a small rounding (false); not set = as the theme has it
-      coverRound: mb.coverRound === true,
+      // (the scrollbar of the cover lists in every theme: the theme's own, or across the width and thicker)
+      scrollbarStyle: mb.scrollbarStyle === 'full' ? 'full' : 'standard',
       hiddenCategories: Array.isArray(mb.hiddenCategories) ? (mb.hiddenCategories as unknown[]).filter((c) => CATEGORIES.includes(String(c))) : [],
       resume: num(mb.resume, 1, 99) ?? 9,
       listviewTimer: num(mb.listviewTimer, 0.5, 5, 0.5) ?? 2.5,
@@ -131,10 +131,14 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     const mb: Record<string, unknown> = {}
     const chromium: Record<string, unknown> = {}
     const bad = (what: string) => res.status(400).json({ error: `invalid ${what}` })
-    for (const key of ['coverflowShowNames', 'hideScrollbar', 'coverRound', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker']) {
+    for (const key of ['coverflowShowNames', 'hideScrollbar', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker']) {
       if (body[key] === undefined) continue
       if (typeof body[key] !== 'boolean') return bad(key)
       mb[key] = body[key]
+    }
+    if (body.scrollbarStyle !== undefined) {
+      if (body.scrollbarStyle !== 'standard' && body.scrollbarStyle !== 'full') return bad('scrollbarStyle')
+      mb.scrollbarStyle = body.scrollbarStyle
     }
     if (body.hiddenCategories !== undefined) {
       const list = body.hiddenCategories
@@ -212,9 +216,10 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       await applyNightDim(deps.getMupiboxConfig(), true)
       result.dimmed = nightDimmed()
     }
-    // rotation: into /boot/config.txt as the admin interface does (DietPi's G_CONFIG_INJECT); needs a restart
+    // rotation: into config.txt as the admin interface does (DietPi's G_CONFIG_INJECT); needs a restart
+    const bootConfig = await bootConfigPath()
     for (const [key, value] of Object.entries(rotation)) {
-      await run('sudo', ['su', '-', 'dietpi', '-c', `. /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT '${key}=' '${key}=${value}' /boot/config.txt`], 30000)
+      await run('sudo', ['su', '-', 'dietpi', '-c', `. /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT '${key}=' '${key}=${value}' ${bootConfig}`], 30000)
       result.reboot = true
     }
     if (tts !== undefined) {
@@ -227,12 +232,8 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       // (as the admin interface: with dietpi's login environment, so chromium finds its display)
       detached('sudo /usr/local/bin/mupibox/setting_update.sh >/dev/null 2>&1; sudo -i -u dietpi bash -c "setsid nohup /usr/local/bin/mupibox/restart_kiosk.sh >/dev/null 2>&1 < /dev/null &"')
       result.restartKiosk = true
-    } else if (['coverflowShowNames', 'hideScrollbar', 'coverRound', 'hiddenCategories', 'listviewTimer', 'settingsAccessTimer'].some((k) => k in mb)) {
+    } else if (['coverflowShowNames', 'hideScrollbar', 'scrollbarStyle', 'hiddenCategories', 'listviewTimer', 'settingsAccessTimer'].some((k) => k in mb)) {
       result.reloaded = await reloadDisplayPage()
-    }
-    // the choice "Box oder Kopfhörer am Display wählen" switched on: the board's 3.5 mm output made ready (see audio-output.ts)
-    if (body.outputPicker === true) {
-      result.audio = await enableOnboardAudio().catch(() => undefined)
     }
     res.json(result)
   })

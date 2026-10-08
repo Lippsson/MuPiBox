@@ -19,15 +19,6 @@ import os
 import time
 from collections import deque
 
-def _system_uptime():
-    """Seconds since the system started (a huge number where it cannot be told: nothing is restored then)."""
-    try:
-        with open("/proc/uptime") as f:
-            return float(f.read().split()[0])
-    except (OSError, ValueError, IndexError):
-        return 1e12
-
-
 CHARGING_PHASES = ("precharge", "cc", "cv", "topoff")
 
 
@@ -61,47 +52,63 @@ class ChargeEstimator:
     MIN_CHARGE_MA = 15
     # the time constant of the smoothing of the charge current, in seconds
     CURRENT_SMOOTHING_S = 60
+    # the time constant of the current the time until full is worked out with in the CC phase, in seconds: the box takes
+    # part of what the input gives (a playing amplifier, the display), so the charge current goes up and down by the
+    # minute - with the current of the last minute the time jumped between 6 and 15 hours
+    ETA_SMOOTHING_S = 900
     # how long a quiet stretch of the pack is remembered as the starting point, in seconds
     REST_WINDOW_S = 600
+    # after a charge the voltage reads too high for a while (the pack settles): this long the starting point of a new charge
+    # is what the last one reached, less what the box took from the pack since
+    RELAX_S = 1800
     # more than this many hours is no estimate
     MAX_ETA_H = 24
     # the constant-voltage phase counts when the voltage is within this of the charge limit, for this many readings in a row
     CV_NEAR_LIMIT_MV = 250
+    # the end of a charge (Done, Top-off) only this close to the limit: on a weak 5 V input the chip reported "Done" again and
+    # again at 8.0-8.17 V of 8.30, whenever the box took more and the charge current broke down for a moment - at 80 %
+    END_NEAR_LIMIT_MV = 100
     CV_CONFIRM_READINGS = 3
-    # in the CC phase a percent that is this much above the count of the charge is taken back to the count
-    HEAL_PCT = 10.0
-    # a charge that was running when the box was restarted goes on where it was, for this many seconds after the start of
-    # the system (the state in /tmp is gone after a restart, so it is also kept on the memory card, at most this often)
-    REBOOT_WINDOW_S = 900
-    PERSIST_EVERY_S = 60
+    # A real end comes on a weak input straight out of the CC phase (no CV), and the pack then drops at once to 8.14-8.17 V
+    # of 8.30: the voltage of the Done is no measure then, so it also counts when the charge was near the limit this short
+    # a time before - or when the chip holds the Done this long and the pack stays above its recharge level. Near the end
+    # the chip goes back and forth between CC and Done for a minute or two at a time: the Done after the near limit counts
+    # only when it stays END_CONFIRM_S
+    END_RECENT_S = 600
+    END_CONFIRM_S = 300
+    END_HOLD_S = 1800
+    END_HOLD_NEAR_MV = 200
 
-    def __init__(self, capacity_mah=None, iterm_ma=200, clock=time.monotonic, wall=time.time, state_file=None, persist_file=None, uptime=None):
+    def __init__(self, capacity_mah=None, iterm_ma=200, clock=time.monotonic, wall=time.time, state_file=None):
         self.capacity = capacity_mah if capacity_mah and capacity_mah > 0 else None
         self.iterm = max(50, iterm_ma or 200)
         self._clock = clock
         self._wall = wall
         self._state_file = state_file
-        self._persist_file = persist_file
-        self._uptime = uptime or _system_uptime
-        self._persist_active = None
-        self._persist_wall = 0.0
         self._rest = deque()  # (t, percent by voltage) while not charging
         self._last_t = None
         self._cv_streak = 0
+        self._end_streak = 0
+        self._near_end_t = None  # when the pack was last near the limit while it charged
+        self._done_since = None  # since when the chip reports the end without a break
+        self._after = None  # [time the last charge ended, percent it reached, mAh taken from the pack since]
         self.reset_session()
         self._restore()
 
     # --- what the user of this class reads
     percent = None  # the estimate while charging (float), else None
+    settling = False  # True: no charge, but shortly after one - percent is then what it reached less what was used
     eta_min = None  # minutes until full, else None
     phase = "idle"
 
     def reset_session(self):
         self.active = False
+        self.full = False  # True: the chip ended this charge once (a top-up after it stays at 100 %)
         self.start_uncertain = False  # True: the starting point is only the voltage (nothing known from before the charge)
         self.start_pct = 0.0
         self.charged_mah = 0.0
         self.ema = None
+        self.slow = None
         self.cc_peak = 0.0
         self.cv_i0 = None
         self._cv = deque()  # (t, ln(I)) in the CV phase
@@ -112,29 +119,44 @@ class ChargeEstimator:
         self.capacity = capacity_mah if capacity_mah and capacity_mah > 0 else None
 
     # --- feeding
-    def update(self, ibat_ma, status, voltage_pct, vbat_mv=None, vreg_mv=None, vrest_mv=None):
+    def update(self, ibat_ma, status, voltage_pct, vbat_mv=None, vreg_mv=None):
         """One reading (every few seconds): battery current in mA (+ = charging), the chip's charge state, and the percent
         the voltage alone says (a float, with the voltage drop of the charge current taken off). With the battery voltage
-        and the charge limit (VREG) the constant-voltage phase is told from a false report of it. vrest_mv is the battery
-        voltage less the drop the current causes in the pack (what the pack would read at rest): with a pack of high
-        resistance the terminals reach the charge limit long before the cells are full, and the chip reports CV then."""
+        and the charge limit (VREG) the constant-voltage phase is told from a false report of it."""
         now = self._clock()
         dt = 0.0 if self._last_t is None else min(30.0, max(0.0, now - self._last_t))
         self._last_t = now
         ph = phase_of(status)
         # The chip reports "Taper (CV mode)" for a moment now and then while it is still far from its charge limit (when
         # the input gives way, at a change of the cable ...). The CV phase is only taken for real when the voltage is near
-        # the limit and the report stays for a few readings - a single wrong one set the percent to 99 for good. The same for
-        # "termination done": with a pack of high resistance and a box that takes most of the input, the charge current
-        # falls below the termination current for a moment, and the chip says "done" while the cells are far from full.
-        if ph in ("cv", "done"):
-            v_check = vrest_mv if vrest_mv is not None else vbat_mv
-            near_limit = v_check is None or vreg_mv is None or v_check >= vreg_mv - self.CV_NEAR_LIMIT_MV
+        # the limit and the report stays for a few readings - a single wrong one set the percent to 99 for good.
+        if ph == "cv":
+            near_limit = vbat_mv is None or vreg_mv is None or vbat_mv >= vreg_mv - self.CV_NEAR_LIMIT_MV
             self._cv_streak = self._cv_streak + 1 if near_limit else 0
             if self._cv_streak < self.CV_CONFIRM_READINGS:
                 ph = "cc"
         else:
             self._cv_streak = 0
+        # The same for the end of a charge ("Top-off", "Charge Termination Done"): after a failed read of the chip
+        # (I2C error) one of them came now and then in the middle of the constant-current phase, and as the percent never
+        # goes back within a charge, it stayed at 99 % from 50 % on. Taken only near the charge limit and when it stays;
+        # until then the reading is left out (the percent and the time stay as they were).
+        if ph in ("topoff", "done"):
+            if self._done_since is None:
+                self._done_since = now
+            near_limit = vbat_mv is None or vreg_mv is None or vbat_mv >= vreg_mv - self.END_NEAR_LIMIT_MV
+            recent = (self._near_end_t is not None and self._done_since - self._near_end_t <= self.END_RECENT_S
+                      and now - self._done_since >= self.END_CONFIRM_S)
+            held = now - self._done_since >= self.END_HOLD_S and vbat_mv is not None and vreg_mv is not None and vbat_mv >= vreg_mv - self.END_HOLD_NEAR_MV
+            self._end_streak = self._end_streak + 1 if (near_limit or recent or held) else 0
+            if self._end_streak < self.CV_CONFIRM_READINGS:
+                return
+        else:
+            self._end_streak = 0
+            self._done_since = None
+            if (ph in CHARGING_PHASES and ibat_ma is not None and ibat_ma > self.MIN_CHARGE_MA and vbat_mv is not None
+                    and vreg_mv is not None and vbat_mv >= vreg_mv - self.END_NEAR_LIMIT_MV):
+                self._near_end_t = now
         self.phase = ph
         charging = ph in CHARGING_PHASES and ibat_ma is not None and ibat_ma > self.MIN_CHARGE_MA
 
@@ -148,19 +170,41 @@ class ChargeEstimator:
                 self._rest.clear()
                 if last is not None:
                     self._rest.append((now - 25, last))
+                    self._after = [now, float(last), 0.0]
                 self._save()
+            if self._after is not None:
+                if now - self._after[0] <= self.RELAX_S:
+                    self._after[2] += max(-(ibat_ma or 0.0), 0.0) * dt / 3600.0
+                else:
+                    self._after = None
             if voltage_pct is not None:
                 self._rest.append((now, float(voltage_pct)))
             while self._rest and now - self._rest[0][0] > self.REST_WINDOW_S:
                 self._rest.popleft()
-            self.percent = None
             self.eta_min = None
+            # shortly after a charge (cable out) the voltage still reads the charge - it showed 90 % at 80: what the
+            # charge reached, less what the box used since, until the pack has settled
+            if self._after is not None:
+                used = self._after[2] / self.capacity * 100.0 if self.capacity else 0.0
+                self.percent = max(0.0, self._after[1] - used)
+                self.settling = True
+            else:
+                self.percent = None
+                self.settling = False
             return
 
+        self.settling = False
+        if self.full and ph != "done":
+            # the chip charges again after the end (the pack sank a little, or the box took more for a moment): still full
+            self.phase = "done"
+            self.percent = 100.0
+            self.eta_min = None
+            return
         if ph == "done":
             self.percent = 100.0
             self.eta_min = 0
             self.active = True
+            self.full = True
             self.start_uncertain = False
             self._save()
             return
@@ -171,6 +215,7 @@ class ChargeEstimator:
             self.start_uncertain = not known
             self.charged_mah = 0.0
             self.ema = None
+            self.slow = None
             self.cc_peak = 0.0
             self.cv_i0 = None
             self._cv.clear()
@@ -178,6 +223,7 @@ class ChargeEstimator:
 
         i = float(ibat_ma)
         self.ema = i if self.ema is None else self.ema + (i - self.ema) * min(1.0, dt / self.CURRENT_SMOOTHING_S if dt else 1.0)
+        self.slow = i if self.slow is None else self.slow + (i - self.slow) * min(1.0, dt / self.ETA_SMOOTHING_S if dt else 1.0)
         self.charged_mah += max(i, 0.0) * dt / 3600.0 * self.EFFICIENCY
 
         pct = self.start_pct + (self.charged_mah / self.capacity * 100.0 if self.capacity else 0.0)
@@ -188,6 +234,10 @@ class ChargeEstimator:
             if self.cv_i0 is None:
                 # the step over to CV is a known point: take the count to it
                 self.cv_i0 = max(i, self.iterm * 1.5)
+                # a start that was only a guess from the voltage (too high while it charges) is corrected here, downwards
+                # too - once; the note on it goes only with the correction
+                if self.start_uncertain:
+                    self.percent = None
                 self.start_uncertain = False
                 self.cc_peak = max(self.cc_peak, self.cv_i0)
                 pct = self.CC_END_PCT
@@ -199,18 +249,23 @@ class ChargeEstimator:
                 self._cv.popleft()
         elif ph == "topoff":
             pct = max(pct, 97.0)
-        # a value far above what the charge counted comes from a false report of the chip: back to the count
-        if ph == "cc" and self.percent is not None and self.percent - pct > self.HEAL_PCT:
-            self.percent = pct
         # never backwards within a charge, never "full" before the charger says so
         pct = max(pct, self.percent or 0.0)
         self.percent = min(pct, 99.0)
-        self.eta_min = self._eta(ph)
+        # (from 99 % on no time any more: the pack is as good as full - on a weak input the chip stays in CC at the
+        # charge limit with the current the input leaves, and the fall of that current, which the time goes by, does
+        # not come; it said "full in about 6 h 20 min" at 8.30 V and 100 %)
+        self.eta_min = None if self.percent >= 99.0 else self._eta(ph)
         self._save()
 
     # --- parts
     def _starting_point(self, now, voltage_pct):
-        """The percent before the charge: the middle of what the voltage said while the pack was at rest."""
+        """The percent before the charge: the middle of what the voltage said while the pack was at rest - or, shortly after
+        a charge (cable out for a moment), what that one reached less what was used since: the voltage then still reads
+        the charge (it jumped from 70 to 80 % after five minutes without the cable)."""
+        if self._after is not None and now - self._after[0] <= self.RELAX_S:
+            used = self._after[2] / self.capacity * 100.0 if self.capacity else 0.0
+            return max(0.0, self._after[1] - used), True
         old = sorted(p for (t, p) in self._rest if now - t >= 20)
         if old:
             return old[len(old) // 2], True
@@ -239,7 +294,8 @@ class ChargeEstimator:
             return None
         if ph == "topoff":
             return 10
-        i_now = self.ema if self.ema else 0.0
+        # (CC: the current of the last quarter of an hour; CV: the current now - it falls, and the fall is the measure)
+        i_now = (self.slow or self.ema or 0.0) if ph == "cc" else (self.ema or 0.0)
         if i_now < self.MIN_CHARGE_MA * 2:
             return None  # hardly anything goes in (the box takes what the input gives): no time to name
         tau = self._tau_s()
@@ -258,170 +314,36 @@ class ChargeEstimator:
         return int(round(seconds / 60.0 / 5.0) * 5)
 
     # --- a restart of the service in the middle of a charge goes on where it was
-    def _state(self):
-        return {"wall": self._wall(), "active": self.active, "start_pct": self.start_pct, "charged_mah": self.charged_mah, "cc_peak": self.cc_peak, "cv_i0": self.cv_i0, "percent": self.percent, "start_uncertain": self.start_uncertain}
-
-    def _write(self, path, data):
-        tmp = path + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(data, f)
-        os.replace(tmp, path)
-
     def _save(self):
-        data = self._state()
-        if self._state_file:
-            try:
-                self._write(self._state_file, data)
-            except OSError:
-                pass
-        # (also on the memory card, for a restart of the whole box: when a charge starts or ends, else once a minute)
-        if self._persist_file and (data["active"] != self._persist_active or data["wall"] - self._persist_wall >= self.PERSIST_EVERY_S):
-            try:
-                os.makedirs(os.path.dirname(self._persist_file), exist_ok=True)
-                self._write(self._persist_file, data)
-                self._persist_active = data["active"]
-                self._persist_wall = data["wall"]
-            except OSError:
-                pass
-
-    @staticmethod
-    def _read(path):
-        if not path:
-            return None
-        try:
-            with open(path) as f:
-                data = json.load(f)
-            return data if isinstance(data, dict) and data.get("active") else None
-        except (OSError, ValueError, TypeError):
-            return None
-
-    def _apply(self, data):
-        self.active = True
-        self.start_pct = float(data["start_pct"])
-        self.charged_mah = float(data["charged_mah"])
-        self.cc_peak = float(data.get("cc_peak") or 0.0)
-        self.cv_i0 = data.get("cv_i0")
-        self.percent = data.get("percent")
-        self.start_uncertain = bool(data.get("start_uncertain", False))
-
-    def _restore(self):
-        try:
-            data = self._read(self._state_file)
-            if data and self._wall() - float(data.get("wall", 0)) < 120:
-                self._apply(data)
-                return
-            # the state in /tmp is gone (the box was restarted): the one on the memory card counts for a short while after
-            # the start of the system - a charge that was running goes on, it does not start from a guess of the voltage
-            data = self._read(self._persist_file)
-            if data and self._uptime() < self.REBOOT_WINDOW_S:
-                self._apply(data)
-        except (ValueError, KeyError, TypeError):
-            pass
-
-
-class ResistanceTracker:
-    """Measures the resistance between the HAT and the cells (cells, holders, wires, the BMS) from the steps of the battery
-    current: V = OCV + I x R, and within a few seconds of a step (the charger plugged in or pulled, the box's load going up
-    or down) the open-circuit voltage OCV has not moved, so  R = (V after - V before) / (I after - I before).
-
-    The pack's rest voltage is then  V - I x R  (I positive = charging), in the charge as at the load of the music. Until a
-    step has been seen the value of before is used (a typical pack: 0.12 ohm); a measured value is kept on the memory card.
-    No I2C in here (see test_resistance.py)."""
-
-    DEFAULT_OHM = 0.12
-    MIN_OHM = 0.02
-    MAX_OHM = 2.0
-    # a step is a change of the current by at least this much between two readings ...
-    MIN_STEP_MA = 400
-    # ... with the current steady (within this) in the seconds before and after it
-    SPREAD_MA = 250
-    BEFORE_S = 25.0
-    AFTER_S = 8.0  # only the first seconds after the step: the polarisation of the cells is still small then
-    KEEP_S = 90.0
-    ALPHA = 0.3  # how much a new measurement counts against the old value
-
-    def __init__(self, clock=time.monotonic, wall=time.time, persist_file=None):
-        self._clock = clock
-        self._wall = wall
-        self._persist_file = persist_file
-        self._samples = deque()  # (t, mV, mA)
-        self._done_t = -1.0
-        self.ohm = self.DEFAULT_OHM
-        self.measured = False
-        self.count = 0
-        self._load()
-
-    def add(self, vbat_mv, ibat_ma, valid=True):
-        """One reading (every few seconds). valid=False while the charger holds the voltage (CV phase, top-off, done): the
-        voltage does not follow the current then, nothing can be measured and what was collected is dropped."""
-        if not valid or vbat_mv is None or ibat_ma is None:
-            self._samples.clear()
-            return
-        now = self._clock()
-        self._samples.append((now, float(vbat_mv), float(ibat_ma)))
-        while self._samples and now - self._samples[0][0] > self.KEEP_S:
-            self._samples.popleft()
-        self._evaluate()
-
-    @staticmethod
-    def _median(values):
-        v = sorted(values)
-        return v[len(v) // 2] if len(v) % 2 else (v[len(v) // 2 - 1] + v[len(v) // 2]) / 2.0
-
-    def _evaluate(self):
-        s = list(self._samples)
-        for k in range(len(s) - 1, 0, -1):
-            t1 = s[k][0]
-            if t1 <= self._done_t:
-                return
-            if abs(s[k][2] - s[k - 1][2]) < self.MIN_STEP_MA:
-                continue
-            if s[-1][0] - t1 < self.AFTER_S:
-                return  # the seconds after the step are not over yet
-            self._done_t = t1
-            before = [x for x in s[:k] if s[k - 1][0] - x[0] <= self.BEFORE_S]
-            after = [x for x in s[k:] if x[0] - t1 <= self.AFTER_S]
-            if len(before) < 3 or len(after) < 2:
-                return
-            if max(x[2] for x in before) - min(x[2] for x in before) > self.SPREAD_MA:
-                return
-            if max(x[2] for x in after) - min(x[2] for x in after) > self.SPREAD_MA:
-                return
-            d_i = self._median([x[2] for x in after]) - self._median([x[2] for x in before])
-            d_v = self._median([x[1] for x in after]) - self._median([x[1] for x in before])
-            if abs(d_i) < self.MIN_STEP_MA:
-                return
-            r = d_v / d_i
-            if not (self.MIN_OHM <= r <= self.MAX_OHM):
-                return  # a voltage that did not follow the current (or the wrong way): not a measurement of the pack
-            self.ohm = r if not self.measured else self.ohm + (r - self.ohm) * self.ALPHA
-            self.measured = True
-            self.count += 1
-            self._save()
-            return
-
-    def _save(self):
-        if not self._persist_file:
+        if not self._state_file:
             return
         try:
-            os.makedirs(os.path.dirname(self._persist_file), exist_ok=True)
-            tmp = self._persist_file + ".tmp"
+            data = {"wall": self._wall(), "active": self.active, "start_pct": self.start_pct, "charged_mah": self.charged_mah, "cc_peak": self.cc_peak, "slow": self.slow, "cv_i0": self.cv_i0, "percent": self.percent, "start_uncertain": self.start_uncertain, "full": self.full}
+            tmp = self._state_file + ".tmp"
             with open(tmp, "w") as f:
-                json.dump({"ohm": self.ohm, "count": self.count, "wall": self._wall()}, f)
-            os.replace(tmp, self._persist_file)
+                json.dump(data, f)
+            os.replace(tmp, self._state_file)
         except OSError:
             pass
 
-    def _load(self):
-        if not self._persist_file:
+    def _restore(self):
+        if not self._state_file:
             return
         try:
-            with open(self._persist_file) as f:
+            with open(self._state_file) as f:
                 data = json.load(f)
-            ohm = float(data["ohm"])
-            if self.MIN_OHM <= ohm <= self.MAX_OHM:
-                self.ohm = ohm
-                self.measured = True
-                self.count = int(data.get("count", 1))
+            if data.get("active") and self._wall() - float(data.get("wall", 0)) < 120:
+                self.active = True
+                self.start_pct = float(data["start_pct"])
+                self.charged_mah = float(data["charged_mah"])
+                self.cc_peak = float(data.get("cc_peak") or 0.0)
+                self.slow = float(data["slow"]) if data.get("slow") else None
+                self.cv_i0 = data.get("cv_i0")
+                self.percent = data.get("percent")
+                self.start_uncertain = bool(data.get("start_uncertain", False))
+                self.full = bool(data.get("full", False))
+                # (the phase of the charge as well: a reading left out right after the restart - a false "Done" - would
+                # else show the voltage, which reads high while it charges)
+                self.phase = "done" if self.full else "cv" if self.cv_i0 else "cc"
         except (OSError, ValueError, KeyError, TypeError):
             pass

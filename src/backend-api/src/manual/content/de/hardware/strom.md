@@ -6,18 +6,7 @@ Unter **Einstellungen › Akku & Strom** findest du alles zur Stromversorgung.
 
 **Einstellungen › Akku & Strom › Akku** zeigt den Ladestand, die Spannung und den Verlauf der letzten 24 Stunden. Das Display zeigt den Stand in der Statusanzeige.
 
-### Laden und die Zeit bis voll
-
-Während der Akku lädt, hält der Lader die Spannung hoch. Aus der Spannung allein wäre der Akku deshalb sofort „voll“. Die Box rechnet beim Laden anders:
-
-- Sie merkt sich den Stand **vor dem Anstecken** und zählt die **geladene Menge** (Strom mal Zeit) dazu. Die Prozentanzeige steigt dann mit der Ladung, statt gleich auf 100 % zu springen. Erst wenn der Lade-Chip die Ladung selbst für beendet erklärt, steht dort 100 %.
-- Die **Zeit bis voll** steht unter der Prozentzahl („voll in etwa 2 h 10 min“) und als eigene Zeile. Sie ist die Rest-Ladung geteilt durch den aktuellen Ladestrom. Gegen Ende, wenn der Strom langsam abfällt (Spannungsphase), wird sie aus dem gemessenen Abfall berechnet.
-- Lief die Ladung schon, als die Box (der Dienst) startete, kennt sie den Stand davor nicht. Dann steht unter der Prozentzahl der Hinweis, dass der **Startwert nur aus der Spannung geschätzt** ist. Beim Übergang in die Spannungsphase (etwa 85 %) und am Ende der Ladung wird er korrigiert.
-- Zum Rechnen braucht die Box die **Kapazität** des Akkus. Bei den fertigen Profilen liest sie die Größe aus dem Namen (zum Beispiel „10.000mAh“). Beim eigenen Profil trägst du sie unter **Laden › Kapazität** ein. Ohne Kapazität gibt es keine Zeit bis voll.
-- Der **Widerstand des Akkupacks** (Zellen, Halter, Kabel und ein eingebautes BMS) lässt die Spannung absacken, solange die Box Strom zieht, und steigen, solange sie lädt. Die Box **misst ihn selbst** am Sprung des Akkustroms, wenn das Ladekabel angesteckt oder abgezogen wird (und bei starken Laständerungen), merkt sich den Wert und rechnet damit die Prozentanzeige aus, beim Laden und beim Spielen. Bis zum ersten Sprung nimmt sie einen typischen Wert, die Anzeige kann bis dahin zu niedrig oder zu hoch sein. Ein Pack mit schlechten Kontakten oder einem BMS mit hohem Widerstand kann 0,5 Ω und mehr haben. Die Abschaltgrenzen bleiben bei der echten Spannung.
-
-> [!NOTE]
-> Die Zeit ist eine Schätzung. Sie ändert sich mit dem Ladestrom: Läuft die Box beim Laden (Display, Musik), bleibt weniger Strom für den Akku übrig, und die Zeit wird länger. Ein alter Akku fasst weniger als aufgedruckt. Wird der Strom sehr klein, nennt die Box keine Zeit.
+Beim Laden zeigt die Spannung zu viel an, weil das Ladegerät den Akku über seine Ruhespannung hebt. Die Box rechnet deshalb beim Laden mit der Menge, die hineingeht, ausgehend vom Stand vor dem Einstecken, und zeigt dazu **voll in etwa …**. Auch kurz nach dem Laden, wenn die Spannung noch erhöht ist, zählt sie weiter, erst danach wieder nach der Spannung. Die Zeit ist eine Schätzung: Spielt die Box gleichzeitig, bekommt der Akku weniger Strom ab, und mit einem schwachen 5-V-Netzteil lädt er deutlich langsamer.
 
 ## MuPiHAT und Akku-Profil
 
@@ -36,6 +25,7 @@ Darunter stehen die Spannungen des gewählten Profils in Millivolt. Du kannst si
 | **Schwellen** | **Warnung ab**: ab dieser Spannung warnt die Box | 5500–8000 |
 | **Schwellen** | **Abschalten bei**: ab dieser Spannung schaltet sich die Box aus. Muss unter der Warnung liegen | 5000–7500 |
 | **Laden** | **Ladeschluss** (VREG, optional): die Spannung, bei der das Laden endet. Leer = Standard des Lade-Chips | 6000–8400 |
+| **Laden** | **Kapazität** (mAh, optional): die Größe des Akkus, für die Zeit bis voll. Leer = die Größe aus dem Namen des Profils | 500–200000 |
 
 > [!WARNING]
 > **Der Ladeschluss (VREG) ist sicherheitskritisch.** Bei zwei Zellen in Reihe sind höchstens 8400 mV erlaubt (4,2 V je Zelle). Höher schadet dem Akku, die App nimmt keinen höheren Wert an. Ändere ihn nur, wenn du weißt, was du tust.

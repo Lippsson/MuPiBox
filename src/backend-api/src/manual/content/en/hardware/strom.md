@@ -6,18 +6,7 @@ Under **Settings › Battery & Power** you find everything about the power suppl
 
 **Settings › Battery & Power › Battery** shows the charge level, the voltage and the history of the last 24 hours. The display shows the level in the status indicator.
 
-### Charging and the time until full
-
-While the battery charges, the charger holds the voltage up. From the voltage alone the battery would therefore be “full” at once. While charging, the box calculates differently:
-
-- It remembers the level **from before the cable was plugged in** and adds the **charge that has gone in** (current times time). The percentage then rises with the charge instead of jumping to 100 % at once. Only when the charger chip declares the charge finished itself does it show 100 %.
-- The **time until full** is shown under the percentage (“full in about 2 h 10 min”) and as a row of its own. It is the remaining charge divided by the current charging current. Towards the end, when the current slowly falls off (constant-voltage phase), it is calculated from the measured fall.
-- If the charge was already running when the box (the service) started, it does not know the level from before. A note under the percentage then says the **starting value is only estimated from the voltage**. It is corrected at the change to the constant-voltage phase (about 85 %) and at the end of the charge.
-- For the calculation the box needs the battery's **capacity**. For the ready-made profiles it reads the size from the name (for example “10.000mAh”). For a custom profile you enter it under **Charging › Capacity**. Without a capacity there is no time until full.
-- The **resistance of the pack** (cells, holders, wires and a built-in BMS) makes the voltage sag while the box takes current and rise while it charges. The box **measures it itself** from the jump of the battery current when the charging cable is plugged in or pulled out (and when the load changes strongly), keeps the value and uses it to work out the percentage, while charging and while the box plays. Until the first jump it uses a typical value, so the percentage can be too low or too high by then. A pack with bad contacts or a high-resistance BMS can show 0.5 ohm or more. The shutdown limits stay on the real voltage.
-
-> [!NOTE]
-> The time is an estimate. It changes with the charging current: if the box is running while it charges (display, music), less current is left for the battery and the time gets longer. An old battery holds less than printed. If the current becomes very small, the box names no time.
+While charging, the voltage reads too high, because the charger lifts the battery above its rest voltage. So while charging the box counts the charge that goes in, starting from the level before the cable was plugged in, and shows **full in about …**. Shortly after charging, while the voltage is still raised, it keeps counting, and only then goes by the voltage again. The time is an estimate: if the box plays at the same time, the battery gets less current, and a weak 5 V power supply charges it much more slowly.
 
 ## MuPiHAT and battery profile
 
@@ -36,6 +25,7 @@ Below it are the voltages of the chosen profile in millivolts. You can change th
 | **Thresholds** | **Warning from**: from this voltage the box warns | 5500–8000 |
 | **Thresholds** | **Shut down at**: from this voltage the box switches itself off. Must be below the warning | 5000–7500 |
 | Charging | **Charge cutoff** (VREG, optional): the voltage at which charging ends. Empty = the charger chip's default | 6000–8400 |
+| Charging | **Capacity** (mAh, optional): the size of the battery, for the time until full. Empty = the size from the profile's name | 500–200000 |
 
 > [!WARNING]
 > **The charge cutoff (VREG) is safety-critical.** With two cells in series at most 8400 mV are allowed (4.2 V per cell). Higher damages the battery; the app does not accept a higher value. Change it only if you know what you are doing.

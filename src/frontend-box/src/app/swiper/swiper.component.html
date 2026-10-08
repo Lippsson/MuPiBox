@@ -1,19 +1,19 @@
 @if (configLoaded()) {
   @if (coverflow()) {
   <!-- Cover Flow: the centered cover faces front, all others are tilted towards it (see applyCoverflow). -->
-    <swiper-container #swiper class="coverflow" (click)="slideClicked($event)" (swiperprogress)="applyCoverflow()" (swipersettranslate)="applyCoverflow()" (swiperinit)="applyCoverflow()" watch-slides-progress="true" centered-slides="true" slides-per-view="auto" space-between="-272" grab-cursor="true" touch-ratio="0.67" [attr.scrollbar]="!hideScrollbar()" scrollbar-hide="false" scrollbar-draggable="true" scrollbar-drag-size="auto" scrollbar-snap-on-release="true">
+    <swiper-container #swiper class="coverflow" [class.sb-full]="fullScrollbar()" (click)="slideClicked($event)" (swiperprogress)="applyCoverflow()" (swipersettranslate)="applyCoverflow()" (swiperinit)="applyCoverflow()" watch-slides-progress="true" centered-slides="true" slides-per-view="auto" space-between="-272" grab-cursor="true" touch-ratio="0.67" [attr.scrollbar]="!hideScrollbar()" scrollbar-hide="false" scrollbar-draggable="true" scrollbar-drag-size="auto" scrollbar-snap-on-release="true">
       @for (currentData of shownData(); track currentData.trackKey) {
         <swiper-slide>
           <ion-grid>
             <ion-row class="img-row">
               <ion-col size="12">
-                <ion-card class="ep-anchor" [class.cf-round]="coverShape() === 'round'">
+                <ion-card class="ep-anchor">
                   @let src = currentData.imgSrc | async;
-                  @if (noCover(currentData.name, src)) {
-                    <!-- no picture (or it does not load): dark to mid grey with the folder's name -->
+                  @if (noCover(src)) {
+                    <!-- no picture (or it does not load): a card with the folder's name in its colour -->
                     <div class="mupi-no-cover" [style.background]="noCoverStyle(currentData.name).background" [style.color]="noCoverStyle(currentData.name).color"><span>{{ currentData.name }}</span></div>
                   } @else {
-                    <img draggable="false" ondragstart="return false;" [attr.data-src]="src" (error)="onCoverError(currentData.name)">
+                    <img draggable="false" ondragstart="return false;" [attr.data-src]="src" (error)="onCoverError(src)">
                   }
                   @if (currentData.isNew) {
                     <span class="ep-new" aria-hidden="true"></span>
@@ -47,11 +47,11 @@
             @if (it.data.kind === 'folder') {
               <span class="km-stack"></span><span class="km-stack"></span>
             }
-            <div class="km-stage-card ep-anchor" [class.km-round]="roundCovers()">
-              @if (coverMissing(it.data.name, src)) {
+            <div class="km-stage-card ep-anchor" [class.km-round]="roundImages()">
+              @if (coverMissing(src)) {
                 <img class="km-placeholder" draggable="false" [src]="kmCoverPlaceholder()" alt="">
               } @else {
-                <img draggable="false" ondragstart="return false;" [src]="src" alt="" (error)="onCoverError(it.data.name)">
+                <img draggable="false" ondragstart="return false;" [src]="src" alt="" (error)="onCoverError(src)">
               }
               @if (it.data.kind === 'own') {
                 <span class="km-own-label">{{ displayTexts.text('ownFilesLabel') }}</span>
@@ -81,11 +81,11 @@
         <button class="km-stage-name" [class.km-speaking]="speakingName() === cur.name" (click)="readText(cur.name)"><span>{{ cur.name }}</span></button>
       }
       @if (!hideScrollbar() && stageBar(); as bar) {
-        <div class="km-stage-bar"><i [style.width.px]="bar.width" [style.transform]="'translateX(' + bar.x + 'px)'"></i></div>
+        <div class="km-stage-bar" [class.sb-full]="fullScrollbar()" (pointerdown)="stageBarDown($event)" (pointermove)="stageBarMove($event)" (pointerup)="stageBarUp()" (pointercancel)="stageBarUp()"><i [style.width.%]="bar.w * 100" [style.margin-left.%]="bar.x * 100"></i></div>
       }
     </div>
   } @else {
-  <swiper-container #swiper slides-per-view="3" [class.km-few]="km() && shownData().length < 3" [attr.scrollbar]="!hideScrollbar()" scrollbar-hide="false" scrollbar-draggable="true" scrollbar-drag-size="auto" scrollbar-snap-on-release="true" free-mode="false" css-mode="true"
+  <swiper-container #swiper slides-per-view="3" [class.sb-full]="fullScrollbar()" [class.km-few]="km() && shownData().length < 3" [attr.scrollbar]="!hideScrollbar()" scrollbar-hide="false" scrollbar-draggable="true" scrollbar-drag-size="auto" scrollbar-snap-on-release="true" free-mode="false" css-mode="true"
     speed="900" touch-ratio="0.5" slides-per-group="1" resistance="true" resistance-ratio="0.85"
     (swiperslidechange)="onSlideChange($event)">
       @for (currentData of shownData(); track currentData.trackKey) {
@@ -93,17 +93,17 @@
           <ion-grid>
             <ion-row class="img-row">
               <ion-col size="12">
-                <ion-card class="ep-anchor" [class.circle-card]="roundCovers()" [class.km-folder]="km() && currentData.kind === 'folder'" [class.km-own]="km() && currentData.kind === 'own'" (click)="this.elementClicked.emit(currentData)">
+                <ion-card class="ep-anchor" [class.circle-card]="roundImages()" [class.km-folder]="km() && currentData.kind === 'folder'" [class.km-own]="km() && currentData.kind === 'own'" (click)="this.elementClicked.emit(currentData)">
                   @if (km()) {
                     <!-- km themes: folder = card stack + badge, the folder's own titles, Spotify sync, missing cover = mascot -->
                     @let src = currentData.imgSrc | async;
                     @if (currentData.kind === 'folder') {
                       <span class="km-stack"></span><span class="km-stack"></span>
                     }
-                    @if (coverMissing(currentData.name, src)) {
+                    @if (coverMissing(src)) {
                       <img class="km-placeholder" draggable="false" [src]="kmCoverPlaceholder()" alt="">
                     } @else {
-                      <img draggable="false" ondragstart="return false;" loading="lazy" [src]="src" (error)="onCoverError(currentData.name)">
+                      <img draggable="false" ondragstart="return false;" loading="lazy" [src]="src" (error)="onCoverError(src)">
                     }
                     @if (currentData.kind === 'folder') {
                       <span class="km-badge"><ion-icon name="folder"></ion-icon></span>
@@ -117,10 +117,10 @@
                     }
                   } @else {
                     @let plainSrc = currentData.imgSrc | async;
-                    @if (noCover(currentData.name, plainSrc)) {
+                    @if (noCover(plainSrc)) {
                       <div class="mupi-no-cover" [style.background]="noCoverStyle(currentData.name).background" [style.color]="noCoverStyle(currentData.name).color"><span>{{ currentData.name }}</span></div>
                     } @else {
-                      <img draggable="false" ondragstart="return false;" loading="lazy" src="{{plainSrc}}" (error)="onCoverError(currentData.name)">
+                      <img draggable="false" ondragstart="return false;" loading="lazy" src="{{plainSrc}}" (error)="onCoverError(plainSrc)">
                     }
                   }
                   @if (currentData.isNew) {

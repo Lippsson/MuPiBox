@@ -170,9 +170,16 @@ function currentId() {
 function currentPage() {
   return state.pages.get(currentId())
 }
+// Two pages of the same settings group (Aussehen › Theme, Ansicht …): moving between them is like changing tabs, it
+// takes no step of its own - back (the arrow at the top, the browser's back) leads up to the group, not page by page
+const groupSiblings = (a, b) => !!a && !!b && a.id !== b.id && !!a.parent && a.parent === b.parent && a.parent.startsWith('g-')
 function go(id) {
   // (an address outside the app, e.g. "Erweiterte Einstellungen": whoever wired the click)
   if (String(id).startsWith('ext:')) return openExternal(id.slice(4))
+  if (groupSiblings(currentPage(), state.pages.get(id))) {
+    if (location.hash !== hashOf(id)) history.replaceState(null, '', hashOf(id))
+    return route()
+  }
   // (the address by pushState, then drawn: setting location.hash made the app on the iPhone's home screen load itself
   // again after every change of page - "Verbinde mit der Box …" - while Safari and Chrome only fired hashchange)
   if (location.hash !== hashOf(id)) history.pushState(null, '', hashOf(id))
@@ -213,6 +220,8 @@ function noteTrail(page) {
   }
   const at = trail.indexOf(page.id)
   if (at >= 0) trail.length = at + 1
+  // (another page of the same settings group: it takes the place of the one before, see groupSiblings)
+  else if (groupSiblings(state.pages.get(trail.at(-1)), page)) trail[trail.length - 1] = page.id
   else trail.push(page.id)
 }
 // where the back button leads: the page before, else (opened by a link, reloaded) the one above
@@ -301,13 +310,11 @@ function renderChrome(page) {
   $('#topbar').innerHTML = `
     ${isArea ? `<div class="brand-dot">${mupiImg()}</div>` : `<button class="icon-btn" id="back" aria-label="Zurück">${icon('back')}</button>`}
     <div class="title">${esc(title)}</div>
-    ${manualButton()}
     ${langButton()}
     ${themeButton()}
     <button class="icon-btn soft" id="power-btn" aria-label="Neu starten oder ausschalten">${icon('power')}</button>
     ${state.open ? '' : `<button class="icon-btn" id="logout-btn" aria-label="Abmelden">${icon('logout')}</button>`}`
   $('#back')?.addEventListener('click', () => go(backTarget(page)))
-  $('#manual-btn').addEventListener('click', openManual)
   $('#lang-btn').addEventListener('click', openLangSheet)
   $('#theme-btn').addEventListener('click', toggleTheme)
   $('#power-btn').addEventListener('click', openPowerSheet)
@@ -372,7 +379,7 @@ function pager(page) {
   if (sibs.length < 2 || at < 0) return ''
   const btn = (p, kind, label) =>
     `<button class="pager-btn ${kind}" data-go="${esc(p.id)}">${kind === 'prev' ? icon('back', 18) : ''}<span class="lbl"><small>${label}</small><b>${esc(p.title)}</b></span>${kind === 'next' ? icon('chevron', 18) : ''}</button>`
-  return `<div class="group-pager wide">${sibs[at - 1] ? btn(sibs[at - 1], 'prev', 'Zurück') : '<span></span>'}${sibs[at + 1] ? btn(sibs[at + 1], 'next', 'Weiter') : '<span></span>'}</div>`
+  return `<div class="group-pager wide">${sibs[at - 1] ? btn(sibs[at - 1], 'prev', 'Vorherige Seite') : '<span></span>'}${sibs[at + 1] ? btn(sibs[at + 1], 'next', 'Nächste Seite') : '<span></span>'}</div>`
 }
 
 // The cards of the page drawn (headings of its cards) as jumps under the shown page; marks the one being read.
@@ -421,14 +428,15 @@ function updatePageNavSections(page) {
   }
 }
 
-// The manual on the box (/manual/, open without a login): in the app's language when it has it, else its own choice
-// (the language used there last, or the browser's)
+// The manual on the box (/manual/, open without a login): in the app's language when it has it, else the browser's,
+// else English (see the manual's front door). A row on the start page; the login page has it as a button (no
+// start page there - and whoever cannot sign in needs it most)
 function manualButton() {
   return `<button class="icon-btn soft" id="manual-btn" aria-label="Handbuch">${icon('book')}</button>`
 }
 function openManual() {
-  const lang = getLang()
-  window.open(['de', 'en'].includes(lang) ? `/manual/${lang}/index.html` : '/manual/', '_blank', 'noopener')
+  // (the manual's front door finds the language itself: the app's, else the browser's, else English)
+  window.open('/manual/', '_blank', 'noopener')
 }
 
 function themeButton() {
@@ -702,7 +710,7 @@ function renderItemOnly(it) {
     case 'seg':
       return `<div class="field"><label>${esc(it.label)}</label><div class="seg" data-seg="${esc(it.key)}">${it.options
         .map((o) => `<button aria-pressed="${o === value(it)}" data-v="${esc(o)}">${esc(o)}</button>`)
-        .join('')}</div></div>`
+        .join('')}</div>${help}</div>`
     case 'text': {
       const kind = it.kind || 'text'
       const type = kind === 'password' ? 'password' : kind === 'number' ? 'number' : kind === 'url' ? 'url' : kind === 'time' ? 'time' : 'text'
@@ -889,6 +897,7 @@ function wire(root, page) {
 
 // Pages outside the app: the previous admin interface (port 80) and the DietPi dashboard (port 5252)
 async function openExternal(which) {
+  if (which === 'manual') return openManual()
   const host = location.hostname
   if (which === 'dietpi') {
     window.open(`http://${host}:5252/`, '_blank', 'noopener')
@@ -1016,6 +1025,7 @@ function startSkeleton() {
       ${navRow('bluetooth', 'Bluetooth', 'Kopfhörer und Lautsprecher', 'bt')}
       ${navRow('telegram', 'Telegram', 'Eltern-Bot', 'tg')}
       ${navRow('g-system', 'System', 'Über die Box, Neustart, Updates', 'gear')}
+      ${navRow('ext:manual', 'Handbuch', 'Anleitung zu Box, Display und App', 'book')}
       ${navRow('ext:admin', 'Erweiterte Einstellungen', 'Das bisherige Admin-Interface', 'ext')}
     </div></section>`,
   ]
@@ -1159,6 +1169,8 @@ const outState = { data: null, busy: null }
 
 // a sound card's name: the amplifier is the speaker (in the app's language), the others say what they are (3.5 mm, HDMI, USB)
 const cardName = (c) => (c.kind === 'amp' ? tr('Lautsprecher') : c.name)
+// the battery of connected headphones, when they report it (backend-api btBattery): " · 80 %"
+const btBatteryText = (d) => (d?.connected && Number.isInteger(d.battery) ? ` · ${d.battery} %` : '')
 
 function outputRow() {
   const o = outState.data
@@ -1166,7 +1178,7 @@ function outputRow() {
   if (!o?.devices?.length && cards.length < 2) return ''
   const btn = (target, ic, label) =>
     `<button data-out="${esc(target)}" aria-pressed="${o.current === target}" ${outState.busy ? 'disabled' : ''}>${outState.busy === target ? '<span class="spin sm"></span>' : icon(ic, 16)}<span translate="${target === 'box' ? 'yes' : 'no'}">${esc(label)}</span></button>`
-  return `<div class="out-row"><span class="out-label">Ausgabe</span><div class="seg out-seg">${cards.length > 1 ? cards.map((c) => btn(`card:${c.id}`, c.kind === 'jack' ? 'phones' : 'vol', cardName(c))).join('') : btn('box', 'vol', 'Lautsprecher')}${o.devices.map((d) => btn(d.mac, 'phones', d.name)).join('')}</div></div>`
+  return `<div class="out-row"><span class="out-label">Ausgabe</span><div class="seg out-seg">${cards.length > 1 ? cards.map((c) => btn(`card:${c.id}`, c.kind === 'jack' ? 'phones' : 'vol', cardName(c))).join('') : btn('box', 'vol', 'Lautsprecher')}${o.devices.map((d) => btn(d.mac, 'phones', d.name + btBatteryText(d))).join('')}</div></div>`
 }
 
 async function loadOutput(root) {
@@ -1550,7 +1562,13 @@ async function listenedToday() {
 }
 
 async function loadCaps() {
-  const [cfg, st, sleep] = await Promise.all([api(`${API}/caps-config`), api('/api/playtime'), api(`${API}/sleeptimer`)])
+  const [cfg, st, sleep, power] = await Promise.all([api(`${API}/caps-config`), api('/api/playtime'), api(`${API}/sleeptimer`), api(`${API}/power-config`)])
+  // (the card "Ausschalten": the same values as the pages Automatisch ausschalten and Display - wish of hyperbit, all
+  // the times in one place)
+  if (power.ok) {
+    state.values.set('idleOff', Number(power.body.timeout?.idlePiShutdown ?? power.body.idlePiShutdown ?? 0))
+    state.values.set('dispOff', Number(power.body.idleDisplayOff ?? power.body.timeout?.idleDisplayOff ?? 10))
+  }
   if (!cfg.ok) throw new Error(`caps-config ${cfg.status}`)
   caps.config = cfg.body
   caps.status = st.ok ? st.body : null
@@ -2855,6 +2873,7 @@ async function openLocalSheet(folder, parent = null) {
        <div class="lbl"><h2 translate="no">${esc(folder.title)}</h2><p class="help" style="margin:0">${esc(['Ordner auf der SD-Karte', catLabel(folder.category), `${albums.length} ${albums.length === 1 ? 'Album' : 'Alben'}`].join(' · '))}</p>
        <button class="btn sm" data-cover>${icon('image', 16)}${folder.cover ? 'Cover ändern' : 'Cover wählen'}</button></div></div>
      ${albums.length ? `<div class="section-label" style="margin:0">Alben</div><div class="rows">${albums.map((a, i) => `<button class="entry lib-row" data-a="${i}">${thumb(a.cover)}<span class="lbl"><b translate="no">${esc(a.title)}</b>${a.libraryIsContainer ? '<small>Ordner</small>' : ''}</span><span class="chev">${icon('chevron', 18)}</span></button>`).join('')}</div>` : ''}
+     <div class="dl-card" id="dl-card" hidden></div>
      <div class="btns"><button class="btn danger" data-all>Ganzen Ordner löschen</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
     (sheet, close) => {
       for (const img of sheet.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
@@ -2863,6 +2882,7 @@ async function openLocalSheet(folder, parent = null) {
       sheet.querySelector('[data-back]')?.addEventListener('click', back)
       sheet.querySelector('[data-cover]').onclick = () => pickLocalCover(folder, parent, (f) => openLocalSheet(f, parent))
       for (const b of sheet.querySelectorAll('[data-a]')) b.onclick = () => openLocalSheet(albums[Number(b.dataset.a)], folder)
+      fillFolderDownloads(sheet, folder, albums)
       sheet.querySelector('[data-all]').onclick = () => {
         close()
         deleteLocal(folder.libraryPath, folder.title, 'Der Ordner')
@@ -2986,6 +3006,71 @@ function openNasAlbumSheet(album, parent) {
   )
 }
 
+/* Herunterladen von der SD-Karte / dem USB-Stick (hyperbit): a track as it lies on the card, an album or a folder as a
+   ZIP the box makes while it goes (local-download.ts) */
+
+// from this size on a question before (the phone needs the room, WiFi needs the time)
+const DL_ASK_BYTES = 1e9
+// a rough time over WiFi, at 2 to 6 MB/s; nothing for a small download
+function dlTime(bytes) {
+  if (bytes < 60e6) return ''
+  const lo = Math.max(1, Math.round(bytes / 6e6 / 60))
+  const hi = Math.max(lo, Math.round(bytes / 2e6 / 60))
+  return lo === hi ? `über WLAN ca. ${lo} min` : `über WLAN ca. ${lo}–${hi} min`
+}
+function startDownload(url) {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = ''
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+async function downloadFolder(libraryPath, title, info) {
+  if (info.bytes >= DL_ASK_BYTES) {
+    const ok = await ask('Ganzen Ordner herunterladen?', `„${title}“ – ${info.files} Dateien, ${formatBytes(info.bytes)}. Die Box spielt dabei weiter. Auf dem Handy braucht die Datei ${formatBytes(info.bytes)} freien Platz.`, 'Herunterladen')
+    if (!ok) return
+  }
+  startDownload(`${API}/local/zip?path=${encodeURIComponent(libraryPath)}`)
+  toast(`Download startet: ${title}.zip`)
+}
+// a folder's sheet: per album its tracks and size, and the ZIP of the whole folder
+async function fillFolderDownloads(sheet, folder, albums) {
+  const r = await api(`${API}/local/info?path=${encodeURIComponent(folder.libraryPath)}`)
+  const card = $('#dl-card', sheet)
+  if (!r.ok || !card?.isConnected) return
+  const info = r.body
+  for (const b of sheet.querySelectorAll('[data-a]')) {
+    const s = info.children?.[String(albums[Number(b.dataset.a)]?.libraryPath ?? '').split('/').pop()]
+    if (s) b.querySelector('.lbl')?.insertAdjacentHTML('beforeend', `<small>${esc(`${s.audio} Titel · ${formatBytes(s.bytes)}`)}</small>`)
+  }
+  card.innerHTML = `<button class="btn primary block" id="dl-zip">${icon('download', 18)}Ordner als ZIP herunterladen</button>
+    <div class="dl-meta"><span>${esc(`${info.files} Dateien · ${formatBytes(info.bytes)}`)}</span><span>${esc(dlTime(info.bytes))}</span></div>`
+  card.hidden = false
+  $('#dl-zip', sheet).onclick = () => downloadFolder(folder.libraryPath, folder.title, info)
+}
+// an album's sheet: its tracks, each to download, and the album as a ZIP
+async function fillAlbumDownloads(sheet, album) {
+  const r = await api(`${API}/local/info?path=${encodeURIComponent(album.libraryPath)}`)
+  const list = $('#dl-tracks', sheet)
+  if (!r.ok || !list?.isConnected) return
+  const info = r.body
+  const head = $('#dl-head', sheet)
+  if (info.tracks?.length) {
+    head.lastElementChild.textContent = `${info.tracks.length} · ${formatBytes(info.bytes)}`
+    head.hidden = false
+    list.innerHTML = info.tracks
+      .map(
+        (t, i) => `<div class="lib-row dl-row"><span class="trk-no">${i + 1}</span><span class="lbl"><b translate="no">${esc(t.name)}</b><small>${esc(formatBytes(t.size))}</small></span>
+          <a class="icon-btn soft" href="${API}/local/download?path=${encodeURIComponent(t.path)}" download aria-label="${esc(t.name)} herunterladen" data-dl="${esc(t.name)}">${icon('download', 18)}</a></div>`,
+      )
+      .join('')
+    for (const a of list.querySelectorAll('[data-dl]')) a.addEventListener('click', () => toast(`Download startet: ${a.dataset.dl}`))
+  }
+  $('#dl-album', sheet).innerHTML = `<button class="btn block" id="dl-zip">${icon('download', 18)}Album als ZIP herunterladen</button>`
+  $('#dl-zip', sheet).onclick = () => downloadFolder(album.libraryPath, album.title, info)
+}
+
 // An album of the SD card: its cover large, change it or delete the album; back to its artist
 function openLocalAlbumSheet(album, parent) {
   openSheet(
@@ -2993,6 +3078,7 @@ function openLocalAlbumSheet(album, parent) {
      <span class="album-cover">${album.cover ? `<img src="${esc(stampedCover(album.cover))}" alt="">` : icon('image', 40)}</span>
      <div class="album-title"><h2 translate="no">${esc(album.title)}</h2><p class="help" style="margin:0">${esc(['Album auf der SD-Karte', catLabel(album.category), parent?.title].filter(Boolean).join(' · '))}</p></div>
      <button class="btn primary block" data-cover>${icon('image', 18)}${album.cover ? 'Cover ändern' : 'Cover wählen'}</button>
+     <div id="dl-album"></div><div class="section-label dl-head" id="dl-head" hidden><span>Titel</span><span></span></div><div class="rows" id="dl-tracks"></div>
      <div class="btns"><button class="btn danger" data-del>Album löschen</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
     (sheet, close) => {
       for (const img of sheet.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
@@ -3000,6 +3086,7 @@ function openLocalAlbumSheet(album, parent) {
       sheet.querySelector('[data-close]').onclick = back
       sheet.querySelector('[data-back]')?.addEventListener('click', back)
       sheet.querySelector('[data-cover]').onclick = () => pickLocalCover(album, parent, (f) => openLocalAlbumSheet(f, parent))
+      fillAlbumDownloads(sheet, album)
       sheet.querySelector('[data-del]').onclick = () => {
         close()
         deleteLocal(album.libraryPath, album.title, 'Das Album')
@@ -5508,9 +5595,6 @@ async function loadDisplayOptions() {
 
 // What the display did after a save, in words
 function displayNote(b) {
-  // (the choice of the output on the display switched on: the 3.5 mm output made ready - at once, or after a restart)
-  if (b?.audio?.restartNeeded) return 'Der 3,5-mm-Ausgang wurde eingeschaltet – das gilt erst nach einem Neustart der Box.'
-  if (b?.audio && (b.audio.blacklistRemoved || b.audio.configChanged || b.audio.cmdlineChanged)) return 'Der 3,5-mm-Ausgang ist bereit.'
   if (b?.restartKiosk) return 'Das Display startet neu.'
   if (b?.reboot) return 'Wird nach einem Neustart der Box übernommen.'
   if (b?.restartPlayer) return 'Der Player startet neu.'
@@ -6450,14 +6534,14 @@ function btTop() {
     ${noHw ? `<div class="note warn">${icon('info', 18)}<span>Der Bluetooth-Chip ist ausgeschaltet (gilt nach einem Neustart). Einschalten unten unter „Hardware“.</span></div>` : ''}
     ${b.powered ? `<div class="status-line"><span class="dot ${linked ? 'ok' : ''}"></span><span>${linked ? `Verbunden mit <b translate="no">${esc(linked.name)}</b>` : 'Kein Gerät verbunden'}</span></div>` : ''}
     ${sw('bt-on', 'Bluetooth', 'Für Kopfhörer oder Lautsprecher.', b.powered, noHw)}${sw('bt-auto', 'Automatisch verbinden', 'Verbindet ein bekanntes Gerät von selbst, sobald es an ist.', b.autoconnect, noHw)}
-    <div class="navlist">${navRow('lautstaerke', 'Lautstärkegrenze für Kopfhörer', 'Eigenes Maximum, solange Bluetooth-Audio läuft', 'vol')}</div></section>`
+    <div class="navlist">${navRow('lautstaerke', 'Lautstärkegrenze für Kopfhörer', 'Eigenes Maximum, solange Kopfhörer spielen', 'vol')}</div></section>`
   const paired = b.powered
     ? `<section class="card" data-col="1" data-card="gekoppelte-gerate"><h2>Gekoppelte Geräte</h2>${
         devices.length
           ? `<div class="rows">${devices
               .map(
                 (d, i) =>
-                  `<div class="entry"><span class="avatar">${icon('bt', 16)}</span><span class="lbl"><b translate="no">${esc(d.name)}</b><small>${d.connected ? 'verbunden' : 'nicht verbunden'}</small></span>
+                  `<div class="entry"><span class="avatar">${icon('bt', 16)}</span><span class="lbl"><b translate="no">${esc(d.name)}</b><small>${d.connected ? 'verbunden' : 'nicht verbunden'}${btBatteryText(d) ? `<span class="bt-batt${d.battery <= 20 ? ' low' : ''}" translate="no">${btBatteryText(d)}</span>` : ''}</small></span>
                   ${d.connected ? `<button class="btn sm" data-bt-disc="${i}">Trennen</button>` : `<button class="btn sm" data-bt-conn="${i}">Verbinden</button>`}<button class="btn danger sm" data-bt-rm="${i}">Entfernen</button></div>`,
               )
               .join('')}</div>`
@@ -6582,6 +6666,11 @@ function mountBluetooth(root, page) {
 // the battery takes current (not: the power supply gives some - that also runs the Pi; with the charger stuck it gave
 // 45 mA and the app showed the flash while the battery ran down)
 const batteryCharging = (h) => Number.isFinite(h?.Ibat) && h.Ibat > 50
+// The charge goes on but no current flows just now: the chip reports "Done" now and then on a weak input, far below its
+// limit, and the estimate does not take it (Charge_Phase stays the one of the charge) - "vollständig geladen" was wrong
+const batteryChargePaused = (h) => !batteryCharging(h) && ['precharge', 'cc', 'cv', 'topoff'].includes(h?.Charge_Phase) && Number.isFinite(h?.Vbus) && h.Vbus > 4000
+// full: as the estimate says, when the HAT service has one (Charge_Phase), else as the chip says
+const batteryFull = (h) => (h?.Charge_Phase ? h.Charge_Phase === 'done' : /termination|done/i.test(h?.Charger_Status ?? ''))
 // (the box saw it for 10 minutes: /api/mupihat ChargeProblemSince, see checkCharging in server.ts)
 const NOT_CHARGING = 'Das Netzteil steckt, aber der Akku lädt nicht. Bitte das Netzteil an der Box kurz abziehen und wieder anstecken.'
 // (the MuPiHAT service did not update the values for 10 minutes, a restart of it did not help: BatteryStaleSince, see
@@ -6609,11 +6698,19 @@ function batteryTop() {
   if (!Number.isFinite(pct)) pct = Number.parseInt(String(h.Bat_SOC ?? ''), 10)
   const charging = batteryCharging(h)
   const v = (mv) => (Number.isFinite(mv) && mv > 0 ? `${(mv / 1000).toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} V` : '–')
-  const status = { 'Not Charging': 'lädt nicht', 'Pre-charge': 'Vorladen', 'Fast charge (CC mode)': 'lädt (schnell)', 'Fast Charging': 'lädt (schnell)', 'Fast charging': 'lädt (schnell)', 'Trickle Charge': 'lädt (Erhaltung)', 'Taper Charge (CV mode)': 'lädt (fast voll)', 'Taper Charging': 'lädt (fast voll)', 'Top-off Timer Active Charging': 'lädt (fast voll)', 'Charge Termination Done': 'vollständig geladen' }[h.Charger_Status] ?? h.Charger_Status ?? '–'
+  // (while it charges: the phase the estimate goes by - the chip reports "Taper (CV)" also far below its limit when the
+  // input gives too little, then "fast voll" said the wrong thing at 70 %)
+  const PHASE = { precharge: 'Vorladen', cc: 'lädt (schnell)', cv: 'lädt (fast voll)', topoff: 'lädt (fast voll)', done: 'vollständig geladen' }
+  const status =
+    (charging && PHASE[h.Charge_Phase]) ||
+    (batteryChargePaused(h) && 'lädt (Pause)') ||
+    ({ 'Not Charging': 'lädt nicht', 'Pre-charge': 'Vorladen', 'Fast charge (CC mode)': 'lädt (schnell)', 'Fast Charging': 'lädt (schnell)', 'Fast charging': 'lädt (schnell)', 'Trickle Charge': 'lädt (Erhaltung)', 'Taper Charge (CV mode)': 'lädt (fast voll)', 'Taper Charging': 'lädt (fast voll)', 'Top-off Timer Active Charging': 'lädt (fast voll)', 'Charge Termination Done': 'vollständig geladen' }[h.Charger_Status] ?? h.Charger_Status ?? '–')
   // what the battery does now, under the big number (as the design: "OK · entlädt")
   const state = charging
     ? 'lädt'
-    : /termination|done/i.test(h.Charger_Status ?? '')
+    : batteryChargePaused(h)
+      ? 'lädt (Pause)'
+      : batteryFull(h)
       ? 'vollständig geladen'
       : Number.isFinite(h.Ibat) && h.Ibat < -50
         ? 'entlädt'
@@ -6709,7 +6806,7 @@ function hatNowLine() {
   }
   if (!h || !Number.isFinite(h.Vbat)) return ''
   const pct = Number.isFinite(h.Bat_Percent) ? h.Bat_Percent : Number.parseInt(String(h.Bat_SOC ?? ''), 10)
-  const what = batteryCharging(h) ? 'lädt' : Number.isFinite(h.Ibat) && h.Ibat < -50 ? 'entlädt' : 'Ruhezustand'
+  const what = batteryCharging(h) ? 'lädt' : batteryChargePaused(h) ? 'lädt (Pause)' : Number.isFinite(h.Ibat) && h.Ibat < -50 ? 'entlädt' : 'Ruhezustand'
   const eta = batteryCharging(h) && Number.isFinite(h.Charge_Eta_Min) && h.Charge_Eta_Min >= 5 ? `voll in etwa ${h.Charge_Eta_Min >= 60 ? `${Math.floor(h.Charge_Eta_Min / 60)} h ` : ''}${h.Charge_Eta_Min % 60 ? `${h.Charge_Eta_Min % 60} min` : ''}`.trim() : ''
   const parts = [`${(h.Vbat / 1000).toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} V`, Number.isFinite(pct) ? `${pct} %` : '', what, eta].filter(Boolean)
   return `<div class="status-line"><span class="dot ok"></span><span><span>Jetzt</span> <b>${esc(parts.join(' · '))}</b></span></div>`
@@ -8024,6 +8121,13 @@ const fmtUptime = (s) => {
   return d ? `${d} T ${h} h` : h ? `${h} h ${m} min` : `${m} min`
 }
 
+// what the three choices of the scrollbar do (Aussehen > Ansicht)
+const SCROLLBAR_HELP = {
+  Standard: 'Wie im Theme vorgesehen.',
+  Durchgehend: 'Über die ganze Breite und dicker – leichter zu treffen, auch mit großen Fingern.',
+  Ausblenden: 'Keine Leiste, gewischt wird auf den Covern.',
+}
+
 /* Über die Box */
 
 // news.txt is an HTML snippet from GitHub: turned into plain text (headings, bullet points) - nothing of it is run
@@ -8075,11 +8179,19 @@ function aboutTop() {
   const disk = i.disk ?? {}
   const used = disk.total ? Math.round(((disk.total - disk.free) / disk.total) * 100) : null
   const row = (k, v) => (v ? `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>` : '')
+  // (the drive the box runs from - an SD card, or a USB stick / SSD; a stick at USB 2.0 speed is many times slower)
+  const drive = i.drive ?? {}
+  const driveName = { sd: 'SD-Karte', usb: 'USB-Laufwerk', nvme: 'SSD' }[drive.kind] ?? (drive.kind ? 'Systemlaufwerk' : 'SD-Karte')
+  const driveNote = {
+    'usb2-port': 'Dein Systemlaufwerk steckt in einem USB-2.0-Port (schwarz). Steck es in einen blauen USB-3.0-Port, dann startet und reagiert die Box deutlich schneller.',
+    'usb2-drive': 'Dein Systemlaufwerk ist ein USB-2.0-Stick. Mit einem USB-3.0-Stick oder einer SSD im blauen Port startet und reagiert die Box deutlich schneller.',
+  }[drive.hint]
   return [
     // (on a wide screen: MuPiBox on the left over two rows, the name and the support beside it, then the history and
     // the news across the whole width)
     `<section class="card about-main"><h2>MuPiBox</h2><dl class="kv">${row('Version', sys.version)}${row('Hostname', i.hostname)}${row('Läuft seit', i.uptime_seconds != null ? fmtUptime(i.uptime_seconds) : '')}${row('CPU-Last', i.load_1 != null ? `${i.load_1.toLocaleString(LOCALE)} (${i.cpu_count} Kerne)` : '')}${row('Temperatur', i.cpu_temp_c != null ? `${Math.round(i.cpu_temp_c)} °C` : '')}${row('Arbeitsspeicher', i.mem_total ? `${formatBytes(i.mem_total - i.mem_free)} von ${formatBytes(i.mem_total)}` : '')}</dl>
-      ${used != null ? `<div class="bar"><div class="slider-head"><b>SD-Karte</b><span class="value-pill">${used} %</span></div><div class="track"><i style="--w:${used}%"></i></div><small>${formatBytes(disk.free)} frei von ${formatBytes(disk.total)}</small></div>` : ''}</section>`,
+      ${used != null ? `<div class="bar"><div class="slider-head"><b>${esc(driveName)}</b><span class="value-pill">${used} %</span></div><div class="track"><i style="--w:${used}%"></i></div><small>${formatBytes(disk.free)} frei von ${formatBytes(disk.total)}</small></div>` : ''}
+      ${driveNote ? `<div class="note warn">${icon('info', 18)}<span>${esc(driveNote)}</span></div>` : ''}</section>`,
     `<section class="card"><h2>Name der Box</h2><p class="help">Steht auf dem Startbild und oben in der App.</p>
       <div class="field"><label for="ab-name">Name der Box (höchstens ${max} Zeichen)</label><input class="input" id="ab-name" maxlength="${max}" value="${esc(sys.bs?.current?.boxName ?? '')}" placeholder="${esc(sys.bs?.screens?.defaultName ?? 'MuPiBox')}"></div>
       <div class="btns"><button class="btn primary" id="ab-save">Speichern</button></div></section>`,
@@ -9128,14 +9240,24 @@ const isSharesSection = (s) => (s.items ?? []).some((it) => it.target === 'freig
 const CONTROLLERS = {
   spielzeit: {
     load: loadCaps,
+    // ("Display aus nach" in the steps of its own page)
+    sections: (page) => page.sections.map((sec) => (sec.title === 'Ausschalten' ? { ...sec, items: sec.items.map((it) => (it.key === 'dispOff' ? { ...it, stops: DISPLAY_OFF_STOPS } : it)) } : sec)),
     mount(root) {
       drawRing()
       drawSleep()
       bonusButton(root)
       every(20000, refreshPlaytime)
     },
-    change(key, v) {
+    async change(key, v) {
       switch (key) {
+        case 'idleOff': {
+          const r = await api(`${API}/power-config`, { method: 'POST', body: { idlePiShutdown: Number(v) } })
+          return toast(r.ok ? (Number(v) === 0 ? 'Schaltet sich nicht mehr selbst aus' : `Aus nach ${v} min ohne Wiedergabe`) : 'Nicht gespeichert', r.ok ? 'ok' : 'info')
+        }
+        case 'dispOff': {
+          const r = await api(`${API}/power-config`, { method: 'POST', body: { idleDisplayOff: Number(v) } })
+          return toast(r.ok ? (Number(v) === 0 ? 'Display bleibt an' : `Display aus nach ${v} min`) : 'Nicht gespeichert', r.ok ? 'ok' : 'info')
+        }
         case 'limitOn':
           bonusButton($('#content'), v)
           return saveCaps({ playtimeLimit: { enabled: v } }, v ? 'Tageslimits an' : 'Tageslimits aus')
@@ -9540,20 +9662,32 @@ const CONTROLLERS = {
       state.values.set('stage', disp.theme.stage === true)
       state.values.set('tts', disp.theme.stageAutoRead === true)
       state.values.set('names', disp.opts.coverflowShowNames)
-      state.values.set('hideScroll', disp.opts.hideScrollbar)
-      state.values.set('coverRound', disp.opts.coverRound === true)
+      state.values.set('scrollbar', disp.opts.hideScrollbar ? 'Ausblenden' : disp.opts.scrollbarStyle === 'full' ? 'Durchgehend' : 'Standard')
+      state.values.set('headerBand', disp.theme.headerBand !== false)
+      state.values.set('playerPanel', disp.theme.playerPanel !== false)
+      state.values.set('fullscreenGestures', disp.theme.fullscreenGestures !== false)
     },
     sections: (page) =>
       page.sections.map((sec) => ({
         ...sec,
-        items: sec.items.map((it) => {
+        // (the band behind the header and the panel behind the player: only the old plain themes may do without them -
+        // on a picture the writing would not be readable; not shown at all for the other themes)
+        items: sec.items
+          .filter((it) => it.key !== 'headerBand' || (disp.theme?.bandOptional ?? []).includes(disp.theme?.current))
+          .filter((it) => it.key !== 'playerPanel' || (disp.theme?.panelOptional ?? []).includes(disp.theme?.current))
+          // (the full screen gestures exist only in the Cover Flow theme)
+          .filter((it) => it.key !== 'fullscreenGestures' || disp.theme?.current === 'coverflow')
+          .map((it) => {
           const cur = themeLabel(disp.theme?.current ?? '')
           if (it.key === 'stage') return { ...it, help: `Große Cover in der Mitte, für die Kinder-Themes${isKidsTheme(disp.theme?.current) ? '' : ` – das aktive Theme (${cur}) nutzt sie nicht`}.` }
           // (reading names out works only with the cover flow: shown under it while it is on)
           if (it.key === 'tts') return { ...it, dep: 'stage' }
-          // (the scroll bar is below the covers in every view - the cover flow's and the three side by side too)
-          if (it.key === 'hideScroll') return { ...it, help: 'Der Balken unter den Covern, in jeder Ansicht.' }
+          // (the scroll bar is below the covers in every view - the stage's, the cover flow's and the three side by side)
+          if (it.key === 'scrollbar') return { ...it, helpId: 'sb-help', help: SCROLLBAR_HELP[state.values.get('scrollbar')] ?? SCROLLBAR_HELP.Standard }
           if (it.key === 'names') return { ...it, help: disp.theme?.current === 'coverflow' ? 'Nur beim Theme „coverflow“.' : `Nur beim Theme „coverflow“ – aktiv ist gerade „${cur}“.` }
+          if (it.key === 'headerBand') return { ...it, help: 'Aus: Die Kopfzeile liegt ohne farbiges Band auf dem Hintergrund des Themes.' }
+          if (it.key === 'playerPanel') return { ...it, help: 'Aus: Die Knöpfe des Players stehen ohne Fläche auf dem Hintergrund, in den Farben der Kopfzeile.' }
+          if (it.key === 'fullscreenGestures') return { ...it, help: 'Zwei Finger nach oben wischen blendet die Kopfzeile aus und macht die Cover größer, nach unten holt sie zurück. Ohne Kopfzeile: ein Finger vom unteren Rand nach oben geht zurück, zwei Finger vom Rand zur Seite wechseln die Kategorie.' }
           return it
         }),
       })),
@@ -9566,9 +9700,17 @@ const CONTROLLERS = {
         const r = await api(`${API}/theme-stage`, { method: 'POST', body: { autoRead: v } })
         return toast(r.ok ? (v ? 'Vorlesen an' : 'Vorlesen aus') : 'Nicht gespeichert', r.ok ? 'ok' : 'info')
       }
+      if (key === 'headerBand' || key === 'playerPanel' || key === 'fullscreenGestures') {
+        const r = await api(`${API}/theme-stage`, { method: 'POST', body: { [key]: v } })
+        if (r.ok) disp.theme[key] = v
+        return toast(r.ok ? 'Gespeichert' : 'Nicht gespeichert', r.ok ? 'ok' : 'info')
+      }
       if (key === 'names') return saveDisplayOptions({ coverflowShowNames: v })
-      if (key === 'hideScroll') return saveDisplayOptions({ hideScrollbar: v })
-      if (key === 'coverRound') return saveDisplayOptions({ coverRound: v })
+      if (key === 'scrollbar') {
+        const help = $('#sb-help')
+        if (help) help.textContent = SCROLLBAR_HELP[v] ?? ''
+        return saveDisplayOptions(v === 'Ausblenden' ? { hideScrollbar: true } : { hideScrollbar: false, scrollbarStyle: v === 'Durchgehend' ? 'full' : 'standard' })
+      }
     },
   },
   startbilder: { load: loadBootscreens, top: bootTop, sections: () => [], ownNav: true, mount: mountBoot },
@@ -9615,7 +9757,7 @@ const CONTROLLERS = {
         },
         {
           title: 'Auflösung',
-          help: 'Das Display startet damit gleich neu.',
+          help: 'Die Auflösung deines Displays. Ist sie größer als 800 × 480, wird die Oberfläche passend vergrößert – scharf und im gleichen Aufbau. Das Display startet damit gleich neu.',
           items: [
             { type: 'select', label: 'Größe', key: 'resPreset', options: [...RES_PRESETS.map(([l]) => l), 'Eigene …'] },
             { type: 'pair', dep: 'resCustom', keep: true, items: [it('resX', { label: 'Breite', unit: 'px' }), it('resY', { label: 'Höhe', unit: 'px' })] },
@@ -9717,7 +9859,7 @@ const CONTROLLERS = {
               type: 'toggle',
               key: 'outPick',
               label: 'Box oder Kopfhörer am Display wählen',
-              help: 'Ein Tipp auf die Lautstärke oben im Player öffnet „Hören mit“ – wenn ein Bluetooth-Gerät gekoppelt ist oder die Box mehrere Soundausgänge hat. Beim Einschalten bereitet die Box den 3,5-mm-Ausgang vor (gilt nach einem Neustart). In der App geht es immer.',
+              help: 'Ein Tipp auf die Lautstärke oben im Player öffnet „Hören mit“ – wenn ein Bluetooth-Gerät gekoppelt ist oder die Box mehrere Soundausgänge hat. In der App geht es immer.',
             },
           ],
         },
@@ -9778,14 +9920,14 @@ const CONTROLLERS = {
                 ...it,
                 help:
                   hw.audio?.bluetooth && state.values.get('volBtOn')
-                    ? `Höchstens ${state.values.get('volBtMax')} % – gerade mit Bluetooth-Kopfhörer oder -Lautsprecher.`
+                    ? `Höchstens ${state.values.get('volBtMax')} % – gerade mit Kopfhörer oder Bluetooth-Lautsprecher.`
                     : `Höchstens ${state.values.get('volMax')} % (Hörschutz).`,
               }
             : it.key === 'volMax'
               ? [
                   { ...it, help: 'Lauter geht es auch am Display und per Telegram nicht.' },
-                  { type: 'toggle', key: 'volBtOn', label: 'Eigene Grenze mit Bluetooth', help: 'Für Kopfhörer: gilt, solange Kopfhörer oder ein Lautsprecher per Bluetooth verbunden sind.' },
-                  { type: 'slider', key: 'volBtMax', label: 'Maximum mit Bluetooth', min: 10, max: 100, step: 5, unit: ' %', dep: 'volBtOn', help: 'Ist die Box beim Verbinden lauter, geht sie gleich auf diesen Wert herunter.' },
+                  { type: 'toggle', key: 'volBtOn', label: 'Eigene Grenze für Kopfhörer', help: 'Gilt, solange über Bluetooth (Kopfhörer oder Lautsprecher) oder die Kopfhörerbuchse gespielt wird.' },
+                  { type: 'slider', key: 'volBtMax', label: 'Maximum für Kopfhörer', min: 10, max: 100, step: 5, unit: ' %', dep: 'volBtOn', help: 'Ist die Box beim Verbinden oder beim Wechsel auf die Buchse lauter, geht sie gleich auf diesen Wert herunter.' },
                 ]
               : it.key === 'volStart'
                 ? // (never above the maximum; only with a fixed start value)
@@ -9871,9 +10013,10 @@ const CONTROLLERS = {
       await loadHardware()
       const sc = hw.data.soundcard
       state.values.set('sound', sc.options.find((o) => o.id === sc.current)?.name ?? sc.current)
+      state.values.set('jack', !!sc.onboard?.on)
     },
-    sections: (page) =>
-      withoutSave(page).map((sec) => ({
+    sections: (page) => [
+      ...withoutSave(page).map((sec) => ({
         ...sec,
         // (and what the system has found: a card chosen but not found here has no driver, or wants the restart)
         help: [
@@ -9885,7 +10028,43 @@ const CONTROLLERS = {
           .join(' '),
         items: sec.items.map((it) => (it.key === 'sound' ? { ...it, options: hw.data.soundcard.options.map((o) => o.name) } : it)),
       })),
+      // the board's 3.5 mm output next to the box's card: headphones on the jack (not with the onboard output as the card)
+      ...(hw.data.soundcard.onboard?.applicable
+        ? [
+            {
+              title: 'Kopfhörerbuchse',
+              items: [
+                {
+                  type: 'toggle',
+                  key: 'jack',
+                  label: '3,5-mm-Ausgang zusätzlich',
+                  help: [
+                    'Für Kopfhörer an der Buchse des Raspberry Pi, neben der Soundkarte der Box. Gewählt wird im Player über „Hören mit“ oder in der App bei der Ausgabe.',
+                    hw.data.soundcard.onboard.on && !hw.data.soundcard.onboard.active ? 'Gilt nach einem Neustart der Box.' : '',
+                    // (Pi up to the 3: the jack and the LED's hardware PWM share one PWM unit, see onboard_audio.sh)
+                    hw.data.soundcard.onboard.ledSoftware ? 'Auf diesem Raspberry Pi teilen sich Buchse und Status-LED die PWM-Einheit: Die LED läuft dann per Software weiter (etwas mehr Rechenlast).' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
+                },
+              ],
+            },
+          ]
+        : []),
+    ],
     async change(key, v, page) {
+      if (key === 'jack') {
+        const r = await api(`${API}/onboard-audio`, { method: 'POST', body: { on: !!v } })
+        if (!r.ok || r.body?.ok === false) {
+          state.values.set('jack', !v)
+          renderPage(page, false)
+          return toast('Das hat nicht geklappt', 'info')
+        }
+        hw.data.soundcard.onboard.on = !!v
+        renderPage(page, false)
+        if (r.body?.reboot) return offerReboot(v ? 'Der 3,5-mm-Ausgang gilt nach einem Neustart.' : 'Der 3,5-mm-Ausgang ist nach einem Neustart aus.')
+        return toast('Gespeichert')
+      }
       if (key !== 'sound') return
       const opt = hw.data.soundcard.options.find((o) => o.name === v)
       if (!opt || opt.id === hw.data.soundcard.current) return
@@ -11007,7 +11186,7 @@ const LIVE_CARDS = {
         ? `<div class="rows">${pins.btDevices
             .map(
               (d, i) =>
-                `<div class="entry"><span class="avatar">${icon('phones', 16)}</span><span class="lbl"><b translate="no">${esc(d.name)}</b><small>${d.connected ? 'verbunden' : 'nicht verbunden'}</small></span>${d.connected ? `<button class="btn sm" data-pin-bt="disconnect" data-i="${i}">Trennen</button>` : `<button class="btn sm primary" data-pin-bt="connect" data-i="${i}">Verbinden</button>`}</div>`,
+                `<div class="entry"><span class="avatar">${icon('phones', 16)}</span><span class="lbl"><b translate="no">${esc(d.name)}</b><small>${d.connected ? 'verbunden' : 'nicht verbunden'}${btBatteryText(d) ? `<span class="bt-batt${d.battery <= 20 ? ' low' : ''}" translate="no">${btBatteryText(d)}</span>` : ''}</small></span>${d.connected ? `<button class="btn sm" data-pin-bt="disconnect" data-i="${i}">Trennen</button>` : `<button class="btn sm primary" data-pin-bt="connect" data-i="${i}">Verbinden</button>`}</div>`,
             )
             .join('')}</div>`
         : `<p class="help" style="margin:0">${esc('Noch kein Gerät gekoppelt.')}</p>`

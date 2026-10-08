@@ -56,9 +56,10 @@ while t <= total:
             print(f"  at {frac * 100:3.0f} % of the way: percent {est.percent:5.1f}  eta {est.eta_min} min  (truth {truth_min:4.0f} min)  {est.phase}")
     t += STEP
 
-# the end: the charger says done
-clock[0] += STEP
-est.update(0, "Charge Termination Done", 100)
+# the end: the charger says done (and stays at it)
+for _ in range(3):
+    clock[0] += STEP
+    est.update(0, "Charge Termination Done", 100)
 print(f"done: percent {est.percent}  eta {est.eta_min}")
 assert est.percent == 100.0 and est.eta_min == 0
 
@@ -67,8 +68,8 @@ mean = sum(abs(e) for e in errors) / len(errors)
 print(f"eta error (relative, floor 30 min): mean {mean * 100:.0f} %, worst {worst * 100:.0f} %")
 assert worst < 0.5, "the time estimate is off by more than half"
 
-# unplugged in the middle: back to the voltage, and a new charge starts from the new rest value
-for _ in range(60):
+# unplugged for long (more than the settling time): back to the voltage, and a new charge starts from the new rest value
+for _ in range(400):
     clock[0] += STEP
     est.update(-600, "Not Charging", 70)
 assert est.percent is None and est.eta_min is None
@@ -111,6 +112,142 @@ for _ in range(10):  # a real one: near the limit, and it stays
     flick.update(900, "Taper Charge (CV mode)", 35, 8280, 8300)
 assert flick.phase == "cv" and flick.percent >= 85, f"the real CV phase was not taken: {flick.phase} {flick.percent}"
 
+# the cable out for five minutes in the middle of a charge: the voltage at rest still reads the charge (80 %), the new
+# charge goes on from what was reached less what the box used meanwhile, not from the voltage
+pause = ChargeEstimator(capacity_mah=15000, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    pause.update(-650, "Not Charging", 44, 7220, 8300)
+for _ in range(1200):  # 100 minutes at 0.65 A: about 1.05 Ah, 7 % of 15 Ah
+    clock[0] += STEP
+    pause.update(650, "Fast charge (CC mode)", 100, 7900, 8300)
+reached = pause.percent
+for _ in range(60):  # five minutes without the cable, 0.65 A taken
+    clock[0] += STEP
+    pause.update(-650, "Not Charging", 80, 7730, 8300)
+clock[0] += STEP
+pause.update(620, "Fast charge (CC mode)", 100, 8100, 8300)
+assert reached - 1.0 < pause.percent < reached, f"after a short pause the charge should go on from about {reached:.1f} %, got {pause.percent:.1f}"
+
+# the charge current goes up and down (the box takes part of the input: a playing amplifier): the time until full stays calm
+calm = ChargeEstimator(capacity_mah=15000, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    calm.update(-600, "Not Charging", 50, 7300, 8300)
+for k in range(360):  # 30 minutes of 650 mA and 250 mA, five minutes each
+    clock[0] += STEP
+    calm.update(650 if (k // 60) % 2 == 0 else 250, "Fast charge (CC mode)", 100, 7900, 8300)
+etas = []
+for k in range(480):  # 40 minutes more of the same
+    clock[0] += STEP
+    calm.update(650 if (k // 60) % 2 == 0 else 250, "Fast charge (CC mode)", 100, 7900, 8300)
+    etas.append(calm.eta_min)
+spread = (max(etas) - min(etas)) / (sum(etas) / len(etas))
+assert spread < 0.35, f"the time until full jumps with the current: {min(etas)}..{max(etas)} min"
+
+# a weak input: "Done" for a minute at 8.05 V (limit 8.30), then the charge goes on - several times; it stays a charge
+weak = ChargeEstimator(capacity_mah=15000, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    weak.update(-650, "Not Charging", 69, 7700, 8300)
+for _ in range(3):
+    for _ in range(120):
+        clock[0] += STEP
+        weak.update(600, "Fast charge (CC mode)", 100, 8150, 8300)
+    for _ in range(12):
+        clock[0] += STEP
+        weak.update(0, "Charge Termination Done", 100, 8050, 8300)
+assert weak.percent < 85, f"a Done far below the limit moved the percent to {weak.percent:.1f}"
+# ... and a Done that stays far below the limit (under the recharge level) stays no end, however long
+for _ in range(720):
+    clock[0] += STEP
+    weak.update(0, "Charge Termination Done", 100, 8050, 8300)
+assert weak.phase != "done", "a long Done at 8.05 V of 8.30 should not count as full"
+
+# the real end on a weak input: straight out of CC at 8.26 V, then Done - and the pack drops to 8.15 V at once
+real = ChargeEstimator(capacity_mah=15000, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    real.update(-650, "Not Charging", 70, 7700, 8300)
+for _ in range(240):
+    clock[0] += STEP
+    real.update(580, "Fast charge (CC mode)", 100, 8250, 8300)
+for _ in range(3):  # near the end it goes back and forth: a minute of Done, then CC again - no end yet
+    for _ in range(12):
+        clock[0] += STEP
+        real.update(0, "Charge Termination Done", 100, 8120, 8300)
+    assert real.phase != "done", "a Done of a minute between CC readings should not count yet"
+    for _ in range(24):
+        clock[0] += STEP
+        real.update(560, "Fast charge (CC mode)", 100, 8225, 8300)
+for _ in range(70):
+    clock[0] += STEP
+    real.update(0, "Charge Termination Done", 100, 8146, 8300)
+assert real.phase == "done" and real.percent == 100.0, f"the end after 8.25 V was not taken: {real.phase} {real.percent}"
+# the chip charges again a little later: it stays full
+for _ in range(60):
+    clock[0] += STEP
+    real.update(600, "Fast charge (CC mode)", 100, 8250, 8300)
+assert real.phase == "done" and real.percent == 100.0 and real.eta_min is None, "a top-up after the end should stay full"
+# the cable out: what was reached (100 %) less what was used
+for _ in range(12):
+    clock[0] += STEP
+    real.update(-650, "Not Charging", 95, 8000, 8300)
+assert real.settling and 99 < real.percent <= 100, f"after the end and the cable out: {real.percent}"
+
+# the same end with nothing known from before (the service restarted after the Done): the Done held for half an hour
+# above the recharge level counts
+late_end = ChargeEstimator(capacity_mah=15000, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(300):
+    clock[0] += STEP
+    late_end.update(0, "Charge Termination Done", 100, 8162, 8300)
+assert late_end.phase != "done", "a Done far from the limit should not count at once"
+for _ in range(100):
+    clock[0] += STEP
+    late_end.update(0, "Charge Termination Done", 100, 8162, 8300)
+assert late_end.phase == "done" and late_end.percent == 100.0, "a Done held for half an hour at 8.16 V should count"
+
+# the cable out after a charge: the voltage still reads high (90 %), the box shows what the charge reached, less what
+# it used - and the voltage again only after the pack has settled
+out = ChargeEstimator(capacity_mah=15000, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    out.update(-650, "Not Charging", 70, 7600, 8300)
+for _ in range(720):  # an hour at 0.6 A
+    clock[0] += STEP
+    out.update(600, "Fast charge (CC mode)", 100, 8100, 8300)
+reached = out.percent
+for _ in range(24):  # two minutes without the cable
+    clock[0] += STEP
+    out.update(-650, "Not Charging", 90, 7950, 8300)
+assert out.settling and reached - 1 < out.percent <= reached, f"after the cable went out it should show about {reached:.1f}, got {out.percent}"
+for _ in range(400):  # more than half an hour later: the voltage again
+    clock[0] += STEP
+    out.update(-650, "Not Charging", 74, 7700, 8300)
+assert out.percent is None and not out.settling, "after the settling time the voltage should count again"
+
+# a false "Done" or "Top-off" in the middle of the CC phase (after an I2C error of the chip): the percent stays where it was
+glitch = ChargeEstimator(capacity_mah=15000, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(60):
+    clock[0] += STEP
+    glitch.update(-650, "Not Charging", 44, 7220, 8400)
+for _ in range(240):
+    clock[0] += STEP
+    glitch.update(640, "Fast charge (CC mode)", 100, 7570, 8400)
+before = glitch.percent
+for status in ("Charge Termination Done", "Top-off Timer Active Charging", "Charge Termination Done"):
+    clock[0] += STEP
+    glitch.update(0, status, 100, 7570, 8400)
+    clock[0] += STEP
+    glitch.update(640, "Fast charge (CC mode)", 100, 7570, 8400)
+assert glitch.phase == "cc" and glitch.percent < 60, f"a false end report moved the percent to {glitch.percent:.1f} ({glitch.phase})"
+assert glitch.percent >= before, "the percent went backwards"
+assert glitch.eta_min is not None and glitch.eta_min > 300, f"the time left should still be hours, got {glitch.eta_min}"
+for _ in range(3):  # a real end: near the limit, and it stays
+    clock[0] += STEP
+    glitch.update(0, "Charge Termination Done", 100, 8380, 8400)
+assert glitch.percent == 100.0 and glitch.eta_min == 0, f"the real end was not taken: {glitch.percent}"
+
 # a charge that is already running when the estimate starts: the starting point is a guess, and the note goes at CV
 late = ChargeEstimator(capacity_mah=CAP, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
 clock[0] += STEP
@@ -120,6 +257,15 @@ for _ in range(6):
     clock[0] += STEP
     late.update(1800, "Taper Charge (CV mode)", 60, 8290, 8300)
 assert late.start_uncertain is False, "the step to CV should correct the guess"
+# the guess was too high (the voltage read 100 % while it charged): the step to CV corrects it downwards, once
+high = ChargeEstimator(capacity_mah=CAP, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
+clock[0] += STEP
+high.update(2000, "Fast charge (CC mode)", 100, 7900, 8300)
+assert high.start_uncertain and high.percent >= 85
+for _ in range(6):
+    clock[0] += STEP
+    high.update(1800, "Taper Charge (CV mode)", 100, 8290, 8300)
+assert not high.start_uncertain and high.percent < 90, f"the too high guess was not corrected: {high.percent:.1f}"
 known = ChargeEstimator(capacity_mah=CAP, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
 for _ in range(10):
     clock[0] += STEP
@@ -138,99 +284,14 @@ for _ in range(5):
     slow.update(20, "Fast charge (CC mode)", 100)
 assert slow.eta_min is None
 
+# as good as full (after a restart of the box the chip charges again, on a weak input in CC at the limit): no time
+nearly = ChargeEstimator(capacity_mah=15000, iterm_ma=ITERM, clock=lambda: clock[0], wall=lambda: clock[0])
+for _ in range(10):
+    clock[0] += STEP
+    nearly.update(-400, "Not Charging", 99.5, 8250, 8300)
+for _ in range(60):
+    clock[0] += STEP
+    nearly.update(565, "Fast charge (CC mode)", 100, 8296, 8300)
+assert nearly.percent >= 99 and nearly.eta_min is None, f"at {nearly.percent:.1f} % a time of {nearly.eta_min} min"
+
 print("ok")
-
-
-# --- the box is restarted in the middle of a charge: the state in /tmp is gone, the one on the memory card goes on
-import tempfile
-
-with tempfile.TemporaryDirectory() as tmp:
-    tmp_state = os.path.join(tmp, "tmp_state.json")
-    persist = os.path.join(tmp, "var", "lib", "mupihat", "charge_state.json")
-    clk = [0.0]
-
-    def make(state, uptime):
-        return ChargeEstimator(capacity_mah=CAP, iterm_ma=ITERM, clock=lambda: clk[0], wall=lambda: clk[0], state_file=state, persist_file=persist, uptime=lambda: uptime)
-
-    a = make(tmp_state, 5000)
-    for _ in range(60):  # at rest: 30 %
-        clk[0] += STEP
-        a.update(-600, "Not Charging", START)
-    for _ in range(360):  # 30 minutes at 2 A
-        clk[0] += STEP
-        a.update(ICC, "Fast charge (CC mode)", START)
-    before = a.percent
-    assert before is not None and before > START + 5, before
-    assert os.path.exists(persist), "nothing was kept on the memory card"
-
-    # restart of the box 3 minutes later: /tmp is empty, the system has been up for 60 s
-    clk[0] += 180
-    b = make(os.path.join(tmp, "gone.json"), 60)
-    assert b.active and abs(b.percent - before) < 1.0 and not b.start_uncertain, (b.active, b.percent, before)
-    b.update(ICC, "Fast charge (CC mode)", 90.0)  # the voltage of the charge says "90 %": it is not taken as the start
-    assert b.percent < before + 3, b.percent
-
-    # the same state file, but the system has been up for hours (the service was started by hand long after): a guess
-    c = make(os.path.join(tmp, "gone2.json"), 7200)
-    assert not c.active, "an old state on the card was taken up long after the start"
-
-    # the cable was pulled while the box was restarting: the session ends at the first reading, what was reached stays
-    d = make(os.path.join(tmp, "gone3.json"), 60)
-    d.update(-500, "Not Charging", 40.0)
-    assert not d.active and d.percent is None
-    clk[0] += 30
-    d.update(ICC, "Fast charge (CC mode)", 90.0)  # plugged in again: starts from what was reached, not from the voltage of the charge
-    assert abs(d.start_pct - before) < 1.5, (d.start_pct, before)
-print("restart in the middle of a charge: ok")
-
-
-# --- a pack of high resistance: the terminals are at the charge limit at 0.5 A, the chip says "CV", the cells are at 73 %
-hr = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
-for _ in range(60):
-    clock[0] += STEP
-    hr.update(-600, "Not Charging", 72.0)
-for _ in range(120):  # 10 minutes: 8280 mV at the terminals, VREG 8300, 0.5 A, the pack at rest would read 7940 mV (73 %)
-    clock[0] += STEP
-    hr.update(500, "Taper Charge (CV mode)", 73.0, 8280, 8300, 7940)
-assert hr.phase == "cc" and hr.percent is not None and hr.percent < 80, (hr.phase, hr.percent)
-# ... while the same report with a pack that really is near the limit still counts as the constant-voltage phase
-real = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
-for _ in range(60):
-    clock[0] += STEP
-    real.update(-600, "Not Charging", 80.0)
-for _ in range(10):
-    clock[0] += STEP
-    real.update(1500, "Taper Charge (CV mode)", 90.0, 8290, 8300, 8250)
-assert real.phase == "cv" and real.percent >= 85.0, (real.phase, real.percent)
-print("high resistance pack, false CV: ok")
-
-
-# --- "termination done" for a moment (the current fell below the termination current while the box took the input): not full
-fl = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
-for _ in range(60):
-    clock[0] += STEP
-    fl.update(-600, "Not Charging", 72.0)
-for k in range(120):
-    clock[0] += STEP
-    done_now = k % 20 in (5, 6)  # two readings in a row now and then
-    fl.update(500, "Charge Termination Done" if done_now else "Fast charge (CC mode)", 73.0, 8280, 8300, 7940)
-assert fl.phase == "cc" and fl.percent < 80, (fl.phase, fl.percent)
-# ... and a percent that was set far too high is taken back to the count while the charge runs in CC
-bad = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
-for _ in range(60):
-    clock[0] += STEP
-    bad.update(-600, "Not Charging", 72.0)
-bad.update(500, "Fast charge (CC mode)", 73.0, 8200, 8300, 7900)
-bad.percent = 99.0
-bad.update(500, "Fast charge (CC mode)", 73.0, 8200, 8300, 7900)
-assert bad.percent < 80, bad.percent
-# a real end of the charge still counts: terminals and rest voltage near the limit, the report stays
-fin = ChargeEstimator(capacity_mah=5000.0, iterm_ma=200, clock=lambda: clock[0], wall=lambda: clock[0])
-for _ in range(60):
-    clock[0] += STEP
-    fin.update(-600, "Not Charging", 90.0)
-for _ in range(10):
-    clock[0] += STEP
-    fin.update(200, "Charge Termination Done", 99.0, 8300, 8300, 8280)
-assert fin.phase == "done" and fin.percent == 100.0, (fin.phase, fin.percent)
-print("termination flicker, heal, real end: ok")

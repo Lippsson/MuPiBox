@@ -139,6 +139,8 @@ export class SwiperComponent<T> {
   protected readonly displayTexts = inject(DisplayTextsService)
   protected readonly speakingName = signal<string | undefined>(undefined)
   private speakingTimer: ReturnType<typeof setTimeout> | undefined
+  // the picture addresses that did not load (by address, not by name: two entries of the same name can have different
+  // pictures, and a new address of an entry gets its try)
   private readonly missingCovers = signal(new Set<string>())
 
   // km "Bühne" (stage, MuPi-Conf > "Cover-Flow-Ansicht"): the covers around the one in the middle, drawn by hand
@@ -182,14 +184,18 @@ export class SwiperComponent<T> {
     const data = this.shownData()
     return data.length > 0 ? data[this.stageClamp(this.stageIndex(), data.length)] : undefined
   })
-  // position of the scrollbar's thumb (track 200 px): the whole list, not only what is rendered yet
+  // position of the scrollbar's thumb as parts of the track (w: its width, x: where it starts): the whole list, not only
+  // what is rendered yet; at least 24 px of the 200 px track, or 60 px of the long one
   protected readonly stageBar = computed(() => {
     const total = this.data()?.length ?? 0
     if (total < 2 || this.shownData().length === 0) return undefined
-    const width = Math.max(24, 200 / total)
+    const w = Math.max(this.fullScrollbar() ? 0.08 : 0.12, 1 / total)
     const c = this.stageClamp(this.stageIndex(), total)
-    return { width, x: (c / (total - 1)) * (200 - width) }
+    return { w, x: (c / (total - 1)) * (1 - w) }
   })
+  // the stage's bar can be dragged (the short one of "Standard" and the long one): the stage follows, the name is read
+  // (when switched on) where it stops
+  private stageBarFrom: number | undefined
 
   // Since we reset the swiper container when the page is entered / left, we need to
   // manually cache / restore the swiper position.
@@ -207,9 +213,8 @@ export class SwiperComponent<T> {
   /** Width of one cover in the Cover Flow, measured on first use (0 = not yet). */
   private coverflowCoverWidth = 0
   protected hideScrollbar: WritableSignal<boolean> = signal(false)
-  // "Runde Cover" of the app: round | square (small rounding) | auto (not chosen: as the theme and the page have it)
-  protected coverShape: WritableSignal<'round' | 'square' | 'auto'> = signal('auto')
-  protected readonly roundCovers = computed(() => (this.coverShape() === 'round' ? true : this.coverShape() === 'square' ? false : this.roundImages()))
+  // the scrollbar across the width and thicker (app > Aussehen > Ansicht: "Durchgehend"), in every theme
+  protected readonly fullScrollbar = signal(false)
   // Coverflow theme only: shows currentData.name (album name, falling back to the folder name -
   // the same value the non-Coverflow list already shows under each cover) below the cover.
   protected coverflowShowNames: WritableSignal<boolean> = signal(false)
@@ -235,8 +240,7 @@ export class SwiperComponent<T> {
       next: (config) => {
         this.coverflow.set(config?.mupibox?.theme === 'coverflow')
         this.hideScrollbar.set(config?.mupibox?.hideScrollbar === true)
-        const round = config?.mupibox?.coverRound
-        this.coverShape.set(round === true ? 'round' : round === false ? 'square' : 'auto')
+        this.fullScrollbar.set(config?.mupibox?.scrollbarStyle === 'full')
         this.coverflowShowNames.set(config?.mupibox?.coverflowShowNames === true)
         this.configLoaded.set(true)
       },
@@ -697,6 +701,43 @@ export class SwiperComponent<T> {
     }
   }
 
+  protected stageBarDown(event: PointerEvent): void {
+    this.stageBarFrom = this.stageIndex()
+    ;(event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId)
+    this.stageBarAt(event)
+  }
+
+  protected stageBarMove(event: PointerEvent): void {
+    if (this.stageBarFrom !== undefined) this.stageBarAt(event)
+  }
+
+  protected stageBarUp(): void {
+    if (this.stageBarFrom === undefined) return
+    const to = this.stageIndex()
+    // (back to where it started for a moment: stageGo then reads the name of the new one, as after a swipe)
+    this.stageIndex.set(this.stageBarFrom)
+    this.stageBarFrom = undefined
+    this.stageGo(to)
+  }
+
+  private stageBarAt(event: PointerEvent): void {
+    const el = event.currentTarget as HTMLElement | null
+    const bar = this.stageBar()
+    const total = this.data()?.length ?? 0
+    if (!el || !bar || total < 2) return
+    const r = el.getBoundingClientRect()
+    const f = ((event.clientX - r.left) / Math.max(1, r.width) - bar.w / 2) / Math.max(0.01, 1 - bar.w)
+    const target = Math.round(Math.max(0, Math.min(1, f)) * (total - 1))
+    // (a long list is rendered bit by bit: a place beyond the rendered part has it rendered up to there first - else
+    // the end of a list of 300 stood at the 45th entry)
+    if (target >= this.shownData().length) this.renderableLimit.set(Math.min(total, Math.max(this.renderableLimit(), target + 12)))
+    const c = this.stageClamp(target, this.shownData().length)
+    this.stageIndex.set(c)
+    this.cachedSwiperPosition = c
+    this.preloadCoversNear(c)
+    this.maybeGrow()
+  }
+
   // The cover in the middle opens, a side cover comes to the middle.
   protected kmStageTap(index: number, item: SwiperData<T>): void {
     if (this.stageDragged) return
@@ -715,23 +756,23 @@ export class SwiperComponent<T> {
     this.speakingTimer = setTimeout(() => this.speakingName.set(undefined), 1800)
   }
 
-  // A cover that does not load counts as missing (km themes: their mascot, the other themes: the grey card with the name)
-  protected onCoverError(name: string): void {
-    this.missingCovers.update((set) => new Set(set).add(name))
+  // A cover that does not load counts as missing (km themes: their mascot, the other themes: the card with the name)
+  protected onCoverError(src: string | null | undefined): void {
+    if (src) this.missingCovers.update((set) => new Set(set).add(src))
   }
 
-  // The other themes show a dark to mid grey card with the folder's name when there is no picture - the default
+  // The other themes show a card with the folder's name in its colour when there is no picture - the default
   // picture ("nocover") or one that does not load. (The picture's address arrives at once; null: not known yet.)
   // (the colours of the card: one per folder name, see no-cover.ts)
   protected readonly noCoverStyle = noCoverStyle
 
-  protected noCover(name: string, src: string | null | undefined): boolean {
+  protected noCover(src: string | null | undefined): boolean {
     if (this.km()) return false
-    return this.missingCovers().has(name) || (typeof src === 'string' && (src === '' || src.includes('nocover')))
+    return typeof src === 'string' && (src === '' || src.includes('nocover') || this.missingCovers().has(src))
   }
 
-  protected coverMissing(name: string, src: string | null | undefined): boolean {
-    return !src || src.includes('nocover') || this.missingCovers().has(name)
+  protected coverMissing(src: string | null | undefined): boolean {
+    return !src || src.includes('nocover') || this.missingCovers().has(src)
   }
 
   // Tapping a tilted side cover brings it to the center; only the centered one opens.
