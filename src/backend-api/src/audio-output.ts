@@ -288,6 +288,22 @@ async function toCard(sink: string, devices: OutputDevice[]): Promise<boolean> {
   return true
 }
 
+/** The sink of a Bluetooth device once PulseAudio has made it (it follows the connection by a moment) */
+async function waitForSink(mac: string, ms: number): Promise<string | undefined> {
+  for (let waited = 0; ; waited += 500) {
+    const sink = (await sinks()).find((s) => sinkMac(s) === mac)
+    if (sink || waited >= ms) return sink
+    await sleep(500)
+  }
+}
+
+/** Connects the audio profile (A2DP sink) of a device that is connected otherwise - what the plain connect skips then */
+async function connectAudioProfile(mac: string): Promise<void> {
+  if (!MAC_RE.test(mac)) return
+  const path = `/org/bluez/hci0/dev_${mac.toUpperCase().replace(/:/g, '_')}`
+  await run('busctl', ['--system', 'call', 'org.bluez', path, 'org.bluez.Device1', 'ConnectProfile', 's', '0000110b-0000-1000-8000-00805f9b34fb'], 15000)
+}
+
 /** Plays on a Bluetooth device: connected (up to ~15 s), the others let go, its sink the default */
 async function toDevice(mac: string, devices: OutputDevice[]): Promise<'ok' | 'not_found' | 'no_sink'> {
   const before = await boxSink()
@@ -304,10 +320,18 @@ async function toDevice(mac: string, devices: OutputDevice[]): Promise<'ok' | 'n
     if (!connected) return 'not_found'
   }
   for (const d of devices.filter((x) => x.connected && x.mac !== mac)) await ctl('disconnect', d.mac)
-  let sink: string | undefined
-  for (let i = 0; i < 16 && !sink; i++) {
-    sink = (await sinks()).find((s) => sinkMac(s) === mac)
-    if (!sink) await sleep(500)
+  let sink = await waitForSink(mac, 3000)
+  if (!sink) {
+    // "Connected" without an audio output: the speaker took the link but not the audio profile (the box's A2DP connect
+    // met "Host is down" while it woke up) - the profile on its own, then, as a last step, the whole link again
+    await connectAudioProfile(mac)
+    sink = await waitForSink(mac, 5000)
+  }
+  if (!sink) {
+    await ctl('disconnect', mac)
+    await sleep(1500)
+    await ctl('connect', mac)
+    sink = await waitForSink(mac, 6000)
   }
   if (!sink) return 'no_sink'
   await notLouderThan(sink, boxVolume)
