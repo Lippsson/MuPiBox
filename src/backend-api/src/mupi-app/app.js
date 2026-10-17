@@ -8708,6 +8708,7 @@ async function loadNetOptions() {
   v.set('dhcpTo', r.body.dhcpTimeout)
   v.set('wMon', r.body.wifiMonitor)
   v.set('wBest', r.body.bestConnection)
+  v.set('wPs', r.body.wifiPowerSave === 'on' ? 'Ein' : 'Aus')
   v.set('usbDrv', nopt.drv)
   v.set('usbPm', POWER_LABEL[netDriver()?.power] ?? 'Standard')
   if (nopt.lan) {
@@ -8737,6 +8738,13 @@ function wlanNetSections() {
       : 'Nicht installiert'
   const hardware = [
     { type: 'toggle', label: 'Onboard-WLAN an', key: 'wOnboard', help: onboardHelp },
+    {
+      type: 'select',
+      label: 'WLAN-Energiesparmodus',
+      key: 'wPs',
+      options: ['Aus', 'Ein'],
+      help: 'Aus (Standard) = stabilere Verbindung, besonders bei Musik aus dem Netz. Ein spart etwas Strom, der Router hält dann aber Pakete zurück und die Verbindung kann stocken. Gilt sofort, für alle WLAN-Adapter.',
+    },
     { type: 'select', label: 'USB-WLAN-Treiber', key: 'usbDrv', options: (o.drivers ?? []).map((x) => x.id), help: driverState },
   ]
   if (job.headersMissing) hardware.push({ type: 'warn', text: 'Die Kernel-Header fehlen, der Treiber ließ sich nicht bauen. In /boot/config.txt muss arm_64bit zum System passen.' })
@@ -8817,6 +8825,11 @@ async function changeNetOption(key, v, page) {
     nopt.drv = v
     state.values.set('usbPm', POWER_LABEL[netDriver()?.power] ?? 'Standard')
     return renderPage(page, false)
+  }
+  if (key === 'wPs') {
+    const r = await api(`${API}/network-options`, { method: 'POST', body: { key: 'wifiPowerSave', value: v === 'Ein' } })
+    toast(r.ok ? 'Gespeichert' : 'Das hat nicht geklappt', r.ok ? 'ok' : 'info')
+    return r.ok ? undefined : back()
   }
   if (key === 'lanMode') return renderPage(page, false)
   if (key.startsWith('lan') && key !== 'lanOn') return // saved with "Speichern"

@@ -43,6 +43,8 @@ For every saved network a **fixed IP address** can be set via **Address** (**Obt
 
 The built-in Wi-Fi can be switched off (**Onboard Wi-Fi on**). For a **USB Wi-Fi stick** you choose the **USB Wi-Fi driver** (RTL88X2BU or RTL8821AU) and tap **Install driver**. The driver is built on the box, which takes a few minutes. Then restart the box. Once the driver is installed, you set **Power saving for the USB adapter** (**Off**, **Minimum** or **Maximum**). **Off** makes the connection more stable with some adapters.
 
+**Wi-Fi power saving** applies to every Wi-Fi adapter, also the built-in one and adapters whose driver the system brings along (newer systems with Debian 13 know the RTL8821AU already, then there is no driver to install). **Off** is the default: the connection is more stable, especially with music from the network. **On** saves a little power, but the router then holds packets back and the connection can stutter. The choice applies at once and stays after a restart.
+
 ## LAN (cable)
 
 The **LAN** page belongs to the cable connection:

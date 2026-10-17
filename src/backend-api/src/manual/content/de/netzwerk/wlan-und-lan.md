@@ -43,6 +43,8 @@ Für jedes gespeicherte Netz lässt sich über **Adresse** eine **feste IP-Adres
 
 Das eingebaute WLAN lässt sich ausschalten (**Onboard-WLAN an**). Für einen **USB-WLAN-Stick** wählst du den **USB-WLAN-Treiber** (RTL88X2BU oder RTL8821AU) und tippst auf **Treiber installieren**. Der Treiber wird auf der Box gebaut, das dauert einige Minuten. Danach startest du die Box neu. Ist der Treiber installiert, stellst du **Stromsparen des USB-Adapters** ein (**Aus**, **Minimal** oder **Maximal**). **Aus** macht die Verbindung bei manchen Adaptern stabiler.
 
+Der **WLAN-Energiesparmodus** gilt für jeden WLAN-Adapter, auch für das eingebaute WLAN und für Adapter, deren Treiber das System selbst mitbringt (neuere Systeme mit Debian 13 kennen zum Beispiel den RTL8821AU schon, dann ist kein Treiber zu installieren). **Aus** ist die Voreinstellung: Die Verbindung ist stabiler, vor allem bei Musik aus dem Netz. **Ein** spart etwas Strom, aber der Router hält dann Pakete zurück und die Verbindung kann stocken. Die Wahl gilt sofort und bleibt nach einem Neustart erhalten.
+
 ## LAN (Kabel)
 
 Die Seite **LAN** gehört dem Kabelanschluss:

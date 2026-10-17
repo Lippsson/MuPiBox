@@ -42,6 +42,7 @@ async function exists(p: string): Promise<boolean> {
   return (await run('sudo', ['test', '-e', p], 5000)).ok
 }
 const ONBOARD_SCRIPT = '/usr/local/bin/mupibox/mupi_onboard_wifi.sh'
+const WIFI_POWER_SCRIPT = '/usr/local/bin/mupibox/mupi_wifi_power.sh'
 const enabled = async (unit: string) => (await run('systemctl', ['is-enabled', unit], 5000)).stdout.trim() === 'enabled'
 const wifiIface = async () => (await run('/usr/local/bin/mupibox/mupi_wifi_iface.sh', [], 5000)).stdout.trim() || 'wlan0'
 
@@ -67,6 +68,9 @@ export function registerNetworkRoutes(router: Router, deps: NetworkDeps): void {
       onboardIface: (await run('/usr/local/bin/mupibox/mupi_wifi_iface.sh', ['onboard'], 5000)).stdout.trim(),
       usbIface: (await run('/usr/local/bin/mupibox/mupi_wifi_iface.sh', ['usb'], 5000)).stdout.trim(),
       wifiIface: await wifiIface(),
+      // the WiFi's power saving: as set (off when not set) and as the adapter in use is set now
+      wifiPowerSave: (deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.wifiPowerSave === 'on' ? 'on' : 'off',
+      wifiPowerSaveNow: /Power save:\s*(on|off)/i.exec((await run('/usr/sbin/iw', ['dev', await wifiIface(), 'get', 'power_save'], 5000)).stdout)?.[1]?.toLowerCase() ?? '',
       drivers,
       dhcpTimeout: /^timeout 10;/m.test(dhclient),
       wifiMonitor: await enabled('dietpi-wifi-monitor'),
@@ -94,6 +98,13 @@ export function registerNetworkRoutes(router: Router, deps: NetworkDeps): void {
         }
         break
       }
+      case 'wifiPowerSave':
+        // kept in the config (set again whenever an adapter appears, see mupi_wifi_power.sh) and set at once
+        await deps.updateMupiboxConfig((cfg) => {
+          cfg.mupibox = { ...((cfg.mupibox as Record<string, unknown>) ?? {}), wifiPowerSave: on ? 'on' : 'off' }
+        })
+        r = await run('sudo', [WIFI_POWER_SCRIPT], 10000)
+        break
       case 'dhcpTimeout':
         r = await run('sudo', ['sed', '-i', on ? 's/#timeout 60;/timeout 10;/g' : 's/timeout 10;/#timeout 60;/g', '/etc/dhcp/dhclient.conf'])
         break
