@@ -1,3 +1,8 @@
+# The WiFi's power saving off for every WiFi interface that appears: some drivers start with it on (rtw88 of the TP-Link
+# Archer T2U PLUS, RTL8821AU), and an access point holds back the frames to a client that sleeps - the box is on all the
+# time, with music streaming in. (The setting stays while the adapter is there; it is set again when it appears.)
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="wlan*", RUN+="/usr/sbin/iw dev %k set power_save off"
+
 # A WiFi interface appeared or disappeared (e.g. a USB WiFi adapter was plugged in or removed):
 # let MuPiBox choose again which adapter to use (USB preferred, onboard as fallback).
 # KillMode=process: the script starts the WiFi (wpa_supplicant, dhclient run in the background); systemd must
