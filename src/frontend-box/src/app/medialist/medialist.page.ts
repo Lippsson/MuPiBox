@@ -137,6 +137,12 @@ export class MedialistPage extends SwiperIonicEventsHelper {
     // above again), instead of only by the one-time navigation state above.
     this.route.queryParamMap.subscribe((params) => {
       const libraryPath = params.get('lib')
+      const nasLevel = params.get('nas')
+      // The same level again (the page was entered again: back from the player): the list stays as it is. Set anew,
+      // the list was emptied and loaded again - for a moment the page showed no covers at all.
+      if ((libraryPath && this.currentLevel.lib === libraryPath) || (nasLevel && this.currentLevel.nas === nasLevel)) {
+        return
+      }
       if (libraryPath) {
         // Local folder level, e.g. "audiobook/Artist" (see MediaService.fetchMediaFromArtist).
         const parts = libraryPath.split('/').filter(Boolean)
