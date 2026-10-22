@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, effect, Signal, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, inject, Signal, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { IonApp, IonRouterOutlet } from '@ionic/angular/standalone'
 import { catchError, distinctUntilChanged, firstValueFrom, interval, map, Observable, of, switchMap, timeout } from 'rxjs'
@@ -19,12 +19,14 @@ import { PlaytimeChipComponent } from './playtime-chip/playtime-chip.component'
 import { buildResumeMedia } from './resume-builder'
 import { StalePageReloadService } from './stale-page-reload.service'
 import { KmThemeService } from './theme/km-theme.service'
+import { WinampService } from './winamp/winamp.service'
+import { WinampShellComponent } from './winamp/winamp-shell.component'
 
 @Component({
   selector: 'app-root',
   templateUrl: 'app.component.html',
   styleUrls: ['app.component.scss'],
-  imports: [IonApp, IonRouterOutlet, PlaytimeBlockedOverlayComponent, PlaytimeChipComponent, ElternMagicLinkOverlayComponent],
+  imports: [IonApp, IonRouterOutlet, PlaytimeBlockedOverlayComponent, PlaytimeChipComponent, ElternMagicLinkOverlayComponent, WinampShellComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent {
@@ -36,6 +38,8 @@ export class AppComponent {
   // box's own state (display off, a real playtime lock, the playtime chip).
   protected readonly textPreview = window.location.pathname.startsWith('/text-preview')
   protected playtimeBlocked: Signal<boolean>
+  // the Winamp theme on a 1920 x 480 display: the player of a Winamp skin on the left half of the screen
+  protected readonly winamp = inject(WinampService)
 
   // Track previous playtime state to detect normal -> grace/blocked transitions.
   // 'unknown' on first tick avoids spurious save before we know the baseline.

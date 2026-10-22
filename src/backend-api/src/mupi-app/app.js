@@ -5595,6 +5595,8 @@ async function loadTheme() {
   disp.theme = r.body
   const c = await api(`${API}/display/custom-theme`)
   disp.custom = c.ok ? c.body : null
+  const w = await api(`${API}/display/winamp-skin`)
+  disp.winamp = w.ok ? w.body : null
 }
 async function loadDisplayOptions() {
   const r = await api(`${API}/display-options`)
@@ -5640,6 +5642,7 @@ function themeTop() {
   return [
     // (the own theme's settings first while it is the theme: below 68 tiles they were far down)
     ...(t.current === 'custom' && disp.custom ? [customCard()] : []),
+    ...(t.current === 'winamp' && disp.winamp ? [winampCard()] : []),
     `<section class="card wide"><h2>Theme</h2><p class="help">Tippe auf ein Theme, um es auf der Box zu verwenden.</p>
       <div class="search">${icon('search')}<input class="input" id="t-q" type="search" placeholder="Theme suchen" autocomplete="off"></div>
       <div class="theme-grid" id="t-grid">${list
@@ -5693,6 +5696,58 @@ function mountTheme(root, page) {
       )
   }
   mountCustomCard(root)
+  mountWinampCard(root, page)
+}
+
+/* Winamp theme: the player of a classic Winamp 2.x skin (.wsz) on the left half of a 1920 × 480 display. The skin is
+   unpacked by the box (eltern/winamp-skin.ts); the display loads it at once. Shown on the theme page while "winamp" is
+   the theme. */
+
+function winampCard() {
+  const w = disp.winamp
+  return `<section class="card wide" id="wa-card"><h2>Winamp-Skin</h2>
+    <p class="help">Das Theme „Winamp“ zeichnet den Player mit einem klassischen Winamp-Skin (.wsz) auf die linke Hälfte der Anzeige, rechts davon stehen Equalizer, Playlist und die Bibliothek. Es funktioniert nur mit einem Display von 1920 × 480 Pixeln.</p>
+    ${
+      w?.installed
+        ? `<div class="wa-prev"><img src="/theme-data/winamp/skin/main.bmp?v=${w.version}" alt=""></div><p style="margin:8px 0"><b translate="no">${esc(w.name)}</b></p>`
+        : '<p class="help"><b>Noch kein Skin installiert.</b> Ohne Skin zeigt die Box nur einen Hinweis.</p>'
+    }
+    <div class="btns"><button class="btn sm primary" type="button" id="wa-pick">${icon('up', 18)}${w?.installed ? 'Anderen Skin hochladen' : 'Skin hochladen (.wsz)'}</button>${w?.installed ? '<button class="btn sm" type="button" id="wa-del">Entfernen</button>' : ''}</div>
+    <input type="file" id="wa-file" accept=".wsz,.zip,application/zip" hidden>
+    <small>Skins gibt es zum Beispiel im Winamp Skin Museum. Eigene Skins lassen sich jederzeit hier austauschen.</small></section>`
+}
+
+function mountWinampCard(root, page) {
+  const card = $('#wa-card', root)
+  if (!card) return
+  const refresh = async () => {
+    await loadTheme()
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  }
+  $('#wa-pick', card).onclick = () => $('#wa-file', card).click()
+  $('#wa-file', card).onchange = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 8 * 1024 * 1024) return toast('Die Datei ist zu groß (höchstens 8 MB).', 'info')
+    const r = await fetch(`${API}/display/winamp-skin`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/zip', 'x-mupibox-csrf': state.csrf, 'x-skin-name': encodeURIComponent(file.name) },
+      body: file,
+    }).catch(() => null)
+    const body = r ? await r.json().catch(() => ({})) : {}
+    if (!r?.ok) return toast(body.error === 'not a Winamp skin' || body.error === 'not a zip' ? 'Das ist kein Winamp-Skin (.wsz).' : 'Hochladen ging nicht', 'info')
+    toast(`Skin „${body.name}“ ist installiert. ${body.reloaded ? 'Das Display zeigt ihn gleich.' : ''}`.trim())
+    await refresh()
+  }
+  const del = $('#wa-del', card)
+  if (del)
+    del.onclick = async () => {
+      const r = await api(`${API}/display/winamp-skin`, { method: 'DELETE', body: {} })
+      toast(r.ok ? 'Skin entfernt' : 'Das hat nicht geklappt', r.ok ? undefined : 'info')
+      await refresh()
+    }
 }
 
 /* Eigenes Theme ("custom"): the parents' picture and its settings - on the theme page, only while "custom" is the

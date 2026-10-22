@@ -1,0 +1,369 @@
+import { HttpClient } from '@angular/common/http'
+import { computed, effect, inject, Injectable, signal } from '@angular/core'
+import { toObservable, toSignal } from '@angular/core/rxjs-interop'
+import { NavigationEnd, Router } from '@angular/router'
+import { NavController } from '@ionic/angular/standalone'
+import { catchError, filter, firstValueFrom, interval, of, switchMap, timeout } from 'rxjs'
+import { environment } from '../../environments/environment'
+import { BackgroundPlaybackService } from '../background-playback.service'
+import type { CurrentMPlayer } from '../current.mplayer'
+import type { CurrentSpotify } from '../current.spotify'
+import { CurrentMediaService } from '../current-media.service'
+import type { Media } from '../media'
+import { MediaService } from '../media.service'
+import { PlayerCmds, PlayerService } from '../player.service'
+import { SpotifyService } from '../spotify.service'
+import { KmThemeService } from '../theme/km-theme.service'
+import { EQ_FLAT, type EqState } from './winamp-eq-view'
+import type { MainState, PlayState } from './winamp-main-view'
+import type { PlaylistEntry } from './winamp-playlist-view'
+import { type SkinMeta, Skin } from './winamp-skin'
+
+export type WinampRight = 'lib' | 'pl' | 'eq'
+
+const SKIN_BASE = '/theme-data/winamp/skin'
+
+/** Whatever the player reports as playing: mplayer says "playing", Spotify (the display's Web Playback SDK) "pause". */
+function isPlaying(data: CurrentMPlayer): boolean {
+  if (data.loading === true) return true
+  return data.currentPlayer === 'spotify' ? data.pause === false && data.spotifySilent !== true : data.playing === true
+}
+
+/**
+ * The Winamp theme, on a 1920 x 480 display: the main window of a Winamp skin always on the left half, the right half
+ * holds the equaliser, the playlist or - with both closed - the library (the app's normal pages). This service knows
+ * what the windows show (from the player's /local report) and does what their buttons say; the windows themselves are
+ * plain DOM built from the skin (winamp-*-view.ts), mounted by WinampShellComponent.
+ */
+@Injectable({ providedIn: 'root' })
+export class WinampService {
+  private readonly http = inject(HttpClient)
+  private readonly router = inject(Router)
+  private readonly nav = inject(NavController)
+  private readonly kmTheme = inject(KmThemeService)
+  private readonly mediaService = inject(MediaService)
+  private readonly player = inject(PlayerService)
+  private readonly spotifyService = inject(SpotifyService)
+  private readonly background = inject(BackgroundPlaybackService)
+  private readonly currentMedia = inject(CurrentMediaService)
+
+  /** the theme is chosen and the display is the 1920 x 480 one it is made for (anything else shows the plain dark look) */
+  readonly active = computed(() => this.kmTheme.isWinamp() && this.fits)
+  private readonly fits = window.innerWidth >= 1800 && window.innerHeight <= 600
+
+  /** what the right half shows */
+  readonly right = signal<WinampRight>('lib')
+  /** the skin; null while it loads or when none is installed */
+  readonly skin = signal<Skin | null>(null)
+  readonly skinLoaded = signal(false)
+
+  // ---- what the player says ----
+  private readonly report = signal<{ data: CurrentMPlayer; at: number } | null>(null)
+  private readonly spotifyReport = signal<{ data: CurrentSpotify; at: number } | null>(null)
+  private readonly clock = signal(Date.now())
+  private readonly media$ = toSignal(this.currentMedia.currentMedia$, { initialValue: null })
+  readonly media = computed<Media | null>(() => this.media$() ?? this.background.media())
+
+  // ---- sound: equaliser, balance, repeat ----
+  readonly eq = signal<EqState>({ ...EQ_FLAT, bands: [...EQ_FLAT.bands] })
+  readonly balance = signal(0)
+  /** false when the player is mplayer (it has no equaliser) */
+  readonly soundSupported = signal(true)
+  readonly repeat = signal(false)
+  private readonly shuffleOn = signal(false)
+
+  // ---- the playlist window ----
+  readonly entries = signal<PlaylistEntry[]>([])
+  private loadedFor = ''
+
+  readonly main = computed<MainState>(() => {
+    const l = this.report()
+    const data = l?.data
+    const busy = !!data?.currentPlayer
+    const spotify = data?.currentPlayer === 'spotify'
+    const sp = this.spotifyReport()?.data
+    const playing = !!data && busy && isPlaying(data)
+    const playState: PlayState = !busy ? 'stop' : playing ? 'play' : 'pause'
+    let duration = 0
+    let position = 0
+    let title = ''
+    if (spotify) {
+      duration = (sp?.item?.duration_ms ?? 0) / 1000
+      position = (sp?.progress_ms ?? 0) / 1000
+      const nr = sp?.item?.track_number
+      title = [nr ? `${nr}.` : '', sp?.item?.name || data?.currentTrackname || ''].filter(Boolean).join(' ')
+    } else if (busy) {
+      duration = data?.durationSeconds ?? 0
+      position = data?.positionSeconds ?? 0
+      const nr = data?.currentTracknr
+      title = [nr ? `${nr}.` : '', data?.currentTrackname || data?.album || ''].filter(Boolean).join(' ')
+    }
+    if (!title && busy) title = this.media()?.title ?? ''
+    if (title && duration > 0) title += ` (${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')})`
+    // the report is up to a second old: the clock runs on between two of them
+    if (playing && data?.loading !== true && duration > 0) {
+      const at = spotify ? (this.spotifyReport()?.at ?? 0) : (l?.at ?? 0)
+      position = Math.min(duration, position + Math.max(0, this.clock() - at) / 1000)
+    }
+    const media = this.media()
+    return {
+      title,
+      playState,
+      positionSeconds: busy ? position : 0,
+      durationSeconds: busy ? duration : 0,
+      volume: data?.volume ?? 0,
+      balance: this.balance(),
+      shuffle: this.shuffleOn(),
+      shuffleAvailable: media?.type === 'spotify' && (media.category === 'music' || media.category === 'other'),
+      repeat: this.repeat(),
+      eqOpen: this.right() === 'eq',
+      playlistOpen: this.right() === 'pl',
+      bitrate: data?.bitrate ?? 0,
+      khz: data?.khz ?? 0,
+      channels: data?.channels ?? 0,
+    }
+  })
+
+  /** the number of the track that plays, for the playlist's highlight (0: none known) */
+  readonly currentPosition = computed(() => {
+    const data = this.report()?.data
+    const media = this.media()
+    if (!data?.currentPlayer || !media) return 0
+    if (media.type === 'library' || media.type === 'nas') return data.currentTracknr ?? 0
+    const sp = this.spotifyReport()?.data
+    if (media.playlistid) return sp?.playlist?.current_track_position ?? 0
+    if (media.audiobookid) return sp?.audiobook?.current_chapter_position ?? 0
+    if (media.showid) return this.entries().find((e) => (e as PlaylistEntry & { id?: string }).id === sp?.item?.id)?.position ?? 0
+    return sp?.item?.track_number ?? 0
+  })
+
+  constructor() {
+    // what the player says, once a second while the theme is on (the player's /local is a cheap dump)
+    toObservable(this.active)
+      .pipe(
+        switchMap((on) =>
+          on
+            ? interval(1000).pipe(
+                switchMap(() => this.http.get<CurrentMPlayer>(`${environment.backend.playerUrl}/local`).pipe(timeout(1500), catchError(() => of(null)))),
+              )
+            : of(null),
+        ),
+      )
+      .subscribe((data) => {
+        if (data) this.report.set({ data, at: Date.now() })
+      })
+    // Spotify's own state (the SDK's) only while Spotify plays: asking for it keeps the SDK polling
+    toObservable(computed(() => this.active() && this.report()?.data.currentPlayer === 'spotify'))
+      .pipe(switchMap((on) => (on ? this.mediaService.current$ : of(null))))
+      .subscribe((data) => this.spotifyReport.set(data ? { data, at: Date.now() } : null))
+    // a clock for the position between two reports
+    effect((onCleanup) => {
+      if (!this.active()) return
+      const timer = setInterval(() => this.clock.set(Date.now()), 250)
+      onCleanup(() => clearInterval(timer))
+    })
+    effect(() => {
+      const on = this.active()
+      document.body.classList.toggle('wa-on', on)
+    })
+    // the skin: when the theme comes on and whenever the app says the theme changed (a new upload)
+    effect(() => {
+      if (!this.active()) return
+      this.kmTheme.refreshes()
+      void this.loadSkin()
+    })
+    effect(() => {
+      if (this.active()) void this.loadSound()
+    })
+    // a playback that starts (here or from the parents' app) opens the playlist; one that ends on its own goes back to the library
+    this.router.events.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd)).subscribe((e) => {
+      if (!this.active()) return
+      if (e.urlAfterRedirects.startsWith('/player')) {
+        if (this.right() === 'lib') this.right.set('pl')
+      } else if (this.right() !== 'lib') {
+        this.right.set('lib')
+      }
+    })
+    // the playlist of what plays: read when its window is open (a Spotify list is a request to Spotify)
+    effect(() => {
+      const media = this.media()
+      if (!this.active() || this.right() !== 'pl' || !media) return
+      const key = `${media.type}|${media.id ?? ''}|${media.playlistid ?? ''}|${media.libraryPath ?? ''}|${media.nasPath ?? ''}|${media.title ?? ''}`
+      if (key === this.loadedFor) return
+      this.loadedFor = key
+      void this.loadEntries(media)
+    })
+    effect(() => {
+      const m = this.media()
+      this.shuffleOn.set(m?.shuffle === true)
+    })
+  }
+
+  // ---------- the windows ----------
+
+  /** The EQ and PL buttons (and the X of the windows): the window opens; the same again closes it - back to the library. */
+  setRight(view: WinampRight): void {
+    const next = view === this.right() ? 'lib' : view
+    this.right.set(next)
+    if (next === 'lib' && this.router.url.startsWith('/player')) this.nav.back()
+  }
+
+  /** Eject / ADD: the library, to start something else. */
+  showLibrary(): void {
+    this.right.set('lib')
+    if (this.router.url.startsWith('/player')) this.nav.back()
+    else if (!this.router.url.startsWith('/home')) void this.router.navigate(['/home'])
+  }
+
+  // ---------- the player ----------
+
+  prev(): void {
+    this.player.sendCmd(PlayerCmds.PREVIOUS)
+  }
+  next(): void {
+    this.player.sendCmd(PlayerCmds.NEXT)
+  }
+
+  play(): void {
+    const s = this.main().playState
+    if (s === 'pause') this.player.sendCmd(PlayerCmds.PLAY)
+    else if (s === 'stop') {
+      const media = this.media()
+      if (media) {
+        // started again from the beginning; the page of the player opens for it as for any start
+        void this.router.navigate(['/player'], { state: { media } })
+      }
+    } else this.player.seekPosition(0)
+  }
+
+  pause(): void {
+    const s = this.main().playState
+    if (s === 'play') this.player.sendCmd(PlayerCmds.PAUSE)
+    else if (s === 'pause') this.player.sendCmd(PlayerCmds.PLAY)
+  }
+
+  stop(): void {
+    if (this.main().playState === 'stop') return
+    // (a playback that went on in the background is stopped with its resume saving; a stop of the player makes the open page leave by itself)
+    if (this.background.media()) void this.background.stop()
+    else this.player.sendCmd(PlayerCmds.STOP)
+  }
+
+  seek(fraction: number): void {
+    const data = this.report()?.data
+    if (!data?.currentPlayer) return
+    if (data.currentPlayer === 'spotify') {
+      const duration = this.spotifyReport()?.data.item?.duration_ms
+      if (duration) this.player.seekPosition(duration * fraction)
+    } else {
+      this.player.seekPosition(Math.round(fraction * 100))
+    }
+  }
+
+  setVolume(percent: number): void {
+    this.player.setVolume(percent)
+  }
+
+  toggleShuffle(): void {
+    const on = !this.shuffleOn()
+    this.shuffleOn.set(on)
+    this.player.sendCmd(on ? PlayerCmds.SHUFFLEON : PlayerCmds.SHUFFLEOFF)
+  }
+
+  toggleRepeat(): void {
+    const on = !this.repeat()
+    this.repeat.set(on)
+    this.player.setRepeat(on)
+  }
+
+  playEntry(entry: PlaylistEntry): void {
+    const media = this.media()
+    if (media) this.player.playTrackAtPosition(media, { position: entry.position, id: (entry as PlaylistEntry & { id?: string }).id })
+  }
+
+  // ---------- sound ----------
+
+  private soundTimer: ReturnType<typeof setTimeout> | undefined
+
+  setEq(state: EqState): void {
+    this.eq.set(state)
+    this.saveSoundSoon()
+  }
+
+  setBalance(balance: number): void {
+    this.balance.set(balance)
+    this.saveSoundSoon()
+  }
+
+  private saveSoundSoon(): void {
+    clearTimeout(this.soundTimer)
+    // (a slider is dragged through many values: the player gets the one it rests on)
+    this.soundTimer = setTimeout(() => {
+      const e = this.eq()
+      this.http
+        .post(`${environment.backend.playerUrl}/winamp/sound`, { on: e.on, auto: e.auto, preamp: e.preamp, bands: e.bands, balance: this.balance() })
+        .pipe(catchError(() => of(null)))
+        .subscribe()
+    }, 250)
+  }
+
+  private async loadSound(): Promise<void> {
+    try {
+      const s = await firstValueFrom(
+        this.http.get<{ supported?: boolean; on?: boolean; auto?: boolean; preamp?: number; bands?: number[]; balance?: number }>(`${environment.backend.playerUrl}/winamp/sound`).pipe(timeout(3000)),
+      )
+      this.soundSupported.set(s.supported !== false)
+      this.eq.set({
+        on: s.on === true,
+        auto: s.auto === true,
+        preamp: typeof s.preamp === 'number' ? s.preamp : 0,
+        bands: Array.isArray(s.bands) && s.bands.length === 10 ? s.bands : new Array<number>(10).fill(0),
+      })
+      this.balance.set(typeof s.balance === 'number' ? s.balance : 0)
+    } catch {
+      // an older player without the route: the equaliser is shown, it changes nothing
+      this.soundSupported.set(false)
+    }
+  }
+
+  // ---------- skin ----------
+
+  private async loadSkin(): Promise<void> {
+    try {
+      const meta = await firstValueFrom(this.http.get<SkinMeta>(`${SKIN_BASE}/skin.json?t=${Date.now()}`).pipe(timeout(5000)))
+      if (this.skin()?.meta.version !== meta.version) this.skin.set(new Skin(meta, SKIN_BASE))
+    } catch {
+      this.skin.set(null)
+    }
+    this.skinLoaded.set(true)
+  }
+
+  // ---------- playlist ----------
+
+  private async loadEntries(media: Media): Promise<void> {
+    type Row = PlaylistEntry & { id?: string }
+    const spotify = this.spotifyService
+    let rows: Row[] = []
+    try {
+      if (media.type === 'library' || media.type === 'nas') {
+        const tracks = await firstValueFrom(media.type === 'library' ? this.player.getLocalTracklist(media) : this.player.getNasTracklist(media))
+        rows = (tracks ?? []).map((t) => ({ position: t.position, id: `${t.position}`, name: t.name }))
+      } else if (media.playlistid) {
+        const info = await firstValueFrom(spotify.getPlaylistInfo(media.playlistid))
+        rows = (info.tracks ?? []).map((t: any, i: number) => ({ position: i + 1, id: t.id ?? t.uri, name: t.name, artist: t.artist, duration: (t.duration_ms ?? 0) / 1000 }))
+      } else if (media.audiobookid) {
+        const info = await firstValueFrom(spotify.getAudiobookInfo(media.audiobookid))
+        rows = (info.chapters ?? []).map((c: any, i: number) => ({ position: i + 1, id: c.id, name: c.name, duration: (c.duration_ms ?? 0) / 1000 }))
+      } else if (media.showid) {
+        const info = await firstValueFrom(spotify.getShowInfo(media.showid))
+        rows = (info.episodes ?? []).map((c: any, i: number) => ({ position: i + 1, id: c.id, name: c.name, duration: (c.duration_ms ?? 0) / 1000 }))
+      } else if (media.id && media.type === 'spotify') {
+        const info = await firstValueFrom(spotify.getAlbumInfo(media.id))
+        rows = (info.tracks ?? []).map((t: any, i: number) => ({ position: i + 1, id: t.id, name: t.name, artist: t.artist, duration: (t.duration_ms ?? 0) / 1000 }))
+      }
+    } catch {
+      rows = []
+    }
+    this.entries.set(rows)
+  }
+}

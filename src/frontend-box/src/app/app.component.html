@@ -9,5 +9,8 @@
     }
   }
   <mupi-eltern-magic-link-overlay></mupi-eltern-magic-link-overlay>
+  @if (!textPreview && winamp.active()) {
+    <mupi-winamp-shell></mupi-winamp-shell>
+  }
   <ion-router-outlet></ion-router-outlet>
 </ion-app>

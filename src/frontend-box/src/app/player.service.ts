@@ -99,6 +99,16 @@ export class PlayerService {
     }
   }
 
+  /** The volume of the box as a percentage (the Winamp theme's slider); the player keeps it under its maximum. */
+  setVolume(percent: number) {
+    this.sendRequest(`volume/=${Math.max(0, Math.min(100, Math.round(percent)))}`)
+  }
+
+  /** Repeat of the local playlist (the Winamp theme's REP button); Spotify has its own. */
+  setRepeat(on: boolean) {
+    this.sendRequest(on ? 'repeaton' : 'repeatoff')
+  }
+
   seekPosition(pos: number) {
     const seekpos = `seekpos:${pos}`
     this.sendRequest(seekpos)

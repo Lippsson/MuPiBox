@@ -72,6 +72,7 @@ ensure_theme matrix
 ensure_theme mint
 ensure_theme danger
 ensure_theme cinema
+ensure_theme winamp
 ensure_theme coverflow
 
 #2.1.0

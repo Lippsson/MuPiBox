@@ -191,9 +191,20 @@ function applyLoudness() {
   player.setLoudness?.(mode)
   console.log(`${new Date().toLocaleString()}: [Player] loudness levelling: ${mode}`)
 }
+// The Winamp theme's equaliser and balance (the display's windows, see frontend-box/src/app/winamp): kept in a file so
+// they come back after a restart; only mpv has the filters
+const WINAMP_SOUND_FILE = '/home/dietpi/.mupibox/winamp-sound.json'
+const winampSound = { on: false, auto: false, preamp: 0, bands: new Array(10).fill(0), balance: 0 }
+try {
+  Object.assign(winampSound, JSON.parse(fs.readFileSync(WINAMP_SOUND_FILE, 'utf8')))
+} catch {
+  // none saved yet
+}
+const applyWinampSound = () => player.setSound?.(winampSound)
 player.on('ready', () => {
   loudnessApplied = null // (a new mpv process after a respawn starts without the filter)
   applyLoudness()
+  applyWinampSound()
 })
 
 // Refuse commands a foreign web page sends through a visitor's browser; CORS only for the box's
@@ -431,6 +442,8 @@ function finishLoading() {
 // nothing for the seconds until the sound came. With mpv the loading ends with the cache filled (or, for a stream that
 // reports no buffering, with the sound running: time_pos).
 const loadingEndsWithCache = cachePrefillPercent >= 100
+// what the file is, for the Winamp theme's little displays (kbit/s, kHz, mono / stereo)
+player.on('audio-info', (info) => Object.assign(currentMeta, info))
 player.on('cache-fill', (percent) => {
   if (currentMeta.loading) {
     currentMeta.loadProgress = Math.min(100, Math.round((percent / cachePrefillPercent) * 100))
@@ -651,6 +664,12 @@ const currentMeta = {
   positionSeconds: 0,
   durationSeconds: 0,
   volume: 0,
+  // the file that plays (mpv): kbit/s, kHz, channels - 0 when not known
+  bitrate: 0,
+  khz: 0,
+  channels: 0,
+  // the playlist starts again at its end (Winamp theme's REP button)
+  repeat: false,
   // Radio streams and podcasts are buffered before they start: how far along that is.
   loading: false,
   // Cover of a radio station or podcast episode started by the parents' app (?cover=): the display shows it when it
@@ -1876,6 +1895,9 @@ function stop() {
     }
     //currentMeta.playing = false;
     writeplayerstatePause()
+    currentMeta.bitrate = 0
+    currentMeta.khz = 0
+    currentMeta.channels = 0
     currentMeta.currentTrackname = ''
     currentMeta.progressTime = ''
     currentMeta.positionSeconds = 0
@@ -2993,6 +3015,19 @@ async function volumeCap() {
 }
 
 /*gets available devices, searches for the active one and returns its volume*/
+// An absolute volume (the Winamp theme's slider), in the same queue as the steps and under the same maximum
+async function setVolumeTo(percent) {
+  _volumeOpQueue = _volumeOpQueue.then(async () => {
+    const cap = await volumeCap()
+    const target = Math.max(0, Math.min(cap, percent))
+    await cmdCall(`/usr/bin/amixer sset Master ${target}%`)
+    currentMeta.volume = target
+  }).catch((err) => {
+    log.warn(`${now()}: [setVolumeTo] op failed:`, err?.message || err)
+  })
+  return _volumeOpQueue
+}
+
 async function setVolume(volume, step = 5) {
   // step: percent per change (5 for the +5 / -5 commands, 1..10 for the rotary encoder)
   const volumeUp = `/usr/bin/amixer sset Master ${step}%+`
@@ -3299,6 +3334,24 @@ app.post('/display/reload-page', (_req, res) => {
   res.json({ ok: true })
 })
 
+// The Winamp theme's equaliser and balance: GET reads them (supported: false = mplayer, which has no filter), POST sets
+// them live and keeps them in a file
+app.get('/winamp/sound', (_req, res) => {
+  res.json({ supported: typeof player.setSound === 'function', ...winampSound })
+})
+app.post('/winamp/sound', (req, res) => {
+  const body = req.body ?? {}
+  const num = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || 0))
+  winampSound.on = body.on === true
+  winampSound.auto = body.auto === true
+  winampSound.preamp = num(body.preamp, -12, 12)
+  winampSound.bands = Array.from({ length: 10 }, (_, i) => num(Array.isArray(body.bands) ? body.bands[i] : 0, -12, 12))
+  winampSound.balance = num(body.balance, -100, 100)
+  applyWinampSound()
+  fs.writeFile(WINAMP_SOUND_FILE, JSON.stringify(winampSound), () => undefined)
+  res.json({ ok: true })
+})
+
 /*endpoint to return all local metainformation*/
 /*only used if sonos-kids-player is modified*/
 app.get('/local', (_req, res) => {
@@ -3534,6 +3587,12 @@ app.use((req, res) => {
     // +5 / -5 as before; other steps (1..10) come from the rotary encoder
     const step = Math.min(10, Math.max(1, Math.abs(Number.parseInt(command.name, 10))))
     setVolume(command.name.startsWith('+') ? 1 : 0, step)
+  }
+  else if (/^=\d{1,3}$/.test(command.name)) setVolumeTo(Number.parseInt(command.name.slice(1), 10))
+  else if (command.name === 'repeaton' || command.name === 'repeatoff') {
+    // (mpv: the playlist loops; with mplayer nothing changes and the button shows it)
+    currentMeta.repeat = command.name === 'repeaton' && typeof player.setRepeat === 'function'
+    player.setRepeat?.(command.name === 'repeaton')
   }
   else if (command.name === 'shuffleon') shuffleon()
   else if (command.name === 'shuffleoff') shuffleoff()
