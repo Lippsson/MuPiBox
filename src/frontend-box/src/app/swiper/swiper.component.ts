@@ -103,6 +103,11 @@ export class SwiperComponent<T> {
   // the underlying cover-cache lifetime well enough. See preloadCoversNear().
   private readonly preloadedSrcs = new Set<string>()
   private static readonly PRELOAD_LOOKAHEAD = 12
+  // Cover Flow: covers on each side of the centered one - 3 on the 800 px display, 6 on a wide one (the 8.8" display
+  // turned to 1920 x 480: the strips of the side covers would be far too wide for 3)
+  private static readonly COVERFLOW_SIDES = 3
+  private static readonly COVERFLOW_SIDES_WIDE = 6
+  private static readonly COVERFLOW_WIDE_PX = 1500
   private static readonly PRELOAD_LOOKBEHIND = 4
 
   protected swiperContainer = viewChild<ElementRef>('swiper')
@@ -557,12 +562,12 @@ export class SwiperComponent<T> {
       return
     }
     this.watchCoverSources(this.swiperContainer()?.nativeElement as HTMLElement)
-    this.loadNearCovers(swiper, 9)
+    const visibleSides = swiper.width >= SwiperComponent.COVERFLOW_WIDE_PX ? SwiperComponent.COVERFLOW_SIDES_WIDE : SwiperComponent.COVERFLOW_SIDES
+    this.loadNearCovers(swiper, visibleSides + 6)
     // Three covers on each side of the centered one. The space between the edge of the centered cover and the
     // edge of the screen is divided into three equal steps (each side cover shows a strip of one step), and
     // all side covers have the same tilt. With three covers or fewer there are less than three on a side: the space
     // is divided among those that are there, so the outermost one reaches the edge of the screen all the same.
-    const visibleSides = 3
     const maxAngle = 65
     const depth = 100
     const perspective = 1000
@@ -584,7 +589,7 @@ export class SwiperComponent<T> {
     // How many covers there are on the side of the screen `side` points to (-1 left, +1 right), at least 1 and at most
     // 3 - kept steady while the list moves, so the covers glide instead of jumping when another one reaches the middle.
     const coversOnSide = (side: number): number =>
-      total > 3 ? visibleSides : Math.min(visibleSides, Math.max(1, side > 0 ? total - 1 - position : position))
+      total > visibleSides ? visibleSides : Math.min(visibleSides, Math.max(1, side > 0 ? total - 1 - position : position))
     for (const slide of slides) {
       const progress = slide.progress ?? 0
       const t = Math.abs(progress)
