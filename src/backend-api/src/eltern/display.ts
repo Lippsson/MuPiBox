@@ -17,6 +17,7 @@ import { applyNightDim, nightDimmed, nightDimOf, parseNightDim } from './night-d
 import { CUSTOM_THEME_CSS, customThemeCss, customThemeOf } from './custom-theme'
 import { bootConfigPath } from './boot-paths'
 import { DSI_SCREEN_CONF, DSI_TOUCH_CONF, dsiConfig, dsiOutput, isDsiRotation } from './dsi-rotation'
+import { installSkin, readSkinMeta, removeSkin } from './winamp-skin'
 
 export interface DisplayDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -43,6 +44,16 @@ function detached(script: string): void {
   const child = spawn('sh', ['-c', script], { detached: true, stdio: 'ignore' })
   child.on('error', () => undefined)
   child.unref()
+}
+
+/** The skin changed: when the box shows the Winamp theme, the display takes it over at once. */
+async function winampReload(deps: DisplayDeps): Promise<boolean> {
+  if (mupibox(deps).theme !== 'winamp') return false
+  try {
+    return (await fetch('http://127.0.0.1:5005/display/reload-theme', { method: 'POST', signal: AbortSignal.timeout(3000) })).ok
+  } catch {
+    return false
+  }
 }
 
 /** Asks the display to load its page again (it then reads the changed settings); false when the player did not answer. */
@@ -328,6 +339,45 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     }
     const theme = String(mupibox(deps).theme ?? '')
     res.json({ ok: true, width: info.width, height: info.height, active: theme === 'custom', reloaded: theme === 'custom' ? await reloadDisplayPage() : false })
+  })
+
+  /**
+   * GET /api/app/display/winamp-skin - the skin of the theme "winamp" (a classic Winamp 2.x skin, see winamp-skin.ts).
+   * PUT /api/app/display/winamp-skin  body: a .wsz, header X-Skin-Name: its file name
+   * DELETE /api/app/display/winamp-skin
+   * The theme only works on a 1920 x 480 display; the skin is unpacked into the display's theme data and the display
+   * loads it again at once (no page reload) when the theme is the one on the box.
+   */
+  router.get('/display/winamp-skin', requireSession, async (_req, res) => {
+    const meta = await readSkinMeta()
+    res.json({ installed: !!meta, name: meta?.name ?? null, version: meta?.version ?? null, active: mupibox(deps).theme === 'winamp' })
+  })
+
+  router.put('/display/winamp-skin', requireSession, requireCsrf, async (req, res) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length
+      if (size > 8 * 1024 * 1024) {
+        res.status(413).json({ error: 'too_large' })
+        req.destroy()
+        return
+      }
+      chunks.push(chunk as Buffer)
+    }
+    const name = decodeURIComponent(String(req.headers['x-skin-name'] ?? 'Skin'))
+    try {
+      const meta = await installSkin(Buffer.concat(chunks), name)
+      res.json({ ok: true, name: meta.name, files: Object.keys(meta.files).length, reloaded: await winampReload(deps) })
+    } catch (err) {
+      const message = (err as Error).message
+      res.status(message === 'not a Winamp skin' || message === 'not a zip' || message === 'broken zip' ? 422 : 500).json({ error: message })
+    }
+  })
+
+  router.delete('/display/winamp-skin', requireSession, requireCsrf, async (_req, res) => {
+    await removeSkin()
+    res.json({ ok: true, reloaded: await winampReload(deps) })
   })
 
   /** GET /api/app/display/custom-theme - the own theme's settings (light/dark, veil, accent, font, size). */

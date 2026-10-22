@@ -102,8 +102,17 @@ const createPlayer = (options = {}) => {
   // (the end of the previous file is followed by the start of the next one in a playlist; "idle" comes only when
   // nothing follows)
 
-  // the loudness filter in use - set again on a new mpv (one that crashed and was started anew has none)
+  // the filter in use (the loudness levelling and the Winamp theme's equaliser / balance in one graph) - set again on a
+  // new mpv (one that crashed and was started anew has none)
   let audioFilter = ''
+  let loudnessChain = ''
+  let soundChain = ''
+  const applyFilter = () => {
+    const chain = [loudnessChain, soundChain].filter(Boolean).join(',')
+    audioFilter = chain ? `lavfi=[${chain}]` : ''
+    // (not reachable now: set when it is - see connect)
+    if (sock && !sock.destroyed) send(['set_property', 'af', audioFilter])
+  }
   // Commands while mpv is not reachable (starting, started anew after a crash, its socket lost): kept and sent once it
   // is - a child's choice in those seconds was lost before. Questions for a value are not kept (asked again anyway).
   const MAX_QUEUED = 20
@@ -219,6 +228,10 @@ const createPlayer = (options = {}) => {
         if (msg.name === 'playlist-pos') playlistPos = typeof msg.data === 'number' ? msg.data : -1
         else if (msg.name === 'playlist-count') playlistCount = typeof msg.data === 'number' ? msg.data : 0
         else if (msg.name === 'idle-active') idleActive = msg.data === true
+        // (what the file is: only a real report counts - mpv also reports "nothing" between two files)
+        else if (msg.name === 'audio-bitrate' && typeof msg.data === 'number' && msg.data > 0) out.emit('audio-info', { bitrate: Math.round(msg.data / 1000) })
+        else if (msg.name === 'audio-params' && msg.data?.samplerate > 0)
+          out.emit('audio-info', { khz: Math.round(msg.data.samplerate / 1000), channels: msg.data['channel-count'] ?? 0 })
         else if (msg.name === 'cache-buffering-state' && typeof msg.data === 'number') {
           // 0-100 of mpv's buffering goal before a stream starts (the player scales its loading bar by
           // cachePrefillPercent below - 100 here, 10 with mplayer's cache-min)
@@ -259,6 +272,8 @@ const createPlayer = (options = {}) => {
       send(['observe_property', 2, 'cache-buffering-state'])
       send(['observe_property', 3, 'idle-active'])
       send(['observe_property', 4, 'playlist-count'])
+      send(['observe_property', 5, 'audio-bitrate'])
+      send(['observe_property', 6, 'audio-params'])
       if (audioFilter) send(['set_property', 'af', audioFilter])
       for (const command of queued.splice(0)) send(command)
       debug('connected')
@@ -391,11 +406,30 @@ const createPlayer = (options = {}) => {
   // Levelling of the loudness (mupibox.loudness): 'soft' = EBU R128 loudnorm, leaves an audiobook its dynamics;
   // 'strong' = dynaudnorm, evens out more (music, radio); 'off' = no filter in the chain. Set live, playback goes on.
   out.setLoudness = (mode) => {
-    const filter = { soft: 'lavfi=[loudnorm=I=-16:TP=-1.5:LRA=11]', strong: 'lavfi=[dynaudnorm=f=250:g=15:p=0.9]' }[mode]
-    audioFilter = filter ?? ''
-    // (not reachable now: set when it is - see connect)
-    if (sock && !sock.destroyed) send(['set_property', 'af', audioFilter])
+    loudnessChain = { soft: 'loudnorm=I=-16:TP=-1.5:LRA=11', strong: 'dynaudnorm=f=250:g=15:p=0.9' }[mode] ?? ''
+    applyFilter()
   }
+  // The Winamp theme's equaliser (pre-amp and ten bands, dB) and balance (-100 .. 100): ffmpeg's equalizer filters of
+  // an octave each at Winamp's ten frequencies, a limiter behind them so a boost does not clip. Set live.
+  const EQ_FREQS = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000]
+  out.setSound = (sound) => {
+    const parts = []
+    const db = (v) => Math.max(-12, Math.min(12, Number(v) || 0))
+    if (sound?.on) {
+      const preamp = db(sound.preamp)
+      if (preamp !== 0) parts.push(`volume=${preamp}dB`)
+      ;(sound.bands ?? []).slice(0, 10).forEach((gain, i) => {
+        if (db(gain) !== 0) parts.push(`equalizer=f=${EQ_FREQS[i]}:t=o:w=1:g=${db(gain)}`)
+      })
+      if (parts.length) parts.push('alimiter=limit=0.97:level=0')
+    }
+    const balance = Math.max(-100, Math.min(100, Number(sound?.balance) || 0)) / 100
+    if (balance !== 0) parts.push(`stereotools=balance_out=${balance}`)
+    soundChain = parts.join(',')
+    applyFilter()
+  }
+  // Repeat of the playlist (the Winamp theme's REP button)
+  out.setRepeat = (on) => send(['set_property', 'loop-playlist', on ? 'inf' : 'no'])
   out.startsAt = true
   out.cachePrefillPercent = 100
   // The place in the playlist of the file that plays (0-based; -1: none). mpv reports it before the file is loaded,

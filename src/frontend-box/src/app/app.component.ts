@@ -22,6 +22,8 @@ import { PlaytimeChipComponent } from './playtime-chip/playtime-chip.component'
 import { buildResumeMedia } from './resume-builder'
 import { StalePageReloadService } from './stale-page-reload.service'
 import { KmThemeService } from './theme/km-theme.service'
+import { WinampService } from './winamp/winamp.service'
+import { WinampShellComponent } from './winamp/winamp-shell.component'
 
 @Component({
   selector: 'app-root',
@@ -35,6 +37,7 @@ import { KmThemeService } from './theme/km-theme.service'
     ElternMagicLinkOverlayComponent,
     HaPairingOverlayComponent,
     ParentAccessBarComponent,
+    WinampShellComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -48,6 +51,8 @@ export class AppComponent {
   protected readonly textPreview = window.location.pathname.startsWith('/text-preview')
   protected playtimeBlocked: Signal<boolean>
   protected readonly parentAccess = inject(ParentAccessService)
+  // the Winamp theme on a 1920 x 480 display: the player of a Winamp skin on the left half of the screen
+  protected readonly winamp = inject(WinampService)
 
   // Track previous playtime state to detect normal -> grace/blocked transitions.
   // 'unknown' on first tick avoids spurious save before we know the baseline.

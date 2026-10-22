@@ -56,6 +56,7 @@ import { ArtworkService } from '../artwork.service'
 import { CoverFlipService } from '../cover-flip.service'
 import { DisplayTextsService } from '../display-texts.service'
 import { KmThemeService } from '../theme/km-theme.service'
+import { WinampService } from '../winamp/winamp.service'
 import { LogService } from '../log.service'
 import { isResumeEntry, type Media } from '../media'
 import { cleanResumePlaceholder } from '../resume-builder'
@@ -133,6 +134,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
   cover = ''
   // km themes (children's themes): their own markup in the template (see theme/km-theme.service.ts)
   private readonly kmTheme = inject(KmThemeService)
+  private readonly winamp = inject(WinampService)
   protected readonly km = this.kmTheme.isKm
   /** header, controls, track list and "Hören mit" of design round 2: the km themes and coverflow */
   protected readonly r2 = this.kmTheme.roundTwo
@@ -458,7 +460,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
         if (typeof configuredSeconds === 'number' && configuredSeconds > 0) {
           this.listViewTimerMs = configuredSeconds * 1000
         }
-        this.backAction.set(config?.mupibox?.playerBack === 'stop' ? 'stop' : 'minimize')
+        // (the Winamp theme browses the library while the music goes on: always minimise)
+        this.backAction.set(config?.mupibox?.playerBack === 'stop' && !this.winamp.active() ? 'stop' : 'minimize')
         this.coverflowTheme = config?.mupibox?.theme === 'coverflow'
       },
       error: () => {
