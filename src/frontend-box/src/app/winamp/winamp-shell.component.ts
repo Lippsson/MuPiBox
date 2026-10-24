@@ -109,7 +109,8 @@ export class WinampShellComponent implements OnDestroy {
     const place = (node: HTMLElement, h: number, host: HTMLElement) => {
       node.style.transform = `scale(${SCALE})`
       node.style.left = '0px'
-      node.style.top = `${Math.round((SCREEN_H - h * SCALE) / 2)}px`
+      // (at the bottom edge of the screen)
+      node.style.top = `${Math.round(SCREEN_H - h * SCALE)}px`
       host.appendChild(node)
     }
     const svc = this.svc
