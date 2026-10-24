@@ -163,7 +163,8 @@ export class WinampService {
     }
     const media = this.media()
     // a local or NAS album: the player shuffles it itself (the track numbers stay, only the next track is chosen by chance)
-    const localAlbum = busy && (media?.type === 'library' || media?.type === 'nas')
+    // (as the player says it: after a reload of the page the display does not know what it started)
+    const localAlbum = busy && !spotify && (data?.currentType === 'local' || data?.currentType === 'nas')
     return {
       title,
       playState,
@@ -172,7 +173,7 @@ export class WinampService {
       volume: data?.volume ?? 0,
       balance: this.balance(),
       shuffle: localAlbum ? data?.shuffle === true : this.shuffleOn(),
-      shuffleAvailable: (media?.type === 'spotify' && (media.category === 'music' || media.category === 'other')) || (localAlbum && data?.shuffleSupported === true),
+      shuffleAvailable: (spotify && media?.type === 'spotify' && (media.category === 'music' || media.category === 'other')) || (localAlbum && data?.shuffleSupported === true),
       repeat: this.repeat(),
       eqOpen: this.right() === 'eq',
       playlistOpen: this.right() === 'pl',
