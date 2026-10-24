@@ -13,6 +13,7 @@ const net = require('node:net')
 const os = require('node:os')
 const path = require('node:path')
 const debug = require('debug')('mpv-wrapper')
+const { createShuffler } = require('./shuffle.js')
 
 const RESPAWN_MAX_BACKOFF_MS = 30_000
 const HEALTHY_RUN_MS = 30_000
@@ -88,6 +89,12 @@ const createPlayer = (options = {}) => {
   let playbackActive = false
   let playlistPos = -1
   let playlistCount = 0
+  // Shuffle (the Winamp theme's button): the playlist keeps its order and track numbers, "next" and the end of a track
+  // jump to a track chosen by chance that was not played in this round (see shuffle.js). mpv is told keep-open=always
+  // meanwhile: at the end of a file it stops there instead of going on with the next one, and the wrapper chooses.
+  let shuffleOn = false
+  let repeatOn = false
+  const shuffler = createShuffler()
   // nothing loaded (before the first file, after a stop or the end): mplayer answered no property then - and
   // "pause" as yes, which the player reads as "not playing"
   let idleActive = true
@@ -153,9 +160,11 @@ const createPlayer = (options = {}) => {
       // load takes the flag off (a pause sent after the end of a playback left every later file standing paused
       // and silent, seen on the box), and a pause while nothing plays is ignored.
       case 'loadfile':
+        shuffler.reset()
         send(['set_property', 'pause', false])
         return send(['loadfile', String(a[0]), a[1] === 1 || a[1] === '1' ? 'append-play' : 'replace'])
       case 'loadlist':
+        shuffler.reset()
         send(['set_property', 'pause', false])
         return send(['loadlist', String(a[0]), 'replace'])
       case 'pt_step': {
@@ -208,6 +217,7 @@ const createPlayer = (options = {}) => {
     }
     switch (msg.event) {
       case 'file-loaded':
+        if (shuffleOn) shuffler.visit(playlistPos)
         // (mplayer said "Starting playback..." here: the file is open, its tags are known, the sound follows)
         playbackActive = true
         if (startPending) setStart('none')
@@ -228,6 +238,13 @@ const createPlayer = (options = {}) => {
         if (msg.name === 'playlist-pos') playlistPos = typeof msg.data === 'number' ? msg.data : -1
         else if (msg.name === 'playlist-count') playlistCount = typeof msg.data === 'number' ? msg.data : 0
         else if (msg.name === 'idle-active') idleActive = msg.data === true
+        else if (msg.name === 'eof-reached' && msg.data === true && shuffleOn && playlistCount > 1) {
+          // the track played to its end (keep-open holds it there): the next one is chosen here
+          const target = shuffler.next(playlistPos, playlistCount, repeatOn)
+          if (target >= 0) send(['playlist-play-index', target])
+          // (the round is over: the album ends as any album does - mpv goes idle, the player says "finished")
+          else send(['stop'])
+        }
         // (what the file is: only a real report counts - mpv also reports "nothing" between two files)
         else if (msg.name === 'audio-bitrate' && typeof msg.data === 'number' && msg.data > 0) out.emit('audio-info', { bitrate: Math.round(msg.data / 1000) })
         else if (msg.name === 'audio-params' && msg.data?.samplerate > 0)
@@ -274,6 +291,9 @@ const createPlayer = (options = {}) => {
       send(['observe_property', 4, 'playlist-count'])
       send(['observe_property', 5, 'audio-bitrate'])
       send(['observe_property', 6, 'audio-params'])
+      send(['observe_property', 7, 'eof-reached'])
+      // (a new mpv process after a crash: shuffle is told again)
+      if (shuffleOn) send(['set_property', 'keep-open', 'always'])
       if (audioFilter) send(['set_property', 'af', audioFilter])
       for (const command of queued.splice(0)) send(command)
       debug('connected')
@@ -429,7 +449,18 @@ const createPlayer = (options = {}) => {
     applyFilter()
   }
   // Repeat of the playlist (the Winamp theme's REP button)
-  out.setRepeat = (on) => send(['set_property', 'loop-playlist', on ? 'inf' : 'no'])
+  out.setRepeat = (on) => {
+    repeatOn = on
+    send(['set_property', 'loop-playlist', on ? 'inf' : 'no'])
+  }
+  // Shuffle on / off for the playlist that plays (and until it is switched off: the next ones too, the round starts over)
+  out.setShuffle = (on) => {
+    shuffleOn = on
+    shuffler.reset()
+    if (on) shuffler.visit(playlistPos)
+    send(['set_property', 'keep-open', on ? 'always' : 'no'])
+  }
+  out.shuffling = () => shuffleOn
   out.startsAt = true
   out.cachePrefillPercent = 100
   // The place in the playlist of the file that plays (0-based; -1: none). mpv reports it before the file is loaded,
@@ -437,8 +468,15 @@ const createPlayer = (options = {}) => {
   // that was skipped before it was open (two "next" in a row).
   out.trackIndex = () => playlistPos
   out.queue = (fileOrUrl) => exec('loadfile', [fileOrUrl, '1'])
-  out.next = () => exec('pt_step', ['1'])
-  out.previous = () => exec('pt_step', ['-1'])
+  // (a tap on a track in the list is a pt_step too - it stays what it is; only these two choose by chance with shuffle)
+  const shuffleStep = (forward) => {
+    const target = forward ? shuffler.next(playlistPos, playlistCount, repeatOn) : shuffler.previous()
+    if (target >= 0) return send(['playlist-play-index', target])
+    // (no track left: "next" does nothing, as on the last track; "previous" starts this one again)
+    return forward ? undefined : send(['seek', 0, 'absolute'])
+  }
+  out.next = () => (shuffleOn && playlistCount > 1 ? shuffleStep(true) : exec('pt_step', ['1']))
+  out.previous = () => (shuffleOn && playlistCount > 1 ? shuffleStep(false) : exec('pt_step', ['-1']))
   out.playPause = () => exec('pause')
   out.setVolume = (amount) => exec('volume', [amount, '1'])
   out.stop = () => exec('stop')
