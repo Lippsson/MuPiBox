@@ -62,6 +62,7 @@ const player = {
   shuffle: false,
   generation: 0,
   sound: { on: false, auto: false, preamp: 0, bands: new Array(10).fill(0), balance: 0 },
+  presets: { presets: {}, auto: {}, default: null },
 }
 setInterval(() => {
   if (!player.album || player.paused) return
@@ -207,6 +208,15 @@ createServer(async (req, res) => {
       return json(res, { ok: true })
     }
     return json(res, { supported: true, ...player.sound })
+  }
+  if (p === '/winamp/presets') {
+    if (req.method === 'POST') {
+      const b = await readBody(req)
+      player.presets = { presets: b.presets ?? {}, auto: b.auto ?? {}, default: b.default ?? null }
+      log(JSON.stringify(player.presets))
+      return json(res, { ok: true })
+    }
+    return json(res, player.presets)
   }
   if (p.startsWith('/display/')) return json(res, { ok: true })
   if (p.startsWith('/local/tracklist/')) {

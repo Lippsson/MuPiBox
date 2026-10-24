@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { computed, effect, inject, Injectable, signal } from '@angular/core'
+import { computed, effect, inject, Injectable, signal, untracked } from '@angular/core'
 import { toObservable, toSignal } from '@angular/core/rxjs-interop'
 import { NavigationEnd, Router } from '@angular/router'
 import { NavController } from '@ionic/angular/standalone'
@@ -14,7 +14,7 @@ import { MediaService } from '../media.service'
 import { PlayerCmds, PlayerService } from '../player.service'
 import { SpotifyService } from '../spotify.service'
 import { KmThemeService } from '../theme/km-theme.service'
-import { EQ_FLAT, type EqState } from './winamp-eq-view'
+import { EQ_FLAT, type EqPresetHost, type EqState, type EqValues } from './winamp-eq-view'
 import type { MainState, PlayState } from './winamp-main-view'
 import type { PlaylistEntry } from './winamp-playlist-view'
 import { type SkinMeta, Skin } from './winamp-skin'
@@ -71,6 +71,59 @@ export class WinampService {
   readonly soundSupported = signal(true)
   readonly repeat = signal(false)
   private readonly shuffleOn = signal(false)
+
+  // ---- the equaliser's presets (kept by the player, one set for the whole box) ----
+  private readonly store = signal<{ presets: Record<string, EqValues>; auto: Record<string, EqValues>; default: EqValues | null }>({ presets: {}, auto: {}, default: null })
+  /** the album that plays - what AUTO looks its preset up by ('' = nothing, or Spotify: the equaliser does not reach it) */
+  readonly album = computed(() => {
+    const data = this.report()?.data
+    if (!data?.currentPlayer || data.currentPlayer === 'spotify') return ''
+    return data.album || this.media()?.title || ''
+  })
+  /** why the equaliser would do nothing for what plays, '' when it works */
+  readonly eqStatus = computed(() => {
+    if (!this.soundSupported()) return 'NEEDS THE MPV PLAYER'
+    return this.report()?.data.currentPlayer === 'spotify' ? 'NO EQ FOR SPOTIFY' : ''
+  })
+  private readonly autoOn = computed(() => this.eq().auto)
+  readonly presetHost: EqPresetHost = {
+    user: () => Object.keys(this.store().presets).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    values: (kind, name) => (kind === 'default' ? (this.store().default ?? undefined) : name ? this.store().presets[name] : undefined),
+    hasDefault: () => this.store().default !== null,
+    album: () => this.album(),
+    hasAuto: () => this.album() in this.store().auto,
+    save: (kind, now) => {
+      const copy: EqValues = { preamp: now.preamp, bands: [...now.bands] }
+      const s = this.store()
+      let name = ''
+      if (kind === 'default') {
+        name = 'default'
+        this.store.set({ ...s, default: copy })
+      } else if (kind === 'auto') {
+        name = this.album()
+        if (name) this.store.set({ ...s, auto: { ...s.auto, [name]: copy } })
+      } else {
+        let n = 1
+        while (`My preset ${n}` in s.presets) n++
+        name = `My preset ${n}`
+        this.store.set({ ...s, presets: { ...s.presets, [name]: copy } })
+      }
+      this.savePresets()
+      return name
+    },
+    remove: (kind, name) => {
+      const s = this.store()
+      if (kind === 'default') this.store.set({ ...s, default: null })
+      else if (kind === 'auto') {
+        const { [this.album()]: _gone, ...rest } = s.auto
+        this.store.set({ ...s, auto: rest })
+      } else if (name) {
+        const { [name]: _gone, ...rest } = s.presets
+        this.store.set({ ...s, presets: rest })
+      }
+      this.savePresets()
+    },
+  }
 
   // ---- the playlist window ----
   readonly entries = signal<PlaylistEntry[]>([])
@@ -173,7 +226,22 @@ export class WinampService {
       void this.loadSkin()
     })
     effect(() => {
-      if (this.active()) void this.loadSound()
+      if (!this.active()) return
+      void this.loadSound()
+      void this.loadPresets()
+    })
+    // AUTO: the preset of the album that starts (else the default, else flat) - as Winamp loads a preset by the file
+    effect(() => {
+      const album = this.album()
+      if (!this.active() || !this.autoOn() || !album) return
+      untracked(() => {
+        const s = this.store()
+        const found = s.auto[album] ?? s.default
+        const values = found ?? { preamp: 0, bands: new Array<number>(10).fill(0) }
+        const e = this.eq()
+        if (e.preamp === values.preamp && e.bands.every((b, i) => b === values.bands[i])) return
+        this.setEq({ ...e, preamp: values.preamp, bands: [...values.bands], on: e.on || !!found })
+      })
     })
     // a playback that starts (here or from the parents' app) opens the playlist; one that ends on its own goes back to the library
     this.router.events.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd)).subscribe((e) => {
@@ -293,6 +361,22 @@ export class WinampService {
   setBalance(balance: number): void {
     this.balance.set(balance)
     this.saveSoundSoon()
+  }
+
+  private async loadPresets(): Promise<void> {
+    try {
+      const s = await firstValueFrom(this.http.get<{ presets?: Record<string, EqValues>; auto?: Record<string, EqValues>; default?: EqValues | null }>(`${environment.backend.playerUrl}/winamp/presets`).pipe(timeout(3000)))
+      this.store.set({ presets: s.presets ?? {}, auto: s.auto ?? {}, default: s.default ?? null })
+    } catch {
+      // an older player: the presets of this session only
+    }
+  }
+
+  private savePresets(): void {
+    this.http
+      .post(`${environment.backend.playerUrl}/winamp/presets`, this.store())
+      .pipe(catchError(() => of(null)))
+      .subscribe()
   }
 
   private saveSoundSoon(): void {

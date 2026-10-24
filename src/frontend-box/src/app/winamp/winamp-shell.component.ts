@@ -29,10 +29,17 @@ const SCALE = HALF / MAIN_W
     mupi-winamp-shell .wa-message { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px; text-align: center; color: #c8c8e6; font: 28px/1.3 Arial, sans-serif; }
     mupi-winamp-shell .wa-message small { font-size: 20px; color: #8a8ab0; }
     mupi-winamp-shell .wa-knob-fallback { background: linear-gradient(#d8d8d8, #8a8a8a); border: 1px solid #333; }
-    mupi-winamp-shell .wa-eq-note { position: absolute; font: 5px/9px Arial, sans-serif; color: #c0c0c0; text-align: center; background: rgba(0,0,0,.6); }
-    mupi-winamp-shell .wa-eq-presets { position: absolute; z-index: 5; display: grid; grid-template-columns: 1fr 1fr; align-content: start; font: 7px/10px Arial, sans-serif; border: 1px solid #888; padding: 1px; }
-    mupi-winamp-shell .wa-eq-preset { padding: 0 3px; cursor: pointer; white-space: nowrap; }
-    mupi-winamp-shell .wa-eq-preset:active { background: #3c3c6e; }
+    mupi-winamp-shell .wa-eq-note { position: absolute; font: 5px/9px Arial, sans-serif; color: #c0c0c0; text-align: center; background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center; }
+    mupi-winamp-shell .wa-eq-presets { position: absolute; z-index: 5; display: flex; flex-direction: column; font: 7px/10px Arial, sans-serif; border: 1px solid #888; }
+    mupi-winamp-shell .wa-eq-tabs { display: flex; flex: none; border-bottom: 1px solid #888; }
+    mupi-winamp-shell .wa-eq-tab { flex: 1; text-align: center; cursor: pointer; line-height: 12px; }
+    mupi-winamp-shell .wa-eq-tab.wa-eq-on { background: var(--wa-selected-bg); color: var(--wa-current); }
+    mupi-winamp-shell .wa-eq-x { flex: none; width: 16px; }
+    mupi-winamp-shell .wa-eq-list { flex: 1; overflow-y: auto; scrollbar-width: none; display: grid; grid-template-columns: 1fr 1fr; align-content: start; touch-action: pan-y; }
+    mupi-winamp-shell .wa-eq-list::-webkit-scrollbar { display: none; }
+    mupi-winamp-shell .wa-eq-preset { padding: 0 3px; cursor: pointer; white-space: nowrap; overflow: hidden; }
+    mupi-winamp-shell .wa-eq-preset:active { background: var(--wa-selected-bg); color: var(--wa-current); }
+    mupi-winamp-shell .wa-eq-off { opacity: .45; }
     mupi-winamp-shell .wa-pop { position: absolute; left: 24px; top: 24px; z-index: 10; min-width: 340px; background: #0f0f1b; border: 2px solid #6e6e96; border-radius: 6px; padding: 6px 0; font: 30px Arial, sans-serif; color: #d2d2f0; box-shadow: 0 8px 30px #000a; }
     mupi-winamp-shell .wa-pop div { padding: 12px 24px; }
     mupi-winamp-shell .wa-pop .wa-pop-item:active { background: #3c3c6e; }
@@ -77,6 +84,10 @@ export class WinampShellComponent implements OnDestroy {
       this.eqView?.node.style.setProperty('display', view === 'eq' ? '' : 'none')
       this.plView?.node.style.setProperty('display', view === 'pl' ? '' : 'none')
       if (view === 'pl') setTimeout(() => this.plView?.scrollToCurrent(), 0)
+    })
+    effect(() => {
+      const status = this.svc.eqStatus()
+      this.eqView?.setStatus(status)
     })
     effect(() => {
       const entries = this.svc.entries()
@@ -136,8 +147,9 @@ export class WinampShellComponent implements OnDestroy {
     })
     place(this.main.node, MAIN_H, this.left)
 
-    this.eqView = new WinampEqView(skin, (s) => svc.setEq(s), () => svc.setRight('eq'), { unsupported: !svc.soundSupported() })
+    this.eqView = new WinampEqView(skin, (s) => svc.setEq(s), () => svc.setRight('eq'), svc.presetHost)
     this.eqView.setState(svc.eq())
+    this.eqView.setStatus(svc.eqStatus())
     place(this.eqView.node, EQ_H, this.right)
 
     this.plView = new WinampPlaylistView(skin, {
