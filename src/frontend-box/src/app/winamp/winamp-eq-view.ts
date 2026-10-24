@@ -42,6 +42,28 @@ export const EQ_PRESETS: { name: string; bands: number[] }[] = [
   { name: 'Techno', bands: [8, 5, 0, -5, -4, 0, 8, 9, 9, 8] },
 ]
 
+/** What a preset holds: the pre-amp and the ten bands (dB). */
+export interface EqValues {
+  preamp: number
+  bands: number[]
+}
+
+/**
+ * What the PRESETS menu needs from outside (the service keeps them, the player stores them): the user's own presets,
+ * the default, and the auto-load preset of the album that plays (AUTO loads it when the album starts).
+ */
+export interface EqPresetHost {
+  user(): string[]
+  values(kind: 'default' | 'user', name?: string): EqValues | undefined
+  hasDefault(): boolean
+  /** the album that plays ('' = none: nothing to save an auto-load preset for) */
+  album(): string
+  hasAuto(): boolean
+  /** saves `now`; the name of what was made */
+  save(kind: 'new' | 'default' | 'auto', now: EqValues): string
+  remove(kind: 'user' | 'default' | 'auto', name?: string): void
+}
+
 const SLIDER_H = 63
 const THUMB = 11
 const clampDb = (v: number) => Math.max(-12, Math.min(12, Math.round(v * 2) / 2))
@@ -56,13 +78,16 @@ export class WinampEqView {
   private readonly autoBtn: WaButton
   private lineColours: string[] = []
   private popup: HTMLElement | undefined
+  private readonly note: HTMLElement
+  private status = ''
+  private noteTimer: ReturnType<typeof setTimeout> | undefined
+  private mode: 'load' | 'save' | 'delete' = 'load'
 
   constructor(
     private readonly skin: Skin,
     private readonly onChange: (s: EqState) => void,
     private readonly onClose: () => void,
-    /** a note under the sliders ("only with mpv" ...): shown over the graph when the engine cannot do it */
-    private readonly notes: { unsupported?: boolean } = {},
+    private readonly host: EqPresetHost,
   ) {
     const win = el('wa-win wa-eq', { width: `${EQ_W}px`, height: `${EQ_H}px` })
     this.node = win
@@ -123,11 +148,9 @@ export class WinampEqView {
       box.addEventListener('dblclick', () => (index === 0 ? this.set({ preamp: 0 }) : this.set({ bands: this.state.bands.map((b, i) => (i === index - 1 ? 0 : b)) })))
       this.sliders.push({ box, thumb })
     })
-    if (notes.unsupported) {
-      const note = el('wa-eq-note', { left: '88px', top: '5px', width: '108px', height: '9px' })
-      note.textContent = 'needs the mpv player'
-      win.appendChild(note)
-    }
+    this.note = el('wa-eq-note', { left: '86px', top: '17px', width: '113px', height: '19px' })
+    this.note.style.display = 'none'
+    win.appendChild(this.note)
     this.render()
   }
 
@@ -149,28 +172,93 @@ export class WinampEqView {
     this.onChange(this.value)
   }
 
+  /** A text over the curve that stays (the equaliser does nothing for what plays: Spotify, mplayer), '' = none. */
+  setStatus(text: string): void {
+    this.status = text
+    this.showNote()
+  }
+
+  private flash(text: string): void {
+    this.note.textContent = text
+    this.note.style.display = ''
+    clearTimeout(this.noteTimer)
+    this.noteTimer = setTimeout(() => this.showNote(), 2500)
+  }
+
+  private showNote(): void {
+    this.note.textContent = this.status
+    this.note.style.display = this.status ? '' : 'none'
+  }
+
+  private closePresets(): void {
+    this.popup?.remove()
+    this.popup = undefined
+  }
+
   private togglePresets(): void {
-    if (this.popup) {
-      this.popup.remove()
-      this.popup = undefined
-      return
-    }
-    const box = el('wa-eq-presets', { left: '120px', top: '16px', width: '150px', height: '96px' })
-    const meta = this.skin.meta.pledit
-    box.style.background = meta.normalBg
-    box.style.color = meta.normal
-    for (const preset of EQ_PRESETS) {
-      const row = el('wa-eq-preset')
-      row.textContent = preset.name
-      row.addEventListener('click', () => {
-        this.popup?.remove()
-        this.popup = undefined
-        this.set({ bands: [...preset.bands], on: true })
-      })
-      box.appendChild(row)
-    }
-    this.node.appendChild(box)
+    if (this.popup) return this.closePresets()
+    const colours = this.skin.meta.pledit
+    const box = el('wa-eq-presets', { left: '6px', top: '31px', width: '263px', height: '80px' })
+    box.style.background = colours.normalBg
+    box.style.color = colours.normal
+    box.style.setProperty('--wa-current', colours.current)
+    box.style.setProperty('--wa-selected-bg', colours.selectedBg)
     this.popup = box
+    this.node.appendChild(box)
+    this.fillPresets()
+  }
+
+  /** The menu: LOAD / SAVE / DELETE as in Winamp's, one list at a time. */
+  private fillPresets(): void {
+    const box = this.popup
+    if (!box) return
+    box.replaceChildren()
+    const tabs = el('wa-eq-tabs')
+    for (const [mode, label] of [['load', 'LOAD'], ['save', 'SAVE'], ['delete', 'DELETE']] as const) {
+      const tab = el(`wa-eq-tab${this.mode === mode ? ' wa-eq-on' : ''}`, {}, 'span')
+      tab.textContent = label
+      tab.addEventListener('click', () => {
+        this.mode = mode
+        this.fillPresets()
+      })
+      tabs.appendChild(tab)
+    }
+    const close = el('wa-eq-tab wa-eq-x', {}, 'span')
+    close.textContent = 'X'
+    close.addEventListener('click', () => this.closePresets())
+    tabs.appendChild(close)
+    const list = el('wa-eq-list')
+    const row = (text: string, fn: () => void, off = false) => {
+      const r = el(`wa-eq-preset${off ? ' wa-eq-off' : ''}`)
+      r.textContent = text
+      if (!off) r.addEventListener('click', fn)
+      list.appendChild(r)
+    }
+    const apply = (v: EqValues, keepPreamp = false) => {
+      this.closePresets()
+      this.set({ bands: [...v.bands], preamp: keepPreamp ? this.state.preamp : v.preamp, on: true })
+    }
+    const album = this.host.album()
+    const now = (): EqValues => ({ preamp: this.state.preamp, bands: [...this.state.bands] })
+    const done = (text: string) => {
+      this.closePresets()
+      this.flash(text)
+    }
+    if (this.mode === 'load') {
+      row('Default', () => apply(this.host.values('default') ?? { preamp: 0, bands: new Array<number>(10).fill(0) }))
+      for (const preset of EQ_PRESETS) row(preset.name, () => apply({ preamp: 0, bands: preset.bands }, true))
+      for (const name of this.host.user()) row(`* ${name}`, () => apply(this.host.values('user', name) ?? now()))
+    } else if (this.mode === 'save') {
+      row('New preset', () => done(`SAVED: ${this.host.save('new', now())}`))
+      row('As default', () => done(`SAVED: ${this.host.save('default', now())}`))
+      row(album ? `For album: ${album}` : 'For this album (nothing plays)', () => done(`AUTO: ${this.host.save('auto', now())}`), !album)
+    } else {
+      for (const name of this.host.user()) row(`* ${name}`, () => (this.host.remove('user', name), done(`DELETED: ${name}`)))
+      if (this.host.hasDefault()) row('Default', () => (this.host.remove('default'), done('DELETED: default')))
+      if (album && this.host.hasAuto()) row(`Album: ${album}`, () => (this.host.remove('auto'), done('DELETED: auto-load')))
+      if (!list.children.length) row('Nothing saved yet', () => undefined, true)
+    }
+    box.append(tabs, list)
   }
 
   private render(): void {

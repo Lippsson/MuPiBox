@@ -3494,6 +3494,36 @@ app.post('/winamp/sound', (req, res) => {
   res.json({ ok: true })
 })
 
+// The equaliser's presets of the Winamp theme: the ones the children / parents saved (named), the auto-load ones (one per
+// album: AUTO loads them when the album plays) and the default. The display keeps the whole set and sends it back whole.
+const WINAMP_PRESETS_FILE = '/home/dietpi/.mupibox/winamp-presets.json'
+const cleanValues = (v) => {
+  const num = (x) => Math.max(-12, Math.min(12, Math.round((Number(x) || 0) * 2) / 2))
+  return { preamp: num(v?.preamp), bands: Array.from({ length: 10 }, (_, i) => num(Array.isArray(v?.bands) ? v.bands[i] : 0)) }
+}
+const cleanSet = (body, max) => {
+  const out = {}
+  for (const [name, v] of Object.entries(body && typeof body === 'object' ? body : {}).slice(0, max)) {
+    const key = [...String(name)].filter((c) => c.charCodeAt(0) >= 32).join('').trim().slice(0, 80)
+    if (key) out[key] = cleanValues(v)
+  }
+  return out
+}
+function readPresets() {
+  try {
+    const f = JSON.parse(fs.readFileSync(WINAMP_PRESETS_FILE, 'utf8'))
+    return { presets: cleanSet(f.presets, 60), auto: cleanSet(f.auto, 300), default: f.default ? cleanValues(f.default) : null }
+  } catch {
+    return { presets: {}, auto: {}, default: null }
+  }
+}
+app.get('/winamp/presets', (_req, res) => res.json(readPresets()))
+app.post('/winamp/presets', (req, res) => {
+  const b = req.body ?? {}
+  const set = { presets: cleanSet(b.presets, 60), auto: cleanSet(b.auto, 300), default: b.default ? cleanValues(b.default) : null }
+  fs.writeFile(WINAMP_PRESETS_FILE, JSON.stringify(set), (err) => (err ? res.status(500).json({ error: 'write_failed' }) : res.json({ ok: true })))
+})
+
 /*endpoint to return all local metainformation*/
 /*only used if sonos-kids-player is modified*/
 app.get('/local', (_req, res) => {
