@@ -51,6 +51,9 @@ export interface CurrentMPlayer {
   bitrate?: number
   khz?: number
   channels?: number
+  /** shuffle of a local or NAS album is on, and whether the engine can do it (mpv) */
+  shuffle?: boolean
+  shuffleSupported?: boolean
   /** The display's Spotify player is silent (paused, or the playback not on it), as the display told the player. */
   spotifySilent?: boolean
 }

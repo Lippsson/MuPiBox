@@ -135,7 +135,7 @@ export class WinampShellComponent implements OnDestroy {
       seek: (f) => svc.seek(f),
       setVolume: (p) => svc.setVolume(p),
       setBalance: (b) => svc.setBalance(b),
-      toggleShuffle: () => (svc.main().shuffleAvailable ? svc.toggleShuffle() : this.toast('Shuffle works with Spotify albums and playlists')),
+      toggleShuffle: () => (svc.main().shuffleAvailable ? svc.toggleShuffle() : this.toast('Shuffle works with albums from the library, the NAS and Spotify music')),
       toggleRepeat: () => svc.toggleRepeat(),
       toggleEq: () => svc.setRight('eq'),
       togglePlaylist: () => svc.setRight('pl'),

@@ -8,9 +8,12 @@ import { build } from 'esbuild'
 import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
+// the player's own choice of the next track (src/backend-player/src/shuffle.js)
+const { createShuffler } = createRequire(import.meta.url)('../../src/backend-player/src/shuffle.js')
 const root = path.join(here, '../..')
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`)
@@ -63,13 +66,22 @@ const player = {
   generation: 0,
   sound: { on: false, auto: false, preamp: 0, bands: new Array(10).fill(0), balance: 0 },
   presets: { presets: {}, auto: {}, default: null },
+  shuffler: createShuffler(),
 }
 setInterval(() => {
   if (!player.album || player.paused) return
   player.position += 0.25
   const dur = durationOf(player.album, player.track - 1)
   if (player.position >= dur) {
-    if (player.track < player.album.tracks.length) {
+    if (player.shuffle && player.album.tracks.length > 1) {
+      const to = player.shuffler.next(player.track - 1, player.album.tracks.length, player.repeat)
+      if (to >= 0) goTo(to + 1)
+      else {
+        player.album = null
+        player.finished = true
+        player.shuffle = false
+      }
+    } else if (player.track < player.album.tracks.length) {
       player.track++
       player.position = 0
     } else if (player.repeat) {
@@ -118,10 +130,20 @@ function localState() {
     khz: a ? (mono ? 22 : 44) : 0,
     channels: a ? (mono ? 1 : 2) : 0,
     repeat: player.repeat,
+    shuffle: player.shuffle,
+    shuffleSupported: true,
   }
 }
 
+function goTo(track) {
+  player.track = track
+  player.position = 0
+  if (player.shuffle) player.shuffler.visit(track - 1)
+}
+
 function start(album) {
+  player.shuffle = false
+  player.shuffler.reset()
   player.album = album
   player.track = 1
   player.position = 0
@@ -141,14 +163,21 @@ function command(rest) {
   else if (name === 'play') player.paused = false
   else if (name === 'stop') {
     player.album = null
+    player.shuffle = false
     player.generation++
   } else if (name === 'next') {
-    if (player.album && player.track < player.album.tracks.length) {
-      player.track++
-      player.position = 0
+    if (player.album && player.shuffle && player.album.tracks.length > 1) {
+      const to = player.shuffler.next(player.track - 1, player.album.tracks.length, player.repeat)
+      if (to >= 0) goTo(to + 1)
+    } else if (player.album && player.track < player.album.tracks.length) {
+      goTo(player.track + 1)
     }
   } else if (name === 'previous') {
-    if (player.album) {
+    if (player.album && player.shuffle && player.album.tracks.length > 1) {
+      const to = player.shuffler.previous()
+      if (to >= 0) goTo(to + 1)
+      else player.position = 0
+    } else if (player.album) {
       if (player.track > 1) player.track--
       player.position = 0
     }
@@ -157,13 +186,14 @@ function command(rest) {
   else if (name.startsWith('seekpos:') && player.album) player.position = (Number(name.slice(8)) / 100) * durationOf(player.album, player.track - 1)
   else if (name === 'seek+30' && player.album) player.position = Math.min(player.position + 30, durationOf(player.album, player.track - 1) - 1)
   else if (name === 'seek-30' && player.album) player.position = Math.max(0, player.position - 30)
-  else if (name.startsWith('localtrack:') && player.album) {
-    player.track = Number(name.slice(11))
-    player.position = 0
-  } else if (name === 'repeaton') player.repeat = true
+  else if (name.startsWith('localtrack:') && player.album) goTo(Number(name.slice(11)))
+  else if (name === 'repeaton') player.repeat = true
   else if (name === 'repeatoff') player.repeat = false
-  else if (name === 'shuffleon') player.shuffle = true
-  else if (name === 'shuffleoff') player.shuffle = false
+  else if (name === 'shuffleon' && player.album) {
+    player.shuffle = true
+    player.shuffler.reset()
+    player.shuffler.visit(player.track - 1)
+  } else if (name === 'shuffleoff') player.shuffle = false
 }
 
 const cors = (req, res) => {

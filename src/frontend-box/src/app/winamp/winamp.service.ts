@@ -71,6 +71,9 @@ export class WinampService {
   readonly soundSupported = signal(true)
   readonly repeat = signal(false)
   private readonly shuffleOn = signal(false)
+  // shuffle that this window switched on (and for which media): it is switched off again with the playback
+  private shuffledHere = false
+  private shuffledFor: Media | null = null
 
   // ---- the equaliser's presets (kept by the player, one set for the whole box) ----
   private readonly store = signal<{ presets: Record<string, EqValues>; auto: Record<string, EqValues>; default: EqValues | null }>({ presets: {}, auto: {}, default: null })
@@ -159,6 +162,8 @@ export class WinampService {
       position = Math.min(duration, position + Math.max(0, this.clock() - at) / 1000)
     }
     const media = this.media()
+    // a local or NAS album: the player shuffles it itself (the track numbers stay, only the next track is chosen by chance)
+    const localAlbum = busy && (media?.type === 'library' || media?.type === 'nas')
     return {
       title,
       playState,
@@ -166,8 +171,8 @@ export class WinampService {
       durationSeconds: busy ? duration : 0,
       volume: data?.volume ?? 0,
       balance: this.balance(),
-      shuffle: this.shuffleOn(),
-      shuffleAvailable: media?.type === 'spotify' && (media.category === 'music' || media.category === 'other'),
+      shuffle: localAlbum ? data?.shuffle === true : this.shuffleOn(),
+      shuffleAvailable: (media?.type === 'spotify' && (media.category === 'music' || media.category === 'other')) || (localAlbum && data?.shuffleSupported === true),
       repeat: this.repeat(),
       eqOpen: this.right() === 'eq',
       playlistOpen: this.right() === 'pl',
@@ -265,6 +270,18 @@ export class WinampService {
       const m = this.media()
       this.shuffleOn.set(m?.shuffle === true)
     })
+    // Spotify keeps its shuffle for the next album: what this window switched on goes off with the playback (as the player
+    // page does when it is left); a local album's shuffle the player switches off itself
+    effect(() => {
+      const stopped = this.main().playState === 'stop'
+      const media = this.media()
+      untracked(() => {
+        if (!this.shuffledHere || (!stopped && media === this.shuffledFor)) return
+        this.shuffledHere = false
+        this.shuffleOn.set(false)
+        this.player.sendCmd(PlayerCmds.SHUFFLEOFF)
+      })
+    })
   }
 
   // ---------- the windows ----------
@@ -333,8 +350,11 @@ export class WinampService {
   }
 
   toggleShuffle(): void {
-    const on = !this.shuffleOn()
+    const on = !this.main().shuffle
     this.shuffleOn.set(on)
+    const m = this.media()
+    this.shuffledHere = on && m?.type === 'spotify'
+    this.shuffledFor = m
     this.player.sendCmd(on ? PlayerCmds.SHUFFLEON : PlayerCmds.SHUFFLEOFF)
   }
 

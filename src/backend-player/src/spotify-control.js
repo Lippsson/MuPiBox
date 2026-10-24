@@ -670,6 +670,8 @@ const currentMeta = {
   channels: 0,
   // the playlist starts again at its end (Winamp theme's REP button)
   repeat: false,
+  // Shuffle of a local or NAS album (mpv): "next" and the end of a track choose a track not played yet; the numbers stay
+  shuffle: false,
   // Radio streams and podcasts are buffered before they start: how far along that is.
   loading: false,
   // Cover of a radio station or podcast episode started by the parents' app (?cover=): the display shows it when it
@@ -1882,6 +1884,7 @@ function stop() {
     currentMeta.pause = false
     spotifyRunning = false
   } else if (currentMeta.currentPlayer === 'mplayer') {
+    resetLocalShuffle()
     stopLoading()
     player.stop()
     // mplayer ignores 'stop' while it is still opening a playlist; it then starts playing after all, and
@@ -2054,7 +2057,24 @@ function jumpToTrack(targetPosition) {
   }
 }
 
+// Shuffle of a local or NAS album: only the engine's choice of the next track (mpv-wrapper.js), nothing at Spotify
+function localShuffle(on) {
+  if (currentMeta.currentPlayer !== 'mplayer' || typeof player.setShuffle !== 'function' || isCuePlayback()) return false
+  currentMeta.shuffle = on
+  player.setShuffle(on)
+  log.debug(`${now()}: [Spotify Control] Shuffle of the album: ${on ? 'on' : 'off'}`)
+  return true
+}
+// (every playback starts without shuffle, as the player page switches Spotify's off when it is left)
+function resetLocalShuffle() {
+  if (currentMeta.shuffle || player.shuffling?.()) {
+    currentMeta.shuffle = false
+    player.setShuffle?.(false)
+  }
+}
+
 function shuffleon() {
+  if (localShuffle(true)) return
   forgetSpotifyState()
   if (spotifyBlockedUntil()) return
   spotifyApi.setShuffle(true, ownSpotifyDeviceOptions()).then(
@@ -2072,6 +2092,8 @@ function shuffleon() {
 }
 
 function shuffleoff() {
+  if (localShuffle(false)) return
+  resetLocalShuffle()
   forgetSpotifyState()
   if (spotifyBlockedUntil()) return
   spotifyApi.setShuffle(false, ownSpotifyDeviceOptions()).then(
@@ -3391,7 +3413,7 @@ app.get('/local', (_req, res) => {
   // landen nicht in der Response, obwohl die Mutationen am Objekt
   // ankommen.
   // (generation: which start this is - a stop of the display's background playback names it, see ?gen=)
-  res.json({ ...currentMeta, generation: playbackRequest })
+  res.json({ ...currentMeta, generation: playbackRequest, shuffleSupported: typeof player.setShuffle === 'function' })
 })
 
 app.get('/spotify/token', (_req, res) => {
@@ -3513,6 +3535,7 @@ app.use((req, res) => {
   // picture of a podcast played before it (radio and podcasts set their own below, Spotify brings its own).
   const newMedia = command.name.includes('spotify:') || ['library', 'nas', 'radio', 'rss'].some((segment) => hasDirSegment(command, segment))
   if (newMedia) {
+    resetLocalShuffle()
     playbackRequest++
     currentMeta.pause = false
     if (hasDirSegment(command, 'library') || hasDirSegment(command, 'nas')) currentMeta.cover = triggerCover
