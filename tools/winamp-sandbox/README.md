@@ -17,4 +17,9 @@ Open http://localhost:8200/home in a browser window of exactly 1920 x 480 pixels
 the page loads; in the Claude Code browser pane: set the size, then reload). The skin is unpacked by the backend's own
 code (src/backend-api/src/eltern/winamp-skin.ts), so what works here is what the upload does on the box.
 
+The parents' app is there too: http://localhost:8200/app/ (no login) - its theme page is http://localhost:8200/app/#/theme.
+Choosing a theme there changes the display at once; with "Winamp" chosen the skin card appears, and uploading a .wsz
+there works for real (the same unpacking the box uses; the display loads the new skin without a reload). Everything else
+in the app shows empty pages.
+
 `tools/winamp-preview` is the lighter variant: only the Winamp windows, no app.
