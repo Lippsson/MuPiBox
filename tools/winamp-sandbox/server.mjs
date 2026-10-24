@@ -1,0 +1,288 @@
+// Sandbox for the display's themes without a box: serves the built display (src/deploy/www/browser, or --www) on
+// http://localhost:8200 like the box does and plays a pretend player on http://localhost:5005 - a small library
+// with generated covers, a clock that runs through the tracks, volume, pause, seek, repeat and the Winamp theme's
+// equaliser. No sound is made. See README.md.
+//
+//   node tools/winamp-sandbox/server.mjs [--skin file.wsz] [--theme winamp] [--www dir]
+import { build } from 'esbuild'
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
+import { createServer } from 'node:http'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const root = path.join(here, '../..')
+const arg = (name, fallback) => {
+  const i = process.argv.indexOf(`--${name}`)
+  return i >= 0 ? process.argv[i + 1] : fallback
+}
+const THEME = arg('theme', 'winamp')
+const WWW = path.resolve(arg('www', path.join(root, 'src/deploy/www/browser')))
+const SKIN_DIR = path.join(here, '.skin')
+
+// ---------- the skin: unpacked with the backend's own code ----------
+const wsz = arg('skin')
+if (wsz) {
+  mkdirSync(SKIN_DIR, { recursive: true })
+  const out = path.join(here, '.skin-code.cjs')
+  await build({ entryPoints: [path.join(root, 'src/backend-api/src/eltern/winamp-skin.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: out, logLevel: 'error' })
+  const mod = await import(pathToFileURL(out).href)
+  const { installSkin } = mod.default ?? mod
+  const meta = await installSkin(readFileSync(wsz), path.basename(wsz), SKIN_DIR)
+  console.log(`skin: ${meta.name} (${Object.keys(meta.files).length} bitmaps)`)
+}
+
+// ---------- the pretend library ----------
+const ALBUMS = {
+  music: [
+    { name: 'Demo Album One', tracks: ['Opening Credits', 'Walking Down the Road', 'A Very Long Track Name That Does Not Fit In One Line Of The Display', 'Interlude', 'Sunset', 'Closing Theme'] },
+    { name: 'Demo Album Two', tracks: Array.from({ length: 14 }, (_, i) => `Song number ${i + 1}`) },
+    { name: 'Radio Hits', tracks: ['Hit A', 'Hit B', 'Hit C'] },
+  ],
+  audiobook: [{ name: 'Bedtime Story', tracks: ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4'], long: true }],
+  other: [],
+}
+const colours = ['#d94f4f', '#3f8fd9', '#4fb36b', '#d9a93f', '#8a5fd9', '#d95f9b']
+const albumKey = (category, name) => `${category}/${name}`
+const albums = new Map()
+for (const [category, list] of Object.entries(ALBUMS)) for (const a of list) albums.set(albumKey(category, a.name), { ...a, category })
+const durationOf = (album, i) => (album.long ? 900 + i * 130 : 95 + ((i * 37) % 160))
+
+const coverSvg = (n, label) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${colours[n % colours.length]}"/><stop offset="1" stop-color="#1b1b2b"/></linearGradient></defs><rect width="300" height="300" fill="url(#g)"/><circle cx="150" cy="130" r="70" fill="#ffffff22"/><text x="150" y="250" text-anchor="middle" font-family="Arial" font-size="26" fill="#fff">${label}</text></svg>`
+
+// ---------- the pretend player ----------
+const player = {
+  album: null, // the album that plays, or null
+  track: 1,
+  position: 0,
+  paused: false,
+  volume: 40,
+  repeat: false,
+  finished: false,
+  shuffle: false,
+  generation: 0,
+  sound: { on: false, auto: false, preamp: 0, bands: new Array(10).fill(0), balance: 0 },
+}
+setInterval(() => {
+  if (!player.album || player.paused) return
+  player.position += 0.25
+  const dur = durationOf(player.album, player.track - 1)
+  if (player.position >= dur) {
+    if (player.track < player.album.tracks.length) {
+      player.track++
+      player.position = 0
+    } else if (player.repeat) {
+      player.track = 1
+      player.position = 0
+    } else {
+      player.album = null
+      player.finished = true
+    }
+  }
+}, 250)
+
+function localState() {
+  const a = player.album
+  const dur = a ? durationOf(a, player.track - 1) : 0
+  const mono = a && player.track % 4 === 0
+  return {
+    activeSpotifyId: '',
+    currentPlayer: a ? 'mplayer' : '',
+    currentType: 'local',
+    playing: !!a && !player.paused,
+    pause: !!a && player.paused,
+    album: a?.name ?? '',
+    path: a ? `/home/dietpi/MuPiBox/media/${a.category}/${a.name}` : '',
+    finished: player.finished,
+    episode: '',
+    currentTrackname: a?.tracks[player.track - 1] ?? '',
+    currentTracknr: a ? player.track : '',
+    totalTracks: a ? a.tracks.length : '',
+    progressTime: a ? Math.round((player.position / dur) * 100) : '',
+    positionSeconds: a ? player.position : 0,
+    durationSeconds: dur,
+    volume: player.volume,
+    loading: false,
+    cover: '',
+    loadProgress: 0,
+    triggerSource: 'box',
+    triggerAt: 0,
+    themeReloadAt: 0,
+    pageReloadAt: 0,
+    spotifySilentAt: 0,
+    trackFile: '',
+    generation: player.generation,
+    spotifySilent: false,
+    bitrate: a ? (mono ? 64 : 192) : 0,
+    khz: a ? (mono ? 22 : 44) : 0,
+    channels: a ? (mono ? 1 : 2) : 0,
+    repeat: player.repeat,
+  }
+}
+
+function start(album) {
+  player.album = album
+  player.track = 1
+  player.position = 0
+  player.paused = false
+  player.finished = false
+  player.generation++
+}
+
+function command(rest) {
+  const segs = rest.split('/')
+  const name = segs[segs.length - 1]
+  if (rest.startsWith('musicsearch/library/album/') || rest.startsWith('musicsearch/library/resume/')) {
+    const param = segs[segs.length - 1].split(':')
+    const album = albums.get(`${param[0]}/${param[1]}`)
+    if (album) start(album)
+  } else if (name === 'pause') player.paused = true
+  else if (name === 'play') player.paused = false
+  else if (name === 'stop') {
+    player.album = null
+    player.generation++
+  } else if (name === 'next') {
+    if (player.album && player.track < player.album.tracks.length) {
+      player.track++
+      player.position = 0
+    }
+  } else if (name === 'previous') {
+    if (player.album) {
+      if (player.track > 1) player.track--
+      player.position = 0
+    }
+  } else if (/^[+-]\d+$/.test(name)) player.volume = Math.max(0, Math.min(100, player.volume + Number(name)))
+  else if (/^=\d+$/.test(name)) player.volume = Math.min(100, Number(name.slice(1)))
+  else if (name.startsWith('seekpos:') && player.album) player.position = (Number(name.slice(8)) / 100) * durationOf(player.album, player.track - 1)
+  else if (name === 'seek+30' && player.album) player.position = Math.min(player.position + 30, durationOf(player.album, player.track - 1) - 1)
+  else if (name === 'seek-30' && player.album) player.position = Math.max(0, player.position - 30)
+  else if (name.startsWith('localtrack:') && player.album) {
+    player.track = Number(name.slice(11))
+    player.position = 0
+  } else if (name === 'repeaton') player.repeat = true
+  else if (name === 'repeatoff') player.repeat = false
+  else if (name === 'shuffleon') player.shuffle = true
+  else if (name === 'shuffleoff') player.shuffle = false
+}
+
+const cors = (req, res) => {
+  const origin = req.headers.origin
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST')
+  }
+}
+const json = (res, body, status = 200) => {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+  res.end(JSON.stringify(body))
+}
+const readBody = (req) =>
+  new Promise((resolve) => {
+    const chunks = []
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString() || '{}'))
+      } catch {
+        resolve({})
+      }
+    })
+  })
+
+createServer(async (req, res) => {
+  cors(req, res)
+  if (req.method === 'OPTIONS') return res.writeHead(204).end()
+  const url = new URL(req.url, 'http://localhost:5005')
+  const p = decodeURIComponent(url.pathname)
+  const log = (what) => process.env.SANDBOX_LOG && console.log(`player ${req.method} ${p} ${what ?? ''}`)
+  if (p === '/local') return json(res, localState())
+  if (p === '/state') return json(res, {})
+  if (p === '/winamp/sound') {
+    if (req.method === 'POST') {
+      const b = await readBody(req)
+      player.sound = { on: b.on === true, auto: b.auto === true, preamp: Number(b.preamp) || 0, bands: Array.from({ length: 10 }, (_, i) => Number(b.bands?.[i]) || 0), balance: Number(b.balance) || 0 }
+      log(JSON.stringify(player.sound))
+      return json(res, { ok: true })
+    }
+    return json(res, { supported: true, ...player.sound })
+  }
+  if (p.startsWith('/display/')) return json(res, { ok: true })
+  if (p.startsWith('/local/tracklist/')) {
+    const param = p.slice('/local/tracklist/'.length).split(':')
+    const album = albums.get(`${param[0]}/${param[1]}`)
+    return json(res, (album?.tracks ?? []).map((name, i) => ({ position: i + 1, name })))
+  }
+  const m = p.match(/^\/(current|[^/]+)\/(.+)$/)
+  if (m) {
+    log()
+    command(m[2])
+    return json(res, { ok: true })
+  }
+  json(res, {}, 404)
+}).listen(5005, () => console.log('pretend player: http://localhost:5005'))
+
+// ---------- the pretend box API and the display's files ----------
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.bmp': 'image/bmp', '.png': 'image/png', '.jpg': 'image/jpeg', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.txt': 'text/plain', '.webmanifest': 'application/manifest+json' }
+const send = (res, file) => {
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' })
+  createReadStream(file).pipe(res)
+}
+const isFile = (f) => existsSync(f) && statSync(f).isFile()
+const inside = (base, rel) => {
+  const f = path.join(base, rel)
+  return f.startsWith(base) ? f : ''
+}
+
+createServer((req, res) => {
+  cors(req, res)
+  if (req.method === 'OPTIONS') return res.writeHead(204).end()
+  const url = new URL(req.url, 'http://localhost:8200')
+  const p = decodeURIComponent(url.pathname)
+  if (p.startsWith('/api/')) {
+    const api = p.slice(4)
+    if (api === '/config') return json(res, { mupibox: { theme: THEME, hiddenCategories: [], settingsAccessTimer: 3, listviewTimer: 2, playerBack: 'minimize', headerBand: true, playerPanel: true } })
+    if (api === '/data-version') return json(res, { version: '1', local: '1', nasTab: false })
+    if (api === '/data' || api === '/nas/artists' || api === '/home-lists' || api === '/resume' || api === '/activeresume') return json(res, api === '/home-lists' ? {} : [])
+    if (api === '/library/artists') {
+      const category = url.searchParams.get('category')
+      const list = (ALBUMS[category] ?? []).map((a, i) => ({
+        type: 'library',
+        category,
+        artist: a.name,
+        title: a.name,
+        libraryPath: `${category}/${a.name}`,
+        libraryIsContainer: false,
+        cover: `/sandbox/cover/${i + (category === 'audiobook' ? 3 : 0)}.svg?t=${encodeURIComponent(a.name)}`,
+        artistcover: `/sandbox/cover/${i + (category === 'audiobook' ? 3 : 0)}.svg?t=${encodeURIComponent(a.name)}`,
+      }))
+      return json(res, list)
+    }
+    if (api === '/library/children') return json(res, [])
+    if (api === '/playtime') return json(res, { enabled: false })
+    if (api === '/monitor') return json(res, { monitor: 'On' })
+    if (api === '/albumstop') return json(res, { albumstop: 'Off' })
+    if (api === '/sonos') return json(res, { tts: { enabled: false } })
+    if (api === '/wlan' || api === '/wifi/status') return json(res, [])
+    return json(res, {})
+  }
+  if (p.startsWith('/sandbox/cover/')) {
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml' })
+    return res.end(coverSvg(Number.parseInt(path.basename(p), 10) || 0, url.searchParams.get('t') ?? ''))
+  }
+  if (p === '/active_theme.css') return send(res, path.join(root, 'themes', `${THEME}.css`))
+  if (p.startsWith('/theme-data/winamp/skin/')) {
+    const f = inside(SKIN_DIR, p.slice('/theme-data/winamp/skin/'.length))
+    return f && isFile(f) ? send(res, f) : res.writeHead(404).end()
+  }
+  if (p.startsWith('/theme-data/')) {
+    const f = inside(path.join(root, 'themes'), p.slice('/theme-data/'.length))
+    return f && isFile(f) ? send(res, f) : res.writeHead(404).end()
+  }
+  const file = inside(WWW, p === '/' ? 'index.html' : p.slice(1))
+  if (file && isFile(file)) return send(res, file)
+  // (a page of the display, opened or reloaded by its address)
+  if (!path.extname(p)) return send(res, path.join(WWW, 'index.html'))
+  res.writeHead(404).end()
+}).listen(8200, () => console.log(`display: http://localhost:8200  (theme ${THEME}, ${WWW})`))

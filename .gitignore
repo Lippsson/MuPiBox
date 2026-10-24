@@ -22,3 +22,6 @@ src/backend-api/build/
 
 __pycache__/
 *.pyc
+tools/winamp-sandbox/.skin/
+tools/winamp-sandbox/.skin-code.cjs
+tools/winamp-preview/out/
