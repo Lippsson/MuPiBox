@@ -5,7 +5,7 @@
 //
 //   node tools/winamp-sandbox/server.mjs [--skin file.wsz] [--theme winamp] [--www dir]
 import { build } from 'esbuild'
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import path from 'node:path'
 import { createRequire } from 'node:module'
@@ -19,18 +19,19 @@ const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`)
   return i >= 0 ? process.argv[i + 1] : fallback
 }
-const THEME = arg('theme', 'winamp')
+let THEME = arg('theme', 'winamp')
+let themeReloadAt = 0 // (the display polls /local and loads the theme again when this goes up)
 const WWW = path.resolve(arg('www', path.join(root, 'src/deploy/www/browser')))
 const SKIN_DIR = path.join(here, '.skin')
 
-// ---------- the skin: unpacked with the backend's own code ----------
+// ---------- the skin: unpacked with the backend's own code (the same as the app's upload uses) ----------
+mkdirSync(SKIN_DIR, { recursive: true })
+const skinCode = path.join(here, '.skin-code.cjs')
+await build({ entryPoints: [path.join(root, 'src/backend-api/src/eltern/winamp-skin.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: skinCode, logLevel: 'error' })
+const skinMod = await import(pathToFileURL(skinCode).href)
+const { installSkin, readSkinMeta, removeSkin } = skinMod.default ?? skinMod
 const wsz = arg('skin')
 if (wsz) {
-  mkdirSync(SKIN_DIR, { recursive: true })
-  const out = path.join(here, '.skin-code.cjs')
-  await build({ entryPoints: [path.join(root, 'src/backend-api/src/eltern/winamp-skin.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: out, logLevel: 'error' })
-  const mod = await import(pathToFileURL(out).href)
-  const { installSkin } = mod.default ?? mod
   const meta = await installSkin(readFileSync(wsz), path.basename(wsz), SKIN_DIR)
   console.log(`skin: ${meta.name} (${Object.keys(meta.files).length} bitmaps)`)
 }
@@ -120,7 +121,7 @@ function localState() {
     loadProgress: 0,
     triggerSource: 'box',
     triggerAt: 0,
-    themeReloadAt: 0,
+    themeReloadAt,
     pageReloadAt: 0,
     spotifySilentAt: 0,
     trackFile: '',
@@ -248,6 +249,10 @@ createServer(async (req, res) => {
     }
     return json(res, player.presets)
   }
+  if (p === '/display/reload-theme') {
+    themeReloadAt = Date.now()
+    return json(res, { ok: true })
+  }
   if (p.startsWith('/display/')) return json(res, { ok: true })
   if (p.startsWith('/local/tracklist/')) {
     const param = p.slice('/local/tracklist/'.length).split(':')
@@ -269,6 +274,64 @@ const send = (res, file) => {
   res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' })
   createReadStream(file).pipe(res)
 }
+const APP_DIR = path.join(root, 'src/backend-api/src/mupi-app')
+
+// The parents' app against the sandbox: a login-free session, the theme page with the skin upload working for real
+// (the backend's own unpacking), everything else empty.
+const KM = JSON.parse(readFileSync(path.join(root, 'themes/km-themes.json'), 'utf8')).themes
+async function parentsApi(req, res, url, api) {
+  const csrfOk = () => req.headers['x-mupibox-csrf'] === 'sandbox'
+  if (api === '/session') return json(res, { csrf_token: 'sandbox', open: true })
+  if (api === '/theme') {
+    if (req.method === 'POST') {
+      const b = await readBody(req)
+      if (typeof b.theme === 'string' && existsSync(path.join(root, 'themes', `${b.theme}.css`))) THEME = b.theme
+      return json(res, { ok: true, theme: THEME })
+    }
+    const names = readdirSync(path.join(root, 'themes')).filter((n) => n.endsWith('.css')).map((n) => n.slice(0, -4))
+    const labels = {}
+    const labelsDe = {}
+    for (const t of KM) {
+      labels[t.id] = t.labelEn ?? t.label
+      labelsDe[t.id] = t.label
+    }
+    return json(res, { current: THEME, available: names, labels, labelsDe, stage: true, stageAutoRead: false, headerBand: true, playerPanel: true, fullscreenGestures: true, bandOptional: [], panelOptional: [] })
+  }
+  if (api === '/display/reload-theme' || api === '/display/reload-page') {
+    themeReloadAt = Date.now()
+    return json(res, { ok: true })
+  }
+  if (api === '/display/custom-theme') return json(res, { mode: 'auto', resolved: 'dark', veil: 0, accent: null, font: 'fredoka', size: 'm', v: 0, hasPicture: false, active: THEME === 'custom' })
+  if (api === '/display/winamp-skin') {
+    if (req.method === 'GET') {
+      const meta = await readSkinMeta(SKIN_DIR)
+      return json(res, { installed: !!meta, name: meta?.name ?? null, version: meta?.version ?? null, active: THEME === 'winamp' })
+    }
+    if (!csrfOk()) return json(res, { error: 'csrf token missing or invalid' }, 403)
+    if (req.method === 'DELETE') {
+      await removeSkin(SKIN_DIR)
+      themeReloadAt = Date.now()
+      return json(res, { ok: true, reloaded: THEME === 'winamp' })
+    }
+    const chunks = []
+    for await (const c of req) chunks.push(c)
+    try {
+      const meta = await installSkin(Buffer.concat(chunks), decodeURIComponent(String(req.headers['x-skin-name'] ?? 'Skin')), SKIN_DIR)
+      themeReloadAt = Date.now()
+      console.log(`skin uploaded in the app: ${meta.name} (${Object.keys(meta.files).length} bitmaps)`)
+      return json(res, { ok: true, name: meta.name, files: Object.keys(meta.files).length, reloaded: THEME === 'winamp' })
+    } catch (err) {
+      const message = err.message
+      return json(res, { error: message }, ['not a Winamp skin', 'not a zip', 'broken zip'].includes(message) ? 422 : 500)
+    }
+  }
+  if (api.startsWith('/theme-preview/')) {
+    const f = path.join(root, 'AdminInterface/www/images', `${decodeURIComponent(api.slice('/theme-preview/'.length)).replace(/[^\w.-]/g, '')}.png`)
+    return isFile(f) ? send(res, f) : res.writeHead(404).end()
+  }
+  return json(res, {})
+}
+
 const isFile = (f) => existsSync(f) && statSync(f).isFile()
 const inside = (base, rel) => {
   const f = path.join(base, rel)
@@ -280,6 +343,15 @@ createServer((req, res) => {
   if (req.method === 'OPTIONS') return res.writeHead(204).end()
   const url = new URL(req.url, 'http://localhost:8200')
   const p = decodeURIComponent(url.pathname)
+  if (p.startsWith('/api/app/')) return parentsApi(req, res, url, p.slice('/api/app'.length))
+  if (p.startsWith('/app')) {
+    // the parents' app: its files as they are in the source (nothing to build)
+    const rel = p === '/app' || p === '/app/' ? 'index.html' : p.slice('/app/'.length)
+    const f = inside(APP_DIR, rel)
+    if (f && isFile(f)) return send(res, f)
+    if (!path.extname(rel)) return send(res, path.join(APP_DIR, 'index.html'))
+    return res.writeHead(404).end()
+  }
   if (p.startsWith('/api/')) {
     const api = p.slice(4)
     if (api === '/config') return json(res, { mupibox: { theme: THEME, hiddenCategories: [], settingsAccessTimer: 3, listviewTimer: 2, playerBack: 'minimize', headerBand: true, playerPanel: true } })
