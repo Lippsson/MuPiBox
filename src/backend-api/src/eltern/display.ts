@@ -247,7 +247,7 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       const output = (await dsiOutput()) as string
       const files = dsiConfig(output, dsiRotation)
       for (const [path, text] of [[DSI_SCREEN_CONF, files?.screen], [DSI_TOUCH_CONF, files?.touch]] as const) {
-        if (text === undefined) {
+        if (!text) {
           await run('sudo', ['rm', '-f', path])
           continue
         }

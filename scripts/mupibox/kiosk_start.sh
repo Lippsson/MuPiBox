@@ -20,6 +20,19 @@ else
 	[ ${#COLOR} -eq 6 ] && xsetroot -solid "#${COLOR}" 2>/dev/null
 fi
 
+# A mirrored display on the ribbon cable (app: Display > Drehung, mupibox.dsiRotation 0x10000 / 0x20000): the X server's
+# own option for it (Monitor "Reflect") is ignored by the KMS driver, so xrandr mirrors it here. Turning is done by X's
+# configuration (/etc/X11/xorg.conf.d/20-mupibox-rotate.conf), the touch's turn and mirror by its own file.
+case "$(jq -r '.mupibox.dsiRotation // "0"' /etc/mupibox/mupiboxconfig.json 2>/dev/null)" in
+	0x10000) REFLECT=x ;;
+	0x20000) REFLECT=y ;;
+	*) REFLECT= ;;
+esac
+if [ -n "${REFLECT}" ]; then
+	DSI_OUT=$(xrandr 2>/dev/null | awk '/^DSI-[0-9]+ connected/ { print $1; exit }')
+	[ -n "${DSI_OUT}" ] && xrandr --output "${DSI_OUT}" --reflect "${REFLECT}" 2>/dev/null
+fi
+
 # Chromium's window came a pixel smaller than the screen (799 x 479): the X background showed as a line on the right and
 # at the bottom - with the boot screen there a light one. The window is set to the screen's size once it is shown, and
 # the background goes back to black when the page is loaded.

@@ -25,9 +25,9 @@ describe('dsi rotation', () => {
   it('90 degrees turns the screen to the right and the touch with it', () => {
     const c = dsiConfig('DSI-1', '1')
     assert.ok(c)
-    assert.match(c.screen, /Identifier "DSI-1"/)
-    assert.match(c.screen, /Option "Rotate" "right"/)
-    assert.doesNotMatch(c.screen, /Reflect/)
+    assert.match(c.screen ?? '', /Identifier "DSI-1"/)
+    assert.match(c.screen ?? '', /Option "Rotate" "right"/)
+    assert.doesNotMatch(c.screen ?? '', /Reflect/)
     assert.match(c.touch, /CalibrationMatrix" "0 1 0 -1 0 1 0 0 1"/)
   })
 
@@ -37,13 +37,13 @@ describe('dsi rotation', () => {
     assert.match(dsiConfig('DSI-2', '3')?.touch ?? '', /"0 -1 1 1 0 0 0 0 1"/)
   })
 
-  it('the mirrorings reflect and do not turn', () => {
-    const h = dsiConfig('DSI-1', '0x10000')
-    assert.match(h?.screen ?? '', /Reflect" "x"/)
-    assert.doesNotMatch(h?.screen ?? '', /Rotate/)
-    const v = dsiConfig('DSI-1', '0x20000')
-    assert.match(v?.screen ?? '', /Reflect" "y"/)
-    assert.doesNotMatch(v?.screen ?? '', /Rotate/)
+  it('a mirroring has no file for the screen (xrandr does it at the kiosk start) but a touch matrix', () => {
+    for (const r of ['0x10000', '0x20000'] as const) {
+      const c = dsiConfig('DSI-1', r)
+      assert.ok(c)
+      assert.equal(c.screen, null)
+      assert.match(c.touch, /CalibrationMatrix/)
+    }
   })
 
   it('the touch matrices move the corners as the picture moves them', () => {
