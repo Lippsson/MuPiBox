@@ -2132,6 +2132,20 @@
       },
       {
        "type": "select",
+       "label": "DSI-Drehung",
+       "key": "dsiRot",
+       "default": "Aus (Standard)",
+       "options": [
+        "Aus (Standard)",
+        "90°",
+        "180°",
+        "270°",
+        "Horizontal spiegeln",
+        "Vertikal spiegeln"
+       ]
+      },
+      {
+       "type": "select",
        "label": "LCD-Drehung",
        "key": "lcdRot",
        "default": "Aus (Standard)",

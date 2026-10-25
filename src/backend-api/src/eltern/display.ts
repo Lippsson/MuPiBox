@@ -16,6 +16,7 @@ import { episodeStateSettings } from '../episode-state'
 import { applyNightDim, nightDimmed, nightDimOf, parseNightDim } from './night-dim'
 import { CUSTOM_THEME_CSS, customThemeCss, customThemeOf } from './custom-theme'
 import { bootConfigPath } from './boot-paths'
+import { DSI_SCREEN_CONF, DSI_TOUCH_CONF, dsiConfig, dsiOutput, isDsiRotation } from './dsi-rotation'
 
 export interface DisplayDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -118,6 +119,8 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       brightness: await readBrightness().then((now) => (now === null ? null : typeof mb.displayBrightness === 'number' ? mb.displayBrightness : now)),
       nightDim: { ...nightDimOf(cfg), dimmed: nightDimmed() },
       rotation: await readRotations(),
+      // a display on the ribbon cable with the KMS driver: turned and mirrored by X (dsi-rotation.ts); null = none there
+      dsi: await dsiOutput().then((output) => (output ? { output, rotation: isDsiRotation(mb.dsiRotation) ? mb.dsiRotation : '0' } : null)),
       ttsLanguage: typeof mb.ttsLanguage === 'string' ? mb.ttsLanguage : 'en',
       ttsLanguages: langs.map((l) => ({ code: String(l['iso639-1'] ?? ''), name: String(l.Language ?? '') })).filter((l) => l.code),
     })
@@ -201,6 +204,18 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       }
     }
 
+    // the DSI display's turn / mirroring (KMS): the files for X from it, then the kiosk starts again (X reads them at its start)
+    let dsiRotation: string | undefined
+    if (body.dsiRotation !== undefined) {
+      if (!isDsiRotation(body.dsiRotation)) return bad('dsiRotation')
+      if (!(await dsiOutput())) {
+        res.status(409).json({ error: 'no DSI display' })
+        return
+      }
+      dsiRotation = body.dsiRotation
+      mb.dsiRotation = dsiRotation
+    }
+
     if (Object.keys(mb).length || Object.keys(chromium).length) {
       await deps.updateMupiboxConfig((cfg) => {
         cfg.mupibox = { ...((cfg.mupibox as Record<string, unknown>) ?? {}), ...mb }
@@ -227,6 +242,26 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     for (const [key, value] of Object.entries(rotation)) {
       await run('sudo', ['su', '-', 'dietpi', '-c', `. /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT '${key}=' '${key}=${value}' ${bootConfig}`], 30000)
       result.reboot = true
+    }
+    if (dsiRotation !== undefined && isDsiRotation(dsiRotation)) {
+      const output = (await dsiOutput()) as string
+      const files = dsiConfig(output, dsiRotation)
+      for (const [path, text] of [[DSI_SCREEN_CONF, files?.screen], [DSI_TOUCH_CONF, files?.touch]] as const) {
+        if (text === undefined) {
+          await run('sudo', ['rm', '-f', path])
+          continue
+        }
+        const tmp = `/tmp/mupibox-dsi-${process.pid}-${path.split('/').pop()}`
+        await fsp.writeFile(tmp, text)
+        const done = await run('sudo', ['install', '-m', '644', '-o', 'root', '-g', 'root', tmp, path])
+        await fsp.unlink(tmp).catch(() => undefined)
+        if (!done.ok) {
+          res.status(500).json({ error: 'write_failed' })
+          return
+        }
+      }
+      detached('sudo -i -u dietpi bash -c "setsid nohup /usr/local/bin/mupibox/restart_kiosk.sh >/dev/null 2>&1 < /dev/null &"')
+      result.restartKiosk = true
     }
     if (tts !== undefined) {
       // the player reads the language from its own config at its start: spoken names of the old language go

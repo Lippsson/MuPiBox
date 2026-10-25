@@ -26,6 +26,8 @@ Mit **Abends dunkler** wird das Display abends dunkler und morgens wieder normal
 
 Steht das Display auf dem Kopf oder quer, drehst du das Bild. Für ein **Display am HDMI-Anschluss** wählst du aus, 90°, 180°, 270°, horizontal oder vertikal spiegeln. Für ein **Display am Flachbandkabel (DSI/LCD)** gibt es (zugeklappt) **LCD-Drehung** und **Display-LCD-Drehung**, jeweils aus oder 180°. Die Drehung gilt nach einem Neustart der Box.
 
+Hat die Box ein **Display am Flachbandkabel (DSI)** mit dem KMS-Treiber (`vc4-kms-v3d`, bei neueren DietPi-Installationen der Standard) und erkennt sie es, erscheint darüber ein eigenes Feld **Display am Flachbandkabel (DSI)** mit denselben sechs Kacheln wie beim HDMI-Display: 90°, 180°, 270°, horizontal oder vertikal spiegeln. Das Bild wird vom Display-Server gedreht und gespiegelt, und die **Berührung dreht und spiegelt mit**, damit ein Tipp dort landet, wo das Bild ist. Nach dem Ändern startet das Display gleich neu, ein Neustart der Box ist nicht nötig. Gedreht wird, wie das Display von Haus aus zeigt: Ein Display, das hochkant eingebaut ist, bringst du mit 90° oder 270° ins Querformat.
+
 ## Auflösung
 
 Der Standard ist **800 × 480** Pixel (die Größe der üblichen 7-Zoll-Touch-Displays). Unter **Größe** wählst du eine der üblichen Größen oder **Eigene …** und trägst dann **Breite** und **Höhe** ein. Mit **Auflösung übernehmen** startet das Display gleich neu.

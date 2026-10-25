@@ -6968,6 +6968,7 @@ async function loadDisplaySettings() {
   if (o.brightness != null) state.values.set('bright', o.brightness)
   state.values.set('dispOff', Number(disp.power.idleDisplayOff ?? disp.power.timeout?.idleDisplayOff ?? 10))
   state.values.set('hdmiRot', rotLabel(HDMI_ROT, o.rotation.display_hdmi_rotate))
+  state.values.set('dsiRot', rotLabel(HDMI_ROT, o.dsi?.rotation ?? '0'))
   state.values.set('lcdRot', rotLabel(LCD_ROT, o.rotation.lcd_rotate))
   state.values.set('dlcdRot', rotLabel(LCD_ROT, o.rotation.display_lcd_rotate))
   state.values.set('resX', String(o.resX))
@@ -10661,6 +10662,11 @@ const CONTROLLERS = {
           help: 'Gilt nach einem Neustart der Box.',
           items: [
             { type: 'html', html: `<div class="field"><label>Display am HDMI-Anschluss</label>${rotTiles('hdmiRot', HDMI_ROT)}</div>` },
+            // (a display on the ribbon cable that the box found, with the KMS driver: turned and mirrored like the HDMI one -
+            // by the display server, so the kiosk starts again at once instead of after a restart of the box)
+            ...(disp.opts?.dsi
+              ? [{ type: 'html', html: `<div class="field"><label>Display am Flachbandkabel (DSI) – dreht und spiegelt auch die Berührung</label>${rotTiles('dsiRot', HDMI_ROT)}<small>Das Display startet nach dem Ändern gleich neu. Gedreht wird das Bild, wie es das Display von Haus aus zeigt.</small></div>` }]
+              : []),
             {
               type: 'html',
               html: `<details class="more"><summary>Display am Flachbandkabel (DSI/LCD)</summary><div class="field"><label>LCD-Drehung</label>${rotTiles('lcdRot', LCD_ROT)}</div>
@@ -10703,6 +10709,7 @@ const CONTROLLERS = {
         const rl = await api(`${API}/display/reload-page`, { method: 'POST', body: {} })
         return toast(`${Number(v) === 0 ? 'Display bleibt an' : `Display aus nach ${v} min`}. ${rl.body?.ok ? 'Das Display lädt neu.' : ''}`.trim())
       }
+      if (key === 'dsiRot') return saveDisplayOptions({ dsiRotation: rotValue(HDMI_ROT, v) }, 'Drehung gespeichert')
       const rot = { hdmiRot: ['display_hdmi_rotate', HDMI_ROT], lcdRot: ['lcd_rotate', LCD_ROT], dlcdRot: ['display_lcd_rotate', LCD_ROT] }[key]
       if (rot) return saveDisplayOptions({ rotation: { [rot[0]]: rotValue(rot[1], v) } }, 'Drehung gespeichert – gilt nach einem Neustart')
       if (key === 'resPreset') {

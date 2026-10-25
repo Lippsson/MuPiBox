@@ -26,6 +26,8 @@ With **Evening dimming** the display gets darker in the evening and normally bri
 
 If the display stands upside down or sideways, you rotate the picture. For a **Display on the HDMI port** you choose off, 90°, 180°, 270°, mirror horizontally or vertically. For a **Display on the ribbon cable (DSI/LCD)** there are (folded) **LCD rotation** and **Display LCD rotation**, each off or 180°. The rotation applies after a restart of the box.
 
+If the box has a **display on the ribbon cable (DSI)** with the KMS driver (`vc4-kms-v3d`, the default on newer DietPi installations) and finds it, a field of its own appears above: **Display on the ribbon cable (DSI)**, with the same six tiles as for the HDMI display: 90°, 180°, 270°, mirror horizontally or vertically. The picture is turned and mirrored by the display server, and the **touch turns and mirrors with it**, so a tap lands where the picture is. After the change the display restarts at once; the box does not need a restart. The picture is turned relative to how the display shows it by default: a display built in upright is brought to landscape with 90° or 270°.
+
 ## Resolution
 
 The default is **800 × 480** pixels (the size of the usual 7-inch touch displays). Under **Size** you choose one of the usual sizes or **Custom …** and then enter **Width** and **Height**. With **Apply resolution** the display restarts at once.
