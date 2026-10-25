@@ -10,6 +10,8 @@ import { WinampService } from './winamp.service'
 const HALF = 960
 const SCREEN_H = 480
 const SCALE = HALF / MAIN_W
+// the compact layout (a display like 800 x 480): the bar below the window that changes between player, equaliser, playlist and library
+const NAV_H = 64
 
 /**
  * Mounts the Winamp windows of the skin: the main window on the left half (always), the equaliser or the playlist on the
@@ -25,7 +27,17 @@ const SCALE = HALF / MAIN_W
     mupi-winamp-shell .wa-half { position: absolute; top: 0; width: 960px; height: 480px; overflow: hidden; pointer-events: auto; background: #000; }
     mupi-winamp-shell .wa-half-left { left: 0; }
     mupi-winamp-shell .wa-half-right { left: 960px; }
-    mupi-winamp-shell .wa-half-right.wa-hidden { display: none; }
+    mupi-winamp-shell .wa-half.wa-hidden { display: none; }
+    mupi-winamp-shell.wa-compact { width: 100vw; height: 100vh; }
+    mupi-winamp-shell.wa-compact .wa-half { left: 0; top: 0; width: 100%; height: calc(100% - 64px); }
+    mupi-winamp-shell .wa-nav { position: absolute; left: 0; bottom: 0; width: 100%; height: 64px; display: flex; pointer-events: auto; background: var(--wa-nav-bg, #000); border-top: 2px solid var(--wa-nav-line, #3c3c6e); }
+    mupi-winamp-shell .wa-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--wa-nav-fg, #9a9ac8); font: 600 13px Arial, sans-serif; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; border-right: 1px solid var(--wa-nav-line, #3c3c6e); }
+    mupi-winamp-shell .wa-nav-btn:last-child { border-right: 0; }
+    mupi-winamp-shell .wa-nav-btn svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    mupi-winamp-shell .wa-nav-btn svg .f { fill: currentColor; stroke: none; }
+    mupi-winamp-shell .wa-nav-btn.wa-nav-on { background: var(--wa-nav-on-bg, #3c3c6e); color: var(--wa-nav-on-fg, #fff); }
+    mupi-winamp-shell .wa-nav-btn:active { filter: brightness(1.4); }
+    mupi-winamp-shell.wa-compact .wa-toast { bottom: 76px; max-width: 90vw; }
     mupi-winamp-shell .wa-message { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px; text-align: center; color: #c8c8e6; font: 28px/1.3 Arial, sans-serif; }
     mupi-winamp-shell .wa-message small { font-size: 20px; color: #8a8ab0; }
     mupi-winamp-shell .wa-knob-fallback { background: linear-gradient(#d8d8d8, #8a8a8a); border: 1px solid #333; }
@@ -53,6 +65,9 @@ const SCALE = HALF / MAIN_W
 export class WinampShellComponent implements OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement
   private readonly svc = inject(WinampService)
+  private readonly compact = this.svc.layout === 'compact'
+  private nav: HTMLElement | undefined
+  private readonly navButtons = new Map<string, HTMLElement>()
   private readonly left = el('wa-half wa-half-left')
   private readonly right = el('wa-half wa-half-right wa-hidden')
   private main: WinampMainView | undefined
@@ -63,6 +78,12 @@ export class WinampShellComponent implements OnDestroy {
 
   constructor() {
     this.host.append(this.left, this.right)
+    if (this.compact) {
+      this.host.classList.add('wa-compact')
+      this.host.appendChild(this.makeNav())
+      // the app's pages are drawn at the display's height and scaled to what the bar leaves (themes/winamp.css)
+      document.body.style.setProperty('--wa-f', ((window.innerHeight - NAV_H) / window.innerHeight).toFixed(4))
+    }
     // (the windows are built again for another skin; nothing else in the page depends on them)
     effect(() => {
       const skin = this.svc.skin()
@@ -80,7 +101,14 @@ export class WinampShellComponent implements OnDestroy {
     })
     effect(() => {
       const view = this.svc.right()
-      this.right.classList.toggle('wa-hidden', view === 'lib')
+      if (this.compact) {
+        // one window at a time: the player, or the equaliser / the playlist; the library is the app's own pages under them
+        this.left.classList.toggle('wa-hidden', view !== 'player')
+        this.right.classList.toggle('wa-hidden', view !== 'eq' && view !== 'pl')
+        for (const [name, button] of this.navButtons) button.classList.toggle('wa-nav-on', name === view)
+      } else {
+        this.right.classList.toggle('wa-hidden', view === 'lib')
+      }
       this.eqView?.node.style.setProperty('display', view === 'eq' ? '' : 'none')
       this.plView?.node.style.setProperty('display', view === 'pl' ? '' : 'none')
       if (view === 'pl') setTimeout(() => this.plView?.scrollToCurrent(), 0)
@@ -117,13 +145,19 @@ export class WinampShellComponent implements OnDestroy {
       this.left.appendChild(note)
       return
     }
+    // the room for the windows: the half of the display (wide) or the display above the bar (compact)
+    const areaW = this.compact ? window.innerWidth : HALF
+    const areaH = this.compact ? window.innerHeight - NAV_H : SCREEN_H
     const place = (node: HTMLElement, h: number, host: HTMLElement) => {
-      node.style.transform = `scale(${SCALE})`
-      node.style.left = '0px'
-      // (at the bottom edge of the screen)
-      node.style.top = `${Math.round(SCREEN_H - h * SCALE)}px`
+      // (a window is 275 skin pixels wide; compact: as large as the room allows, wide: the half's width)
+      const scale = this.compact ? Math.min(areaW / MAIN_W, areaH / h) : SCALE
+      node.style.transform = `scale(${scale})`
+      node.style.left = `${Math.round((areaW - MAIN_W * scale) / 2)}px`
+      // (at the bottom edge of the room)
+      node.style.top = `${Math.round(areaH - h * scale)}px`
       host.appendChild(node)
     }
+    this.styleNav(skin)
     const svc = this.svc
     this.main = new WinampMainView(skin, {
       prev: () => svc.prev(),
@@ -167,15 +201,44 @@ export class WinampShellComponent implements OnDestroy {
       eject: () => svc.showLibrary(),
       close: () => svc.setRight('pl'),
     })
-    this.plView.node.style.transform = `scale(${SCALE})`
-    this.plView.node.style.left = '0px'
-    this.plView.node.style.top = `${Math.round((SCREEN_H - PL_H * SCALE) / 2)}px`
-    this.right.appendChild(this.plView.node)
+    place(this.plView.node, PL_H, this.right)
     this.main.update(svc.main())
     this.plView.setEntries(svc.entries(), svc.currentPosition())
     const view = svc.right()
     this.eqView.node.style.display = view === 'eq' ? '' : 'none'
     this.plView.node.style.display = view === 'pl' ? '' : 'none'
+  }
+
+  // ---------- the bar of the compact layout ----------
+
+  private makeNav(): HTMLElement {
+    const icon = (body: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`
+    const items: [string, string, string][] = [
+      ['player', 'Player', icon('<rect x="3" y="5" width="18" height="14" rx="2"/><path class="f" d="M10 9l5 3-5 3z"/>')],
+      ['eq', 'EQ', icon('<path d="M6 4v16M12 4v16M18 4v16"/><circle class="f" cx="6" cy="14" r="2"/><circle class="f" cx="12" cy="8" r="2"/><circle class="f" cx="18" cy="15" r="2"/>')],
+      ['pl', 'Playlist', icon('<path d="M4 6h16M4 12h16M4 18h10"/>')],
+      ['lib', 'Library', icon('<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>')],
+    ]
+    const nav = el('wa-nav')
+    for (const [view, label, svg] of items) {
+      const button = el('wa-nav-btn')
+      button.innerHTML = `${svg}<span>${label}</span>`
+      button.addEventListener('click', () => this.svc.show(view as 'player' | 'eq' | 'pl' | 'lib'))
+      nav.appendChild(button)
+      this.navButtons.set(view, button)
+    }
+    this.nav = nav
+    return nav
+  }
+
+  /** The bar in the skin's playlist colours. */
+  private styleNav(skin: Skin): void {
+    const c = skin.meta.pledit
+    this.nav?.style.setProperty('--wa-nav-bg', c.normalBg)
+    this.nav?.style.setProperty('--wa-nav-fg', c.normal)
+    this.nav?.style.setProperty('--wa-nav-line', c.selectedBg)
+    this.nav?.style.setProperty('--wa-nav-on-bg', c.selectedBg)
+    this.nav?.style.setProperty('--wa-nav-on-fg', c.current)
   }
 
   // ---------- the menu (the logo), the clutter bar and little messages ----------
@@ -235,10 +298,12 @@ export class WinampShellComponent implements OnDestroy {
   }
 
   private toast(text: string): void {
-    this.left.querySelector('.wa-toast')?.remove()
+    // (compact: the left window is hidden while the equaliser or the playlist shows - the message goes on the page itself)
+    const parent = this.compact ? this.host : this.left
+    parent.querySelector('.wa-toast')?.remove()
     const t = el('wa-toast')
     t.textContent = text
-    this.left.appendChild(t)
+    parent.appendChild(t)
     clearTimeout(this.toastTimer)
     this.toastTimer = setTimeout(() => t.remove(), 2800)
   }

@@ -19,7 +19,8 @@ import type { MainState, PlayState } from './winamp-main-view'
 import type { PlaylistEntry } from './winamp-playlist-view'
 import { type SkinMeta, Skin } from './winamp-skin'
 
-export type WinampRight = 'lib' | 'pl' | 'eq'
+/** what is shown: the library (the app's pages), the playlist, the equaliser - and, only in the compact layout, the player */
+export type WinampRight = 'lib' | 'pl' | 'eq' | 'player'
 
 const SKIN_BASE = '/theme-data/winamp/skin'
 
@@ -47,12 +48,23 @@ export class WinampService {
   private readonly background = inject(BackgroundPlaybackService)
   private readonly currentMedia = inject(CurrentMediaService)
 
-  /** the theme is chosen and the display is the 1920 x 480 one it is made for (anything else shows the plain dark look) */
-  readonly active = computed(() => this.kmTheme.isWinamp() && this.fits)
-  private readonly fits = window.innerWidth >= 1800 && window.innerHeight <= 600
+  /**
+   * 'wide': the 1920 x 480 display - the player on the left half, the equaliser / the playlist / the library on the right.
+   * 'compact': a display like 800 x 480 (also the 1280 x 720 and 1920 x 1080 ones, which the app draws at that size) -
+   * one window at a time, with a bar below to change between player, equaliser, playlist and library.
+   * null: another shape (a portrait display): the plain dark look.
+   */
+  readonly layout: 'wide' | 'compact' | null =
+    window.innerWidth >= 1800 && window.innerHeight <= 600
+      ? 'wide'
+      : window.innerWidth >= 600 && window.innerWidth < 1800 && window.innerHeight >= 360 && window.innerHeight <= 720
+        ? 'compact'
+        : null
+  /** the theme is chosen and the display has a shape the layouts are made for */
+  readonly active = computed(() => this.kmTheme.isWinamp() && this.layout !== null)
 
-  /** what the right half shows */
-  readonly right = signal<WinampRight>('lib')
+  /** what is shown: wide - what the right half shows (the player is always on the left); compact - the one window */
+  readonly right = signal<WinampRight>(this.layout === 'compact' ? 'player' : 'lib')
   /** the skin; null while it loads or when none is installed */
   readonly skin = signal<Skin | null>(null)
   readonly skinLoaded = signal(false)
@@ -223,7 +235,8 @@ export class WinampService {
     })
     effect(() => {
       const on = this.active()
-      document.body.classList.toggle('wa-on', on)
+      document.body.classList.toggle('wa-on', on && this.layout === 'wide')
+      document.body.classList.toggle('wa-compact', on && this.layout === 'compact')
     })
     // the skin: when the theme comes on and whenever the app says the theme changed (a new upload)
     effect(() => {
@@ -253,8 +266,9 @@ export class WinampService {
     this.router.events.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd)).subscribe((e) => {
       if (!this.active()) return
       if (e.urlAfterRedirects.startsWith('/player')) {
-        if (this.right() === 'lib') this.right.set('pl')
-      } else if (this.right() !== 'lib') {
+        // (wide: the playlist beside the player; compact: the player itself)
+        if (this.right() === 'lib') this.right.set(this.layout === 'compact' ? 'player' : 'pl')
+      } else if (this.layout === 'wide' && this.right() !== 'lib') {
         this.right.set('lib')
       }
     })
@@ -289,16 +303,21 @@ export class WinampService {
 
   /** The EQ and PL buttons (and the X of the windows): the window opens; the same again closes it - back to the library. */
   setRight(view: WinampRight): void {
-    const next = view === this.right() ? 'lib' : view
-    this.right.set(next)
-    if (next === 'lib' && this.router.url.startsWith('/player')) this.nav.back()
+    // (wide: the library is what is under the windows; compact: the player is)
+    const next = view === this.right() ? (this.layout === 'compact' ? 'player' : 'lib') : view
+    this.show(next)
+  }
+
+  /** The window named, whatever is shown (the bar of the compact layout). Leaving the player's page for the library lets the music go on. */
+  show(view: WinampRight): void {
+    this.right.set(view)
+    if (view === 'lib' && this.router.url.startsWith('/player')) this.nav.back()
   }
 
   /** Eject / ADD: the library, to start something else. */
   showLibrary(): void {
-    this.right.set('lib')
-    if (this.router.url.startsWith('/player')) this.nav.back()
-    else if (!this.router.url.startsWith('/home')) void this.router.navigate(['/home'])
+    this.show('lib')
+    if (!this.router.url.startsWith('/home') && !this.router.url.startsWith('/player')) void this.router.navigate(['/home'])
   }
 
   // ---------- the player ----------
