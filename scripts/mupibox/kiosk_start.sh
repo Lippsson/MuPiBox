@@ -42,8 +42,23 @@ fi
 		sleep 0.5
 		j=$((j + 1))
 	done
+	# (Display > Auflösung > "Seite nur in dieser Größe zeigen": the window is as large as chromium.resX / resY and sits in the
+	# middle of the screen, the rest stays black - else it is the screen's size)
+	set -- $(xdotool getdisplaygeometry 2>/dev/null)
+	SCREEN_W=${1:-0}
+	SCREEN_H=${2:-0}
+	LIMIT=$(jq -r '.chromium.limitWindow // false' /etc/mupibox/mupiboxconfig.json 2>/dev/null)
+	WIN_W=$(jq -r '.chromium.resX // 0' /etc/mupibox/mupiboxconfig.json 2>/dev/null)
+	WIN_H=$(jq -r '.chromium.resY // 0' /etc/mupibox/mupiboxconfig.json 2>/dev/null)
 	for w in $(xdotool search --onlyvisible --class chromium 2>/dev/null); do
-		xdotool windowsize "$w" $(xdotool getdisplaygeometry) 2>/dev/null
+		if [ "${LIMIT}" = "true" ] && [ "${WIN_W}" -gt 0 ] 2>/dev/null && [ "${WIN_H}" -gt 0 ] 2>/dev/null && [ "${SCREEN_W}" -gt 0 ]; then
+			[ "${WIN_W}" -gt "${SCREEN_W}" ] && WIN_W=${SCREEN_W}
+			[ "${WIN_H}" -gt "${SCREEN_H}" ] && WIN_H=${SCREEN_H}
+			xdotool windowsize "$w" "${WIN_W}" "${WIN_H}" 2>/dev/null
+			xdotool windowmove "$w" $(((SCREEN_W - WIN_W) / 2)) $(((SCREEN_H - WIN_H) / 2)) 2>/dev/null
+		else
+			xdotool windowsize "$w" $(xdotool getdisplaygeometry) 2>/dev/null
+		fi
 	done
 	sleep 10
 	xsetroot -solid black 2>/dev/null

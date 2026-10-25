@@ -32,6 +32,8 @@ If the box has a **display on the ribbon cable (DSI)** with the KMS driver (`vc4
 
 The default is **800 × 480** pixels (the size of the usual 7-inch touch displays). Under **Size** you choose one of the usual sizes or **Custom …** and then enter **Width** and **Height**. With **Apply resolution** the display restarts at once.
 
+The resolution does not change the screen itself; the page always fills the whole screen. If it should appear only at the set size, for example 800 × 480 on a wider display, switch on **Show the page only at this size**: the page then sits in the middle and the rest stays black.
+
 If the resolution is larger than 800 × 480, the box enlarges the interface to match: the layout and the themes stay the same, text, symbols and covers are drawn at full sharpness. With the Raspberry Pi Touch Display 2 (1280 × 720) that is 1.5 times. So set the real resolution of your display here. Background pictures for the theme “custom” fit best at exactly this size ([Covers and themes](../bedienung/cover-und-themes.md)).
 
 ## Live display

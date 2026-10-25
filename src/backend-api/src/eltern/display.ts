@@ -115,6 +115,8 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       ...episodeStateSettings(mb),
       resX: num(chromium.resX, 200, 7680) ?? 800,
       resY: num(chromium.resY, 200, 4320) ?? 480,
+      // the page only in that size, in the middle of the screen (the rest stays black); else it fills the screen
+      limitWindow: chromium.limitWindow === true,
       // (the normal brightness, not the one of the evening: that is lower while "Abends dunkler" dims)
       brightness: await readBrightness().then((now) => (now === null ? null : typeof mb.displayBrightness === 'number' ? mb.displayBrightness : now)),
       nightDim: { ...nightDimOf(cfg), dimmed: nightDimmed() },
@@ -172,6 +174,10 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       if (v === undefined) return bad(key)
       // (the resolution stays text in the config, as the admin interface stores it and chromium-autostart.sh reads it)
       target[key] = target === chromium ? String(v) : v
+    }
+    if (body.limitWindow !== undefined) {
+      if (typeof body.limitWindow !== 'boolean') return bad('limitWindow')
+      chromium.limitWindow = body.limitWindow
     }
     let brightness: number | undefined
     if (body.brightness !== undefined) {
@@ -268,7 +274,7 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       detached('sudo rm -f /home/dietpi/MuPiBox/tts_files/*.mp3; sudo /usr/local/bin/mupibox/setting_update.sh >/dev/null 2>&1; PM2=$(command -v pm2 || echo /usr/local/bin/pm2); "$PM2" restart spotify-control >/dev/null 2>&1')
       result.restartPlayer = true
     }
-    if (chromium.resX !== undefined || chromium.resY !== undefined) {
+    if (chromium.resX !== undefined || chromium.resY !== undefined || chromium.limitWindow !== undefined) {
       // the window size of the kiosk is set when chromium starts
       // (as the admin interface: with dietpi's login environment, so chromium finds its display)
       detached('sudo /usr/local/bin/mupibox/setting_update.sh >/dev/null 2>&1; sudo -i -u dietpi bash -c "setsid nohup /usr/local/bin/mupibox/restart_kiosk.sh >/dev/null 2>&1 < /dev/null &"')

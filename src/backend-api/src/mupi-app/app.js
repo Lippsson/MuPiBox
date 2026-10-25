@@ -6973,6 +6973,7 @@ async function loadDisplaySettings() {
   state.values.set('dlcdRot', rotLabel(LCD_ROT, o.rotation.display_lcd_rotate))
   state.values.set('resX', String(o.resX))
   state.values.set('resY', String(o.resY))
+  state.values.set('resLimit', o.limitWindow === true)
   const nd = o.nightDim ?? {}
   state.values.set('ndOn', nd.enabled === true)
   state.values.set('ndFrom', nd.from ?? '19:00')
@@ -10680,6 +10681,7 @@ const CONTROLLERS = {
           items: [
             { type: 'select', label: 'Größe', key: 'resPreset', options: [...RES_PRESETS.map(([l]) => l), 'Eigene …'] },
             { type: 'pair', dep: 'resCustom', keep: true, items: [it('resX', { label: 'Breite', unit: 'px' }), it('resY', { label: 'Höhe', unit: 'px' })] },
+            { type: 'toggle', key: 'resLimit', label: 'Seite nur in dieser Größe zeigen', help: 'Die Seite sitzt dann in der Mitte des Bildschirms, der Rest bleibt schwarz. Ohne diese Option füllt die Seite immer den ganzen Bildschirm.' },
             { type: 'buttons', buttons: [['Auflösung übernehmen', 'primary', 'toast:Gespeichert']] },
           ],
         },
@@ -10728,9 +10730,10 @@ const CONTROLLERS = {
         const resX = Number(state.values.get('resX'))
         const resY = Number(state.values.get('resY'))
         if (!Number.isInteger(resX) || !Number.isInteger(resY) || resX < 200 || resY < 200) return toast('Bitte Breite und Höhe in Pixeln eintragen', 'info')
-        if (resX === disp.opts.resX && resY === disp.opts.resY) return toast('Nichts geändert', 'info')
-        if (!(await ask('Auflösung ändern', `Das Display startet mit ${resX} × ${resY} Pixeln neu. Das dauert ein paar Sekunden.`, 'Übernehmen'))) return
-        if (await saveDisplayOptions({ resX, resY }, 'Auflösung gespeichert')) Object.assign(disp.opts, { resX, resY })
+        const limitWindow = !!state.values.get('resLimit')
+        if (resX === disp.opts.resX && resY === disp.opts.resY && limitWindow === (disp.opts.limitWindow === true)) return toast('Nichts geändert', 'info')
+        if (!(await ask('Auflösung ändern', `Das Display startet mit ${resX} × ${resY} Pixeln neu${limitWindow ? ' und zeigt die Seite nur in dieser Größe' : ''}. Das dauert ein paar Sekunden.`, 'Übernehmen'))) return
+        if (await saveDisplayOptions({ resX, resY, limitWindow }, 'Auflösung gespeichert')) Object.assign(disp.opts, { resX, resY, limitWindow })
       },
     },
   },

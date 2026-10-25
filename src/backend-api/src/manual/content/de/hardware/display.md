@@ -32,6 +32,8 @@ Hat die Box ein **Display am Flachbandkabel (DSI)** mit dem KMS-Treiber (`vc4-km
 
 Der Standard ist **800 × 480** Pixel (die Größe der üblichen 7-Zoll-Touch-Displays). Unter **Größe** wählst du eine der üblichen Größen oder **Eigene …** und trägst dann **Breite** und **Höhe** ein. Mit **Auflösung übernehmen** startet das Display gleich neu.
 
+Die Auflösung ändert nicht den Bildschirm selbst, die Seite füllt immer den ganzen Bildschirm. Soll sie nur in der eingestellten Größe erscheinen, etwa 800 × 480 auf einem breiteren Display, schalte **Seite nur in dieser Größe zeigen** ein: Die Seite sitzt dann in der Mitte, der Rest bleibt schwarz.
+
 Ist die Auflösung größer als 800 × 480, vergrößert die Box die Oberfläche passend: Aufbau und Themes bleiben gleich, Schrift, Symbole und Cover werden in voller Schärfe gezeichnet. Beim Raspberry Pi Touch Display 2 (1280 × 720) ist das das 1,5-Fache. Stell hier deshalb die echte Auflösung deines Displays ein. Hintergrundbilder für das Theme „custom“ passen am besten in genau dieser Größe ([Cover und Themes](../bedienung/cover-und-themes.md)).
 
 ## Display live
