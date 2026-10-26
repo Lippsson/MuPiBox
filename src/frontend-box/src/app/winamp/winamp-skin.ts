@@ -247,14 +247,17 @@ export class WaClock {
   private readonly digits: HTMLElement[] = []
   private readonly minus: HTMLElement
   private last = ''
+  /** numbers.bmp, or nums_ex.bmp (0-9, a blank and a "-" of its own) for a skin that only has that one, as Winamp does */
+  private readonly file: string
 
   constructor(private readonly skin: Skin) {
     this.node = el('wa-clock', { left: '36px', top: '26px', width: '59px', height: '13px' })
-    // the minus is a piece of the middle bar of the "2" (as in Winamp: numbers.bmp has no sign of its own)
-    this.minus = sprite(skin, 'numbers.bmp', [20, 6, 5, 1], 1, 6)
+    this.file = !skin.has('numbers.bmp') && skin.has('nums_ex.bmp') ? 'nums_ex.bmp' : 'numbers.bmp'
+    // the minus is a piece of the middle bar of the "2" (numbers.bmp has no sign of its own); nums_ex.bmp has one
+    this.minus = this.file === 'nums_ex.bmp' ? sprite(skin, this.file, [99, 0, 9, 13], 0, 0) : sprite(skin, this.file, [20, 6, 5, 1], 1, 6)
     this.node.appendChild(this.minus)
     for (const x of [12, 24, 42, 54]) {
-      const d = sprite(skin, 'numbers.bmp', [0, 0, 9, 13], x, 0)
+      const d = sprite(skin, this.file, [0, 0, 9, 13], x, 0)
       this.digits.push(d)
       this.node.appendChild(d)
     }
@@ -269,7 +272,7 @@ export class WaClock {
     this.last = key
     this.minus.style.visibility = remaining ? 'visible' : 'hidden'
     const values = [Math.floor(mm / 10), mm % 10, Math.floor(ss / 10), ss % 10]
-    values.forEach((v, i) => setSprite(this.skin, this.digits[i], 'numbers.bmp', [v * 9, 0, 9, 13]))
+    values.forEach((v, i) => setSprite(this.skin, this.digits[i], this.file, [v * 9, 0, 9, 13]))
   }
 }
 
