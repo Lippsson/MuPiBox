@@ -6338,7 +6338,7 @@ function winampCard() {
     }
     <div class="btns"><button class="btn sm primary" type="button" id="wa-pick">${icon('up', 18)}Skin hochladen (.wsz)</button></div>
     <input type="file" id="wa-file" accept=".wsz,.zip,application/zip" hidden>
-    <small>Skins gibt es zum Beispiel im Winamp Skin Museum.</small></section>`
+    <small>Mehr Skins zum Herunterladen: <a href="https://skins.webamp.org/" target="_blank" rel="noopener" translate="no">Winamp Skin Museum</a></small></section>`
 }
 
 /* The picture of a skin: main.bmp alone is only the background - the buttons, sliders, clock and title bar are in the skin's
