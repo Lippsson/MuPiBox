@@ -9,7 +9,8 @@ import { WinampService } from './winamp.service'
 // A window is 275 skin pixels wide; the half of the 1920 x 480 display is 960 wide
 const HALF = 960
 const SCREEN_H = 480
-const SCALE = HALF / MAIN_W
+// wide layout: the windows are drawn at a whole-number factor (3 on the half of a 1920 x 480 display: 825 x 348 pixels)
+const WIDE_SCALE = Math.max(1, Math.floor(Math.min(HALF / MAIN_W, SCREEN_H / MAIN_H)))
 // the compact layout (a display like 800 x 480): the bar below the window that changes between player, equaliser, playlist and library
 const NAV_H = 64
 
@@ -149,8 +150,9 @@ export class WinampShellComponent implements OnDestroy {
     const areaW = this.compact ? window.innerWidth : HALF
     const areaH = this.compact ? window.innerHeight - NAV_H : SCREEN_H
     const place = (node: HTMLElement, h: number, host: HTMLElement) => {
-      // (a window is 275 skin pixels wide; compact: as large as the room allows, wide: the half's width)
-      const scale = this.compact ? Math.min(areaW / MAIN_W, areaH / h) : SCALE
+      // (a window is 275 skin pixels wide; compact: as large as the room allows; wide: a whole number, so every pixel of the
+      // skin is as large as the others - 3 on the half of 1920 x 480)
+      const scale = this.compact ? Math.min(areaW / MAIN_W, areaH / h) : WIDE_SCALE
       node.style.transform = `scale(${scale})`
       node.style.left = `${Math.round((areaW - MAIN_W * scale) / 2)}px`
       // (at the bottom edge of the room)
@@ -186,6 +188,8 @@ export class WinampShellComponent implements OnDestroy {
     this.eqView.setStatus(svc.eqStatus())
     place(this.eqView.node, EQ_H, this.right)
 
+    // (the playlist is as high as the room: wide - the whole height at the factor of the other windows; compact - its own height)
+    const plHeight = this.compact ? PL_H : Math.floor(areaH / WIDE_SCALE)
     this.plView = new WinampPlaylistView(skin, {
       play: (entry) => svc.playEntry(entry),
       add: () => svc.showLibrary(),
@@ -200,8 +204,8 @@ export class WinampShellComponent implements OnDestroy {
       next: () => svc.next(),
       eject: () => svc.showLibrary(),
       close: () => svc.setRight('pl'),
-    })
-    place(this.plView.node, PL_H, this.right)
+    }, plHeight)
+    place(this.plView.node, plHeight, this.right)
     this.main.update(svc.main())
     this.plView.setEntries(svc.entries(), svc.currentPosition())
     const view = svc.right()

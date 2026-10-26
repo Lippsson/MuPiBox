@@ -82,6 +82,9 @@ export class WinampMainView {
   private readonly mono: HTMLElement
   private readonly volume: HTMLElement
   private readonly balance: HTMLElement
+  // the slider handles (a sprite of their own in the skin's volume and balance sheets - a skin may draw them into the frames)
+  private readonly volThumb: HTMLElement | undefined
+  private readonly balThumb: HTMLElement | undefined
   private readonly seekBar: HTMLElement
   private readonly knob: HTMLElement
   private readonly knobHidden: boolean
@@ -221,6 +224,20 @@ export class WinampMainView {
     this.balance = sprite(skin, 'balance.bmp', [9, 0, 38, 13], 177, 57)
     this.balance.classList.add('wa-slot', 'wa-balance')
     win.appendChild(this.balance)
+    // the handle: 14 x 11 pixels at the bottom of the sheets (x 15 normal, x 0 pressed); the sheets of a skin without one are shorter
+    const thumb = (file: string, slot: HTMLElement, x: number): HTMLElement | undefined => {
+      if (skin.size(file).h < 433) return undefined
+      const node = sprite(skin, file, [15, 422, 14, 11], x, 58)
+      node.style.pointerEvents = 'none'
+      win.appendChild(node)
+      const press = (down: boolean) => setSprite(skin, node, file, [down ? 0 : 15, 422, 14, 11])
+      slot.addEventListener('pointerdown', () => press(true))
+      slot.addEventListener('pointerup', () => press(false))
+      slot.addEventListener('pointercancel', () => press(false))
+      return node
+    }
+    this.volThumb = thumb('volume.bmp', this.volume, 107)
+    this.balThumb = thumb('balance.bmp', this.balance, 177)
     dragValue(this.balance, 'x', (v) => {
       // a click near the middle is "centred" (as Winamp snaps it)
       const b = Math.round((v * 2 - 1) * 100)
@@ -312,6 +329,9 @@ export class WinampMainView {
     setSprite(this.skin, this.volume, 'volume.bmp', [0, vFrame * 15, 68, 13])
     const bFrame = Math.round((Math.abs(s.balance) / 100) * 27)
     setSprite(this.skin, this.balance, 'balance.bmp', [9, bFrame * 15, 38, 13])
+    // the handles: along the 68 pixels of the volume slider and the 38 of the balance slider (14 wide each)
+    if (this.volThumb) this.volThumb.style.left = `${107 + Math.round((Math.max(0, Math.min(100, s.volume)) / 100) * (68 - 14))}px`
+    if (this.balThumb) this.balThumb.style.left = `${177 + Math.round(((Math.max(-100, Math.min(100, s.balance)) + 100) / 200) * (38 - 14))}px`
 
     this.knob.style.left = `${Math.round(showFraction * (248 - 29))}px`
     this.knob.style.visibility = s.durationSeconds > 0 && !this.knobHidden ? 'visible' : 'hidden'

@@ -49,8 +49,10 @@ export class WinampPlaylistView {
   constructor(
     private readonly skin: Skin,
     private readonly actions: PlaylistActions,
+    /** the window's height in skin pixels: the window grows with the room (the list shows more rows) */
+    private readonly h = PL_H,
   ) {
-    const win = el('wa-win wa-pl', { width: `${PL_W}px`, height: `${PL_H}px` })
+    const win = el('wa-win wa-pl', { width: `${PL_W}px`, height: `${this.h}px` })
     this.node = win
     const colours = skin.meta.pledit
     win.style.background = colours.normalBg
@@ -63,17 +65,17 @@ export class WinampPlaylistView {
     for (let x = titleX + 100; x < PL_W - 25; x += 25) win.appendChild(sprite(skin, f, [127, 0, Math.min(25, PL_W - 25 - x), 20], x, 0))
     win.appendChild(sprite(skin, f, [26, 0, 100, 20], titleX, 0))
     // sides
-    for (let y = TOP; y < PL_H - BOTTOM; y += 29) {
-      const h = Math.min(29, PL_H - BOTTOM - y)
+    for (let y = TOP; y < this.h - BOTTOM; y += 29) {
+      const h = Math.min(29, this.h - BOTTOM - y)
       win.appendChild(sprite(skin, f, [0, 42, 12, h], 0, y))
       win.appendChild(sprite(skin, f, [31, 42, 20, h], PL_W - 20, y))
     }
     // the bottom bar (the round buttons and the little transport are part of the picture)
-    win.appendChild(sprite(skin, f, [0, 72, 125, 38], 0, PL_H - BOTTOM))
-    win.appendChild(sprite(skin, f, [126, 72, 150, 38], PL_W - 150, PL_H - BOTTOM))
+    win.appendChild(sprite(skin, f, [0, 72, 125, 38], 0, this.h - BOTTOM))
+    win.appendChild(sprite(skin, f, [126, 72, 150, 38], PL_W - 150, this.h - BOTTOM))
 
     // the list: touch scrolls it, the handle at the right shows and moves the place
-    this.list = el('wa-pl-list', { left: '12px', top: `${TOP}px`, width: `${PL_W - 12 - 20}px`, height: `${PL_H - TOP - BOTTOM}px` })
+    this.list = el('wa-pl-list', { left: '12px', top: `${TOP}px`, width: `${PL_W - 12 - 20}px`, height: `${this.h - TOP - BOTTOM}px` })
     this.list.style.color = colours.normal
     this.list.style.fontFamily = `"${colours.font}", Arial, sans-serif`
     this.list.style.setProperty('--wa-row', `${ROW}px`)
@@ -86,7 +88,7 @@ export class WinampPlaylistView {
     this.dragHandle()
 
     // hit areas over the painted buttons of the bottom bar
-    const y0 = PL_H - BOTTOM
+    const y0 = this.h - BOTTOM
     const hit = (x: number, y: number, w: number, h: number, fn: () => void, title = '') => {
       const node = el('wa-btn wa-hit', { left: `${x}px`, top: `${y0 + y}px`, width: `${w}px`, height: `${h}px` })
       if (title) node.title = title
@@ -176,7 +178,7 @@ export class WinampPlaylistView {
 
   private placeHandle(): void {
     const max = this.list.scrollHeight - this.list.clientHeight
-    const track = PL_H - TOP - BOTTOM - 18 - 2
+    const track = this.h - TOP - BOTTOM - 18 - 2
     this.handle.style.visibility = max > 1 ? 'visible' : 'hidden'
     const f = max > 1 ? this.list.scrollTop / max : 0
     this.handle.style.top = `${TOP + 1 + Math.round(f * track)}px`
@@ -193,7 +195,7 @@ export class WinampPlaylistView {
     this.handle.addEventListener('pointermove', (e) => {
       if (!start) return
       const scale = this.handle.getBoundingClientRect().height / 18 || 1
-      const track = PL_H - TOP - BOTTOM - 18 - 2
+      const track = this.h - TOP - BOTTOM - 18 - 2
       const max = this.list.scrollHeight - this.list.clientHeight
       this.list.scrollTop = start.top + ((e.clientY - start.y) / scale / track) * max
     })
