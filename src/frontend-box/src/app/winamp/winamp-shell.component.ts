@@ -48,7 +48,8 @@ const WIDE_SCALE = Math.max(1, Math.floor(Math.min(HALF / MAIN_W, SCREEN_H / MAI
     mupi-winamp-shell .wa-eq-x { flex: none; width: 16px; }
     mupi-winamp-shell .wa-eq-list { flex: 1; overflow-y: auto; scrollbar-width: none; display: grid; grid-template-columns: 1fr 1fr; align-content: start; touch-action: pan-y; }
     mupi-winamp-shell .wa-eq-list::-webkit-scrollbar { display: none; }
-    mupi-winamp-shell .wa-eq-preset { padding: 0 3px; cursor: pointer; white-space: nowrap; overflow: hidden; }
+    mupi-winamp-shell .wa-eq-preset { padding: 0 3px; cursor: pointer; overflow-wrap: anywhere; }
+    mupi-winamp-shell .wa-eq-preset.wa-eq-wide { grid-column: 1 / -1; }
     mupi-winamp-shell .wa-eq-preset:active { background: var(--wa-selected-bg); color: var(--wa-current); }
     mupi-winamp-shell .wa-eq-off { opacity: .45; }
     mupi-winamp-shell .wa-pop { position: absolute; left: 24px; top: 24px; z-index: 10; min-width: 340px; background: #0f0f1b; border: 2px solid #6e6e96; border-radius: 6px; padding: 6px 0; font: 30px Arial, sans-serif; color: #d2d2f0; box-shadow: 0 8px 30px #000a; }

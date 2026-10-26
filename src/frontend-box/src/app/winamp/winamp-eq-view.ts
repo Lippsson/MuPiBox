@@ -229,7 +229,8 @@ export class WinampEqView {
     tabs.appendChild(close)
     const list = el('wa-eq-list')
     const row = (text: string, fn: () => void, off = false) => {
-      const r = el(`wa-eq-preset${off ? ' wa-eq-off' : ''}`)
+      // (a long name - an album's - gets the whole row and wraps instead of being cut off)
+      const r = el(`wa-eq-preset${off ? ' wa-eq-off' : ''}${text.length > 18 ? ' wa-eq-wide' : ''}`)
       r.textContent = text
       if (!off) r.addEventListener('click', fn)
       list.appendChild(r)
