@@ -8,6 +8,13 @@ import { promises as fsp } from 'node:fs'
 import path from 'node:path'
 
 export const WINAMP_SKIN_DIR = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/winamp/skin'
+/** every skin that was uploaded, one folder each (the display only reads WINAMP_SKIN_DIR: the one chosen is copied there) */
+export const WINAMP_SKIN_LIBRARY = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/winamp/skins'
+export interface SkinDirs {
+  active: string
+  library: string
+}
+const DEFAULT_DIRS: SkinDirs = { active: WINAMP_SKIN_DIR, library: WINAMP_SKIN_LIBRARY }
 
 const MAX_ENTRIES = 600
 const MAX_FILE = 4 * 1024 * 1024
@@ -16,6 +23,8 @@ const MAX_TOTAL = 20 * 1024 * 1024
 const KEEP = /^(main|cbuttons|titlebar|shufrep|numbers|nums_ex|playpaus|posbar|volume|balance|monoster|text|eqmain|eq_ex|pledit|gen|genex|mb|video|avs)\.bmp$/
 
 export interface SkinMeta {
+  /** the folder name in the library (the skin in WINAMP_SKIN_DIR carries it too: which one is chosen) */
+  id?: string
   name: string
   version: number
   files: Record<string, [number, number]>
@@ -150,4 +159,104 @@ export async function readSkinMeta(dir = WINAMP_SKIN_DIR): Promise<SkinMeta | un
 
 export async function removeSkin(dir = WINAMP_SKIN_DIR): Promise<void> {
   await fsp.rm(dir, { recursive: true, force: true })
+}
+
+// ---------- the library of uploaded skins ----------
+
+export interface StoredSkin {
+  id: string
+  name: string
+  version: number
+  /** the one the display shows */
+  active: boolean
+}
+
+const ID = /^[a-z0-9][a-z0-9-]{0,60}$/
+const slug = (s: string) =>
+  s
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'skin'
+
+async function copyFolder(from: string, to: string): Promise<void> {
+  await fsp.rm(to, { recursive: true, force: true })
+  await fsp.mkdir(to, { recursive: true })
+  for (const f of await fsp.readdir(from)) await fsp.copyFile(path.join(from, f), path.join(to, f))
+}
+
+const exists = (p: string) =>
+  fsp
+    .stat(p)
+    .then(() => true)
+    .catch(() => false)
+
+/**
+ * A new skin goes into the library and is the one shown (the display reads the folder `active`). Its id is made of its
+ * name, so a folder of the library tells what it is.
+ */
+export async function addSkin(wsz: Buffer, fileName: string, dirs: SkinDirs = DEFAULT_DIRS): Promise<{ id: string; meta: SkinMeta }> {
+  const name = fileName.replace(/\.wsz$/i, '').slice(0, 60) || 'Skin'
+  const { files, meta } = skinFiles(wsz, name, Date.now())
+  const id = `${slug(name)}-${Date.now().toString(36)}`
+  meta.id = id
+  const tmp = path.join(dirs.library, `.${id}.new`)
+  await fsp.rm(tmp, { recursive: true, force: true })
+  await fsp.mkdir(tmp, { recursive: true })
+  for (const [file, data] of files) await fsp.writeFile(path.join(tmp, file), data)
+  await fsp.writeFile(path.join(tmp, 'skin.json'), JSON.stringify(meta))
+  await fsp.rename(tmp, path.join(dirs.library, id))
+  const active = await activateSkin(id, dirs)
+  return { id, meta: active ?? meta }
+}
+
+/** The skin of the library the display shows from now on; undefined when there is none with that id. */
+export async function activateSkin(id: string, dirs: SkinDirs = DEFAULT_DIRS): Promise<SkinMeta | undefined> {
+  if (!ID.test(id)) return undefined
+  const from = path.join(dirs.library, id)
+  if (!(await exists(path.join(from, 'skin.json')))) return undefined
+  const tmp = `${dirs.active}.new`
+  await copyFolder(from, tmp)
+  // (a new version: the display loads the bitmaps again, also when the same skin is chosen once more)
+  const meta = { ...(JSON.parse(await fsp.readFile(path.join(tmp, 'skin.json'), 'utf8')) as SkinMeta), id, version: Date.now() }
+  await fsp.writeFile(path.join(tmp, 'skin.json'), JSON.stringify(meta))
+  await fsp.rm(dirs.active, { recursive: true, force: true })
+  await fsp.rename(tmp, dirs.active)
+  return meta
+}
+
+/**
+ * All skins of the library, the one shown marked. A skin that was uploaded before the library existed (it is only in
+ * WINAMP_SKIN_DIR) is taken into it first.
+ */
+export async function listSkins(dirs: SkinDirs = DEFAULT_DIRS): Promise<StoredSkin[]> {
+  await fsp.mkdir(dirs.library, { recursive: true })
+  let active = await readSkinMeta(dirs.active)
+  if (active && (!active.id || !(await exists(path.join(dirs.library, active.id))))) {
+    const id = `${slug(active.name)}-${Date.now().toString(36)}`
+    await copyFolder(dirs.active, path.join(dirs.library, id))
+    const json = { ...active, id }
+    await fsp.writeFile(path.join(dirs.library, id, 'skin.json'), JSON.stringify(json))
+    await fsp.writeFile(path.join(dirs.active, 'skin.json'), JSON.stringify(json))
+    active = json
+  }
+  const out: StoredSkin[] = []
+  for (const entry of await fsp.readdir(dirs.library, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !ID.test(entry.name)) continue
+    const meta = await readSkinMeta(path.join(dirs.library, entry.name))
+    if (meta) out.push({ id: entry.name, name: meta.name, version: meta.version, active: active?.id === entry.name })
+  }
+  // (the newest first)
+  return out.sort((a, b) => b.version - a.version)
+}
+
+/** Takes a skin out of the library; the one shown is taken away too when it is that one. */
+export async function removeSkinById(id: string, dirs: SkinDirs = DEFAULT_DIRS): Promise<boolean> {
+  if (!ID.test(id)) return false
+  const dir = path.join(dirs.library, id)
+  if (!(await exists(dir))) return false
+  await fsp.rm(dir, { recursive: true, force: true })
+  if ((await readSkinMeta(dirs.active))?.id === id) await fsp.rm(dirs.active, { recursive: true, force: true })
+  return true
 }

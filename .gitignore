@@ -31,5 +31,6 @@ src/backend-api/src/www/
 
 # Winamp preview and sandbox (tools/): the unpacked skin and what is built for the page
 tools/winamp-sandbox/.skin/
+tools/winamp-sandbox/.skins/
 tools/winamp-sandbox/.skin-code.cjs
 tools/winamp-preview/out/

@@ -1120,8 +1120,15 @@ textarea[hidden] { display: none; }
 .theme-card .theme-img .ct-disp { height: 100%; }
 #ct-prev { margin-top: 2px; }
 .ct-picrow { display: flex; gap: 12px; align-items: center; }
-.wa-prev { margin: 8px 0; background: #000; border-radius: 8px; overflow: hidden; line-height: 0; }
-.wa-prev img { width: 100%; max-width: 550px; height: auto; image-rendering: pixelated; }
+.wa-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.wa-row { display: flex; align-items: center; gap: 8px; }
+.wa-pickrow { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px; text-align: left; background: var(--mp-surface); color: inherit; border: 2px solid var(--mp-border); border-radius: 10px; cursor: pointer; font: inherit; }
+.wa-pickrow[aria-pressed="true"] { border-color: var(--mp-primary); background: var(--mp-primary-soft); }
+.wa-prev { flex: none; width: 138px; background: #000; border-radius: 6px; overflow: hidden; line-height: 0; }
+.wa-prev img { width: 100%; height: auto; image-rendering: pixelated; }
+.wa-name { min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.wa-name small { color: var(--mp-primary-text); }
+.wa-row > .btn { flex: none; }
 .ct-thumb { width: 120px; aspect-ratio: 800 / 480; border-radius: 8px; background: var(--mp-chip) center / cover no-repeat; flex: none; }
 .ct-swatches { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .ct-sw { position: relative; width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 3px solid var(--mp-surface); background: var(--sw); box-shadow: 0 0 0 1.5px var(--mp-border); cursor: pointer; }

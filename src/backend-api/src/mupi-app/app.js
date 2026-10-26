@@ -6256,7 +6256,6 @@ function themeTop() {
   return [
     // (the own theme's settings first while it is the theme: below 68 tiles they were far down)
     ...(t.current === 'custom' && disp.custom ? [customCard()] : []),
-    ...(t.current === 'winamp' && disp.winamp ? [winampCard()] : []),
     `<section class="card wide"><h2>Theme</h2><p class="help">Tippe auf ein Theme, um es auf der Box zu verwenden.</p>
       <div class="search">${icon('search')}<input class="input" id="t-q" type="search" placeholder="Theme suchen" autocomplete="off"></div>
       <div class="theme-grid" id="t-grid">${list
@@ -6265,6 +6264,8 @@ function themeTop() {
             <b translate="no">${esc(themeLabel(n))}</b>${n === t.current ? '<small>aktiv</small>' : ''}</button>`,
         )
         .join('')}</div></section>`,
+    // (below the themes: the skins belong to the theme "winamp", they are kept even while another theme is shown)
+    ...(list.includes('winamp') && disp.winamp ? [winampCard()] : []),
   ]
 }
 
@@ -6319,16 +6320,25 @@ function mountTheme(root, page) {
 
 function winampCard() {
   const w = disp.winamp
+  const skins = w?.skins ?? []
+  const shown = !!w?.active
   return `<section class="card wide" id="wa-card"><h2>Winamp-Skin</h2>
-    <p class="help">Das Theme „Winamp“ zeichnet den Player mit einem klassischen Winamp-Skin (.wsz) auf die linke Hälfte der Anzeige, rechts davon stehen Equalizer, Playlist und die Bibliothek. Es funktioniert nur mit einem Display von 1920 × 480 Pixeln.</p>
+    <p class="help">Das Theme „Winamp“ zeichnet den Player mit einem klassischen Winamp-Skin (.wsz). Alle Skins, die du hochlädst, bleiben in dieser Liste und lassen sich jederzeit wieder auswählen. Das Theme ist für ein Display von 1920 × 480 Pixeln gedacht, auf kleineren Displays zeigt es ein Fenster nach dem anderen.</p>
     ${
-      w?.installed
-        ? `<div class="wa-prev"><img src="/theme-data/winamp/skin/main.bmp?v=${w.version}" alt=""></div><p style="margin:8px 0"><b translate="no">${esc(w.name)}</b></p>`
+      skins.length
+        ? `<ul class="wa-list">${skins
+            .map(
+              (s) => `<li class="wa-row${s.active ? ' on' : ''}"><button class="wa-pickrow" type="button" data-id="${esc(s.id)}" aria-pressed="${s.active}" aria-label="${esc(s.name)}">
+                <span class="wa-prev"><img src="/theme-data/winamp/skins/${encodeURIComponent(s.id)}/main.bmp?v=${s.version}" alt="" loading="lazy"></span>
+                <span class="wa-name"><b translate="no">${esc(s.name)}</b>${s.active ? `<small>${shown ? 'wird angezeigt' : 'ausgewählt'}</small>` : ''}</span></button>
+                <button class="btn sm danger" type="button" data-del="${esc(s.id)}" aria-label="${esc(s.name)} entfernen">${icon('close', 18)}Entfernen</button></li>`,
+            )
+            .join('')}</ul>`
         : '<p class="help"><b>Noch kein Skin installiert.</b> Ohne Skin zeigt die Box nur einen Hinweis.</p>'
     }
-    <div class="btns"><button class="btn sm primary" type="button" id="wa-pick">${icon('up', 18)}${w?.installed ? 'Anderen Skin hochladen' : 'Skin hochladen (.wsz)'}</button>${w?.installed ? '<button class="btn sm" type="button" id="wa-del">Entfernen</button>' : ''}</div>
+    <div class="btns"><button class="btn sm primary" type="button" id="wa-pick">${icon('up', 18)}Skin hochladen (.wsz)</button></div>
     <input type="file" id="wa-file" accept=".wsz,.zip,application/zip" hidden>
-    <small>Skins gibt es zum Beispiel im Winamp Skin Museum. Eigene Skins lassen sich jederzeit hier austauschen.</small></section>`
+    <small>Skins gibt es zum Beispiel im Winamp Skin Museum.</small></section>`
 }
 
 function mountWinampCard(root, page) {
@@ -6352,16 +6362,27 @@ function mountWinampCard(root, page) {
     }).catch(() => null)
     const body = r ? await r.json().catch(() => ({})) : {}
     if (!r?.ok) return toast(body.error === 'not a Winamp skin' || body.error === 'not a zip' ? 'Das ist kein Winamp-Skin (.wsz).' : 'Hochladen ging nicht', 'info')
-    toast(`Skin „${body.name}“ ist installiert. ${body.reloaded ? 'Das Display zeigt ihn gleich.' : ''}`.trim())
+    toast(`Skin „${body.name}“ ist installiert. ${body.reloaded ? 'Das Display zeigt es gleich.' : 'Das Display zeigt es nach dem nächsten Neuladen.'}`)
     await refresh()
   }
-  const del = $('#wa-del', card)
-  if (del)
+  for (const row of card.querySelectorAll('.wa-pickrow')) {
+    row.onclick = async () => {
+      if (row.getAttribute('aria-pressed') === 'true') return
+      const r = await api(`${API}/display/winamp-skin/select`, { method: 'POST', body: { id: row.dataset.id } })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      toast(`Skin „${r.body.name}“ ist ausgewählt. ${r.body.reloaded ? 'Das Display zeigt es gleich.' : 'Das Display zeigt es nach dem nächsten Neuladen.'}`)
+      await refresh()
+    }
+  }
+  for (const del of card.querySelectorAll('[data-del]')) {
     del.onclick = async () => {
-      const r = await api(`${API}/display/winamp-skin`, { method: 'DELETE', body: {} })
+      const skin = (disp.winamp?.skins ?? []).find((s) => s.id === del.dataset.del)
+      if (!(await ask('Skin entfernen?', `„${skin?.name ?? ''}“ wird aus der Liste gelöscht.`, 'Entfernen'))) return
+      const r = await api(`${API}/display/winamp-skin?id=${encodeURIComponent(del.dataset.del)}`, { method: 'DELETE', body: {} })
       toast(r.ok ? 'Skin entfernt' : 'Das hat nicht geklappt', r.ok ? undefined : 'info')
       await refresh()
     }
+  }
 }
 
 /* Eigenes Theme ("custom"): the parents' picture and its settings - on the theme page, only while "custom" is the

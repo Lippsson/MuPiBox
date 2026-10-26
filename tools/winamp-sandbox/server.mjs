@@ -23,16 +23,18 @@ let THEME = arg('theme', 'winamp')
 let themeReloadAt = 0 // (the display polls /local and loads the theme again when this goes up)
 const WWW = path.resolve(arg('www', path.join(root, 'src/deploy/www/browser')))
 const SKIN_DIR = path.join(here, '.skin')
+const SKIN_LIBRARY = path.join(here, '.skins')
+const SKIN_DIRS = { active: SKIN_DIR, library: SKIN_LIBRARY }
 
 // ---------- the skin: unpacked with the backend's own code (the same as the app's upload uses) ----------
 mkdirSync(SKIN_DIR, { recursive: true })
 const skinCode = path.join(here, '.skin-code.cjs')
 await build({ entryPoints: [path.join(root, 'src/backend-api/src/eltern/winamp-skin.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: skinCode, logLevel: 'error' })
 const skinMod = await import(pathToFileURL(skinCode).href)
-const { installSkin, readSkinMeta, removeSkin } = skinMod.default ?? skinMod
+const { activateSkin, addSkin, listSkins, removeSkinById } = skinMod.default ?? skinMod
 const wsz = arg('skin')
 if (wsz) {
-  const meta = await installSkin(readFileSync(wsz), path.basename(wsz), SKIN_DIR)
+  const { meta } = await addSkin(readFileSync(wsz), path.basename(wsz), SKIN_DIRS)
   console.log(`skin: ${meta.name} (${Object.keys(meta.files).length} bitmaps)`)
 }
 
@@ -302,24 +304,33 @@ async function parentsApi(req, res, url, api) {
     return json(res, { ok: true })
   }
   if (api === '/display/custom-theme') return json(res, { mode: 'auto', resolved: 'dark', veil: 0, accent: null, font: 'fredoka', size: 'm', v: 0, hasPicture: false, active: THEME === 'custom' })
+  if (api === '/display/winamp-skin/select' && req.method === 'POST') {
+    if (!csrfOk()) return json(res, { error: 'csrf token missing or invalid' }, 403)
+    const id = String((await readBody(req)).id ?? '')
+    const meta = await activateSkin(id, SKIN_DIRS)
+    if (!meta) return json(res, { error: 'no such skin' }, 404)
+    themeReloadAt = Date.now()
+    return json(res, { ok: true, id, name: meta.name, reloaded: THEME === 'winamp' })
+  }
   if (api === '/display/winamp-skin') {
     if (req.method === 'GET') {
-      const meta = await readSkinMeta(SKIN_DIR)
-      return json(res, { installed: !!meta, name: meta?.name ?? null, version: meta?.version ?? null, active: THEME === 'winamp' })
+      const skins = await listSkins(SKIN_DIRS)
+      const shown = skins.find((s) => s.active)
+      return json(res, { installed: !!shown, name: shown?.name ?? null, version: shown?.version ?? null, id: shown?.id ?? null, skins, active: THEME === 'winamp' })
     }
     if (!csrfOk()) return json(res, { error: 'csrf token missing or invalid' }, 403)
     if (req.method === 'DELETE') {
-      await removeSkin(SKIN_DIR)
+      if (!(await removeSkinById(url.searchParams.get('id') ?? '', SKIN_DIRS))) return json(res, { error: 'no such skin' }, 404)
       themeReloadAt = Date.now()
       return json(res, { ok: true, reloaded: THEME === 'winamp' })
     }
     const chunks = []
     for await (const c of req) chunks.push(c)
     try {
-      const meta = await installSkin(Buffer.concat(chunks), decodeURIComponent(String(req.headers['x-skin-name'] ?? 'Skin')), SKIN_DIR)
+      const { id, meta } = await addSkin(Buffer.concat(chunks), decodeURIComponent(String(req.headers['x-skin-name'] ?? 'Skin')), SKIN_DIRS)
       themeReloadAt = Date.now()
       console.log(`skin uploaded in the app: ${meta.name} (${Object.keys(meta.files).length} bitmaps)`)
-      return json(res, { ok: true, name: meta.name, files: Object.keys(meta.files).length, reloaded: THEME === 'winamp' })
+      return json(res, { ok: true, id, name: meta.name, files: Object.keys(meta.files).length, reloaded: THEME === 'winamp' })
     } catch (err) {
       const message = err.message
       return json(res, { error: message }, ['not a Winamp skin', 'not a zip', 'broken zip'].includes(message) ? 422 : 500)
@@ -384,6 +395,10 @@ createServer((req, res) => {
     return res.end(coverSvg(Number.parseInt(path.basename(p), 10) || 0, url.searchParams.get('t') ?? ''))
   }
   if (p === '/active_theme.css') return send(res, path.join(root, 'themes', `${THEME}.css`))
+  if (p.startsWith('/theme-data/winamp/skins/')) {
+    const f = inside(SKIN_LIBRARY, p.slice('/theme-data/winamp/skins/'.length))
+    return f && isFile(f) ? send(res, f) : res.writeHead(404).end()
+  }
   if (p.startsWith('/theme-data/winamp/skin/')) {
     const f = inside(SKIN_DIR, p.slice('/theme-data/winamp/skin/'.length))
     return f && isFile(f) ? send(res, f) : res.writeHead(404).end()

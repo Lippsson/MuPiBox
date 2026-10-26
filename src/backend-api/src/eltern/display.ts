@@ -17,7 +17,7 @@ import { applyNightDim, nightDimmed, nightDimOf, parseNightDim } from './night-d
 import { CUSTOM_THEME_CSS, customThemeCss, customThemeOf } from './custom-theme'
 import { bootConfigPath } from './boot-paths'
 import { DSI_SCREEN_CONF, DSI_TOUCH_CONF, dsiConfig, dsiOutput, isDsiRotation } from './dsi-rotation'
-import { installSkin, readSkinMeta, removeSkin } from './winamp-skin'
+import { activateSkin, addSkin, listSkins, removeSkinById } from './winamp-skin'
 
 export interface DisplayDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -342,15 +342,19 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
   })
 
   /**
-   * GET /api/app/display/winamp-skin - the skin of the theme "winamp" (a classic Winamp 2.x skin, see winamp-skin.ts).
-   * PUT /api/app/display/winamp-skin  body: a .wsz, header X-Skin-Name: its file name
-   * DELETE /api/app/display/winamp-skin
-   * The theme only works on a 1920 x 480 display; the skin is unpacked into the display's theme data and the display
-   * loads it again at once (no page reload) when the theme is the one on the box.
+   * The skins of the theme "winamp" (classic Winamp 2.x skins, see winamp-skin.ts): all that were uploaded are kept in a
+   * list, one of them is shown.
+   * GET    /api/app/display/winamp-skin          the list ({skins: [{id, name, version, active}]}) and the one shown
+   * PUT    /api/app/display/winamp-skin          body: a .wsz, header X-Skin-Name: its file name - added and shown
+   * POST   /api/app/display/winamp-skin/select   {id} - shown from now on
+   * DELETE /api/app/display/winamp-skin?id=...   taken out of the list (the one shown goes too, when it is that one)
+   * The theme works on a display of 1920 x 480 and, one window at a time, on smaller ones; the skin is copied into the
+   * display's theme data and the display loads it again at once (no page reload) when "winamp" is the theme on the box.
    */
   router.get('/display/winamp-skin', requireSession, async (_req, res) => {
-    const meta = await readSkinMeta()
-    res.json({ installed: !!meta, name: meta?.name ?? null, version: meta?.version ?? null, active: mupibox(deps).theme === 'winamp' })
+    const skins = await listSkins()
+    const shown = skins.find((s) => s.active)
+    res.json({ installed: !!shown, name: shown?.name ?? null, version: shown?.version ?? null, id: shown?.id ?? null, skins, active: mupibox(deps).theme === 'winamp' })
   })
 
   router.put('/display/winamp-skin', requireSession, requireCsrf, async (req, res) => {
@@ -367,16 +371,30 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     }
     const name = decodeURIComponent(String(req.headers['x-skin-name'] ?? 'Skin'))
     try {
-      const meta = await installSkin(Buffer.concat(chunks), name)
-      res.json({ ok: true, name: meta.name, files: Object.keys(meta.files).length, reloaded: await winampReload(deps) })
+      const { id, meta } = await addSkin(Buffer.concat(chunks), name)
+      res.json({ ok: true, id, name: meta.name, files: Object.keys(meta.files).length, reloaded: await winampReload(deps) })
     } catch (err) {
       const message = (err as Error).message
       res.status(message === 'not a Winamp skin' || message === 'not a zip' || message === 'broken zip' ? 422 : 500).json({ error: message })
     }
   })
 
-  router.delete('/display/winamp-skin', requireSession, requireCsrf, async (_req, res) => {
-    await removeSkin()
+  router.post('/display/winamp-skin/select', requireSession, requireCsrf, async (req, res) => {
+    const id = typeof (req.body as { id?: unknown } | undefined)?.id === 'string' ? (req.body as { id: string }).id : ''
+    const meta = await activateSkin(id)
+    if (!meta) {
+      res.status(404).json({ error: 'no such skin' })
+      return
+    }
+    res.json({ ok: true, id, name: meta.name, reloaded: await winampReload(deps) })
+  })
+
+  router.delete('/display/winamp-skin', requireSession, requireCsrf, async (req, res) => {
+    const id = typeof req.query.id === 'string' ? req.query.id : ''
+    if (!(await removeSkinById(id))) {
+      res.status(404).json({ error: 'no such skin' })
+      return
+    }
     res.json({ ok: true, reloaded: await winampReload(deps) })
   })
 
