@@ -10,6 +10,8 @@ import { WinampService } from './winamp.service'
 const HALF = 960
 const SCREEN_H = 480
 // wide layout: the windows are drawn at a whole-number factor (3 on the half of a 1920 x 480 display: 825 x 348 pixels)
+// the compact layout: the app's own top bar (the home page's, or the player page's with the title and the status) stays above the windows
+const HEADER_H = 72
 const WIDE_SCALE = Math.max(1, Math.floor(Math.min(HALF / MAIN_W, SCREEN_H / MAIN_H)))
 
 /**
@@ -28,7 +30,7 @@ const WIDE_SCALE = Math.max(1, Math.floor(Math.min(HALF / MAIN_W, SCREEN_H / MAI
     mupi-winamp-shell .wa-half-right { left: 960px; }
     mupi-winamp-shell .wa-half.wa-hidden { display: none; }
     mupi-winamp-shell.wa-compact { width: 100vw; height: 100vh; }
-    mupi-winamp-shell.wa-compact .wa-half { left: 0; top: 0; width: 100%; height: 100%; }
+    mupi-winamp-shell.wa-compact .wa-half { left: 0; top: 72px; width: 100%; height: calc(100% - 72px); }
     mupi-winamp-shell .wa-back { position: absolute; left: 10px; bottom: 10px; width: 56px; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; pointer-events: auto; cursor: pointer; background: var(--wa-back-bg, #000); color: var(--wa-back-fg, #9a9ac8); border: 2px solid var(--wa-back-line, #3c3c6e); box-shadow: 0 2px 10px #000a; -webkit-tap-highlight-color: transparent; }
     mupi-winamp-shell .wa-back.wa-hidden { display: none; }
     mupi-winamp-shell .wa-back svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -76,6 +78,8 @@ export class WinampShellComponent implements OnDestroy {
     this.host.append(this.left, this.right)
     if (this.compact) {
       this.host.classList.add('wa-compact')
+      // a press on the top bar while a window covers the library: the bar's page is the one to show
+      document.addEventListener('click', this.onBarPress, true)
       this.host.appendChild(this.makeBack())
     }
     // (the windows are built again for another skin; nothing else in the page depends on them)
@@ -124,7 +128,18 @@ export class WinampShellComponent implements OnDestroy {
     })
   }
 
+  private readonly onBarPress = (e: Event): void => {
+    if (this.svc.right() === 'lib') return
+    const target = e.target as HTMLElement | null
+    const bar = target?.closest('ion-router-outlet ion-header')
+    if (!bar) return
+    // (the player page's bar belongs to the window itself: only its back button leaves for the library)
+    if (bar.closest('app-player') && !target?.closest('[data-mupi-back]')) return
+    this.svc.showView('lib')
+  }
+
   ngOnDestroy(): void {
+    document.removeEventListener('click', this.onBarPress, true)
     this.main?.destroy()
   }
 
@@ -142,7 +157,7 @@ export class WinampShellComponent implements OnDestroy {
     }
     // the room for the windows: the half of the display (wide) or the display above the bar (compact)
     const areaW = this.compact ? window.innerWidth : HALF
-    const areaH = this.compact ? window.innerHeight : SCREEN_H
+    const areaH = this.compact ? window.innerHeight - HEADER_H : SCREEN_H
     const place = (node: HTMLElement, h: number, host: HTMLElement) => {
       // (a window is 275 skin pixels wide; compact: as large as the room allows; wide: a whole number, so every pixel of the
       // skin is as large as the others - 3 on the half of 1920 x 480)

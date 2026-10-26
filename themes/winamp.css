@@ -39,7 +39,9 @@
    player of the skin. The player page keeps running (it starts and watches the playback) but is not drawn - the
    playlist and the equaliser of the skin take its place. */
 body.wa-on ion-router-outlet { left: 960px !important; right: auto !important; width: 960px !important; }
-body.wa-on app-player, body.wa-compact app-player { visibility: hidden; }
+body.wa-on app-player { visibility: hidden; }
+/* compact layout: the player page keeps its top bar (back, titles, status) above the skin's windows, its content is not drawn */
+body.wa-compact app-player ion-content { visibility: hidden; }
 
 /* Hintergrund: eigene Grundfarbe, ohne Bild */
 .ion-page { background: var(--km-night) !important; }

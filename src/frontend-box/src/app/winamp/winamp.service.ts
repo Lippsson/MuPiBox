@@ -265,10 +265,15 @@ export class WinampService {
     // a playback that starts (here or from the parents' app) opens the playlist; one that ends on its own goes back to the library
     this.router.events.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd)).subscribe((e) => {
       if (!this.active()) return
+      const first = !this.navigated
+      this.navigated = true
       if (e.urlAfterRedirects.startsWith('/player')) {
         // (wide: the playlist beside the player; compact: the player itself)
         if (this.right() === 'lib') this.right.set(this.layout === 'compact' ? 'player' : 'pl')
       } else if (this.layout === 'wide' && this.right() !== 'lib') {
+        this.right.set('lib')
+      } else if (this.layout === 'compact' && !first && this.right() !== 'lib') {
+        // (a page of the app opens - the resume list, a folder: the windows would cover it)
         this.right.set('lib')
       }
     })
@@ -306,6 +311,13 @@ export class WinampService {
     // (wide: the library is what is under the windows; compact: the player is)
     const next = view === this.right() ? (this.layout === 'compact' ? 'player' : 'lib') : view
     this.show(next)
+  }
+
+  private navigated = false
+
+  /** Only what is shown changes (no page is left): when a button of the app's top bar is pressed, whose page the windows cover. */
+  showView(view: WinampRight): void {
+    this.right.set(view)
   }
 
   /** The window named, whatever is shown (the bar of the compact layout). Leaving the player's page for the library lets the music go on. */
