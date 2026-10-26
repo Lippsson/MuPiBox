@@ -6329,7 +6329,7 @@ function winampCard() {
         ? `<ul class="wa-list">${skins
             .map(
               (s) => `<li class="wa-row${s.active ? ' on' : ''}"><button class="wa-pickrow" type="button" data-id="${esc(s.id)}" aria-pressed="${s.active}" aria-label="${esc(s.name)}">
-                <span class="wa-prev"><img src="/theme-data/winamp/skins/${encodeURIComponent(s.id)}/main.bmp?v=${s.version}" alt="" loading="lazy"></span>
+                <span class="wa-prev"><canvas width="275" height="116" data-base="/theme-data/winamp/skins/${encodeURIComponent(s.id)}" data-v="${s.version}"></canvas></span>
                 <span class="wa-name"><b translate="no">${esc(s.name)}</b>${s.active ? `<small>${shown ? 'wird angezeigt' : 'ausgewählt'}</small>` : ''}</span></button>
                 <button class="btn sm danger" type="button" data-del="${esc(s.id)}" aria-label="${esc(s.name)} entfernen">${icon('close', 18)}Entfernen</button></li>`,
             )
@@ -6341,9 +6341,47 @@ function winampCard() {
     <small>Skins gibt es zum Beispiel im Winamp Skin Museum.</small></section>`
 }
 
+/* The picture of a skin: main.bmp alone is only the background - the buttons, sliders, clock and title bar are in the skin's
+   other bitmaps, so they are put on it here (the same places as the display draws them: winamp-main-view.ts). */
+async function drawSkinPreview(canvas) {
+  const { base, v } = canvas.dataset
+  const load = (name) =>
+    new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => resolve(null)
+      img.src = `${base}/${name}?v=${v}`
+    })
+  const names = ['main', 'titlebar', 'cbuttons', 'shufrep', 'volume', 'balance', 'posbar', 'numbers', 'nums_ex', 'playpaus', 'monoster']
+  const pic = Object.fromEntries(await Promise.all(names.map(async (n) => [n, await load(`${n}.bmp`)])))
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = false
+  const put = (name, sx, sy, w, h, dx, dy) => pic[name] && ctx.drawImage(pic[name], sx, sy, w, h, dx, dy, w, h)
+  put('main', 0, 0, 275, 116, 0, 0)
+  put('titlebar', 27, 0, 275, 14, 0, 0)
+  for (let i = 0; i < 5; i++) put('cbuttons', i * 23, 0, 23, 18, 16 + i * 23, 88)
+  put('cbuttons', 114, 0, 22, 16, 136, 89)
+  put('shufrep', 28, 0, 47, 15, 164, 89)
+  put('shufrep', 0, 0, 28, 15, 210, 89)
+  put('shufrep', 0, 61, 23, 12, 219, 58)
+  put('shufrep', 23, 61, 23, 12, 242, 58)
+  // volume at about half, balance in the middle (the handle is a picture of its own in the taller sheets)
+  put('volume', 0, 14 * 15, 68, 13, 107, 57)
+  put('balance', 9, 0, 38, 13, 177, 57)
+  if (pic.volume?.naturalHeight >= 433) put('volume', 15, 422, 14, 11, 107 + 27, 58)
+  if (pic.balance?.naturalHeight >= 433) put('balance', 15, 422, 14, 11, 177 + 12, 58)
+  // (a 1 x 1 posbar.bmp is a skin that hides the knob)
+  if (pic.posbar?.naturalWidth >= 100) put('posbar', 248, 0, 29, 10, 16, 72)
+  const digits = pic.numbers ? 'numbers' : 'nums_ex'
+  for (const [i, x] of [48, 60, 78, 90].entries()) put(digits, 0, 0, 9, 13, x, 26)
+  put('playpaus', 18, 0, 9, 9, 26, 28)
+  put('monoster', 0, 12, 29, 12, 239, 41)
+}
+
 function mountWinampCard(root, page) {
   const card = $('#wa-card', root)
   if (!card) return
+  for (const canvas of card.querySelectorAll('canvas[data-base]')) drawSkinPreview(canvas)
   const refresh = async () => {
     await loadTheme()
     if (currentPage()?.id === page.id) renderPage(page, false)

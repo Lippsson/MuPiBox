@@ -1125,7 +1125,7 @@ textarea[hidden] { display: none; }
 .wa-pickrow { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px; text-align: left; background: var(--mp-surface); color: inherit; border: 2px solid var(--mp-border); border-radius: 10px; cursor: pointer; font: inherit; }
 .wa-pickrow[aria-pressed="true"] { border-color: var(--mp-primary); background: var(--mp-primary-soft); }
 .wa-prev { flex: none; width: 138px; background: #000; border-radius: 6px; overflow: hidden; line-height: 0; }
-.wa-prev img { width: 100%; height: auto; image-rendering: pixelated; }
+.wa-prev canvas { width: 100%; height: auto; image-rendering: pixelated; }
 .wa-name { min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .wa-name small { color: var(--mp-primary-text); }
 .wa-row > .btn { flex: none; }
