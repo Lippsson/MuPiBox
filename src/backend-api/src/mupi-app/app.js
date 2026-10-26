@@ -6323,7 +6323,7 @@ function winampCard() {
   const skins = w?.skins ?? []
   const shown = !!w?.active
   return `<section class="card wide" id="wa-card"><h2>Winamp-Skin</h2>
-    <p class="help">Das Theme „Winamp“ zeichnet den Player mit einem klassischen Winamp-Skin (.wsz). Alle Skins, die du hochlädst, bleiben in dieser Liste und lassen sich jederzeit wieder auswählen. Das Theme ist für ein Display von 1920 × 480 Pixeln gedacht, auf kleineren Displays zeigt es ein Fenster nach dem anderen.</p>
+    <p class="help">Das Theme „Winamp“ zeichnet den Player mit einem klassischen Winamp-Skin (.wsz). Alle Skins, die du hochlädst, bleiben in dieser Liste und lassen sich jederzeit wieder auswählen.</p>
     ${
       skins.length
         ? `<ul class="wa-list">${skins
