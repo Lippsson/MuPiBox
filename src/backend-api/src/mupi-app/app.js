@@ -6264,8 +6264,8 @@ function themeTop() {
             <b translate="no">${esc(themeLabel(n))}</b>${n === t.current ? '<small>aktiv</small>' : ''}</button>`,
         )
         .join('')}</div></section>`,
-    // (below the themes: the skins belong to the theme "winamp", they are kept even while another theme is shown)
-    ...(list.includes('winamp') && disp.winamp ? [winampCard()] : []),
+    // (below the themes, while "winamp" is the theme: the skins are kept when another theme is chosen)
+    ...(t.current === 'winamp' && disp.winamp ? [winampCard()] : []),
   ]
 }
 
