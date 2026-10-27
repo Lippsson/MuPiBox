@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, Signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, afterNextRender, inject, signal, Signal } from '@angular/core'
 import { toObservable, toSignal } from '@angular/core/rxjs-interop'
 import { map, of, switchMap } from 'rxjs'
 import { analogAngles, digitalTime } from '../clock'
@@ -99,10 +99,10 @@ function signalDbmOf(text: string | undefined): number | undefined {
       @if (clock.settings().show) {
         <span class="st-clock" role="img" [attr.aria-label]="time().time + ' ' + time().suffix">
           @if (clock.settings().style === 'analog') {
-            <svg class="st-analog" viewBox="0 0 28 28" width="28" height="28" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true">
-              <circle cx="14" cy="14" r="12.4" stroke-width="2" />
-              <path d="M14 14V8" stroke-width="2.4" [attr.transform]="'rotate(' + angles().hour + ' 14 14)'" />
-              <path d="M14 14V4.6" stroke-width="1.8" [attr.transform]="'rotate(' + angles().minute + ' 14 14)'" />
+            <svg class="st-analog" viewBox="0 0 28 28" [attr.width]="dial()" [attr.height]="dial()" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true">
+              <circle cx="14" cy="14" r="13" />
+              <path d="M14 14V8" [attr.transform]="'rotate(' + angles().hour + ' 14 14)'" />
+              <path d="M14 14V3.6" [attr.transform]="'rotate(' + angles().minute + ' 14 14)'" />
             </svg>
           } @else {
             <span class="st-time">{{ time().time }}</span>
@@ -213,9 +213,23 @@ function signalDbmOf(text: string | undefined): number | undefined {
       font: 700 22px/1 var(--ion-font-family, inherit);
       font-variant-numeric: tabular-nums;
     }
+    /* the dial is 2 px smaller than the header is high (1 px free above and below, see dial()); the line widths stay the
+       same at every size */
     .st-analog {
       display: block;
       align-self: center;
+      flex: none;
+    }
+    .st-analog circle {
+      vector-effect: non-scaling-stroke;
+      stroke-width: 3px;
+    }
+    .st-analog path {
+      vector-effect: non-scaling-stroke;
+      stroke-width: 3.5px;
+    }
+    .st-analog path + path {
+      stroke-width: 2.5px;
     }
     .st-ampm {
       font-size: 12px;
@@ -259,12 +273,29 @@ export class StatusComponent {
   // The clock (settings and the time: clock.service.ts)
   protected readonly time = computed(() => digitalTime(this.clock.now(), this.clock.settings().hours))
   protected readonly angles = computed(() => analogAngles(this.clock.now()))
+  // The analog dial: its diameter is the height of the header bar minus 2 px (1 px free above and below). The bar is
+  // measured (its height differs by theme: 72 px in the kids' themes, 70 px in the others); a status outside a bar
+  // (the lock screen) keeps a small dial.
+  private readonly barHeight = signal<number | null>(null)
+  protected readonly dial = computed(() => {
+    const bar = this.barHeight()
+    return bar === null ? 28 : Math.max(20, Math.round(bar) - 2)
+  })
 
   public constructor(
     playerService: PlayerService,
     mediaService: MediaService,
     protected readonly clock: ClockService,
   ) {
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement
+    const destroyRef = inject(DestroyRef)
+    afterNextRender(() => {
+      const bar = host.closest('ion-header') ?? host.closest('.km-bar')
+      if (!bar || typeof ResizeObserver === 'undefined') return
+      const observer = new ResizeObserver(() => this.barHeight.set(bar.getBoundingClientRect().height))
+      observer.observe(bar)
+      destroyRef.onDestroy(() => observer.disconnect())
+    })
     this.network = toSignal(mediaService.network$, { initialValue: undefined })
     this.wifiLevel = computed(() => {
       const network = this.network()
