@@ -3569,6 +3569,10 @@ let cdInfo = null
 const CD_CACHE_DIR = '/home/dietpi/.mupibox/cd-cache'
 const CD_COVER_FILE = '/tmp/mupibox-cd-cover.jpg' // (the picture of the disc in the drive: the box's API shows it, /api/cd-cover)
 let cdLookupRun = 0
+// discs the internet did not know, and when it was asked (not again for half an hour: a drive that flaps - a weak power supply
+// resets its USB port every now and then - would ask MusicBrainz and Discogs over and over)
+const cdMisses = new Map()
+const CD_MISS_MS = 30 * 60 * 1000
 
 function cdLookupWanted() {
   return muPiBoxConfig?.mupibox?.cdLookup !== false
@@ -3577,7 +3581,8 @@ function cdLookupWanted() {
 async function startCdLookup(state) {
   const run = ++cdLookupRun
   cdInfo = null
-  fs.rm(CD_COVER_FILE, { force: true }, () => undefined)
+  // (at once, not later: the picture of this disc may be written right below)
+  fs.rmSync(CD_COVER_FILE, { force: true })
   if (!state.present || !cdLookupWanted() || !Array.isArray(state.lbas)) return
   const first = state.first ?? 1
   const disc = { first, last: first + state.tracks - 1, lbas: state.lbas, barcode: state.mcn }
@@ -3595,18 +3600,29 @@ async function startCdLookup(state) {
   try {
     const cached = JSON.parse(fs.readFileSync(`${CD_CACHE_DIR}/${key}.json`, 'utf8'))
     if (done(cached)) {
-      if (cached.hasCover) fs.copyFile(`${CD_CACHE_DIR}/${key}.jpg`, CD_COVER_FILE, () => undefined)
+      if (cached.hasCover) {
+        try {
+          fs.copyFileSync(`${CD_CACHE_DIR}/${key}.jpg`, CD_COVER_FILE)
+        } catch {
+          cdInfo = { ...cdInfo, hasCover: false } // (the picture is gone from the card)
+        }
+      }
       log.debug(`${now()}: [Spotify Control] CD: ${cached.artist} - ${cached.album} (from the card)`)
     }
     return
   } catch {
     // not seen before
   }
+  if (Date.now() - (cdMisses.get(key) ?? 0) < CD_MISS_MS) return
   const info = await lookupDisc(disc, {
     token: String(muPiBoxConfig?.discogs?.token ?? '').trim(),
     log: (message) => log.debug(`${now()}: [Spotify Control] CD lookup - ${message}`),
   })
-  if (!info || run !== cdLookupRun) return
+  if (!info) {
+    cdMisses.set(key, Date.now())
+    return
+  }
+  if (run !== cdLookupRun) return
   const cover = await downloadCover(info)
   if (run !== cdLookupRun) return
   const stored = { source: info.source, artist: info.artist, album: info.album, tracks: info.tracks, hasCover: !!cover }
