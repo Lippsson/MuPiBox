@@ -7088,6 +7088,8 @@ async function loadDisplaySettings() {
   state.values.set('resX', String(o.resX))
   state.values.set('resY', String(o.resY))
   state.values.set('resLimit', o.limitWindow === true)
+  state.values.set('cdOn', o.cdLookup !== false)
+  state.values.set('discogsToken', '')
   state.values.set('clockOn', o.clockShow !== false)
   state.values.set('clockStyle', o.clockStyle === 'analog' ? 'Analog' : 'Digital')
   state.values.set('clockHours', o.clockHours === 12 ? '12 Stunden' : '24 Stunden')
@@ -10803,6 +10805,23 @@ const CONTROLLERS = {
           ],
         },
         {
+          title: 'Audio-CD',
+          help: 'Liegt eine Audio-CD im USB-Laufwerk, zeigt das Display oben den Reiter „CD“. Die Box sucht dann im Internet nach den Namen der Titel und nach dem Cover: zuerst bei Discogs, danach bei MusicBrainz.',
+          items: [
+            { type: 'toggle', key: 'cdOn', label: 'Titel und Cover im Internet suchen' },
+            {
+              type: 'text',
+              kind: 'password',
+              key: 'discogsToken',
+              label: 'Discogs-Token',
+              placeholder: disp.opts?.discogsTokenSet ? 'gespeichert' : '',
+              dep: 'cdOn',
+              help: 'Discogs lässt nur Angemeldete suchen und findet eine CD nur über den Strichcode, den manche CDs mitbringen. Den Token erzeugst du auf discogs.com unter Settings › Developers › „Generate new token“. Ohne Token oder wenn Discogs nichts findet, fragt die Box MusicBrainz – das erkennt eine CD an ihrem Inhaltsverzeichnis.',
+            },
+            { type: 'buttons', dep: 'cdOn', buttons: [['Token speichern', 'primary', 'toast:Gespeichert']] },
+          ],
+        },
+        {
           title: 'Uhrzeit',
           help: 'Die Uhrzeit steht in der Kopfzeile des Displays, rechts neben der Akkuanzeige. Gilt sofort, das Display lädt dafür kurz neu.',
           items: [
@@ -10837,6 +10856,7 @@ const CONTROLLERS = {
         const rl = await api(`${API}/display/reload-page`, { method: 'POST', body: {} })
         return toast(`${Number(v) === 0 ? 'Display bleibt an' : `Display aus nach ${v} min`}. ${rl.body?.ok ? 'Das Display lädt neu.' : ''}`.trim())
       }
+      if (key === 'cdOn') return saveDisplayOptions({ cdLookup: !!v }, v ? 'Die Box sucht Titel und Cover im Internet' : 'Die Box sucht nicht mehr im Internet')
       if (key === 'clockOn') return saveDisplayOptions({ clockShow: !!v }, v ? 'Uhrzeit wird angezeigt' : 'Uhrzeit ist ausgeblendet')
       if (key === 'clockStyle') return saveDisplayOptions({ clockStyle: v === 'Analog' ? 'analog' : 'digital' }, v === 'Analog' ? 'Analoge Uhr' : 'Digitale Uhr')
       if (key === 'clockHours') return saveDisplayOptions({ clockHours: v === '12 Stunden' ? 12 : 24 }, v === '12 Stunden' ? '12-Stunden-Anzeige' : '24-Stunden-Anzeige')
@@ -10855,6 +10875,17 @@ const CONTROLLERS = {
       }
     },
     byLabel: {
+      async 'Token speichern'() {
+        const token = String(state.values.get('discogsToken') ?? '').trim()
+        if (!token) return toast('Bitte den Token eintragen', 'info')
+        if (!/^[A-Za-z0-9_-]+$/.test(token)) return toast('Das sieht nicht wie ein Discogs-Token aus', 'info')
+        const r = await saveDisplayOptions({ discogsToken: token }, 'Token gespeichert')
+        if (r) {
+          disp.opts.discogsTokenSet = true
+          state.values.set('discogsToken', '')
+          renderPage(currentPage(), false)
+        }
+      },
       async 'Auflösung übernehmen'() {
         const resX = Number(state.values.get('resX'))
         const resY = Number(state.values.get('resY'))

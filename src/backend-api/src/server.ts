@@ -8099,6 +8099,15 @@ app.get('/api/track-cover', async (req, res) => {
   await sendThumbnail(res, thumb)
 })
 
+// The picture of the audio CD in the drive (what the player found on the internet, see backend-player cd-lookup.js): the
+// player keeps it in this file while the disc is in. The display's "CD" category shows it as the cover.
+app.get('/api/cd-cover', async (_req, res) => {
+  const file = '/tmp/mupibox-cd-cover.jpg'
+  await stat(file)
+    .then(() => sendThumbnail(res, file))
+    .catch(() => res.status(404).set('Cache-Control', 'no-store').send('no cd cover'))
+})
+
 function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
   return stat(thumb).then((info) => {
     // Revalidated on every use (a cheap 304 on the box itself) instead of cached blindly for a day, so a

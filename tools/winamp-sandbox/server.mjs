@@ -59,9 +59,10 @@ const durationOf = (album, i) => (album.long ? 900 + i * 130 : 95 + ((i * 37) % 
 const coverSvg = (n, label) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${colours[n % colours.length]}"/><stop offset="1" stop-color="#1b1b2b"/></linearGradient></defs><rect width="300" height="300" fill="url(#g)"/><circle cx="150" cy="130" r="70" fill="#ffffff22"/><text x="150" y="250" text-anchor="middle" font-family="Arial" font-size="26" fill="#fff">${label}</text></svg>`
 
 // the audio CD in the pretend drive: put in with http://localhost:5005/sandbox/cd?tracks=9, taken out with ?tracks=0
-const CD = { present: false, tracks: 0, id: 0 }
+const CD = { present: false, tracks: 0, id: 0 } // (+ artist, album, cover, source when named)
 const CD_FOLDER = '_audio_cd_'
-const cdAlbum = () => ({ name: 'Audio-CD', category: 'cd', isCd: true, tracks: Array.from({ length: CD.tracks }, (_, i) => `Track ${i + 1}`) })
+// (with &named=1 the disc is one the internet knows: artist, album, names of the tracks and a cover)
+const cdAlbum = () => ({ name: CD.album || 'Audio-CD', category: 'cd', isCd: true, tracks: Array.from({ length: CD.tracks }, (_, i) => (CD.album ? `Song ${i + 1} of ${CD.album}` : `Track ${i + 1}`)) })
 
 // ---------- the pretend player ----------
 const player = {
@@ -266,7 +267,9 @@ createServer(async (req, res) => {
   if (p === '/cd') return json(res, CD)
   if (p === '/sandbox/cd') {
     const tracks = Math.max(0, Number(url.searchParams.get('tracks')) || 0)
-    if (tracks > 0) Object.assign(CD, { present: true, tracks, id: CD.id + 1 })
+    const named = url.searchParams.get('named') === '1'
+    for (const k of ['artist', 'album', 'cover', 'source']) delete CD[k]
+    if (tracks > 0) Object.assign(CD, { present: true, tracks, id: CD.id + 1 }, named ? { artist: 'Pretend Band', album: 'Pretend Album', source: 'musicbrainz', cover: true } : {})
     else Object.assign(CD, { present: false, tracks: 0 })
     return json(res, CD)
   }
@@ -324,7 +327,8 @@ async function parentsApi(req, res, url, api) {
       themeReloadAt = Date.now()
       return json(res, { ok: true, reloaded: true })
     }
-    return json(res, { hiddenCategories: [], startCategory: 'audiobook', resume: 9, listviewTimer: 2.5, settingsAccessTimer: 3, resX: 1920, resY: 480, limitWindow: false, brightness: null, nightDim: {}, rotation: {}, dsi: null, hideScrollbar: false, scrollbarStyle: 'standard', ...OPTIONS })
+    const { discogsToken, ...shown } = OPTIONS
+    return json(res, { hiddenCategories: [], startCategory: 'audiobook', resume: 9, listviewTimer: 2.5, settingsAccessTimer: 3, resX: 1920, resY: 480, limitWindow: false, brightness: null, nightDim: {}, rotation: {}, dsi: null, hideScrollbar: false, scrollbarStyle: 'standard', cdLookup: true, discogsTokenSet: !!discogsToken, ...shown })
   }
   if (api === '/power-config') return json(res, { idleDisplayOff: 10 })
   if (api === '/display/custom-theme') return json(res, { mode: 'auto', resolved: 'dark', veil: 0, accent: null, font: 'fredoka', size: 'm', v: 0, hasPicture: false, active: THEME === 'custom' })
@@ -386,6 +390,10 @@ createServer((req, res) => {
     if (f && isFile(f)) return send(res, f)
     if (!path.extname(rel)) return send(res, path.join(APP_DIR, 'index.html'))
     return res.writeHead(404).end()
+  }
+  if (p === '/api/cd-cover') {
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml' })
+    return res.end(coverSvg(3, 'Pretend Album'))
   }
   if (p.startsWith('/api/')) {
     const api = p.slice(4)

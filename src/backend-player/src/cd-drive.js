@@ -42,7 +42,15 @@ if full and status == 4:
         try:
             marks = [lba(t) for t in range(hdr[0], hdr[1] + 1)] + [lba(0xAA)]
             out["starts"] = [round((m - marks[0]) / 75.0, 3) for m in marks]
+            out["lbas"] = marks  # (for the disc's id: musicbrainz, see cd-lookup.js)
         except OSError:
+            pass
+        # the media catalog number (the barcode, when the disc carries it)
+        try:
+            mcn = fcntl.ioctl(fd, 0x5311, bytes(14))[:13].decode("ascii", "ignore").strip(chr(0) + " ")
+            if mcn.isdigit() and int(mcn) != 0:
+                out["mcn"] = mcn
+        except (OSError, ValueError):
             pass
 print(json.dumps(out))
 `
@@ -110,7 +118,14 @@ function createCdWatcher({ probe = (full) => probeDevice(DEVICE, full), onChange
         lastDrive = full.drive
         if (full.drive === 'ok' && full.disc === 'audio' && full.tracks > 0) {
           discs++
-          set({ present: true, tracks: full.tracks, id: discs, ...(Array.isArray(full.starts) ? { starts: full.starts } : {}) })
+          set({
+            present: true,
+            tracks: full.tracks,
+            id: discs,
+            ...(Array.isArray(full.starts) ? { starts: full.starts } : {}),
+            ...(Array.isArray(full.lbas) ? { lbas: full.lbas, first: full.first } : {}),
+            ...(full.mcn ? { mcn: full.mcn } : {}),
+          })
         } else if (full.drive === 'ok') {
           // a data disc, a blank one: nothing this player plays (it is asked again only when the disc is changed)
           set(NO_CD)

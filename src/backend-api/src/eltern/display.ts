@@ -121,6 +121,10 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       episodeResume: mb.episodeResume !== false,
       // ("Hören mit" on the display's player: a tap on the volume chooses speaker or Bluetooth - audio-output.ts)
       outputPicker: mb.outputPicker !== false,
+      // the names and the cover of an audio CD in the drive are looked up on the internet (Discogs, then MusicBrainz);
+      // Discogs needs a token of the user's own - it is kept in the config and never sent back, only whether there is one
+      cdLookup: mb.cdLookup !== false,
+      discogsTokenSet: typeof (cfg?.discogs as Record<string, unknown> | undefined)?.token === 'string' && String((cfg?.discogs as Record<string, unknown>).token).length > 0,
       // the clock in the display's header, right of the battery: shown (default), digits or a dial, 12 or 24 hours
       clockShow: mb.clockShow !== false,
       clockStyle: mb.clockStyle === 'analog' ? 'analog' : 'digital',
@@ -153,7 +157,7 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     const mb: Record<string, unknown> = {}
     const chromium: Record<string, unknown> = {}
     const bad = (what: string) => res.status(400).json({ error: `invalid ${what}` })
-    for (const key of ['coverflowShowNames', 'hideScrollbar', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker', 'clockShow']) {
+    for (const key of ['coverflowShowNames', 'hideScrollbar', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker', 'clockShow', 'cdLookup']) {
       if (body[key] === undefined) continue
       if (typeof body[key] !== 'boolean') return bad(key)
       mb[key] = body[key]
@@ -161,6 +165,12 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     if (body.scrollbarStyle !== undefined) {
       if (body.scrollbarStyle !== 'standard' && body.scrollbarStyle !== 'full') return bad('scrollbarStyle')
       mb.scrollbarStyle = body.scrollbarStyle
+    }
+    // (a Discogs token: letters and digits, as the site makes them; an empty text takes it away)
+    let discogsToken: string | undefined
+    if (body.discogsToken !== undefined) {
+      if (typeof body.discogsToken !== 'string' || !/^[A-Za-z0-9_-]{0,200}$/.test(body.discogsToken.trim())) return bad('discogsToken')
+      discogsToken = body.discogsToken.trim()
     }
     if (body.clockStyle !== undefined) {
       if (body.clockStyle !== 'digital' && body.clockStyle !== 'analog') return bad('clockStyle')
@@ -245,9 +255,10 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       mb.dsiRotation = dsiRotation
     }
 
-    if (Object.keys(mb).length || Object.keys(chromium).length) {
+    if (Object.keys(mb).length || Object.keys(chromium).length || discogsToken !== undefined) {
       await deps.updateMupiboxConfig((cfg) => {
         cfg.mupibox = { ...((cfg.mupibox as Record<string, unknown>) ?? {}), ...mb }
+        if (discogsToken !== undefined) cfg.discogs = { ...((cfg.discogs as Record<string, unknown>) ?? {}), token: discogsToken }
         if (Object.keys(chromium).length) cfg.chromium = { ...((cfg.chromium as Record<string, unknown>) ?? {}), ...chromium }
       })
     }

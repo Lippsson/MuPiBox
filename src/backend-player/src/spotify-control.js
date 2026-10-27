@@ -6,6 +6,7 @@ const dns = require('node:dns')
 const SpotifyWebApi = require('spotify-web-api-node')
 const createMpv = require('./mpv-wrapper.js')
 const { createCdWatcher, DEVICE: CD_DEVICE } = require('./cd-drive.js')
+const { downloadCover, lookupDisc, musicBrainzDiscId } = require('./cd-lookup.js')
 const { isPlaylistUrl, pointsAtBox, resolveStreamUrl } = require('./playlist-url.js')
 const googleTTS = require('google-tts-api')
 const fs = require('node:fs')
@@ -359,7 +360,7 @@ player.on('metadata', (val) => {
     if (track) currentMeta.currentTrackname = track.name
   } else if (isCdFolder(currentMeta.path)) {
     // (the disc has no file names: its tracks are numbered, and a title the disc carries - CD-TEXT - is used)
-    currentMeta.currentTrackname = val.Title || `Track ${currentMeta.currentTracknr}`
+    currentMeta.currentTrackname = val.Title || cdTrackTitle(currentMeta.currentTracknr)
   } else if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio') {
     currentMeta.currentTrackname = val.Title
   }
@@ -3562,19 +3563,87 @@ app.post('/winamp/presets', (req, res) => {
 // album - the track list, next / previous, a tap on a track, shuffle, repeat.
 const CD_FOLDER = '_audio_cd_'
 const isCdFolder = (folder) => folder === CD_FOLDER
+// What the internet knows about the disc (cd-lookup.js: Discogs, then MusicBrainz): artist, album, the names of the tracks and a
+// cover. Kept on the card by the disc's id, so a disc that was in the drive before is known at once - and without the internet.
+let cdInfo = null
+const CD_CACHE_DIR = '/home/dietpi/.mupibox/cd-cache'
+const CD_COVER_FILE = '/tmp/mupibox-cd-cover.jpg' // (the picture of the disc in the drive: the box's API shows it, /api/cd-cover)
+let cdLookupRun = 0
+
+function cdLookupWanted() {
+  return muPiBoxConfig?.mupibox?.cdLookup !== false
+}
+
+async function startCdLookup(state) {
+  const run = ++cdLookupRun
+  cdInfo = null
+  fs.rm(CD_COVER_FILE, { force: true }, () => undefined)
+  if (!state.present || !cdLookupWanted() || !Array.isArray(state.lbas)) return
+  const first = state.first ?? 1
+  const disc = { first, last: first + state.tracks - 1, lbas: state.lbas, barcode: state.mcn }
+  const key = musicBrainzDiscId(disc.first, disc.last, disc.lbas).replace(/[^A-Za-z0-9._-]/g, '_')
+  const done = (info) => {
+    if (run !== cdLookupRun) return false // (another disc came in meanwhile)
+    cdInfo = info
+    if (info.tracks?.length && currentMeta.path === CD_FOLDER) {
+      const title = info.tracks[currentMeta.currentTracknr - 1]?.title
+      if (title) currentMeta.currentTrackname = title
+      if (info.album) currentMeta.album = info.album
+    }
+    return true
+  }
+  try {
+    const cached = JSON.parse(fs.readFileSync(`${CD_CACHE_DIR}/${key}.json`, 'utf8'))
+    if (done(cached)) {
+      if (cached.hasCover) fs.copyFile(`${CD_CACHE_DIR}/${key}.jpg`, CD_COVER_FILE, () => undefined)
+      log.debug(`${now()}: [Spotify Control] CD: ${cached.artist} - ${cached.album} (from the card)`)
+    }
+    return
+  } catch {
+    // not seen before
+  }
+  const info = await lookupDisc(disc, {
+    token: String(muPiBoxConfig?.discogs?.token ?? '').trim(),
+    log: (message) => log.debug(`${now()}: [Spotify Control] CD lookup - ${message}`),
+  })
+  if (!info || run !== cdLookupRun) return
+  const cover = await downloadCover(info)
+  if (run !== cdLookupRun) return
+  const stored = { source: info.source, artist: info.artist, album: info.album, tracks: info.tracks, hasCover: !!cover }
+  if (!done(stored)) return
+  try {
+    fs.mkdirSync(CD_CACHE_DIR, { recursive: true })
+    fs.writeFileSync(`${CD_CACHE_DIR}/${key}.json`, JSON.stringify(stored))
+    if (cover) {
+      fs.writeFileSync(`${CD_CACHE_DIR}/${key}.jpg`, cover)
+      fs.writeFileSync(CD_COVER_FILE, cover)
+    }
+  } catch (err) {
+    log.debug(`${now()}: [Spotify Control] CD: could not keep the answer: ${err.message}`)
+  }
+}
+
 const cdWatcher = createCdWatcher({
-  onChange: (state) => log.debug(`${now()}: [Spotify Control] CD drive: ${state.present ? `audio CD, ${state.tracks} tracks` : 'no CD'}`),
+  onChange: (state) => {
+    log.debug(`${now()}: [Spotify Control] CD drive: ${state.present ? `audio CD, ${state.tracks} tracks` : 'no CD'}`)
+    void startCdLookup(state).catch((err) => log.debug(`${now()}: [Spotify Control] CD lookup failed: ${err.message}`))
+  },
   // (the drive belongs to root:cdrom, and this user is not in that group: it is opened for reading - again after a new plug-in; libcdio also wants write access for its commands to the drive)
   fixAccess: () => {
     cmdCall(`sudo -n chmod a+rw ${CD_DEVICE}`).catch(() => undefined)
   },
 })
 cdWatcher.start()
-app.get('/cd', (_req, res) => res.json(cdWatcher.state))
+// (what the display needs: the disc and what is known of it; the table of contents stays here)
+app.get('/cd', (_req, res) => {
+  const { present, tracks, id, starts } = cdWatcher.state
+  res.json({ present, tracks, id, ...(starts ? { starts } : {}), ...(cdInfo ? { artist: cdInfo.artist, album: cdInfo.album, source: cdInfo.source, cover: !!cdInfo.hasCover } : {}) })
+})
 
+const cdTrackTitle = (nr) => cdInfo?.tracks?.[nr - 1]?.title || `Track ${nr}`
 function cdTracklist() {
   const count = cdWatcher.state.tracks
-  return Array.from({ length: count }, (_, i) => ({ position: i + 1, name: `Track ${i + 1}` }))
+  return Array.from({ length: count }, (_, i) => ({ position: i + 1, name: cdTrackTitle(i + 1) }))
 }
 
 // A CD plays as a playlist of the same disc, each entry from the start of its track to the start of the next (mpv-wrapper
@@ -3613,7 +3682,7 @@ function playCd() {
   player.setVolume(volumeStart)
   currentMeta.currentTracknr = 0
   currentMeta.path = CD_FOLDER
-  currentMeta.album = 'Audio-CD'
+  currentMeta.album = cdInfo?.album || 'Audio-CD'
   currentMeta.totalTracks = cdWatcher.state.tracks
 }
 

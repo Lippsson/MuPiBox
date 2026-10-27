@@ -10,6 +10,10 @@ export interface CdState {
   present: boolean
   tracks: number
   id: number
+  // what the player found on the internet (Discogs, MusicBrainz): artist, album and whether a cover came with it
+  artist?: string
+  album?: string
+  cover?: boolean
 }
 
 /**
@@ -29,20 +33,22 @@ export class CdService {
         // (a player that does not answer for a moment, or an old one without /cd: no change, or no CD)
         if (!state) return
         const now = this.state()
-        if (state.present !== now.present || state.tracks !== now.tracks || state.id !== now.id) this.state.set(state)
+        if (state.present !== now.present || state.tracks !== now.tracks || state.id !== now.id || state.album !== now.album || state.cover !== now.cover) this.state.set(state)
       })
   }
 
   /** The disc as a local album: the player's page plays it from the first track. Its place is never kept for "Fortsetzen". */
   cdMedia(): Media {
+    const state = this.state()
     return {
       type: 'library',
       category: 'audiobook',
-      artist: 'CD',
-      title: 'Audio-CD',
+      artist: state.artist || 'CD',
+      title: state.album || 'Audio-CD',
       id: CD_LIBRARY_PATH,
       libraryPath: CD_LIBRARY_PATH,
-      cover: 'assets/cd-cover.svg',
+      // (the disc's own picture when one was found; the disc's id in the address, so another disc is another picture)
+      cover: state.cover ? `${environment.backend.apiUrl}/cd-cover?v=${state.id}` : 'assets/cd-cover.svg',
       cdrom: true,
     }
   }
