@@ -1044,6 +1044,12 @@ rm -f /tmp/mupibox-update-failed
 		cp -f ${MUPI_SRC}/config/udev/99-mupibox-eth.rules /etc/udev/rules.d/99-mupibox-eth.rules >&3 2>&3
 		udevadm control --reload >&3 2>&3
 	fi
+	# the CD drive: readable by the kiosk user at once, also after a USB reset (see the rule)
+	if [ -f ${MUPI_SRC}/config/udev/99-mupibox-cdrom.rules ]; then
+		cp -f ${MUPI_SRC}/config/udev/99-mupibox-cdrom.rules /etc/udev/rules.d/99-mupibox-cdrom.rules >&3 2>&3
+		udevadm control --reload >&3 2>&3
+		udevadm trigger --subsystem-match=block --action=change >&3 2>&3
+	fi
 	systemctl daemon-reload >&3 2>&3
 	# remote display: a VNC that is running keeps its old settings (open to the network) until it starts again
 	systemctl try-restart mupi_vnc.service mupi_novnc.service >&3 2>&3
@@ -1136,7 +1142,7 @@ rm -f /tmp/mupibox-update-failed
 	  echo "dtoverlay=pwm,pin=${LED_PIN},func=4" | tee -a "${BOOT_CONFIG}" >&3 2>&3
 	fi
 
-	usermod -aG dialout dietpi >&3 2>&3
+	usermod -aG dialout,cdrom dietpi >&3 2>&3
 	after=$(date +%s)
 	echo -e "## Set environment	##  finished after $((after - $before)) seconds" >&3 2>&3
 	STEP=$(($STEP + 1))

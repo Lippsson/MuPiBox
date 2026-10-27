@@ -525,7 +525,7 @@ STEP=0
 	/boot/dietpi/func/dietpi-set_hardware bluetooth enable >&3 2>&3
 	/boot/dietpi/func/dietpi-set_hardware soundcard "hifiberry-dac" >&3 2>&3
 	usermod -g pulse -G audio --home /var/run/pulse pulse >&3 2>&3
-	usermod -a -G audio,bluetooth,pulse,pulse-access,gpio,dialout,tty dietpi >&3 2>&3
+	usermod -a -G audio,bluetooth,pulse,pulse-access,gpio,dialout,tty,cdrom dietpi >&3 2>&3
 	usermod -a -G pulse,pulse-access,gpio root >&3 2>&3
 	sed -i 's/; system-instance = no/system-instance = yes/g' /etc/pulse/daemon.conf >&3 2>&3
 	sed -i 's/; default-server =/default-server = \/var\/run\/pulse\/native/g' /etc/pulse/client.conf >&3 2>&3
@@ -681,6 +681,8 @@ STEP=0
 	cp -f ${MUPI_SRC}/config/udev/99-mupibox-wifi.rules /etc/udev/rules.d/99-mupibox-wifi.rules >&3 2>&3
 	# LAN takes over from WiFi again on carrier loss/return of the ethernet cable (same script)
 	cp -f ${MUPI_SRC}/config/udev/99-mupibox-eth.rules /etc/udev/rules.d/99-mupibox-eth.rules >&3 2>&3
+	# the CD drive: readable by the kiosk user at once, also after a USB reset
+	cp -f ${MUPI_SRC}/config/udev/99-mupibox-cdrom.rules /etc/udev/rules.d/99-mupibox-cdrom.rules >&3 2>&3
 	udevadm control --reload >&3 2>&3
 
 	mkdir -p "/etc/systemd/system/ifup@eth0.service.d" >&3 2>&3
