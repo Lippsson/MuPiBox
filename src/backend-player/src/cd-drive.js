@@ -78,8 +78,17 @@ const NO_CD = Object.freeze({ present: false, tracks: 0, id: 0 })
  * changes (id counts up with every disc that comes in, so a swapped disc is a new one). `fixAccess()` is called when the
  * drive cannot be opened (a drive that is not readable by this user); it may make it readable, the next question tells.
  */
-function createCdWatcher({ probe = (full) => probeDevice(DEVICE, full), onChange = () => {}, intervalMs = POLL_MS, fixAccess = () => {} } = {}) {
+// A disc that was in stays "in" this long while the drive is gone or cannot be read: a drive on a USB port that resets (a weak
+// power supply) is away for a few seconds and comes back with the same disc - the display should not flicker meanwhile.
+const GRACE_MS = 120000
+// The drive comes back with the rights of a new device (root only): they are opened again at once, not once in a while
+const FIX_EVERY_MS = 3000
+
+function createCdWatcher({ probe = (full) => probeDevice(DEVICE, full), onChange = () => {}, intervalMs = POLL_MS, fixAccess = () => {}, now = Date.now } = {}) {
   let state = NO_CD
+  let lastOkAt = 0
+  let lastToc = ''
+  let seen = false // (a drive that was seen once is asked as often as ever when it is gone)
   let lastDrive = 'unknown'
   let discs = 0
   let timer = null
@@ -96,27 +105,39 @@ function createCdWatcher({ probe = (full) => probeDevice(DEVICE, full), onChange
   async function tick() {
     if (busy) return
     // (a box without a drive, or without Python: asked only every tenth time - a drive may be plugged in later)
-    if ((lastDrive === 'nodrive' || lastDrive === 'error') && ++skipped % 10 !== 0) return
+    if (!seen && (lastDrive === 'nodrive' || lastDrive === 'error') && ++skipped % 10 !== 0) return
     busy = true
     try {
       const quick = await probe(false)
       if (quick.drive === 'noaccess') {
-        if (Date.now() - lastFix > 30000) {
-          lastFix = Date.now()
+        if (now() - lastFix > FIX_EVERY_MS) {
+          lastFix = now()
           fixAccess()
         }
       }
       if (quick.drive !== 'ok') {
-        // no disc, tray open, spinning up, no drive: nothing to play
         lastDrive = quick.drive
-        if (quick.drive !== 'notready') set(NO_CD)
+        if (quick.drive === 'none' || quick.drive === 'open') {
+          // the disc is out for sure
+          lastToc = ''
+          set(NO_CD)
+        } else if (state.present && now() - lastOkAt > GRACE_MS) {
+          // the drive has been gone, unreadable or spinning up for too long: it is no CD any more
+          set(NO_CD)
+        }
         return
       }
+      seen = true
+      lastOkAt = now()
       // a disc is in: its contents are read when it has just come in (or when the drive was not seen before)
       if (lastDrive !== 'ok') {
         const full = await probe(true)
         lastDrive = full.drive
         if (full.drive === 'ok' && full.disc === 'audio' && full.tracks > 0) {
+          const toc = JSON.stringify(full.lbas ?? full.tracks)
+          // the same disc after the drive was away for a moment: nothing changes (the same id - no new lookup)
+          if (state.present && toc === lastToc) return
+          lastToc = toc
           discs++
           set({
             present: true,

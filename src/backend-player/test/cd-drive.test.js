@@ -130,3 +130,59 @@ test('the start of each track (from the disc) goes with the state', async () => 
   await w.tick()
   assert.deepEqual(w.state, { present: true, tracks: 3, id: 1, starts: [0, 27.307, 228.533, 253.28] })
 })
+
+test('a drive that is gone for a moment (a USB port that resets) keeps the CD, and brings back the same disc under the same id', async () => {
+  const d = pretendDrive()
+  let t = 1000000
+  const { w, changes } = watch(d, { now: () => t })
+  d.quick = { drive: 'ok' }
+  d.full = { drive: 'ok', disc: 'audio', tracks: 12, lbas: [0, 100, 200] }
+  await w.tick()
+  assert.equal(w.state.id, 1)
+  // the drive is away for a minute: still a CD (asked as often as ever - it was seen)
+  d.quick = { drive: 'nodrive' }
+  for (let i = 0; i < 12; i++) {
+    t += 5000
+    await w.tick()
+  }
+  assert.equal(w.state.present, true)
+  assert.equal(d.quickAsked, 13)
+  // it comes back with the same disc: no new disc, no new answer
+  d.quick = { drive: 'ok' }
+  await w.tick()
+  assert.equal(w.state.present, true)
+  assert.equal(w.state.id, 1)
+  assert.equal(changes.length, 1)
+})
+
+test('a drive that stays away for more than two minutes is no CD; an open tray or no disc clears it at once', async () => {
+  const d = pretendDrive()
+  let t = 1000000
+  const { w } = watch(d, { now: () => t })
+  d.quick = { drive: 'ok' }
+  await w.tick()
+  d.quick = { drive: 'nodrive' }
+  t += 121000
+  await w.tick()
+  assert.equal(w.state.present, false)
+  d.quick = { drive: 'ok' }
+  await w.tick()
+  assert.equal(w.state.present, true)
+  d.quick = { drive: 'open' }
+  await w.tick()
+  assert.equal(w.state.present, false)
+})
+
+test('a drive that was not readable is opened at once, every few seconds', async () => {
+  const d = pretendDrive()
+  let t = 1000000
+  let fixes = 0
+  const { w } = watch(d, { now: () => t, fixAccess: () => fixes++ })
+  d.quick = { drive: 'noaccess' }
+  await w.tick()
+  t += 1000
+  await w.tick() // (too soon after the last)
+  t += 3000
+  await w.tick()
+  assert.equal(fixes, 2)
+})
