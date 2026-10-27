@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core'
 import { BehaviorSubject } from 'rxjs'
-import type { Media } from './media'
+import { isCdMedia, type Media } from './media'
 
 // Tracks the Media that the player most recently started playing. Set by
 // PlayerService.playMedia / resumeMedia. Read by the global resume-on-cap
@@ -66,6 +66,7 @@ export class CurrentMediaService {
   // saveResumeFiles, AppComponent global cap saver) so the gating is
   // consistent and based on actual listening, not wall-clock time.
   shouldPersistResume(): boolean {
-    return this.worthResume
+    // (an audio CD is not kept for "Fortsetzen": the disc may be gone, or another one in the drive, when it is picked)
+    return this.worthResume && !isCdMedia(this.currentMedia$.value)
   }
 }

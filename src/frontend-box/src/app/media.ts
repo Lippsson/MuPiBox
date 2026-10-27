@@ -62,6 +62,8 @@ export interface Media {
   // "audiobook/Artist/Album", read live from disk at any depth. Entries without
   // it are old-style library entries from data.json (category/artist/title).
   libraryPath?: string
+  // The audio CD in the drive (cd.service.ts): played like a local album, but never kept for "Fortsetzen"
+  cdrom?: boolean
   // True for a local folder with subfolders holding audio: it opens the next level.
   libraryIsContainer?: boolean
   // The audio files lying directly in such a folder (NAS or local), next to its subfolders: listed first.
@@ -161,3 +163,9 @@ export interface MediaInfoCache {
   episodes?: any[]
   chapters?: any[]
 }
+
+/** The folder the player gives the audio CD (backend-player: CD_FOLDER) - it plays like the folder of a local album. */
+export const CD_LIBRARY_PATH = '_audio_cd_'
+
+/** The audio CD in the drive: whatever way it was started (the CD category, the parents' app, Telegram). */
+export const isCdMedia = (media: Media | null | undefined): boolean => !!media && (media.cdrom === true || media.libraryPath === CD_LIBRARY_PATH)

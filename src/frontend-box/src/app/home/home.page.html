@@ -10,8 +10,8 @@
       @if (configLoaded()) {
         <div class="km-tabs-wrap" [class.km-mini]="pillShown()">
           <div class="km-tabs" role="tablist">
-            @for (cat of visibleCategories(); track cat.key) {
-              <button class="km-tab" type="button" role="tab" [class.km-on]="cat.key === category()" [attr.aria-selected]="cat.key === category()" (click)="category.set(cat.key)">
+            @for (cat of headerCategories(); track cat.key) {
+              <button class="km-tab" type="button" role="tab" [class.km-on]="cat.key === category()" [attr.aria-selected]="cat.key === category()" (click)="categoryClicked(cat.key)">
                 <ion-icon [name]="cat.icon"></ion-icon>
               </button>
             }
@@ -36,7 +36,7 @@
       <!-- Hidden categories are left out; the remaining buttons share the width equally,
            so their icons stay evenly spaced and centered. -->
       <ion-segment value="{{this.category()}}" (ionChange)="categoryChanged($event)">
-        @for (cat of visibleCategories(); track cat.key) {
+        @for (cat of headerCategories(); track cat.key) {
           <ion-segment-button [value]="cat.key">
             <ion-icon [name]="cat.icon"></ion-icon>
           </ion-segment-button>

@@ -5,6 +5,7 @@ const path = require('node:path')
 const dns = require('node:dns')
 const SpotifyWebApi = require('spotify-web-api-node')
 const createMpv = require('./mpv-wrapper.js')
+const { createCdWatcher, DEVICE: CD_DEVICE } = require('./cd-drive.js')
 const { isPlaylistUrl, pointsAtBox, resolveStreamUrl } = require('./playlist-url.js')
 const googleTTS = require('google-tts-api')
 const fs = require('node:fs')
@@ -355,6 +356,9 @@ player.on('metadata', (val) => {
   } else if (currentMeta.currentType === 'tidal') {
     const track = currentTidalTracks[currentMeta.currentTracknr - 1]
     if (track) currentMeta.currentTrackname = track.name
+  } else if (isCdFolder(currentMeta.path)) {
+    // (the disc has no file names: its tracks are numbered, and a title the disc carries - CD-TEXT - is used)
+    currentMeta.currentTrackname = val.Title || `Track ${currentMeta.currentTracknr}`
   } else if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio') {
     currentMeta.currentTrackname = val.Title
   }
@@ -469,7 +473,7 @@ player.on('time_pos', checkSilence)
 
 player.on('filename', (val) => {
   log.debug('track name is', val)
-  if (!currentMeta.currentTrackname && currentMeta.currentPlayer !== 'spotify') {
+  if (!currentMeta.currentTrackname && currentMeta.currentPlayer !== 'spotify' && !isCdFolder(currentMeta.path)) {
     currentMeta.currentTrackname = val
       .split('.mp3')[0]
       .split('.flac')[0]
@@ -488,7 +492,7 @@ player.on('path', (val) => {
     currentMeta.trackFile =
       typeof val === 'string' && val.startsWith(mediaRoot) ? `local:${val.slice(mediaRoot.length)}` : undefined
   }
-  if (!['rss', 'radio', 'nas', 'tidal'].includes(currentMeta.currentType)) {
+  if (!['rss', 'radio', 'nas', 'tidal'].includes(currentMeta.currentType) && !isCdFolder(currentMeta.path)) {
     // The folder holding the file, whatever the folder depth (was: fixed 7th segment).
     const pathParts = val.split('/')
     if (pathParts.length > 2) {
@@ -2449,6 +2453,7 @@ function scheduleResumeJumps(trackNr, progressPct, firstJumpMs) {
 
 // resume: { track, percent } - where the album goes on (only an engine that starts there takes it, see playListAtTrack)
 function playList(playedList, resume) {
+  if (isCdFolder(decodeURI(playedList).replace(/:/g, '/'))) return playCd()
   playbackGeneration++
   currentMeta.trackFile = undefined // the new album's first file sets it (see the path event)
   clearLibraryResumeTimers()
@@ -3546,6 +3551,45 @@ app.post('/winamp/presets', (req, res) => {
   fs.writeFile(WINAMP_PRESETS_FILE, JSON.stringify(set), (err) => (err ? res.status(500).json({ error: 'write_failed' }) : res.json({ ok: true })))
 })
 
+// --- The CD drive ---
+// An audio CD in the drive: the display shows a "CD" category (GET /cd) that plays it. It is played like a local album
+// of a folder that does not exist (CD_FOLDER): the album routes and the display's player page work as they do for any
+// album - the track list, next / previous, a tap on a track, shuffle, repeat.
+const CD_FOLDER = '_audio_cd_'
+const isCdFolder = (folder) => folder === CD_FOLDER
+const cdWatcher = createCdWatcher({
+  onChange: (state) => log.debug(`${now()}: [Spotify Control] CD drive: ${state.present ? `audio CD, ${state.tracks} tracks` : 'no CD'}`),
+  // (the drive belongs to root:cdrom, and this user is not in that group: it is opened for reading - again after a new plug-in; libcdio also wants write access for its commands to the drive)
+  fixAccess: () => {
+    cmdCall(`sudo -n chmod a+rw ${CD_DEVICE}`).catch(() => undefined)
+  },
+})
+cdWatcher.start()
+app.get('/cd', (_req, res) => res.json(cdWatcher.state))
+
+function cdTracklist() {
+  const count = cdWatcher.state.tracks
+  return Array.from({ length: count }, (_, i) => ({ position: i + 1, name: `Track ${i + 1}` }))
+}
+
+// (a CD plays through mpv only: it reads the disc itself)
+function playCd() {
+  playbackGeneration++
+  currentMeta.trackFile = undefined
+  clearLibraryResumeTimers()
+  if (!cdWatcher.state.present || typeof player.playCd !== 'function') {
+    log.debug(`${now()}: [Spotify Control] CD: nothing to play`)
+    return
+  }
+  writeplayerstatePlay()
+  player.playCd(cdWatcher.state.tracks, CD_DEVICE)
+  player.setVolume(volumeStart)
+  currentMeta.currentTracknr = 0
+  currentMeta.path = CD_FOLDER
+  currentMeta.album = 'Audio-CD'
+  currentMeta.totalTracks = cdWatcher.state.tracks
+}
+
 /*endpoint to return all local metainformation*/
 /*only used if sonos-kids-player is modified*/
 app.get('/local', (_req, res) => {
@@ -3576,6 +3620,10 @@ app.get('/local/tracklist/:encoded', (req, res) => {
   const playedTitelmod = decodeURI(req.params.encoded).replace(/:/g, '/')
   if (playedTitelmod.split('/').includes('..')) {
     res.status(400).json({ error: 'invalid path' })
+    return
+  }
+  if (isCdFolder(playedTitelmod)) {
+    res.json(cdTracklist())
     return
   }
 

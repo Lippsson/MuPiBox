@@ -16,6 +16,7 @@ import {
 import { addIcons } from 'ionicons'
 import {
   bookOutline,
+  discOutline,
   musicalNotesOutline,
   radioOutline,
   serverOutline,
@@ -30,6 +31,7 @@ import { CoverFlipService } from '../cover-flip.service'
 import { HeaderVisibilityService } from '../header-visibility.service'
 import { LoadingComponent } from '../loading/loading.component'
 import type { CategoryType } from '../media'
+import { CdService } from '../cd.service'
 import { MediaService } from '../media.service'
 import { MediaUnavailableComponent } from '../media-unavailable/media-unavailable.component'
 import type { MupiboxConfig } from '../mupibox-config.model'
@@ -97,6 +99,11 @@ export class HomePage extends SwiperIonicEventsHelper {
   protected visibleCategories = computed(() =>
     this.categories.filter((c) => !this.hiddenCategories().includes(c.key) && (c.key !== 'nas' || this.nasTabWanted())),
   )
+  // An audio CD in the drive: a "CD" tab after the others (so none of them moves), that is no list - a tap plays the disc
+  private readonly cd = inject(CdService)
+  protected readonly headerCategories = computed<{ key: CategoryType | 'cd'; icon: string }[]>(() =>
+    this.cd.state().present ? [...this.visibleCategories(), { key: 'cd', icon: 'disc-outline' }] : this.visibleCategories(),
+  )
 
   protected artists: Signal<Artist[]>
   // Category of the list currently shown; a reload of the same category keeps the scroll position.
@@ -124,7 +131,7 @@ export class HomePage extends SwiperIonicEventsHelper {
     private coverFlip: CoverFlipService,
   ) {
     super()
-    addIcons({ timerOutline, bookOutline, musicalNotesOutline, radioOutline, serverOutline })
+    addIcons({ timerOutline, bookOutline, discOutline, musicalNotesOutline, radioOutline, serverOutline })
 
     this.http.get<MupiboxConfig>(`${environment.backend.apiUrl}/config`).subscribe({
       next: (config) => {
@@ -260,8 +267,25 @@ export class HomePage extends SwiperIonicEventsHelper {
   }
 
   protected categoryChanged(event: any): void {
+    if (event.detail.value === 'cd') {
+      // (the tab is a button, not a list: the segment goes back to the list that is shown)
+      if (event.target) event.target.value = this.category()
+      this.startCd()
+      return
+    }
     this.categoryChosen = true
     this.category.set(event.detail.value)
+  }
+
+  protected categoryClicked(key: CategoryType | 'cd'): void {
+    if (key === 'cd') return this.startCd()
+    this.category.set(key as CategoryType)
+  }
+
+  // The CD tab: straight into the player, which plays the disc from its first track
+  private startCd(): void {
+    const navigationExtras: NavigationExtras = { state: { media: this.cd.cdMedia() } }
+    void this.navController.navigateForward(['/player'], { ...navigationExtras, animation: this.coverFlip.animation })
   }
 
   protected async artistCoverClicked(artist: Artist): Promise<void> {

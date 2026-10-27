@@ -58,6 +58,11 @@ const durationOf = (album, i) => (album.long ? 900 + i * 130 : 95 + ((i * 37) % 
 
 const coverSvg = (n, label) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${colours[n % colours.length]}"/><stop offset="1" stop-color="#1b1b2b"/></linearGradient></defs><rect width="300" height="300" fill="url(#g)"/><circle cx="150" cy="130" r="70" fill="#ffffff22"/><text x="150" y="250" text-anchor="middle" font-family="Arial" font-size="26" fill="#fff">${label}</text></svg>`
 
+// the audio CD in the pretend drive: put in with http://localhost:5005/sandbox/cd?tracks=9, taken out with ?tracks=0
+const CD = { present: false, tracks: 0, id: 0 }
+const CD_FOLDER = '_audio_cd_'
+const cdAlbum = () => ({ name: 'Audio-CD', category: 'cd', isCd: true, tracks: Array.from({ length: CD.tracks }, (_, i) => `Track ${i + 1}`) })
+
 // ---------- the pretend player ----------
 const player = {
   album: null, // the album that plays, or null
@@ -110,7 +115,7 @@ function localState() {
     playing: !!a && !player.paused,
     pause: !!a && player.paused,
     album: a?.name ?? '',
-    path: a ? `/home/dietpi/MuPiBox/media/${a.category}/${a.name}` : '',
+    path: a ? (a.isCd ? CD_FOLDER : `/home/dietpi/MuPiBox/media/${a.category}/${a.name}`) : '',
     finished: player.finished,
     episode: '',
     currentTrackname: a?.tracks[player.track - 1] ?? '',
@@ -162,7 +167,7 @@ function command(rest) {
   const name = segs[segs.length - 1]
   if (rest.startsWith('musicsearch/library/album/') || rest.startsWith('musicsearch/library/resume/')) {
     const param = segs[segs.length - 1].split(':')
-    const album = albums.get(`${param[0]}/${param[1]}`)
+    const album = param[0] === CD_FOLDER ? (CD.present ? cdAlbum() : null) : albums.get(`${param[0]}/${param[1]}`)
     if (album) start(album)
   } else if (name === 'pause') player.paused = true
   else if (name === 'play') player.paused = false
@@ -258,9 +263,16 @@ createServer(async (req, res) => {
     return json(res, { ok: true })
   }
   if (p.startsWith('/display/')) return json(res, { ok: true })
+  if (p === '/cd') return json(res, CD)
+  if (p === '/sandbox/cd') {
+    const tracks = Math.max(0, Number(url.searchParams.get('tracks')) || 0)
+    if (tracks > 0) Object.assign(CD, { present: true, tracks, id: CD.id + 1 })
+    else Object.assign(CD, { present: false, tracks: 0 })
+    return json(res, CD)
+  }
   if (p.startsWith('/local/tracklist/')) {
     const param = p.slice('/local/tracklist/'.length).split(':')
-    const album = albums.get(`${param[0]}/${param[1]}`)
+    const album = param[0] === CD_FOLDER ? cdAlbum() : albums.get(`${param[0]}/${param[1]}`)
     return json(res, (album?.tracks ?? []).map((name, i) => ({ position: i + 1, name })))
   }
   const m = p.match(/^\/(current|[^/]+)\/(.+)$/)

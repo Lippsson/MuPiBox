@@ -423,6 +423,19 @@ const createPlayer = (options = {}) => {
     exec('loadlist', [fileOrUrl])
     if (opts?.track > 1) send(['playlist-play-index', Math.trunc(opts.track) - 1])
   }
+  // An audio CD: mpv plays the whole disc as one file with a chapter per track (cdda://), so each track becomes a playlist
+  // entry of its own - the same disc opened from track N up to the start of track N + 1. That keeps next / previous, the
+  // track number, shuffle and repeat the playlist's. The last track plays to the end of the disc.
+  out.playCd = (tracks, device) => {
+    if (startPending) setStart('none')
+    shuffler.reset()
+    send(['set_property', 'pause', false])
+    const count = Math.max(1, Math.trunc(Number(tracks)) || 1)
+    for (let n = 1; n <= count; n++) {
+      const options = [`start=#${n}`, n < count ? `end=#${n + 1}` : '', device ? `cdda-device=${device}` : ''].filter(Boolean).join(',')
+      send(['loadfile', 'cdda://', n === 1 ? 'replace' : 'append', -1, options])
+    }
+  }
   // Levelling of the loudness (mupibox.loudness): 'soft' = EBU R128 loudnorm, leaves an audiobook its dynamics;
   // 'strong' = dynaudnorm, evens out more (music, radio); 'off' = no filter in the chain. Set live, playback goes on.
   out.setLoudness = (mode) => {
