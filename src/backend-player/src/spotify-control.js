@@ -231,7 +231,7 @@ const apiAccessToken = {
 
 player.on('percent_pos', (val) => {
   //console.log('track progress is', val);
-  if (!isCuePlayback()) currentMeta.progressTime = val
+  if (!isCuePlayback() && !cdPlaying()) currentMeta.progressTime = val
 })
 
 // --- CUE albums (one audio file, tracks by start time - see /api/nas/tracklist) ---
@@ -268,9 +268,10 @@ function cueSeek(seconds) {
 
 player.on('length', (val) => {
   if (currentCue) currentCue.fileLength = val
-  if (!isCuePlayback()) currentMeta.durationSeconds = val
+  if (!isCuePlayback() && !cdPlaying()) currentMeta.durationSeconds = val
 })
 player.on('time_pos', (seconds) => {
+  if (cdPlaying()) return cdProgress(seconds)
   if (!isCuePlayback()) {
     pendingCueSeek = null
     currentMeta.positionSeconds = seconds
@@ -3026,7 +3027,11 @@ function seek(progress) {
     }
   } else if (currentMeta.currentPlayer === 'mplayer') {
     if (progress > 1) {
-      if (isCuePlayback()) {
+      const cdRange = cdPlaying() ? cdTrackRange(player.trackIndex?.() ?? currentMeta.currentTracknr - 1) : null
+      if (cdRange) {
+        // (a place in the track of the disc: percent of the track, as an absolute time of the disc)
+        player.exec('seek', [cdRange.start + ((cdRange.end - cdRange.start) * progress) / 100, '2'])
+      } else if (isCuePlayback()) {
         const index = Math.max(0, currentMeta.currentTracknr - 1)
         const track = currentCue.tracks[index]
         const end = cueTrackEnd(index)
@@ -3570,6 +3575,28 @@ app.get('/cd', (_req, res) => res.json(cdWatcher.state))
 function cdTracklist() {
   const count = cdWatcher.state.tracks
   return Array.from({ length: count }, (_, i) => ({ position: i + 1, name: `Track ${i + 1}` }))
+}
+
+// A CD plays as a playlist of the same disc, each entry from the start of its track to the start of the next (mpv-wrapper
+// playCd): mpv tells the time of the whole disc, so the place in the track and its length are worked out from where the
+// tracks start (the drive's table of contents)
+const cdPlaying = () => isCdFolder(currentMeta.path) && currentMeta.currentPlayer === 'mplayer' && cdWatcher.state.present
+function cdTrackRange(index) {
+  const starts = cdWatcher.state.starts
+  return Array.isArray(starts) && index >= 0 && index + 1 < starts.length ? { start: starts[index], end: starts[index + 1] } : null
+}
+function cdProgress(seconds) {
+  const index = player.trackIndex?.() ?? currentMeta.currentTracknr - 1
+  const range = cdTrackRange(index)
+  if (!range || range.end <= range.start) {
+    currentMeta.positionSeconds = seconds
+    return
+  }
+  const length = range.end - range.start
+  const at = Math.max(0, Math.min(length, seconds - range.start))
+  currentMeta.positionSeconds = at
+  currentMeta.durationSeconds = length
+  currentMeta.progressTime = Math.round((at / length) * 100)
 }
 
 // (a CD plays through mpv only: it reads the disc itself)

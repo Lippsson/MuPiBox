@@ -121,3 +121,12 @@ test('a box without a drive is asked only now and then', async () => {
   for (let i = 0; i < 10; i++) await w.tick()
   assert.equal(w.state.present, true)
 })
+
+test('the start of each track (from the disc) goes with the state', async () => {
+  const d = pretendDrive()
+  const { w } = watch(d)
+  d.quick = { drive: 'ok' }
+  d.full = { drive: 'ok', disc: 'audio', tracks: 3, starts: [0, 27.307, 228.533, 253.28] }
+  await w.tick()
+  assert.deepEqual(w.state, { present: true, tracks: 3, id: 1, starts: [0, 27.307, 228.533, 253.28] })
+})

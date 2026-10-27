@@ -13,7 +13,7 @@ const POLL_MS = 3000
 // CDROM_DRIVE_STATUS 0x5326: 1 no disc, 2 tray open, 3 not ready (spinning up), 4 disc ok;
 // CDROM_DISC_STATUS 0x5327: 100 audio, 101-104 data, 105 mixed; CDROMREADTOCHDR 0x5305: first and last track
 const PROBE_PY = `
-import fcntl, json, os, sys
+import fcntl, json, os, struct, sys
 dev, full = sys.argv[1], sys.argv[2] == "1"
 try:
     fd = os.open(dev, os.O_RDONLY | os.O_NONBLOCK)
@@ -32,6 +32,18 @@ if full and status == 4:
         hdr = fcntl.ioctl(fd, 0x5305, bytes(2))
         out["first"], out["last"] = hdr[0], hdr[1]
         out["tracks"] = hdr[1] - hdr[0] + 1
+        # where each track starts (seconds from the start of the first track; the last entry is the end of the disc) -
+        # mpv plays the disc as one file with a chapter per track and tells the time of the whole disc
+        def lba(track):
+            buf = bytearray(12)
+            buf[0] = track
+            buf[2] = 1  # CDROM_LBA
+            return struct.unpack_from("<i", fcntl.ioctl(fd, 0x5306, bytes(buf)), 4)[0]
+        try:
+            marks = [lba(t) for t in range(hdr[0], hdr[1] + 1)] + [lba(0xAA)]
+            out["starts"] = [round((m - marks[0]) / 75.0, 3) for m in marks]
+        except OSError:
+            pass
 print(json.dumps(out))
 `
 
@@ -51,13 +63,14 @@ function probeDevice(device = DEVICE, full = false) {
 
 /** What the display is told: an audio CD with its tracks, or nothing. */
 const NO_CD = Object.freeze({ present: false, tracks: 0, id: 0 })
+// (a state also carries `starts`: the start of each track in seconds and the end of the disc, when the drive told them)
 
 /**
  * Watches the drive. `probe(full)` answers as probeDevice does; `onChange(state)` gets { present, tracks, id } whenever it
  * changes (id counts up with every disc that comes in, so a swapped disc is a new one). `fixAccess()` is called when the
  * drive cannot be opened (a drive that is not readable by this user); it may make it readable, the next question tells.
  */
-function createCdWatcher({ probe = probeDevice, onChange = () => {}, intervalMs = POLL_MS, fixAccess = () => {} } = {}) {
+function createCdWatcher({ probe = (full) => probeDevice(DEVICE, full), onChange = () => {}, intervalMs = POLL_MS, fixAccess = () => {} } = {}) {
   let state = NO_CD
   let lastDrive = 'unknown'
   let discs = 0
@@ -97,7 +110,7 @@ function createCdWatcher({ probe = probeDevice, onChange = () => {}, intervalMs 
         lastDrive = full.drive
         if (full.drive === 'ok' && full.disc === 'audio' && full.tracks > 0) {
           discs++
-          set({ present: true, tracks: full.tracks, id: discs })
+          set({ present: true, tracks: full.tracks, id: discs, ...(Array.isArray(full.starts) ? { starts: full.starts } : {}) })
         } else if (full.drive === 'ok') {
           // a data disc, a blank one: nothing this player plays (it is asked again only when the disc is changed)
           set(NO_CD)
