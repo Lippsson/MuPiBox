@@ -121,6 +121,10 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       episodeResume: mb.episodeResume !== false,
       // ("Hören mit" on the display's player: a tap on the volume chooses speaker or Bluetooth - audio-output.ts)
       outputPicker: mb.outputPicker !== false,
+      // the clock in the display's header, right of the battery: shown (default), digits or a dial, 12 or 24 hours
+      clockShow: mb.clockShow !== false,
+      clockStyle: mb.clockStyle === 'analog' ? 'analog' : 'digital',
+      clockHours: Number(mb.clockHours) === 12 ? 12 : 24,
       episodeResumeDays: num(mb.episodeResumeDays, 0, 3650) ?? 180,
       // new episodes marked (for so many days) and how far an episode was heard shown on the display (episode-state.ts)
       ...episodeStateSettings(mb),
@@ -149,7 +153,7 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     const mb: Record<string, unknown> = {}
     const chromium: Record<string, unknown> = {}
     const bad = (what: string) => res.status(400).json({ error: `invalid ${what}` })
-    for (const key of ['coverflowShowNames', 'hideScrollbar', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker']) {
+    for (const key of ['coverflowShowNames', 'hideScrollbar', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker', 'clockShow']) {
       if (body[key] === undefined) continue
       if (typeof body[key] !== 'boolean') return bad(key)
       mb[key] = body[key]
@@ -157,6 +161,14 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     if (body.scrollbarStyle !== undefined) {
       if (body.scrollbarStyle !== 'standard' && body.scrollbarStyle !== 'full') return bad('scrollbarStyle')
       mb.scrollbarStyle = body.scrollbarStyle
+    }
+    if (body.clockStyle !== undefined) {
+      if (body.clockStyle !== 'digital' && body.clockStyle !== 'analog') return bad('clockStyle')
+      mb.clockStyle = body.clockStyle
+    }
+    if (body.clockHours !== undefined) {
+      if (body.clockHours !== 12 && body.clockHours !== 24) return bad('clockHours')
+      mb.clockHours = body.clockHours
     }
     if (body.hiddenCategories !== undefined) {
       const list = body.hiddenCategories
@@ -290,7 +302,7 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       // (as the admin interface: with dietpi's login environment, so chromium finds its display)
       detached('sudo /usr/local/bin/mupibox/setting_update.sh >/dev/null 2>&1; sudo -i -u dietpi bash -c "setsid nohup /usr/local/bin/mupibox/restart_kiosk.sh >/dev/null 2>&1 < /dev/null &"')
       result.restartKiosk = true
-    } else if (['coverflowShowNames', 'hideScrollbar', 'scrollbarStyle', 'hiddenCategories', 'startCategory', 'listviewTimer', 'settingsAccessTimer'].some((k) => k in mb)) {
+    } else if (['coverflowShowNames', 'hideScrollbar', 'scrollbarStyle', 'hiddenCategories', 'startCategory', 'listviewTimer', 'settingsAccessTimer', 'clockShow', 'clockStyle', 'clockHours'].some((k) => k in mb)) {
       result.reloaded = await reloadDisplayPage()
     }
     res.json(result)

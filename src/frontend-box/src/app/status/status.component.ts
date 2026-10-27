@@ -1,12 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, Signal } from '@angular/core'
 import { toObservable, toSignal } from '@angular/core/rxjs-interop'
 import { map, of, switchMap } from 'rxjs'
+import { analogAngles, digitalTime } from '../clock'
+import { ClockService } from '../clock.service'
 import { MediaService } from '../media.service'
 import type { Mupihat } from '../mupihat'
 import { PlayerService } from '../player.service'
 
 // The status at the top right, the same in every theme: WiFi and battery, both 24 px high and in line, the
-// percentage inside the battery. Colours come from --st-* variables (defaults below from the toolbar colour; the
+// percentage inside the battery, and the clock right of them (when the parents did not hide it, clock.ts). Colours come from --st-* variables (defaults below from the toolbar colour; the
 // kids' themes set them in theme/km.scss, the other themes in their theme file).
 // Nothing in here takes pointer events: a press anywhere on the group reaches the element around it (on the start
 // page the button that opens the admin menu when held).
@@ -93,6 +95,22 @@ function signalDbmOf(text: string | undefined): number | undefined {
           <div class="st-batt-body"><div class="st-batt-fill"></div><span class="st-batt-num">{{ percent() }}</span></div>
           <div class="st-batt-pole"></div>
         </div>
+      }
+      @if (clock.settings().show) {
+        <span class="st-clock" role="img" [attr.aria-label]="time().time + ' ' + time().suffix">
+          @if (clock.settings().style === 'analog') {
+            <svg class="st-analog" viewBox="0 0 28 28" width="28" height="28" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true">
+              <circle cx="14" cy="14" r="12.4" stroke-width="2" />
+              <path d="M14 14V8" stroke-width="2.4" [attr.transform]="'rotate(' + angles().hour + ' 14 14)'" />
+              <path d="M14 14V4.6" stroke-width="1.8" [attr.transform]="'rotate(' + angles().minute + ' 14 14)'" />
+            </svg>
+          } @else {
+            <span class="st-time">{{ time().time }}</span>
+            @if (time().suffix) {
+              <span class="st-ampm">{{ time().suffix }}</span>
+            }
+          }
+        </span>
       }
     </div>
   `,
@@ -186,6 +204,23 @@ function signalDbmOf(text: string | undefined): number | undefined {
       border-radius: 0 2px 2px 0;
       background: var(--st-track, color-mix(in srgb, currentColor 42%, transparent));
     }
+    .st-clock {
+      display: flex;
+      align-items: baseline;
+      gap: 3px;
+      margin-left: 2px;
+      white-space: nowrap;
+      font: 700 22px/1 var(--ion-font-family, inherit);
+      font-variant-numeric: tabular-nums;
+    }
+    .st-analog {
+      display: block;
+      align-self: center;
+    }
+    .st-ampm {
+      font-size: 12px;
+      font-weight: 600;
+    }
   `,
 })
 export class StatusComponent {
@@ -221,7 +256,15 @@ export class StatusComponent {
   // (not from the values of a charger that was reset: they are those of before, see Mupihat.Measurement_Valid)
   protected readonly charging = computed(() => this.hat()?.Measurement_Valid !== false && (this.hat()?.IBus ?? 0) > 0)
 
-  public constructor(playerService: PlayerService, mediaService: MediaService) {
+  // The clock (settings and the time: clock.service.ts)
+  protected readonly time = computed(() => digitalTime(this.clock.now(), this.clock.settings().hours))
+  protected readonly angles = computed(() => analogAngles(this.clock.now()))
+
+  public constructor(
+    playerService: PlayerService,
+    mediaService: MediaService,
+    protected readonly clock: ClockService,
+  ) {
     this.network = toSignal(mediaService.network$, { initialValue: undefined })
     this.wifiLevel = computed(() => {
       const network = this.network()

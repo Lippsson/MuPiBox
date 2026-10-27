@@ -7088,6 +7088,9 @@ async function loadDisplaySettings() {
   state.values.set('resX', String(o.resX))
   state.values.set('resY', String(o.resY))
   state.values.set('resLimit', o.limitWindow === true)
+  state.values.set('clockOn', o.clockShow !== false)
+  state.values.set('clockStyle', o.clockStyle === 'analog' ? 'Analog' : 'Digital')
+  state.values.set('clockHours', o.clockHours === 12 ? '12 Stunden' : '24 Stunden')
   const nd = o.nightDim ?? {}
   state.values.set('ndOn', nd.enabled === true)
   state.values.set('ndFrom', nd.from ?? '19:00')
@@ -10799,6 +10802,15 @@ const CONTROLLERS = {
             { type: 'buttons', buttons: [['Auflösung übernehmen', 'primary', 'toast:Gespeichert']] },
           ],
         },
+        {
+          title: 'Uhrzeit',
+          help: 'Die Uhrzeit steht in der Kopfzeile des Displays, rechts neben der Akkuanzeige. Gilt sofort, das Display lädt dafür kurz neu.',
+          items: [
+            { type: 'toggle', key: 'clockOn', label: 'Uhrzeit anzeigen' },
+            { type: 'seg', key: 'clockStyle', label: 'Anzeige', options: ['Digital', 'Analog'], dep: 'clockOn' },
+            { type: 'seg', key: 'clockHours', label: 'Format', options: ['24 Stunden', '12 Stunden'], dep: 'clockOn', help: 'Bei der analogen Uhr ändert sich nichts: Das Zifferblatt hat immer 12 Stunden.' },
+          ],
+        },
       ]
     },
     mount(root, page) {
@@ -10825,6 +10837,9 @@ const CONTROLLERS = {
         const rl = await api(`${API}/display/reload-page`, { method: 'POST', body: {} })
         return toast(`${Number(v) === 0 ? 'Display bleibt an' : `Display aus nach ${v} min`}. ${rl.body?.ok ? 'Das Display lädt neu.' : ''}`.trim())
       }
+      if (key === 'clockOn') return saveDisplayOptions({ clockShow: !!v }, v ? 'Uhrzeit wird angezeigt' : 'Uhrzeit ist ausgeblendet')
+      if (key === 'clockStyle') return saveDisplayOptions({ clockStyle: v === 'Analog' ? 'analog' : 'digital' }, v === 'Analog' ? 'Analoge Uhr' : 'Digitale Uhr')
+      if (key === 'clockHours') return saveDisplayOptions({ clockHours: v === '12 Stunden' ? 12 : 24 }, v === '12 Stunden' ? '12-Stunden-Anzeige' : '24-Stunden-Anzeige')
       if (key === 'dsiRot') return saveDisplayOptions({ dsiRotation: rotValue(HDMI_ROT, v) }, 'Drehung gespeichert')
       const rot = { hdmiRot: ['display_hdmi_rotate', HDMI_ROT], lcdRot: ['lcd_rotate', LCD_ROT], dlcdRot: ['display_lcd_rotate', LCD_ROT] }[key]
       if (rot) return saveDisplayOptions({ rotation: { [rot[0]]: rotValue(rot[1], v) } }, 'Drehung gespeichert – gilt nach einem Neustart')

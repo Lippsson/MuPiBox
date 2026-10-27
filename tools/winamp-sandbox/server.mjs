@@ -21,6 +21,8 @@ const arg = (name, fallback) => {
 }
 let THEME = arg('theme', 'winamp')
 let themeReloadAt = 0 // (the display polls /local and loads the theme again when this goes up)
+// the display options the sandbox keeps (the app's page Display, e.g. the clock in the header)
+const OPTIONS = { clockShow: true, clockStyle: 'digital', clockHours: 24 }
 const WWW = path.resolve(arg('www', path.join(root, 'src/deploy/www/browser')))
 const SKIN_DIR = path.join(here, '.skin')
 const SKIN_LIBRARY = path.join(here, '.skins')
@@ -303,6 +305,16 @@ async function parentsApi(req, res, url, api) {
     themeReloadAt = Date.now()
     return json(res, { ok: true })
   }
+  if (api === '/display-options') {
+    if (req.method === 'POST') {
+      if (!csrfOk()) return json(res, { error: 'csrf token missing or invalid' }, 403)
+      Object.assign(OPTIONS, await readBody(req))
+      themeReloadAt = Date.now()
+      return json(res, { ok: true, reloaded: true })
+    }
+    return json(res, { hiddenCategories: [], startCategory: 'audiobook', resume: 9, listviewTimer: 2.5, settingsAccessTimer: 3, resX: 1920, resY: 480, limitWindow: false, brightness: null, nightDim: {}, rotation: {}, dsi: null, hideScrollbar: false, scrollbarStyle: 'standard', ...OPTIONS })
+  }
+  if (api === '/power-config') return json(res, { idleDisplayOff: 10 })
   if (api === '/display/custom-theme') return json(res, { mode: 'auto', resolved: 'dark', veil: 0, accent: null, font: 'fredoka', size: 'm', v: 0, hasPicture: false, active: THEME === 'custom' })
   if (api === '/display/winamp-skin/select' && req.method === 'POST') {
     if (!csrfOk()) return json(res, { error: 'csrf token missing or invalid' }, 403)
@@ -365,7 +377,7 @@ createServer((req, res) => {
   }
   if (p.startsWith('/api/')) {
     const api = p.slice(4)
-    if (api === '/config') return json(res, { mupibox: { theme: THEME, hiddenCategories: [], settingsAccessTimer: 3, listviewTimer: 2, playerBack: 'minimize', headerBand: true, playerPanel: true } })
+    if (api === '/config') return json(res, { mupibox: { theme: THEME, hiddenCategories: [], settingsAccessTimer: 3, listviewTimer: 2, playerBack: 'minimize', headerBand: true, playerPanel: true, ...OPTIONS } })
     if (api === '/data-version') return json(res, { version: '1', local: '1', nasTab: false })
     if (api === '/data' || api === '/nas/artists' || api === '/home-lists' || api === '/resume' || api === '/activeresume') return json(res, api === '/home-lists' ? {} : [])
     if (api === '/library/artists') {

@@ -173,6 +173,8 @@ function translateCore(s) {
   return null
 }
 
+const withStop = (text) => (text === null ? null : `${text}.`)
+
 // a text as a whole, else put together by the code: sentences one by one ("{} Das gilt erst nach einem Neustart"),
 // the longest known start before a separator and the rest ("3 angezeigt · … · anderes NAS (…)"), the parts one by one
 // ("Stabil · 4.2.4", "Netzwerk › WLAN"). null: nothing known.
@@ -181,7 +183,8 @@ function translateText(core) {
   if (whole !== null) return whole
   const sentences = core.split(/(?<=[.!?…])\s+(?=\S)/)
   if (sentences.length > 1) {
-    const done = sentences.map((x) => translateText(x))
+    // (a sentence may be known without its full stop: "Gespeichert. Das Display lädt neu." has "Gespeichert" as a text)
+    const done = sentences.map((x) => translateText(x) ?? (x.endsWith('.') ? withStop(translateText(x.slice(0, -1))) : null))
     if (done.some((d) => d !== null)) return done.map((d, i) => d ?? sentences[i]).join(' ')
   }
   const parts = core.split(SEPARATORS)

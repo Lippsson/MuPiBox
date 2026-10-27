@@ -21,6 +21,10 @@ export interface MupiboxConfig {
     coverflowShowNames?: boolean
     // Theme "custom" (Eigenes): the parents' settings - the display adds their stylesheet and, with light, km-light
     customTheme?: { resolved?: 'light' | 'dark'; v?: number }
+    // The clock in the header, right of the battery (app > Display > Uhrzeit): shown or not, digits or a dial, 12 or 24 hours
+    clockShow?: boolean
+    clockStyle?: 'digital' | 'analog'
+    clockHours?: 12 | 24
     // Add other mupibox properties if needed
   }
   timeout: {
