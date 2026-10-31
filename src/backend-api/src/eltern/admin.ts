@@ -106,13 +106,19 @@ async function readText(file: string): Promise<string> {
 // Writes a file as root, keeping its owner and mode (as the admin interface's JSON editor). Put next to the target
 // and renamed over it: install replaced the file in place, a reader could see it half written.
 async function installAs(target: string, content: string): Promise<boolean> {
+  const tmp = `/tmp/.mupibox-app-${process.pid}-${Date.now()}.json`
+  await fsp.writeFile(tmp, content)
+  const moved = await installFileAs(target, tmp)
+  await fsp.unlink(tmp).catch(() => undefined)
+  return moved
+}
+
+// ... the same from a file (a library too big to be held as text: the restore)
+async function installFileAs(target: string, source: string): Promise<boolean> {
   const st = await run('sudo', ['stat', '-c', '%a %U %G', target], 10000)
   const [mode, owner, group] = st.ok ? st.stdout.trim().split(' ') : ['644', 'dietpi', 'dietpi']
-  const tmp = `/tmp/.mupibox-app-${process.pid}-${Date.now()}.json`
   const next = `${target}.app-${process.pid}.tmp`
-  await fsp.writeFile(tmp, content)
-  const r = await run('sudo', ['install', '-m', mode, '-o', owner, '-g', group, tmp, next], 20000)
-  await fsp.unlink(tmp).catch(() => undefined)
+  const r = await run('sudo', ['install', '-m', mode, '-o', owner, '-g', group, source, next], 120000)
   const moved = r.ok && (await run('sudo', ['mv', '-f', next, target], 20000)).ok
   if (!moved) await run('sudo', ['rm', '-f', next])
   return moved
@@ -550,17 +556,28 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     }
     const version = String((deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.version ?? '')
     // the library not with the rest (under its name of before it would go through the links of the old names): taken
-    // out of the zip and written to its place now (the last of the two names when a zip has both)
+    // out of the zip into a folder of its own first (a file: a big library does not fit into a command's output) and
+    // checked - one that is not readable changes nothing -, then the rest unpacked, then the library written to its
+    // place (the last of the two names when a zip has both)
     const libraryEntry = [...LIBRARY_ENTRIES].reverse().find((entry) => files.some((f) => f.name === entry))
+    const libraryDir = libraryEntry ? await fsp.mkdtemp('/tmp/.mupibox-restore-') : ''
     const unzip = await (async () => {
+      const library = `${libraryDir}/data.json`
+      if (libraryEntry) {
+        const r = await run('unzip', ['-o', '-j', '-qq', file, libraryEntry, '-d', libraryDir], 120000)
+        const readable = r.ok && (await fsp.readFile(library, 'utf8').then((text) => {
+          JSON.parse(text)
+          return true
+        }).catch(() => false))
+        if (!readable) return { ok: false }
+      }
       const rest = files.some((f) => !LIBRARY_ENTRIES.includes(f.name))
       const r = rest ? await run('sudo', ['unzip', '-o', file, '-d', '/', '-x', ...LIBRARY_ENTRIES], 3600000) : { ok: true }
       if (!r.ok || !libraryEntry) return r
-      const library = await run('unzip', ['-p', file, libraryEntry], 120000)
-      if (!library.ok) return library
-      return { ok: await withDataLock(() => installAs(`${LIBRARY}/data.json`, library.stdout)).then((done) => done === true) }
-    })().finally(() => {
+      return { ok: await withDataLock(() => installFileAs(`${LIBRARY}/data.json`, library)).then((done) => done === true) }
+    })().finally(async () => {
       restoreRunning = false
+      if (libraryDir) await fsp.rm(libraryDir, { recursive: true, force: true }).catch(() => undefined)
     })
     await cleanup()
     if (!unzip.ok) {

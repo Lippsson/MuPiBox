@@ -15,6 +15,9 @@
 # server/config -> data/library (with the program's own config.json, monitor.json, network.json and wlan.json linked into
 # it), www/cover -> data/covers, www/rss-covers -> cache/rss-covers, cache -> ~/.mupibox/cache; the logs, the app's
 # sessions, the hidden covers, the NAS folder index, thumbs/ and the play time of the day at their places of before.
+# The links in the program's folder name their target by its full path: the update of a version before 5.1 copies
+# server/config and www/cover as they are (cp -a, the link itself) into a backup folder elsewhere - a relative link
+# pointed to nothing there, and that update stopped ("data.json backup failed").
 #
 # A step that fails takes back all of this run (last first): the box is as it was, and the caller - the update - stops
 # before it touches anything. A run cut off (a power cut) leaves .layout-moving behind: the next start finishes it
@@ -47,6 +50,9 @@ STOPPED=0
 CRON_STOPPED=0
 LOCKED=0
 STEP=""
+# a run before this one was cut off halfway (its mark is there), and the way back of this run is whole
+RESUMED=0
+BACK_WHOLE=1
 
 log() { echo "migrate_layout: $*"; }
 
@@ -64,21 +70,27 @@ roll_back() {
 		b="${a#*$'\t'}"
 		a="${a%%$'\t'*}"
 		case "${kind}" in
-			mv) mv -T "${b}" "${a}" || log "could not move ${b} back to ${a}" ;;
-			ln) rm -f "${a}" ;;
-			rm) ln -s "${b}" "${a}" || log "could not make the link ${a} again" ;;
+			mv) mv -T "${b}" "${a}" || { log "could not move ${b} back to ${a}"; BACK_WHOLE=0; } ;;
+			ln) rm -f "${a}" || BACK_WHOLE=0 ;;
+			rm) ln -s "${b}" "${a}" || { log "could not make the link ${a} again"; BACK_WHOLE=0; } ;;
 			mkdir) rmdir "${a}" 2>/dev/null ;;
-			rmdir) mkdir -p "${a}" ;;
+			rmdir) mkdir -p "${a}" || BACK_WHOLE=0 ;;
 		esac
 	done
 	DONE=()
 	sync
 }
 
+# The mark goes only when the box is as before the move: this run's steps all taken back, and no run before it cut off
+# (what that one did is not in DONE - its moves stay). Else it stays, and the next start tries again.
 fail() {
 	log "FAILED (${STEP}): $*"
 	roll_back
-	rm -f "${MOVING}"
+	if [ "${RESUMED}" = 0 ] && [ "${BACK_WHOLE}" = 1 ]; then
+		rm -f "${MOVING}"
+	else
+		log "the move is not complete - .layout-moving stays, the next start goes on with it"
+	fi
 	finish 1
 }
 
@@ -221,7 +233,8 @@ finish() {
 # ------------------------------------------------------------------------------------------------------- the run
 
 quiet
-touch "${MOVING}" && sync
+[ -e "${MOVING}" ] && RESUMED=1
+touch "${MOVING}" && sync || fail "could not write ${MOVING} (card full?)"
 
 STEP="folders"
 for d in "${MUPI_LIBRARY}" "${MUPI_COVERS}" "${MUPI_LOGS}" "${MUPI_CACHE}"; do
@@ -280,7 +293,7 @@ if [ -d "${CONF_BEFORE}" ] && [ ! -L "${CONF_BEFORE}" ]; then
 	[ -e "${CONF_BEFORE}" ] && fail "${CONF_BEFORE} is not empty after the move"
 fi
 if [ -d "${MUPI_SERVER}" ]; then
-	link "../../data/library" "${CONF_BEFORE}"
+	link "${MUPI_LIBRARY}" "${CONF_BEFORE}"
 	for name in config.json monitor.json wlan.json; do
 		link "../../server/config/${name}" "${MUPI_LIBRARY}/${name}"
 	done
@@ -295,10 +308,10 @@ if [ -d "${MUPI_SERVER}" ]; then
 	place "${MUPI_SERVER}/www/rss-covers" "${MUPI_CACHE}/rss-covers"
 	place "${MUPI_SERVER}/cache" "${MUPI_CACHE}"
 	if [ -d "${MUPI_WWW}" ]; then
-		link "../../data/covers" "${MUPI_WWW}/cover"
-		link "../../cache/rss-covers" "${MUPI_WWW}/rss-covers"
+		link "${MUPI_COVERS}" "${MUPI_WWW}/cover"
+		link "${MUPI_CACHE}/rss-covers" "${MUPI_WWW}/rss-covers"
 	fi
-	link "../cache" "${MUPI_SERVER}/cache"
+	link "${MUPI_CACHE}" "${MUPI_SERVER}/cache"
 fi
 
 # What lay loose in ~/.mupibox, and the player's play time of the day

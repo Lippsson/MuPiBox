@@ -750,7 +750,13 @@ rm -f /tmp/mupibox-update-failed
 	done
 	#CUSTOM
 	ln -s /home/dietpi/MuPiBox/themes/custom-bg.jpg ${MUPI_WWW}/theme-data/custom/custom-bg.jpg
-	
+	# what the user put into theme-data (pictures and fonts of an own theme) comes over from the old program (-n: nothing
+	# the update ships is replaced) - should that fail, the old program stays (see "Finish the update")
+	THEME_DATA_KEPT=1
+	if [ -d "${BAK_DIR}/www/theme-data" ] && [ ! -L "${BAK_DIR}/www/theme-data" ]; then
+		cp -an "${BAK_DIR}/www/theme-data/." "${MUPI_WWW}/theme-data/" >&3 2>&3 || THEME_DATA_KEPT=0
+	fi
+
 	# the name fonts these themes had before (their licenses do not allow passing them on as part of MuPiBox)
 	rm -f ${MUPI_WWW}/theme-data/supermario/NewSuperMarioFontU.ttf ${MUPI_WWW}/theme-data/steampunk/akaPosse.ttf >&3 2>&3
 	
@@ -1366,7 +1372,9 @@ rm -f /tmp/mupibox-update-failed
 		if [ "${FINISH_OK}" = 1 ]; then
 			for old in "${BAK_DIR}" "${MUPI_HOME}"/server.before-* "${MUPI_HOME}"/player.before-*; do
 				[ -d "${old}" ] || continue
-				if program_only "${old}"; then
+				if [ "${old}" = "${BAK_DIR}" ] && [ "${THEME_DATA_KEPT:-1}" != 1 ]; then
+					echo "## ${old} kept: what was added to its theme-data could not all be taken over" >&3 2>&3
+				elif program_only "${old}"; then
 					rm -rf "${old}" >&3 2>&3
 				else
 					echo "## ${old} kept: it holds data of its own" >&3 2>&3
