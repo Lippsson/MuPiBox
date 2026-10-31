@@ -9,6 +9,7 @@ import * as path from 'node:path'
 import type { Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { requireCsrf, requireSession } from './middleware'
+import { LIBRARY_DIR, PLAYER_DIR, SERVER_CONFIG_DIR, WWW_DIR } from '../paths'
 
 export interface SystemDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -101,7 +102,7 @@ async function missingPrograms(): Promise<string[]> {
     .map((l) => l.trim())
     .filter((l) => /^[a-z0-9.+-]+$/.test(l))
 }
-const PLAYER_CONFIG = '/home/dietpi/.mupibox/spotifycontroller-main/config/config.json'
+const PLAYER_CONFIG = `${PLAYER_DIR}/config/config.json`
 
 // The logs and services the admin interface's log viewer offers (backend.php)
 const LOGS: Record<string, string> = {
@@ -338,8 +339,8 @@ export function registerSystemRoutes(router: Router, deps: SystemDeps): void {
   router.get('/support-info', requireSession, async (_req, res) => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mupibox-support-'))
     try {
-      const server = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config'
-      await fsp.copyFile(`${server}/data.json`, `${dir}/data.json`).catch(() => undefined)
+      const server = SERVER_CONFIG_DIR
+      await fsp.copyFile(`${LIBRARY_DIR}/data.json`, `${dir}/data.json`).catch(() => undefined)
       await fsp.writeFile(`${dir}/mupiboxconfig.json`, JSON.stringify(withoutSecrets(deps.getMupiboxConfig() ?? {}), null, 2))
       for (const f of ['monitor.json', 'network.json']) {
         try {
@@ -537,7 +538,7 @@ export function registerSystemRoutes(router: Router, deps: SystemDeps): void {
     let languages: Record<string, unknown> = {}
     try {
       languages =
-        (JSON.parse(await fsp.readFile('/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/assets/i18n/display-texts.json', 'utf8')) as { languages?: Record<string, unknown> }).languages ?? {}
+        (JSON.parse(await fsp.readFile(`${WWW_DIR}/assets/i18n/display-texts.json`, 'utf8')) as { languages?: Record<string, unknown> }).languages ?? {}
     } catch {
       languages = { en: {}, de: {} }
     }

@@ -1,7 +1,9 @@
 #!/bin/bash
 #
 
-MUPIWIFI="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json"
+. /usr/local/bin/mupibox/mupi_paths.sh
+
+MUPIWIFI="${MUPI_SERVER_CONFIG}/wlan.json"
 WPACONF="/etc/wpa_supplicant/wpa_supplicant.conf"
 TMP_WPACONF="/tmp/wpa_supplicant.conf"
 NETWORKCONFIG="/tmp/network.json"

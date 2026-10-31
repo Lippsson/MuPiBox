@@ -85,6 +85,7 @@ import { withVolumeLock } from '../volume-lock'
 import { spotifyLoginAge } from './spotify-auth-age'
 import { btBattery, headphonesPlaying } from '../audio-output'
 import { playbackSnapshot } from '../playback-snapshot'
+import { CACHE_DIR, LOGS_DIR, SERVER_CONFIG_DIR, WWW_DIR } from '../paths'
 import {
   REQUESTED_SCOPES,
   buildAuthorizeUrl,
@@ -178,7 +179,7 @@ function bootscreenIds(screens: BootscreensFile): string[] {
 // The languages of the display texts ({code: {name, ...}}), the same list MuPi-Conf offers for the boot screens.
 function readDisplayLanguages(): Record<string, { name?: string }> {
   try {
-    const json = JSON.parse(readFileSync('/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/assets/i18n/display-texts.json', 'utf8')) as {
+    const json = JSON.parse(readFileSync(`${WWW_DIR}/assets/i18n/display-texts.json`, 'utf8')) as {
       languages?: Record<string, { name?: string }>
     }
     const languages: Record<string, { name?: string }> = {}
@@ -234,7 +235,7 @@ function runSettingUpdate(restartPlayer = false): void {
   child.unref()
 }
 
-// The player reads its Spotify access from its own config (spotifycontroller-main/config/config.json), which
+// The player reads its Spotify access from its own config (player/config/config.json), which
 // setting_update.sh writes from mupiboxconfig.json. After a login or a reset the player is restarted too, as the admin
 // interface's Spotify page does - but not this process (spotify_restart.sh restarts both): it reads the config live.
 function applySpotifyAccessToPlayer(restartPlayer: boolean): void {
@@ -251,7 +252,7 @@ export function setOnSpotifyCacheCleared(listener: () => void): void {
 // (the artists' album lists and the Smart-Sync's kept pictures, albums and playlists too, and what is kept in memory -
 // those stayed until a restart)
 async function clearSpotifyCache(): Promise<boolean> {
-  const dir = `${process.cwd()}/cache`
+  const dir = CACHE_DIR
   let ok = true
   clearArtistAlbumsMemory()
   clearMetaCache()
@@ -1609,7 +1610,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       res.status(400).json({ error: 'password must be empty (open network) or 8-63 chars' })
       return
     }
-    const WLAN_FILE = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json'
+    const WLAN_FILE = `${SERVER_CONFIG_DIR}/wlan.json`
     let existing: unknown
     try {
       const raw = await fsp.readFile(WLAN_FILE, 'utf8')
@@ -1727,7 +1728,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
 
   /**
    * GET /api/app/battery-history?hours=24  (Phase 18 Item 6)
-   * Reads /home/dietpi/.mupibox/battery_log.jsonl that the server.ts poller
+   * Reads data/logs/battery_log.jsonl (paths.ts) that the server.ts poller
    * writes once a minute. Filtered to the last `hours` (default 24, max
    * 168 = 7 days). Sampled down to ~120 points so the SVG chart in the
    * WebApp stays smooth even after a few days of history.
@@ -1736,7 +1737,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     const hours = Math.max(1, Math.min(168, Math.floor(Number(req.query.hours) || 24)))
     let raw = ''
     try {
-      raw = readFileSync('/home/dietpi/.mupibox/battery_log.jsonl', 'utf8')
+      raw = readFileSync(`${LOGS_DIR}/battery_log.jsonl`, 'utf8')
     } catch {
       res.json({ hours, samples: [] })
       return
@@ -2174,7 +2175,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   // on the old one. Made next to it and swapped in, so the display never finds no link; a setting that cannot be saved
   // puts the link back.
   async function switchTheme(theme: string): Promise<{ status: number; body: Record<string, unknown> }> {
-    const wwwDir = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www'
+    const wwwDir = WWW_DIR
     const symlinkPath = `${wwwDir}/active_theme.css`
     const newLink = `${symlinkPath}.new`
     const swapIn = async (to: string) => {

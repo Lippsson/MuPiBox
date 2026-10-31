@@ -1,6 +1,7 @@
 // What was played today / in the last 7 days, from play_log.jsonl (the backend's play-log poller writes it): the
 // app's history (GET /api/app/playlog) and the weekly Telegram summary (weekly-summary.ts) use it
 import { promises as fsp } from 'node:fs'
+import { LOGS_DIR } from '../paths'
 
 export interface PlaylogSummary {
   range: 'today' | 'week'
@@ -28,7 +29,7 @@ export async function playlogSummary(
     // hätte den einzigen Thread des Backends blockiert -- also auch
     // Wiedergabesteuerung und Display-Sync, während jemand den
     // Hör-Verlauf öffnet.
-    raw = await fsp.readFile('/home/dietpi/.mupibox/play_log.jsonl', 'utf8')
+    raw = await fsp.readFile(`${LOGS_DIR}/play_log.jsonl`, 'utf8')
   } catch {
     // file may not exist yet — return empty result
   }

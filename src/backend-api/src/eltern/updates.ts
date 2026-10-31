@@ -14,6 +14,7 @@ import * as path from 'node:path'
 import type { Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { requireCsrf, requireSession } from './middleware'
+import { LIBRARY_DIR } from '../paths'
 
 export interface UpdatesDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -93,7 +94,7 @@ fi
 progress 2 "Backup"
 mkdir -p /home/dietpi/mupibox-backups
 BACKUP="/home/dietpi/mupibox-backups/before-update-$(date +%Y-%m-%d-%H%M).zip"
-zip -q -r "$BACKUP" /etc/mupibox/mupiboxconfig.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json /home/dietpi/MuPiBox/media/cover
+zip -q -r "$BACKUP" /etc/mupibox/mupiboxconfig.json ${LIBRARY_DIR}/data.json /home/dietpi/MuPiBox/media/cover
 chown -R dietpi:dietpi /home/dietpi/mupibox-backups
 ls -1t /home/dietpi/mupibox-backups/before-update-*.zip 2>/dev/null | tail -n +4 | xargs -r rm -f
 

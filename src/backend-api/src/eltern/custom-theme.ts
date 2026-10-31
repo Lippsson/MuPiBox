@@ -1,3 +1,4 @@
+import { WWW_DIR } from '../paths'
 // The theme "custom" (Eigenes): the parents' own picture plus a few settings of their own - light or dark writing,
 // a veil over the picture, an accent colour, the font and size of the names. The app keeps them in
 // mupibox.customTheme and the backend writes them as a small stylesheet next to the picture
@@ -20,7 +21,9 @@ export interface CustomTheme {
   v: number
 }
 
-export const CUSTOM_THEME_CSS = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/custom/custom-settings.css'
+// (in the program's folder: an update replaces it - the server writes it again at its start, from the settings, see
+// display.ts)
+export const CUSTOM_THEME_CSS = `${WWW_DIR}/theme-data/custom/custom-settings.css`
 export const CUSTOM_THEME_DEFAULTS: CustomTheme = { mode: 'auto', resolved: 'dark', veil: 0, accent: null, font: 'fredoka', size: 'm', v: 0 }
 
 const FONTS: Record<CustomFont, { family: string; face?: string; weight: number }> = {

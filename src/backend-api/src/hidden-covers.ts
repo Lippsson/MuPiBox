@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import { rename, writeFile } from 'node:fs/promises'
+import { DATA_DIR } from './paths'
 
 /**
  * Folders shown without a cover: chosen in the app ("Cover entfernen"). Nothing is deleted - the folder's pictures
@@ -9,7 +10,7 @@ import { rename, writeFile } from 'node:fs/promises'
  * Keys: nas:/<NAS path> and local:<category>/<folder>[/…] (the library path), as the cover picker's targets.
  */
 
-const FILE = '/home/dietpi/.mupibox/hidden-covers.json'
+const FILE = `${DATA_DIR}/hidden-covers.json`
 
 // (the same folder however the path is written: without empty or trailing parts)
 export function hiddenCoverKey(type: 'nas' | 'local', folder: string): string {

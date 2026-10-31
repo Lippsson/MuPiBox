@@ -7,8 +7,10 @@ Diese Seite ist für alle, die der Box „unter die Haube“ schauen wollen, zum
 | Pfad | Inhalt |
 | --- | --- |
 | `/etc/mupibox/mupiboxconfig.json` | die Konfiguration der Box. Die App schreibt hier hinein, ebenso der Editor unter **Experten** |
-| `/home/dietpi/.mupibox/Sonos-Kids-Controller-master/` | die installierte Software: Server, App (`mupi-app/`), Display (`www/`) und dieses Handbuch (`manual/`) |
-| `/home/dietpi/.mupibox/spotifycontroller-main/` | der Player (Spotify und lokale Wiedergabe) |
+| `/home/dietpi/.mupibox/server/` | die installierte Software: Server, App (`mupi-app/`), Display (`www/`) und dieses Handbuch (`manual/`). Ein Update ersetzt den Ordner |
+| `/home/dietpi/.mupibox/player/` | der Player (Spotify und lokale Wiedergabe) |
+| `/home/dietpi/.mupibox/data/` | was die Box behält: die Bibliothek mit Weiterhören und Folgenständen (`library/`), die Cover der lokalen Alben (`covers/`), Hör- und Akku-Protokoll (`logs/`). Ein Update fasst den Ordner nicht an |
+| `/home/dietpi/.mupibox/cache/` | was die Box wieder laden oder neu machen kann (Spotify-Antworten, Vorschaubilder, Podcast-Bilder). Darf jederzeit geleert werden |
 | `/home/dietpi/MuPiBox/media/` | die Medien auf der Speicherkarte (das ist auch die Samba-Freigabe `mupibox`) |
 | `/home/dietpi/MuPiBox/sysmedia/` | Systemdateien: Startbilder, Töne |
 | `/home/dietpi/mupibox-backups/` | die Sicherungen vor einem Update (`before-update-….zip`, die drei neuesten) |

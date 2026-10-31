@@ -15,11 +15,16 @@ const childProcess = require('node:child_process')
 dns.setDefaultResultOrder('ipv4first')
 
 let configBasePath = './config'
-//let networkConfigBasePath = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config'
 if (process.env.NODE_ENV === 'development') {
   configBasePath = '../config'
-  //networkConfigBasePath = '../../backend-api/config'
 }
+// What the box keeps and what it can fetch again, since 5.1 beside the player's folder (~/.mupibox/player):
+// ~/.mupibox/data (an update never touches it) and ~/.mupibox/cache - as the server's paths.ts. In development
+// next to the player's config.
+const MUPI_HOME = '/home/dietpi/.mupibox'
+const DATA_DIR = process.env.NODE_ENV === 'development' ? configBasePath : `${MUPI_HOME}/data`
+const LIBRARY_DIR = process.env.NODE_ENV === 'development' ? configBasePath : `${DATA_DIR}/library`
+const CACHE_DIR = process.env.NODE_ENV === 'development' ? configBasePath : `${MUPI_HOME}/cache`
 
 // mupiboxconfig.json supports live reload — admin saves take effect within ~50ms
 // without a pm2 restart. config.json (Spotify creds, log level, port) is read once
@@ -708,7 +713,7 @@ const TIDAL_SERVICE = 'http://127.0.0.1:5011'
 const PLAYTIME_DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 const PLAYTIME_DEFAULT_LIMITS = { mon: 60, tue: 60, wed: 60, thu: 60, fri: 60, sat: 60, sun: 60 }
 const PLAYTIME_WORKING_PATH = '/tmp/playtime.json'
-const PLAYTIME_CHECKPOINT_PATH = path.join(configBasePath, 'playtime-checkpoint.json')
+const PLAYTIME_CHECKPOINT_PATH = path.join(DATA_DIR, 'playtime-checkpoint.json')
 const PLAYTIME_CHECKPOINT_INTERVAL_MS = 60_000
 
 // What may happen when a limit is reached (play time used up / a quiet window starts):
@@ -1694,7 +1699,7 @@ function mplayerToggle() {
 // went on asking (the grace check every 3 s, the app's state, the pauses). Read again when the file changed; a 429
 // here (with a wait of more than a few seconds) is written into it, so the server and the Smart-Sync wait as well.
 const SPOTIFY_BLOCK_FILE =
-  process.env.SPOTIFY_BLOCK_FILE || path.resolve(__dirname, '..', 'Sonos-Kids-Controller-master', 'cache', 'spotify-block.json')
+  process.env.SPOTIFY_BLOCK_FILE || path.join(CACHE_DIR, 'spotify-block.json')
 let spotifyBlockKept = { mtimeMs: -1, until: 0 }
 function spotifyBlockedUntil() {
   try {
@@ -2725,7 +2730,7 @@ function playRadioURL(radioURL) {
 // for mupibox.episodeResumeDays days after it was last heard (0: without end). Started again - from the episode
 // list, the app or a resume tile - it goes on there. An episode heard to its last half minute counts as heard and
 // starts from the beginning next time. The backend reads the file for the app's episode list.
-const EPISODE_POSITIONS_FILE = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/episode-positions.json'
+const EPISODE_POSITIONS_FILE = path.join(LIBRARY_DIR, 'episode-positions.json')
 const EPISODE_POSITIONS_MAX = 5000
 let episodePositions = null // { [episode key]: { pos, len, at, done } } (by the address, from before the keys)
 // What stays the same of an episode's address from one fetch of its feed to the next - the same as backend-api's

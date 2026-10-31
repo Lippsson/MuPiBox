@@ -17,13 +17,14 @@ import bcrypt from 'bcryptjs'
 import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
 import * as fs from 'node:fs'
 import { promisify } from 'node:util'
+import { DATA_DIR } from '../paths'
 
 const scryptAsync = promisify(scryptCb)
 
 const MAGIC_LINKS_PATH = '/tmp/.eltern_magic_links.json'
 const SESSIONS_PATH = '/tmp/.eltern_sessions.json'
 
-const PERSISTENT_SESSIONS_PATH = '/home/dietpi/.mupibox/.app_sessions.json'
+const PERSISTENT_SESSIONS_PATH = `${DATA_DIR}/.app_sessions.json`
 
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1000
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000

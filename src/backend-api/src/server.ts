@@ -66,6 +66,7 @@ import { EpisodeState, episodeStateSettings } from './episode-state'
 import { uiScale } from './ui-scale'
 import { confirmDisplayTest, displayTestState } from './eltern/display-profile'
 import { browserGuard, corsOptionsFor, isAllowedHost, isLoopback, localOnly, localOrElternSession, logValue, PROXY_PORT, setConfiguredHosts, viaProxy } from './request-guard'
+import { CACHE_DIR, COVERS_DIR, DATA_DIR, LIBRARY_DIR, LOGS_DIR, SERVER_CONFIG_DIR } from './paths'
 
 // Force IPv4 for DNS lookups to avoid EAI_AGAIN errors on Raspberry Pi
 // This fixes issues where IPv6 is misconfigured or not supported
@@ -77,11 +78,10 @@ const testServe = process.env.NODE_ENV === 'test'
 const devServe = process.env.NODE_ENV === 'development'
 const productionServe = !(testServe || devServe)
 
-// Configuration files.
-let configBasePath = './server/config'
-if (!productionServe) {
-  configBasePath = './config' // This uses the package.json path as pwd.
-}
+// Configuration files: what the box writes for the server (config.json, monitor.json, network.json, wlan.json) in
+// server/config, the library and what belongs to it in data/library (paths.ts; in development both config/ below the
+// package.json path as pwd)
+const configBasePath = SERVER_CONFIG_DIR
 
 // "Clear cache" in the app: the lookups' memory too
 setOnSpotifyCacheCleared(() => spotifyApiService?.clearMemory())
@@ -132,11 +132,11 @@ readJsonFile(`${configBasePath}/config.json`).then((configFile) => {
 // i.scdn.co URLs to /api/spotify/cover/:imageId so the box serves covers
 // from its own SD+RAM after the first miss -- caps Chromium's parallel
 // connection limit to one host and saves repeat CDN round-trips.
-const coverCacheService = new CoverCacheService(path.join(process.cwd(), 'cache'))
+const coverCacheService = new CoverCacheService(CACHE_DIR)
 // Covers from iTunes/Deezer for NAS and local albums without a picture (see online-covers.ts). Off unless
 // mupibox.onlineCovers is switched on in the admin interface (Cover page).
 const onlineCovers = new OnlineCovers(
-  path.join(process.cwd(), 'cache', 'online-covers'),
+  path.join(CACHE_DIR, 'online-covers'),
   () => (getMupiboxConfigSync()?.mupibox as { onlineCovers?: boolean } | undefined)?.onlineCovers === true,
   (key) => saveOnlineCoverToFolder(key),
 )
@@ -241,10 +241,10 @@ async function removeSavedOnlineCover(key: string): Promise<void> {
 const mupiboxConfigPath = productionServe ? '/etc/mupibox/mupiboxconfig.json' : path.resolve(configBasePath, 'mupiboxconfig.json')
 const mupiboxConfigDir = path.dirname(mupiboxConfigPath)
 const mupiboxConfigFile = path.basename(mupiboxConfigPath)
-const dataFile = `${configBasePath}/data.json`
-const resumeFile = `${configBasePath}/resume.json`
-const activedataFile = `${configBasePath}/active_data.json`
-const activeresumeFile = `${configBasePath}/active_resume.json`
+const dataFile = `${LIBRARY_DIR}/data.json`
+const resumeFile = `${LIBRARY_DIR}/resume.json`
+const activedataFile = `${LIBRARY_DIR}/active_data.json`
+const activeresumeFile = `${LIBRARY_DIR}/active_resume.json`
 // The display reads the library and the resume list through the active files, links a box's network check
 // (check_network.sh) points at the online or the offline lists. In development no such check runs: the links to the
 // online lists are made here once, when they are missing - else a library put into config/ (README, Contributing)
@@ -267,20 +267,21 @@ if (devServe) {
 const networkFile = `${configBasePath}/network.json`
 const wlanFile = `${configBasePath}/wlan.json`
 const monitorFile = `${configBasePath}/monitor.json`
-const albumstopFile = `${configBasePath}/albumstop.json`
+const albumstopFile = `${LIBRARY_DIR}/albumstop.json`
 const mupihat = '/tmp/mupihat.json'
 const playtimeFile = '/tmp/playtime.json'
 const dataLock = '/tmp/.data.lock'
 const resumeLock = '/tmp/.resume.lock'
 
 // RSS feed cache: persisted on disk (not /tmp) so cached podcast covers and feed
-// data survive a reboot.
-const rssCacheDataDir = `${configBasePath}/rss-cache`
+// data survive a reboot - in cache/, which an update leaves alone (a missing picture is fetched again, see
+// rssCoverFileMissing)
+const rssCacheDataDir = path.join(CACHE_DIR, 'rss-cache')
 const podcastOfflineDir = '/home/dietpi/MuPiBox/podcasts'
 // The folder of this file: __dirname in the bundle (esbuild, CommonJS); run directly as an ES module (the tests, via
 // tsx) there is no __dirname, and the tests failed before the first one ran.
 const serverDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url))
-const rssCoverDir = path.join(serverDir, 'www', 'rss-covers')
+const rssCoverDir = path.join(CACHE_DIR, 'rss-covers')
 const rssCoverPublicBase = '/rss-covers'
 
 // AR5-6: proactively clear any lock file left behind by a previous pm2 crash.
@@ -470,24 +471,15 @@ app.use('/api/player', (req, res) => {
 // them again in the background when data.json changed or they are old. They are kept here as well, so a display
 // that starts (or is reloaded) has them from the first tap. Only the display writes them; one file on the SD,
 // written when a list was made again (not on every switch).
-// In server/config, which the update keeps and puts back: in cache/ it was gone after every update, and a big library
-// (many Spotify entries) was made from scratch at the first tap - minutes of loading dots.
-const homeCacheFile = path.join(configBasePath, 'home-lists.json')
-const homeCacheFileBefore = path.join(process.cwd(), 'cache', 'home-lists.json')
+// In cache/, which an update leaves alone (before 5.1 the update replaced the cache, and a big library - many Spotify
+// entries - was made from scratch at the first tap: minutes of loading dots).
+const homeCacheFile = path.join(CACHE_DIR, 'home-lists.json')
 const homeCacheCategories = ['audiobook', 'music', 'other']
 let homeCache: Record<string, { version: string; at: number; media: unknown[] }> = {}
-for (const file of [homeCacheFile, homeCacheFileBefore]) {
-  try {
-    homeCache = JSON.parse(fs.readFileSync(file, 'utf8'))
-    // (from the place of before: moved over at once, so the next update keeps it already)
-    if (file === homeCacheFileBefore) {
-      fs.writeFileSync(homeCacheFile, JSON.stringify(homeCache))
-      fs.rmSync(homeCacheFileBefore, { force: true })
-    }
-    break
-  } catch {
-    // none yet (there)
-  }
+try {
+  homeCache = JSON.parse(fs.readFileSync(homeCacheFile, 'utf8'))
+} catch {
+  // none yet
 }
 let homeCacheWrite: Promise<void> = Promise.resolve()
 
@@ -525,6 +517,10 @@ app.use(express.urlencoded({ extended: false }))
 // We explicitely check for !== 'development' for now so we do not need to set this env in
 // production.
 if (productionServe) {
+  // the covers of the local albums (m3u_generator.sh copies them from the media folders) and the podcasts' pictures:
+  // at the addresses of before, from data/ and cache/ (before 5.1 they lay in www/ - an update had to save them)
+  app.use('/cover', express.static(COVERS_DIR))
+  app.use(rssCoverPublicBase, express.static(rssCoverDir))
   // Static path to compiled Angular app
   app.use(express.static(path.join(serverDir, 'www')))
 }
@@ -1265,7 +1261,7 @@ app.get('/api/rssfeed/episode-duration', async (req, res) => {
 })
 
 // "New" and how far heard at a podcast's episodes (episode-state.ts)
-const episodeState = new EpisodeState(configBasePath, () =>
+const episodeState = new EpisodeState(LIBRARY_DIR, () =>
   episodeStateSettings(getMupiboxConfigSync()?.mupibox as Record<string, unknown> | undefined),
 )
 
@@ -2211,7 +2207,7 @@ function updateMupiboxConfig(mutate: (cfg: Record<string, unknown>) => void | fa
 // deliberately do NOT modify spotify-control.js — that runs the audio and
 // must stay rock-solid.
 
-const PLAY_LOG_PATH = '/home/dietpi/.mupibox/play_log.jsonl'
+const PLAY_LOG_PATH = path.join(LOGS_DIR, 'play_log.jsonl')
 const PLAY_LOG_POLL_MS = 10_000
 const PLAYER_HOST = 'http://127.0.0.1:5005'
 
@@ -2413,7 +2409,7 @@ function startPlayLogPoller(): void {
 // roughly the last 8 days (more than enough for a 24h chart; cap stops
 // the file growing without bound).
 
-const BATTERY_LOG_PATH = '/home/dietpi/.mupibox/battery_log.jsonl'
+const BATTERY_LOG_PATH = path.join(LOGS_DIR, 'battery_log.jsonl')
 const BATTERY_LOG_POLL_MS = 60_000
 const BATTERY_LOG_KEEP_DAYS = 8
 const BATTERY_LOG_TRIM_EVERY_TICKS = 60 // ≈ every hour
@@ -5627,7 +5623,7 @@ interface NasFolderFacts {
   below?: string // without an own picture: one found in a subfolder (see nasFindCoverBelow)
   at: number
 }
-const nasFolderIndexFile = path.join(process.cwd(), 'cache', 'nas-folders.json')
+const nasFolderIndexFile = path.join(CACHE_DIR, 'nas-folders.json')
 let nasFolderIndex: Record<string, NasFolderFacts> = (() => {
   try {
     return JSON.parse(fs.readFileSync(nasFolderIndexFile, 'utf8')) as Record<string, NasFolderFacts>
@@ -5751,7 +5747,7 @@ function onlineAlbumCover(
 // Width / height of the albums' own pictures, measured on their thumbnails (made by the library walk). A picture far
 // from square - mostly a scanned cassette inlay - gets the album's online cover in its place (when one is found and
 // not discarded); the picture on the NAS / on disk stays as it is. Keys: nas:<NAS path> / local:<library path>.
-const coverShapesFile = path.join(process.cwd(), 'cache', 'cover-shapes.json')
+const coverShapesFile = path.join(CACHE_DIR, 'cover-shapes.json')
 let coverShapes: Record<string, number> = (() => {
   try {
     return JSON.parse(fs.readFileSync(coverShapesFile, 'utf8')) as Record<string, number>
@@ -6225,7 +6221,7 @@ app.post('/api/nas/login', localOrElternSession, async (req, res) => {
 // It is only used for that filter - the tree and the kids' NAS tab always list the NAS live.
 // Rebuilt on demand ("Refresh index") and automatically once it is older than a day.
 
-const nasIndexPath = '/home/dietpi/.mupibox/nas-folder-index.json'
+const nasIndexPath = path.join(DATA_DIR, 'nas-folder-index.json')
 const nasIndexMaxAgeMs = 24 * 60 * 60 * 1000
 const nasIndexRetryMs = 10 * 60 * 1000
 const nasIndexMaxDepth = 12
@@ -7865,9 +7861,9 @@ async function libraryFindCoverBelow(files: NasFileEntry[], depth: number): Prom
 // that are made once with Python's PIL (package python3-pil) and kept in a cache folder.
 // If PIL is missing or a picture cannot be converted, the original file is sent instead.
 
-// (in development next to the cover cache below cwd, see configBasePath: /home/dietpi does not exist there, and the
-// mkdir below failed every picture request of the display - radio logos showed the name card)
-const thumbDir = productionServe ? '/home/dietpi/.mupibox/thumbs' : path.join(process.cwd(), 'cache', 'thumbs')
+// (in cache/; in development below cwd, see paths.ts: /home/dietpi does not exist there, and the mkdir below failed
+// every picture request of the display - radio logos showed the name card)
+const thumbDir = path.join(CACHE_DIR, 'thumbs')
 const thumbMaxParallel = 2
 let thumbsUnavailableUntil = 0
 let thumbRunning = 0

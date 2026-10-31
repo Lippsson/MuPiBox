@@ -930,7 +930,8 @@ def main():
     playerstate = "/tmp/playerstate"
     fan = "/tmp/fan.json"
     mupihat = "/tmp/mupihat.json"
-    data = "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json"
+    # the library (since 5.1 in data/library - scripts/mupibox/mupi_paths.sh)
+    data = "/home/dietpi/.mupibox/data/library/data.json"
 
     # Load MQTT configuration from JSON file
     with open(config) as file:

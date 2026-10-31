@@ -13,6 +13,7 @@ import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { withLock } from '../file-lock'
 import { requireCsrf, requireSession } from './middleware'
 import { bootConfigPath } from './boot-paths'
+import { LIBRARY_DIR, SERVER_CONFIG_DIR } from '../paths'
 
 export interface AdminDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -38,15 +39,17 @@ const rebootSoon = () => detached('( flock -n 9 || exit 0; sleep 5; sudo /usr/lo
 const dietpiInject = (key: string, line: string, file: string) =>
   run('sudo', ['su', '-', 'dietpi', '-c', `. /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT '${key}' '${line}' ${file}`], 60000)
 
-const SERVER_CONFIG = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config'
+// the server's config (config.json, monitor.json) and the library (paths.ts)
+const SERVER_CONFIG = SERVER_CONFIG_DIR
+const LIBRARY = LIBRARY_DIR
 const JSON_FILES: Record<string, string> = {
   mupiboxconfig: '/etc/mupibox/mupiboxconfig.json',
-  data: `${SERVER_CONFIG}/data.json`,
+  data: `${LIBRARY}/data.json`,
   config: `${SERVER_CONFIG}/config.json`,
-  resume: `${SERVER_CONFIG}/resume.json`,
+  resume: `${LIBRARY}/resume.json`,
   monitor: `${SERVER_CONFIG}/monitor.json`,
-  offline_resume: `${SERVER_CONFIG}/offline_resume.json`,
-  offline_monitor: `${SERVER_CONFIG}/offline_monitor.json`,
+  offline_resume: `${LIBRARY}/offline_resume.json`,
+  offline_monitor: `${LIBRARY}/offline_monitor.json`,
 }
 
 // What a backup holds (the admin interface's backup.php / fullbackup.php) and what a restore may write - with the own
@@ -54,7 +57,13 @@ const JSON_FILES: Record<string, string> = {
 const BACKGROUND = '/home/dietpi/MuPiBox/themes/custom-bg.jpg'
 // ... and the own start, goodbye and battery pictures (web app › Startbilder › Eigene Bilder, bootscreen-custom.ts)
 const BOOT_CUSTOM = ['splash.png', 'goodbye.png', 'battery.png', 'color'].map((f) => `/home/dietpi/MuPiBox/sysmedia/images/bootscreen-custom/${f}`)
-const BACKUP_FILES = ['/etc/mupibox/mupiboxconfig.json', `${SERVER_CONFIG}/data.json`]
+// The library in a backup: under the name it had before 5.1 (Sonos-Kids-Controller-master/server/config/data.json), so
+// a box before 5.1 restores a backup of this one too - put there in a folder of its own while the zip is made. A
+// restore takes it under that name or under its name now (data/library) and writes it to its place now, never through
+// the links of the old names (see restore).
+const LIBRARY_ENTRY_BEFORE = 'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json'
+const LIBRARY_ENTRIES = [LIBRARY_ENTRY_BEFORE, 'home/dietpi/.mupibox/data/library/data.json']
+const BACKUP_FILES = ['/etc/mupibox/mupiboxconfig.json']
 // Kept free on the SD card by a restore (the box itself needs room to run)
 const RESERVE_BYTES = 512 * 1024 * 1024
 const freeBytes = async (dir: string) => {
@@ -62,7 +71,7 @@ const freeBytes = async (dir: string) => {
   return st ? Math.max(0, st.bavail * st.bsize - RESERVE_BYTES) : 0
 }
 
-const RESTORE_FILES = ['etc/mupibox/mupiboxconfig.json', 'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json', BACKGROUND.slice(1), ...BOOT_CUSTOM.map((f) => f.slice(1))]
+const RESTORE_FILES = ['etc/mupibox/mupiboxconfig.json', ...LIBRARY_ENTRIES, BACKGROUND.slice(1), ...BOOT_CUSTOM.map((f) => f.slice(1))]
 const RESTORE_DIRS = [
   'etc/',
   'etc/mupibox/',
@@ -77,6 +86,8 @@ const RESTORE_DIRS = [
   'home/dietpi/.mupibox/Sonos-Kids-Controller-master/',
   'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/',
   'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/',
+  'home/dietpi/.mupibox/data/',
+  'home/dietpi/.mupibox/data/library/',
 ]
 // file types the web server runs or a browser runs as a page: never restored below media/ (see admin.php)
 const FORBIDDEN_MEDIA = /(\.(php\d?|phtml|phar|pht|pl|py|cgi|fcgi|sh|shtml|s?html?|xhtml|xht|svgz?|js|mjs|xml|xsl)|\/\.htaccess|\/\.user\.ini)$/i
@@ -344,8 +355,8 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     }
     if (what === 'library') {
       const done = await withDataLock(async () => {
-        await run('sudo', ['rm', '-f', `${SERVER_CONFIG}/offline_data.json`])
-        return installAs(`${SERVER_CONFIG}/data.json`, '[]\n')
+        await run('sudo', ['rm', '-f', `${LIBRARY}/offline_data.json`])
+        return installAs(`${LIBRARY}/data.json`, '[]\n')
       })
       if (done === 'locked') {
         res.status(409).json({ error: 'busy' })
@@ -376,7 +387,7 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
   router.post('/apply-settings', requireSession, requireCsrf, async (_req, res) => {
     try {
       await withDataLock(async () => {
-        const data = JSON.parse(await readText(`${SERVER_CONFIG}/data.json`)) as unknown
+        const data = JSON.parse(await readText(`${LIBRARY}/data.json`)) as unknown
         if (!Array.isArray(data)) return
         let changed = false
         for (const item of data as Record<string, unknown>[]) {
@@ -387,7 +398,7 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
             changed = true
           }
         }
-        if (changed) await installAs(`${SERVER_CONFIG}/data.json`, JSON.stringify(data, null, 4))
+        if (changed) await installAs(`${LIBRARY}/data.json`, JSON.stringify(data, null, 4))
       })
     } catch {
       // an unreadable data.json stays as it is
@@ -405,7 +416,21 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     const present = (f: string) => fsp.access(f).then(() => true, () => false)
     const extras = (await Promise.all([BACKGROUND, ...BOOT_CUSTOM].map(async (f) => ((await present(f)) ? f : '')))).filter(Boolean)
     const sources = [full ? '/home/dietpi/MuPiBox/media' : '/home/dietpi/MuPiBox/media/cover', ...BACKUP_FILES, ...extras]
-    const r = await run('sudo', ['sh', '-c', `zip -q -r '${zip}' ${sources.map((s) => `'${s}'`).join(' ')}; chmod 644 '${zip}'`], full ? 3600000 : 120000)
+    // the library under its name of before (LIBRARY_ENTRY_BEFORE): copied into a folder of its own, the zip made from
+    // there (the other sources by their full path, stored without the leading /)
+    const stage = `/var/tmp/mupibox-backup-${process.pid}-${Date.now()}.d`
+    const staged = `${stage}/${LIBRARY_ENTRY_BEFORE}`
+    const r = await run(
+      'sudo',
+      [
+        'sh',
+        '-c',
+        `mkdir -p '${path.dirname(staged)}' && { [ ! -e '${LIBRARY}/data.json' ] || cp '${LIBRARY}/data.json' '${staged}'; } && cd '${stage}' && ` +
+          `zip -q -r '${zip}' $([ -e '${staged}' ] && echo '${LIBRARY_ENTRY_BEFORE}') ${sources.map((s) => `'${s}'`).join(' ')}; ` +
+          `chmod 644 '${zip}'; rm -rf '${stage}'`,
+      ],
+      full ? 3600000 : 120000,
+    )
     const exists = await fsp.stat(zip).then(() => true, () => false)
     if (!exists) {
       res.status(500).json({ error: `zip failed ${r.stderr.slice(0, 200)}` })
@@ -524,7 +549,17 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
       return
     }
     const version = String((deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.version ?? '')
-    const unzip = await run('sudo', ['unzip', '-o', file, '-d', '/'], 3600000).finally(() => {
+    // the library not with the rest (under its name of before it would go through the links of the old names): taken
+    // out of the zip and written to its place now (the last of the two names when a zip has both)
+    const libraryEntry = [...LIBRARY_ENTRIES].reverse().find((entry) => files.some((f) => f.name === entry))
+    const unzip = await (async () => {
+      const rest = files.some((f) => !LIBRARY_ENTRIES.includes(f.name))
+      const r = rest ? await run('sudo', ['unzip', '-o', file, '-d', '/', '-x', ...LIBRARY_ENTRIES], 3600000) : { ok: true }
+      if (!r.ok || !libraryEntry) return r
+      const library = await run('unzip', ['-p', file, libraryEntry], 120000)
+      if (!library.ok) return library
+      return { ok: await withDataLock(() => installAs(`${LIBRARY}/data.json`, library.stdout)).then((done) => done === true) }
+    })().finally(() => {
       restoreRunning = false
     })
     await cleanup()

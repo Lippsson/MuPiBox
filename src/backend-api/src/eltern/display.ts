@@ -16,6 +16,7 @@ import { episodeStateSettings } from '../episode-state'
 import { applyNightDim, nightDimmed, nightDimOf, parseNightDim } from './night-dim'
 import { CUSTOM_THEME_CSS, customThemeCss, customThemeOf } from './custom-theme'
 import { bootConfigPath } from './boot-paths'
+import { WWW_DIR } from '../paths'
 
 export interface DisplayDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -335,7 +336,7 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       res.status(404).end()
       return
     }
-    res.sendFile(`/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/${file}`, { headers: { 'Content-Type': 'font/ttf', 'Cache-Control': 'public, max-age=86400' } }, (err) => {
+    res.sendFile(`${WWW_DIR}/theme-data/${file}`, { headers: { 'Content-Type': 'font/ttf', 'Cache-Control': 'public, max-age=86400' } }, (err) => {
       if (err && !res.headersSent) res.status(404).end()
     })
   })

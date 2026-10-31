@@ -156,9 +156,9 @@ alias mupi-update-stable='cd; curl -L https://raw.githubusercontent.com/splitti/
 alias mupi-update-beta='cd; curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/start_mupibox_update.sh | sudo bash  -s -- beta'
 alias mupi-update-dev='cd; curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/start_mupibox_update.sh | sudo bash  -s -- dev'
 alias mupi-show-conf='sudo cat /etc/mupibox/mupiboxconfig.json | jq . -r -C'
-alias mupi-show-data='sudo cat /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json | jq . -r -C'
-alias mupi-show-network='sudo cat /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/network.json | jq . -r -C'
-alias mupi-show-monitor='sudo cat /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/monitor.json | jq . -r -C'
+alias mupi-show-data='sudo cat /home/dietpi/.mupibox/data/library/data.json | jq . -r -C'
+alias mupi-show-network='sudo cat /home/dietpi/.mupibox/server/config/network.json | jq . -r -C'
+alias mupi-show-monitor='sudo cat /home/dietpi/.mupibox/server/config/monitor.json | jq . -r -C'
 alias mupi-restart-kiosk='/usr/local/bin/mupibox/./restart_kiosk.sh'
 alias mupi-update-data='/usr/local/bin/mupibox/./m3u_generator.sh'
 

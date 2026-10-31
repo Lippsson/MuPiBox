@@ -184,6 +184,34 @@ if ! curl -fsSL --retry 3 --retry-delay 3 -m 180 -o ${PREFLIGHT_DIR}/jq https://
   exit 1
 fi
 
+# A version before 5.1 is installed by its own update script (from its tag): this one comes from main and puts a
+# version into the folders of 5.1 (server/, player/, data/, cache/ - scripts/mupibox/migrate_layout.sh), which the
+# programs before 5.1 do not know. A box of 5.1 that goes back to one keeps its folders: the older update finds all of
+# it under the names of before (links), and the next update of 5.1 takes over what the older version wrote meanwhile.
+# (A branch is taken for one of 5.1 or later.)
+if [ -z "$BRANCH" ]; then
+  TARGET_URL=$(curl -fsSL --retry 3 --retry-delay 3 -m 60 https://raw.githubusercontent.com/splitti/MuPiBox/main/version.json | ${PREFLIGHT_DIR}/jq -r ".release.${RELEASE}[-1].url // empty" 2>/dev/null)
+  TARGET_TAG=$(printf '%s' "${TARGET_URL}" | sed -nE 's#^https://github.com/splitti/MuPiBox/archive/refs/tags/([A-Za-z0-9._-]+)\.zip$#\1#p')
+  if [ -z "${TARGET_TAG}" ]; then
+    echo "Error: the ${RELEASE} version could not be read from version.json - nothing was changed, please try again."
+    rm -rf ${PREFLIGHT_DIR}
+    exit 1
+  fi
+  if [ "$(printf '%s\n' "${TARGET_TAG#v}" 5.1 | sort -V | head -n 1)" != "5.1" ]; then
+    OWN_SCRIPT=$(mktemp /tmp/mupibox-update-${TARGET_TAG}.XXXXXX)
+    if curl -fsSL --retry 3 --retry-delay 3 -m 120 -o "${OWN_SCRIPT}" "https://raw.githubusercontent.com/splitti/MuPiBox/${TARGET_TAG}/update/start_mupibox_update.sh" \
+       && bash -n "${OWN_SCRIPT}"; then
+      echo "MuPiBox ${TARGET_TAG} is installed by its own update script"
+      rm -rf ${PREFLIGHT_DIR}
+      exec bash "${OWN_SCRIPT}" "$@"
+    fi
+    echo "Error: the update script of ${TARGET_TAG} could not be downloaded - nothing was changed, please try again."
+    rm -f "${OWN_SCRIPT}"
+    rm -rf ${PREFLIGHT_DIR}
+    exit 1
+  fi
+fi
+
 killall -s 9 -w -q -r chromium
 
 CONFIG="/etc/mupibox/mupiboxconfig.json"
@@ -195,7 +223,9 @@ if ${PREFLIGHT_DIR}/jq . ${CONFIG} > /dev/null 2>&1; then
 fi
 # (an empty library never replaces a copy that has one: an update started again after one that stopped halfway - the
 # library empty then - kept only the empty list here)
-PRE_DATA=/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json
+PRE_DATA=/home/dietpi/.mupibox/data/library/data.json
+# (a box before the folders of 5.1: there - moved by this update, see "Folders of 5.1")
+[ -L /home/dietpi/.mupibox/Sonos-Kids-Controller-master ] || PRE_DATA=/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json
 pre_entries() { ${PREFLIGHT_DIR}/jq 'if type == "array" then length else 0 end' "$1" 2>/dev/null | head -n 1 | grep -E '^[0-9]+$' || echo 0; }
 if ${PREFLIGHT_DIR}/jq . "${PRE_DATA}" > /dev/null 2>&1; then
   if [ "$(pre_entries "${PRE_DATA}")" -gt 0 ] || [ "$(pre_entries /home/dietpi/data.json.pre-update)" -eq 0 ]; then
@@ -252,18 +282,6 @@ mark_update() {
 	fi
 	rm -f "${next}"
 	return 1
-}
-# $1 in place of $2 through a copy next to it: a file exchanged in one step (never missing in between - the network
-# check writes an empty library where it finds none), a folder replaced once its copy is complete
-put_back_item() {
-	local next="${2}.upd-restore"
-	rm -rf "${next}"
-	cp -a "$1" "${next}" >&3 2>&3 || { rm -rf "${next}"; return 1; }
-	if [ -d "${next}" ] && [ ! -L "${next}" ]; then
-		rm -rf "$2" && mv "${next}" "$2"
-	else
-		mv -f "${next}" "$2"
-	fi
 }
 clear_update_mark() {
 	rm -f "${UPDATE_STATE}" "${UPDATE_STATE}.new"
@@ -632,50 +650,37 @@ rm -f /tmp/mupibox-update-failed
 
 	###############################################################################################
 
-	echo -e "XXX\n${STEP}\nBackup Userdata... \nXXX" >&3 2>&3
+	echo -e "XXX\n${STEP}\nFolders of 5.1... \nXXX" >&3 2>&3
 	before=$(date +%s)
-	# User data is copied (not moved) to a directory on the SD card, not to /tmp: /tmp is a RAM disk,
-	# and an update that stopped after the old install was moved aside used to leave the library and
-	# the covers only there - gone after the next reboot. The whole server/config directory is kept:
-	# besides data.json it holds resume.json, albumstop.json, wlan.json, the offline lists and the
-	# RSS cache, which were all lost on every update before.
-	USERDATA_BAK="/home/dietpi/.mupibox/userdata.upd-bak"
-	# The box's programs stop before the copy: a change the app saved or the player's progress after the copy was
-	# replaced by the older copy when the data came back (the server was stopped only after the backup before)
+	# The box's programs stop first: nothing writes the library while the folders change or the program is exchanged
 	sudo -H -u dietpi bash -c "pm2 stop server; pm2 stop spotify-control" >&3 2>&3
-	# An update that stopped before (a power cut while it ran): its data back from its backup first - else this run saved
-	# the empty library and brought that back (restore_interrupted_update.sh; it runs at every start of the box too)
+	# An update that stopped before (a power cut while it ran): undone or finished first (restore_interrupted_update.sh;
+	# it runs at every start of the box too)
 	if [ -f "${MUPI_SRC}/scripts/mupibox/restore_interrupted_update.sh" ]; then
 		bash "${MUPI_SRC}/scripts/mupibox/restore_interrupted_update.sh" --no-restart >&3 2>&3 			|| fail_update "An update that stopped before could not be undone (see the log) - nothing was changed, the backups are kept; restart the box: it goes on with it at the start" nostart
 	fi
-	# ... and in place before the installation is touched: should this update stop halfway, the next start undoes or
-	# finishes it (mupi_update_recover.service runs it before pm2) - also on the first update that brings it
+	# ... and in place, with what it needs, before the installation is touched: should this update stop halfway, the next
+	# start undoes or finishes it (mupi_update_recover.service runs it before pm2) - also on the first update that brings it
 	if [ -f "${MUPI_SRC}/scripts/mupibox/restore_interrupted_update.sh" ] && [ -f "${MUPI_SRC}/config/services/mupi_update_recover.service" ]; then
 		mkdir -p /usr/local/bin/mupibox >&3 2>&3
-		tr -d '\r' < "${MUPI_SRC}/scripts/mupibox/restore_interrupted_update.sh" > /usr/local/bin/mupibox/restore_interrupted_update.sh && chmod 755 /usr/local/bin/mupibox/restore_interrupted_update.sh
+		for script in restore_interrupted_update.sh migrate_layout.sh mupi_paths.sh; do
+			tr -d '\r' < "${MUPI_SRC}/scripts/mupibox/${script}" > "/usr/local/bin/mupibox/${script}" && chmod 755 "/usr/local/bin/mupibox/${script}"
+		done
 		cp -f "${MUPI_SRC}/config/services/mupi_update_recover.service" /etc/systemd/system/mupi_update_recover.service >&3 2>&3
 		systemctl daemon-reload >&3 2>&3
 		systemctl enable mupi_update_recover.service >&3 2>&3
 	fi
-	# A backup left from a restore that failed (see "Restore Userdata") is kept under its own name, never thrown away
-	[ -e "${USERDATA_BAK}" ] && mv "${USERDATA_BAK}" "${USERDATA_BAK}.$(date +%Y%m%d-%H%M%S)" >&3 2>&3
-	mkdir -p "${USERDATA_BAK}/www" >&3 2>&3
-	# Every copy is checked (a full card copied part of it, and the old install was deleted all the same); what is not
-	# there (a box without covers yet) is not an error. The podcast pictures (rss-covers) come along: without them every
-	# picture was loaded again after an update. theme-data holds the pictures and fonts of the themes, the custom
-	# theme's among them (put there by the user): it comes back below without replacing the files the update ships.
-	SKC=/home/dietpi/.mupibox/Sonos-Kids-Controller-master
-	cp -a "${SKC}/server/config" "${USERDATA_BAK}/config" >&3 2>&3 || fail_update "backup of the user data failed (card full?)"
-	for item in cover active_theme.css rss-covers theme-data; do
-		[ -e "${SKC}/www/${item}" ] || continue
-		cp -a "${SKC}/www/${item}" "${USERDATA_BAK}/www/${item}" >&3 2>&3 || fail_update "backup of www/${item} failed (card full?)"
-	done
-	# H5: data.json holds the library - non-recoverable: the copy has to be readable
-	if [ -f "${SKC}/server/config/data.json" ]; then
-		/usr/bin/jq -e . "${USERDATA_BAK}/config/data.json" > /dev/null 2>&1 || fail_update "data.json backup failed (library state would be lost)"
-	fi
+	# The folders of 5.1 (server/, player/, data/, cache/ - see scripts/mupibox/migrate_layout.sh): a box before them has
+	# its program, its data and its cache moved there - the program still the one of before, which goes on running in
+	# them (it finds all of it under the names of before: links). The data is no longer copied away and put back: the
+	# update replaces the program only. A move that fails takes the whole run back - nothing is changed then.
+	[ -s /usr/local/bin/mupibox/migrate_layout.sh ] && [ -s /usr/local/bin/mupibox/mupi_paths.sh ] \
+		|| fail_update "The scripts for the folders of 5.1 are missing in the update package - nothing was changed"
+	NO_PM2=1 bash /usr/local/bin/mupibox/migrate_layout.sh >&3 2>&3 \
+		|| fail_update "The folders of 5.1 could not be made (see the log) - nothing was changed"
+	. /usr/local/bin/mupibox/mupi_paths.sh
 	after=$(date +%s)
-	echo -e "## Backup Data  ##  finished after $((after - $before)) seconds" >&3 2>&3
+	echo -e "## Folders of 5.1  ##  finished after $((after - $before)) seconds" >&3 2>&3
 
 	STEP=$(($STEP + 1))
 
@@ -684,41 +689,43 @@ rm -f /tmp/mupibox-update-failed
 
 	echo -e "XXX\n${STEP}\nUpdate frontend, backend-api, and backend-player ... \nXXX"
 	before=$(date +%s)
-	sudo -H -u dietpi bash -c "pm2 stop server" >&3 2>&3
-	#su - dietpi -c "pm2 save" >&3 2>&3
-	# H5: atomic-swap with rollback. Move old install aside instead of
-	# deleting it; if the deploy.zip extract fails, restore the backup
-	# so the box keeps running on the previous version. The .upd-bak
-	# directory is removed after a successful extract.
-	BAK_DIR="/home/dietpi/.mupibox/Sonos-Kids-Controller-master.upd-bak"
-	# (the old install of a restore that failed stays, under its own name)
+	# Exchanged with a way back: the old program moved aside (server.upd-bak), the new one unpacked into server/; if that
+	# fails, the old one comes back and the box goes on as before. The data stays where it is (data/, cache/).
+	BAK_DIR="${MUPI_SERVER}.upd-bak"
+	# (the old program of an update that could not go back stays, under its own name)
 	[ -e "${BAK_DIR}" ] && mv "${BAK_DIR}" "${BAK_DIR}.$(date +%Y%m%d-%H%M%S)" >&3 2>&3
 	# (from here on until the very last step a power cut brings the old installation back at the next start)
 	mark_update unpacking || fail_update "The update's state could not be written (card full?) - nothing was changed"
-	if [ -d /home/dietpi/.mupibox/Sonos-Kids-Controller-master ]; then
-		mv /home/dietpi/.mupibox/Sonos-Kids-Controller-master "${BAK_DIR}" >&3 2>&3 || \
+	if [ -d "${MUPI_SERVER}" ]; then
+		mv "${MUPI_SERVER}" "${BAK_DIR}" >&3 2>&3 || \
 			{ clear_update_mark; fail_update "Could not move old install aside (filesystem full?)"; }
 	fi
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/ >&3 2>&3
-	if ! unzip ${MUPI_SRC}/bin/nodejs/deploy.zip -d /home/dietpi/.mupibox/Sonos-Kids-Controller-master/ >&3 2>&3 \
-		|| [ ! -s /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server.js ] \
-		|| [ ! -s /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/index.html ]; then
+	mkdir -p "${MUPI_SERVER_CONFIG}" >&3 2>&3
+	if ! unzip ${MUPI_SRC}/bin/nodejs/deploy.zip -d "${MUPI_SERVER}/" >&3 2>&3 \
+		|| [ ! -s "${MUPI_SERVER}/server.js" ] \
+		|| [ ! -s "${MUPI_WWW}/index.html" ]; then
 		# Rollback: remove the partially-extracted dir and restore the backup.
-		rm -rf /home/dietpi/.mupibox/Sonos-Kids-Controller-master >&3 2>&3
-		if [ -d "${BAK_DIR}" ]; then
-			mv "${BAK_DIR}" /home/dietpi/.mupibox/Sonos-Kids-Controller-master >&3 2>&3
-			sudo -H -u dietpi bash -c "pm2 start server" >&3 2>&3
-		fi
+		rm -rf "${MUPI_SERVER}" >&3 2>&3
+		[ -d "${BAK_DIR}" ] && mv "${BAK_DIR}" "${MUPI_SERVER}" >&3 2>&3
 		clear_update_mark
 		fail_update "deploy.zip extraction failed — rolled back to previous install"
 	fi
 	sync
-	# (the old install is removed once the user data is back, see "Restore Userdata")
-	mv ${MUPI_SRC}/config/templates/monitor.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/monitor.json >&3 2>&3
-	mv ${MUPI_SRC}/config/templates/www.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/config.json >&3 2>&3
-	chown dietpi:dietpi -R /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www >&3 2>&3
-	cp /home/dietpi/.mupibox/Sonos-Kids-Controller-master/spotify-control.js /home/dietpi/.mupibox/spotifycontroller-main/spotify-control.js >&3 2>&3
-	ln -s /var/www/images/mupif.png /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/mupi.png >&3 2>&3
+	# (the old program goes at the very end of the update, see "Finish the update")
+	mv ${MUPI_SRC}/config/templates/monitor.json "${MUPI_SERVER_CONFIG}/monitor.json" >&3 2>&3
+	mv ${MUPI_SRC}/config/templates/www.json "${MUPI_SERVER_CONFIG}/config.json" >&3 2>&3
+	# the theme the display shows, until setting_update.sh sets it again below
+	[ -L "${BAK_DIR}/www/active_theme.css" ] && cp -a "${BAK_DIR}/www/active_theme.css" "${MUPI_WWW}/active_theme.css" >&3 2>&3
+	chown dietpi:dietpi -R "${MUPI_WWW}" >&3 2>&3
+	cp "${MUPI_SERVER}/spotify-control.js" "${MUPI_PLAYER}/spotify-control.js" >&3 2>&3
+	ln -s /var/www/images/mupif.png "${MUPI_WWW}/mupi.png" >&3 2>&3
+	# The links in the new program's folder (server/config/network.json to /tmp, the names of before): without them the
+	# update is not complete - it goes back to the old program at its end
+	if NO_PM2=1 bash /usr/local/bin/mupibox/migrate_layout.sh >&3 2>&3; then
+		INSTALL_DONE=1
+	else
+		echo "## The links of the folders of 5.1 could not be made - the update goes back to the previous version at its end" >&3 2>&3
+	fi
 	after=$(date +%s)
 	echo -e "## Update Kids-Controller  ##  finished after $((after - $before)) seconds" >&3 2>&3
 	STEP=$(($STEP + 1))
@@ -738,17 +745,17 @@ rm -f /tmp/mupibox-update-failed
 	KM_LEGACY_THEMES="axolotl blue captainamerica chocolate cinema clone-wars comic custom danger dark darkred deepblue dinosaur earth enterprise fantasybutterflies forms green ironman light lines matrix mint mystic orange pikachu pink purple red spiderman steampunk supermario unicorn vintage wall-e wood xmas"
 	
 	for theme in ${KM_THEMES} ${KM_LEGACY_THEMES} _fonts; do
-		mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/${theme} >&3 2>&3
-		cp -f ${MUPI_SRC}/themes/${theme}/* /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/${theme}/ >&3 2>&3
+		mkdir -p ${MUPI_WWW}/theme-data/${theme} >&3 2>&3
+		cp -f ${MUPI_SRC}/themes/${theme}/* ${MUPI_WWW}/theme-data/${theme}/ >&3 2>&3
 	done
 	#CUSTOM
-	ln -s /home/dietpi/MuPiBox/themes/custom-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/custom/custom-bg.jpg
+	ln -s /home/dietpi/MuPiBox/themes/custom-bg.jpg ${MUPI_WWW}/theme-data/custom/custom-bg.jpg
 	
 	# the name fonts these themes had before (their licenses do not allow passing them on as part of MuPiBox)
-	rm -f /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/supermario/NewSuperMarioFontU.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/steampunk/akaPosse.ttf >&3 2>&3
+	rm -f ${MUPI_WWW}/theme-data/supermario/NewSuperMarioFontU.ttf ${MUPI_WWW}/theme-data/steampunk/akaPosse.ttf >&3 2>&3
 	
 	# (after the copies above: the theme pictures are dietpi's too)
-	chown dietpi:dietpi -R /home/dietpi/.mupibox/Sonos-Kids-Controller-master/ >&3 2>&3
+	chown dietpi:dietpi -R "${MUPI_SERVER}/" >&3 2>&3
 	cp -f ${MUPI_SRC}/themes/km-themes.json /home/dietpi/MuPiBox/themes/km-themes.json >&3 2>&3
 	mv ${MUPI_SRC}/themes/*.css /home/dietpi/MuPiBox/themes/ >&3 2>&3
 	mv ${MUPI_SRC}/scripts/chromium-autostart.sh /var/lib/dietpi/dietpi-software/installed/chromium-autostart.sh >&3 2>&3
@@ -770,7 +777,6 @@ rm -f /tmp/mupibox-update-failed
 	fi
 	mv ${MUPI_SRC}/scripts/wled/* /usr/local/bin/mupibox/ >&3 2>&3
 	mv ${MUPI_SRC}/scripts/telegram/* /usr/local/bin/mupibox/ >&3 2>&3
-	#mv ${MUPI_SRC}/config/templates/www.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/config.json >&3 2>&3
 	mv ${MUPI_SRC}/config/templates/.bashrc /home/dietpi/.bashrc >&3 2>&3
 	# cp -rf instead of mv: mv cannot replace the existing, non-empty templates folder ("Directory not empty"),
 	# so the MuPiHAT templates were never updated
@@ -1312,50 +1318,8 @@ rm -f /tmp/mupibox-update-failed
 
 	###############################################################################################
 
-	echo -e "XXX\n${STEP}\nRestore Userdata... \nXXX"
-	before=$(date +%s)
-	# Every step is checked; the backup is only removed when all of them worked and data.json is
-	# valid JSON again (a mere "data.json exists" also passed for a cut-off copy or a failed
-	# resume.json / cover copy on a full card, and the only intact copy was deleted).
-	RESTORE_OK=1
-	# Everything from the backup except what the update installs fresh (config.json, monitor.json)
-	# and the links check_network.sh / get_network.sh recreate (active_*.json, network.json).
-	for item in "${USERDATA_BAK}"/config/* "${USERDATA_BAK}"/config/.[!.]*; do
-		[ -e "${item}" ] || continue
-		name=$(basename "${item}")
-		case "${name}" in
-			config.json|monitor.json|active_data.json|active_resume.json|network.json) continue ;;
-		esac
-		[ -L "${item}" ] && continue
-		put_back_item "${item}" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/${name}" || RESTORE_OK=0
-	done
-	for item in cover active_theme.css rss-covers; do
-		[ -e "${USERDATA_BAK}/www/${item}" ] || continue
-		put_back_item "${USERDATA_BAK}/www/${item}" "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/${item}" || RESTORE_OK=0
-	done
-	# theme-data: the new version's files stay, what the user added comes back (-n: nothing of the update replaced)
-	if [ -d "${USERDATA_BAK}/www/theme-data" ]; then
-		mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data >&3 2>&3
-		cp -an "${USERDATA_BAK}/www/theme-data/." /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/ >&3 2>&3 || RESTORE_OK=0
-	fi
-	chown -R dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config >&3 2>&3
-	# Everything back: the old installation and the backup go at the very end of the update (see "Finish the update"),
-	# not here - until then a power cut brings the old installation back whole at the next start
-	if [ "${RESTORE_OK}" = 1 ] && /usr/bin/jq -e . /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json > /dev/null 2>&1; then
-		RESTORE_DONE=1
-	else
-		# (the end of the update goes back to the old installation, with its data as it was)
-		echo "## Restore incomplete - user data kept in ${USERDATA_BAK} (old install in ${BAK_DIR})" >&3 2>&3
-	fi
-	chown dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/config.json >&3 2>&3
-	sleep 1 >&3 2>&3
-	after=$(date +%s)
-	echo -e "## Restore Userdata  ##  finished after $((after - $before)) seconds" >&3 2>&3
-	STEP=$(($STEP + 1))
-	
-	###############################################################################################
-	
 	echo -e "XXX\n${STEP}\nFinalizing setup... \nXXX"
+	chown dietpi:dietpi "${MUPI_SERVER_CONFIG}/config.json" >&3 2>&3
 	#cp ${CONFIG} ${CONFIG}_backup  >&3 2>&3
 	# The version, written as every other change of the config (conf_update.sh): into a file next to it, then exchanged.
 	# Written in place, a jq that failed (the config broken for a moment, a full SD card) left it empty - every setting
@@ -1370,8 +1334,8 @@ rm -f /tmp/mupibox-update-failed
 	chown root:www-data ${CONFIG}
 	chmod 775 ${CONFIG}
 	#systemctl start mupi_idle_shutdown.service >&3 2>&3
-	rm -f /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/network.json >&3 2>&3
-	ln -s /tmp/network.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/network.json >&3 2>&3
+	rm -f "${MUPI_SERVER_CONFIG}/network.json" >&3 2>&3
+	ln -s /tmp/network.json "${MUPI_SERVER_CONFIG}/network.json" >&3 2>&3
 	systemctl stop mupi_change_checker.service >&3 2>&3
 	systemctl disable mupi_change_checker.service >&3 2>&3
 	rm /etc/systemd/system/mupi_change_checker.service >&3 2>&3
@@ -1380,42 +1344,41 @@ rm -f /tmp/mupibox-update-failed
 	# boot and maintenance screens for the settings (box name, scene, language)
 	/usr/local/bin/mupibox/bootscreen_update.sh >&3 2>&3
 
-	# Finish the update - only now that everything is installed and set up (the configuration above too): the old
-	# installation's caches (Spotify answers, covers, the NAS index) come along - moved, not copied (same card, at once;
-	# without them the box asked Spotify for every entry again, a long way into its rate limit), of two Spotify blocks
-	# the longer one. Then the old installation, the backup and the mark go. Should anything of it fail, all three stay
-	# and the next start brings the old installation back whole.
-	if [ "${RESTORE_DONE:-0}" = 1 ]; then
+	# Finish the update - only now that everything is installed and set up (the configuration above too): the old program
+	# goes, and what the folders of 5.1 left behind - a program folder an older version had put in place
+	# (server.before-<time>, player.before-<time>, see migrate_layout.sh) and the parts of the old player nothing uses
+	# any more (its own node_modules: the player is one file since 5.0). Only program folders: one with data of its own in
+	# it (its library, covers or cache not a link to data/ and cache/) stays. Should anything of it fail, the old program
+	# stays and the next start brings it back whole.
+	program_only() {
+		local d
+		for d in "$1/server/config" "$1/www/cover" "$1/www/rss-covers" "$1/cache"; do
+			[ -e "${d}" ] && [ ! -L "${d}" ] && return 1
+		done
+		return 0
+	}
+	if [ "${INSTALL_DONE:-0}" = 1 ]; then
 		FINISH_OK=1
-		NEW_CACHE=/home/dietpi/.mupibox/Sonos-Kids-Controller-master/cache
-		if [ -d "${BAK_DIR}/cache" ]; then
-			mkdir -p "${NEW_CACHE}" >&3 2>&3 || FINISH_OK=0
-			block_until() { [ -s "$1" ] && /usr/bin/jq -r '.until // 0 | floor' "$1" 2>/dev/null | grep -E '^[0-9]+$' || echo 0; }
-			for item in "${BAK_DIR}"/cache/*; do
-				[ -e "${item}" ] || continue
-				name=$(basename "${item}")
-				if [ "${name}" = "spotify-block.json" ]; then
-					if [ "$(block_until "${item}")" -gt "$(block_until "${NEW_CACHE}/${name}")" ]; then
-						cp -a "${item}" "${NEW_CACHE}/${name}.upd" && mv -f "${NEW_CACHE}/${name}.upd" "${NEW_CACHE}/${name}" >&3 2>&3 || FINISH_OK=0
-					fi
-				elif [ ! -e "${NEW_CACHE}/${name}" ]; then
-					mv "${item}" "${NEW_CACHE}/" >&3 2>&3 || FINISH_OK=0
-				fi
-			done
-			chown -R dietpi:dietpi "${NEW_CACHE}" >&3 2>&3
-		fi
 		sync
 		# The update counts as done once "done" is on the card: what is left over then is only cleared up - a power cut
 		# while the old installation is being deleted must not bring a half deleted one back
-		[ "${FINISH_OK}" = 1 ] && mark_update done || FINISH_OK=0
+		mark_update done || FINISH_OK=0
 		if [ "${FINISH_OK}" = 1 ]; then
-			rm -rf "${USERDATA_BAK}" "${BAK_DIR}" >&3 2>&3
+			for old in "${BAK_DIR}" "${MUPI_HOME}"/server.before-* "${MUPI_HOME}"/player.before-*; do
+				[ -d "${old}" ] || continue
+				if program_only "${old}"; then
+					rm -rf "${old}" >&3 2>&3
+				else
+					echo "## ${old} kept: it holds data of its own" >&3 2>&3
+				fi
+			done
+			( cd "${MUPI_PLAYER}" && rm -rf node_modules auth.js docker-compose.yml dockerfile package.json package-lock.json .gitignore LICENSE README.md ) >&3 2>&3
 			clear_update_mark
 		fi
 	fi
-	# Not done (the user data not all back, the old caches not taken over, the mark not written): back to the previous
-	# version at once, before the new one runs and anything is written into it - not only at the next start
-	if [ "${RESTORE_DONE:-0}" != 1 ] || [ "${FINISH_OK:-0}" != 1 ]; then
+	# Not done (the links of the new program not made, the mark not written): back to the previous version at once,
+	# before the new one runs and anything is written into it - not only at the next start
+	if [ "${INSTALL_DONE:-0}" != 1 ] || [ "${FINISH_OK:-0}" != 1 ]; then
 		echo "## The update could not be finished - going back to the previous version" >&3 2>&3
 		if bash /usr/local/bin/mupibox/restore_interrupted_update.sh --no-restart >&3 2>&3; then
 			fail_update "The update could not be finished (card full?) - the previous version is back, with your data as it was"
@@ -1423,11 +1386,13 @@ rm -f /tmp/mupibox-update-failed
 			fail_update "The update could not be finished, and going back did not complete either - restart the box: it goes on with it at the start" nostart
 		fi
 	fi
-	
+
 	mv ${LOG} /boot/$(date +%F)_update_${VERSION}.log >&3 2>&3
 	chown dietpi:dietpi ${CONFIG} >&3 2>&3
-	
-	# by path: on a fresh box pm2 knows neither process yet ("pm2 start server" looked for a file "server")
+
+	# by path: on a fresh box pm2 knows neither process yet ("pm2 start server" looked for a file "server"). By the names
+	# of before (links to server/ and player/): an update to a version before 5.1 puts its program there - pm2 then starts
+	# that one, not the program of 5.1 it leaves beside it
 	sudo -H -u dietpi bash -c "cd /home/dietpi/.mupibox/Sonos-Kids-Controller-master && if pm2 describe server >/dev/null 2>&1; then pm2 restart server; else pm2 start server.js --name server; fi" >&3 2>&3
 	sudo -H -u dietpi bash -c "cd /home/dietpi/.mupibox/spotifycontroller-main && if pm2 describe spotify-control >/dev/null 2>&1; then pm2 restart spotify-control; else pm2 start spotify-control.js --name spotify-control; fi" >&3 2>&3
 	sudo -H -u dietpi bash -c "pm2 save" >&3 2>&3

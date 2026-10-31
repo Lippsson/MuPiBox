@@ -6,9 +6,11 @@
 # ("no HAT found" on the battery page until it was switched off and on in the admin interface). The caller restarts
 # the box afterwards. Runs as root.
 
+. /usr/local/bin/mupibox/mupi_paths.sh
+
 CONFIG=/etc/mupibox/mupiboxconfig.json
 B=/usr/local/bin/mupibox
-CUSTOM_CSS=/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/custom/custom-settings.css
+CUSTOM_CSS=${MUPI_WWW}/theme-data/custom/custom-settings.css
 
 j() { /usr/bin/jq -r "$1" "${CONFIG}" 2>/dev/null; }
 enabled() { systemctl is-enabled "$1" >/dev/null 2>&1; }

@@ -61,8 +61,8 @@ RUN mkdir -p \
     /home/dietpi/MuPiBox/media/NAS \
     /home/dietpi/MuPiBox/media/cover \
     /home/dietpi/MuPiBox/themes \
-    /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config \
-    /home/dietpi/.mupibox/spotifycontroller-main/config \
+    /home/dietpi/.mupibox/server/config \
+    /home/dietpi/.mupibox/player/config \
     /usr/local/bin/mupibox \
     /etc/mupibox \
     /var/log/mupibox
@@ -80,23 +80,26 @@ RUN cp $mupisrc/config/templates/mupiboxconfig.json /etc/mupibox/mupiboxconfig.j
 # Display, backend-api and backend-player: the bundles of deploy.zip, installed as autosetup.sh does it. The player's
 # spotify-control.js (the mpv wrapper is bundled into it) comes from the same zip; the separate
 # spotifycontroller and mplayer-wrapper downloads of before are gone since the sources moved to src/ (2024-10).
-RUN unzip -q $mupisrc/bin/nodejs/deploy.zip -d /home/dietpi/.mupibox/Sonos-Kids-Controller-master/ && \
-    cp $mupisrc/config/templates/www.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/config.json && \
-    cp $mupisrc/config/templates/monitor.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/monitor.json && \
-    cp /home/dietpi/.mupibox/Sonos-Kids-Controller-master/spotify-control.js /home/dietpi/.mupibox/spotifycontroller-main/spotify-control.js && \
-    cp $mupisrc/config/templates/spotifycontroller.json /home/dietpi/.mupibox/spotifycontroller-main/config/config.json && \
-    ln -sf /etc/mupibox/mupiboxconfig.json /home/dietpi/.mupibox/spotifycontroller-main/config/mupiboxconfig.json && \
-    ln -sf /home/dietpi/MuPiBox/themes/blue.css /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/active_theme.css && \
-    ln -sf /var/www/images/mupif.png /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/mupi.png
+# The folders of 5.1 (scripts/mupibox/mupi_paths.sh): the program in server/ and player/; data/ and cache/ and the
+# names of before as links made by migrate_layout.sh, as autosetup.sh does it.
+RUN unzip -q $mupisrc/bin/nodejs/deploy.zip -d /home/dietpi/.mupibox/server/ && \
+    cp $mupisrc/config/templates/www.json /home/dietpi/.mupibox/server/config/config.json && \
+    cp $mupisrc/config/templates/monitor.json /home/dietpi/.mupibox/server/config/monitor.json && \
+    cp /home/dietpi/.mupibox/server/spotify-control.js /home/dietpi/.mupibox/player/spotify-control.js && \
+    cp $mupisrc/config/templates/spotifycontroller.json /home/dietpi/.mupibox/player/config/config.json && \
+    ln -sf /etc/mupibox/mupiboxconfig.json /home/dietpi/.mupibox/player/config/mupiboxconfig.json && \
+    ln -sf /home/dietpi/MuPiBox/themes/blue.css /home/dietpi/.mupibox/server/www/active_theme.css && \
+    ln -sf /var/www/images/mupif.png /home/dietpi/.mupibox/server/www/mupi.png && \
+    NO_PM2=1 bash $mupisrc/scripts/mupibox/migrate_layout.sh
 
 # The themes' pictures and fonts: a theme's CSS loads them from /theme-data/<theme>/, which autosetup.sh fills from
 # themes/<theme>/ (without it the display's catch-all answers index.html for them, and a theme has no background).
 RUN for d in $mupisrc/themes/*/; do t=$(basename "$d"); \
-      mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/$t && \
-      cp -f "$d"* /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/$t/ 2>/dev/null; \
+      mkdir -p /home/dietpi/.mupibox/server/www/theme-data/$t && \
+      cp -f "$d"* /home/dietpi/.mupibox/server/www/theme-data/$t/ 2>/dev/null; \
     done && \
-    mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/custom && \
-    ln -sf /home/dietpi/MuPiBox/themes/custom-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/custom/custom-bg.jpg
+    mkdir -p /home/dietpi/.mupibox/server/www/theme-data/custom && \
+    ln -sf /home/dietpi/MuPiBox/themes/custom-bg.jpg /home/dietpi/.mupibox/server/www/theme-data/custom/custom-bg.jpg
 
 # Binaries.
 RUN cp $mupisrc/bin/fbv/fbv_64 /usr/bin/fbv && chmod 755 /usr/bin/fbv

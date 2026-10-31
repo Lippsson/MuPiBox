@@ -28,15 +28,29 @@
 # finished: the update then stops before it touches anything. The app's server and the player are stopped first when
 # they run (and started again after). Runs as root.
 #   --no-restart   kept for the callers of before; the apps are only started again when this script stopped them
+# Since 5.1 (the folders server/, player/, data/, cache/ - migrate_layout.sh) the update moves only the program aside,
+# to server.upd-bak; the data stays where it is, and there is no userdata.upd-bak. Before the folders of 5.1 the
+# program is Sonos-Kids-Controller-master (on a box of 5.1 that went back to an older version too: its update puts a
+# folder there in place of the link). A move to the folders of 5.1 that was cut off is finished first.
+#
 # SKC / USERDATA_BAK / UPDATE_STATE / PLAYER_DIR / LOCK_DIR for a test on copies, NO_PM2=1 leaves the running apps
 # and cron alone (NO_CRON=0 holds cron all the same), TEST_PAUSE=<s> waits there between the two moves,
 # SKIP_POLICY_RC=1 leaves a policy-rc.d and the services the update masked alone.
 
-SKC="${SKC:-/home/dietpi/.mupibox/Sonos-Kids-Controller-master}"
+MUPI_HOME="${MUPI_HOME:-/home/dietpi/.mupibox}"
+if [ -e "${MUPI_HOME}/.layout-moving" ] && [ -z "${SKC:-}" ]; then
+	echo "restore_interrupted_update: a move to the folders of 5.1 was cut off - it is finished"
+	bash "$(dirname "$(readlink -f "$0")")/migrate_layout.sh" || { echo "restore_interrupted_update: the move could not be finished"; exit 1; }
+fi
+if [ -L "${MUPI_HOME}/Sonos-Kids-Controller-master" ]; then
+	SKC="${SKC:-${MUPI_HOME}/server}"
+	PLAYER_DIR="${PLAYER_DIR:-${MUPI_HOME}/player}"
+fi
+SKC="${SKC:-${MUPI_HOME}/Sonos-Kids-Controller-master}"
 OLD="${SKC}.upd-bak"
-USERDATA_BAK="${USERDATA_BAK:-/home/dietpi/.mupibox/userdata.upd-bak}"
-UPDATE_STATE="${UPDATE_STATE:-/home/dietpi/.mupibox/update-state}"
-PLAYER_DIR="${PLAYER_DIR:-/home/dietpi/.mupibox/spotifycontroller-main}"
+USERDATA_BAK="${USERDATA_BAK:-${MUPI_HOME}/userdata.upd-bak}"
+UPDATE_STATE="${UPDATE_STATE:-${MUPI_HOME}/update-state}"
+PLAYER_DIR="${PLAYER_DIR:-${MUPI_HOME}/spotifycontroller-main}"
 JQ=/usr/bin/jq
 [ -x "${JQ}" ] || JQ=jq
 STAMP=$(date +%Y%m%d-%H%M%S)
