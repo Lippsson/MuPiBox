@@ -1,5 +1,5 @@
 // The week in a Telegram message, Sunday evening: how long the box played, on how many days, and what the most (the
-// numbers of the app's history, webapp/playlog.ts). Once per week; switched off in the app (Telegram › Wochenrückblick).
+// numbers of the app's history, app-api/playlog.ts). Once per week; switched off in the app (Telegram › Wochenrückblick).
 
 import { spawn } from 'node:child_process'
 import type { MupiboxConfig } from '../models/mupibox-config.model'

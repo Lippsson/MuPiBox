@@ -37,7 +37,7 @@ function run(cmd: string, args: string[], timeoutMs = 30000): Promise<{ ok: bool
 // $1 = stable | beta | dev | os. Its state for the app in state (key=value), progress (percent, tab, step) and
 // output.txt; they stay after the restart, so the app can tell how the last update went.
 export const RUN_SH = `#!/bin/bash
-# The app's update (backend-api webapp/updates.ts), run as the systemd unit ${UNIT}: $1 = stable | beta | dev | os
+# The app's update (backend-api app-api/updates.ts), run as the systemd unit ${UNIT}: $1 = stable | beta | dev | os
 D=${STATE_DIR}
 KIND="$1"
 PHASE=running
@@ -125,7 +125,7 @@ fi
 
 // stands in for whiptail --gauge (no terminal): "XXX / percent / step / XXX" blocks from the update script
 export const WHIPTAIL_SH = `#!/bin/bash
-# stand-in for whiptail --gauge during the app's update (backend-api webapp/updates.ts): the progress to a file
+# stand-in for whiptail --gauge during the app's update (backend-api app-api/updates.ts): the progress to a file
 P=${STATE_DIR}/progress
 while IFS= read -r line; do
 	[ "$line" = "XXX" ] || continue

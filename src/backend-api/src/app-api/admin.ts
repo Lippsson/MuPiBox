@@ -351,7 +351,7 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         if (login !== undefined) cfg.interfacelogin = login
         const fresh = (cfg.mupibox as Record<string, unknown> | undefined) ?? {}
         for (const [k, v] of Object.entries(keep)) if (typeof v === 'string' && v) fresh[k] = v
-        // (the admin interface switched on or off: the web server keeps it so, see webapp/legacy-admin.ts)
+        // (the admin interface switched on or off: the web server keeps it so, see app-api/legacy-admin.ts)
         if (typeof mb.legacyAdmin === 'boolean') fresh.legacyAdmin = mb.legacyAdmin
         cfg.mupibox = fresh
       })

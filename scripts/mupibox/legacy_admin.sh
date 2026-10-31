@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # The previous admin interface (PHP pages behind lighttpd) on or off - the app's switch (Einstellungen › System ›
-# Experten, webapp/legacy-admin.ts), the install (off) and the update (as the config says). Run as root.
+# Experten, app-api/legacy-admin.ts), the install (off) and the update (as the config says). Run as root.
 #
 #   legacy_admin.sh on | off [noreload] | status | apply | reload
 #

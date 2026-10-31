@@ -415,7 +415,7 @@ STEP=0
 	echo -e "XXX\n${STEP}\nPreconfigure Samba, FTP and VNC... \nXXX"
 	before=$(date +%s)
 	# The Samba share (the box in the Windows network) installed and set up, but off: the app switches it on
-	# (Einstellungen › Dienste, webapp/services.ts) - then at once and without internet. Nothing was installed for it
+	# (Einstellungen › Dienste, app-api/services.ts) - then at once and without internet. Nothing was installed for it
 	# before (smb.conf and the password went nowhere, smbd was "switched on" without being there), the app installed it
 	# at its first switch-on. With it its announcement (WS-Discovery): wsdd2 (Debian 12 and 13), else wsdd.
 	# Debian's packages start their service when they are installed: policy-rc.d keeps them from it meanwhile (else
@@ -450,7 +450,7 @@ STEP=0
 		systemctl disable --now ${u}.service >&3 2>&3
 	done
 	# FTP (proftpd) and VNC (x11vnc, websockify and noVNC for the browser) the same way, issue #178: installed and set up,
-	# off - the app's switches (webapp/services.ts) then only start and stop them, at once and without internet
+	# off - the app's switches (app-api/services.ts) then only start and stop them, at once and without internet
 	DEBIAN_FRONTEND=noninteractive apt-get --yes install proftpd-core x11vnc websockify >&3 2>&3
 	if [ -d /etc/proftpd ] && { [ "${FTP_CONF_HAD}" = 0 ] || conf_untouched /etc/proftpd/proftpd.conf /usr/share/proftpd/templates/proftpd.conf; }; then
 		cp -f ${MUPI_SRC}/config/templates/proftpd.conf /etc/proftpd/proftpd.conf >&3 2>&3
@@ -738,7 +738,7 @@ STEP=0
 	done
 	
 	# The DietPi-Dashboard: a password nobody knows, an inner port, off - the app switches it on and opens it with a
-	# one-time ticket (dietpi_dashboard.sh, backend-api webapp/dietpi-dashboard.ts)
+	# one-time ticket (dietpi_dashboard.sh, backend-api app-api/dietpi-dashboard.ts)
 	if [ -x /opt/dietpi-dashboard/dietpi-dashboard ]; then
 		/usr/local/bin/mupibox/dietpi_dashboard.sh setup >&3 2>&3
 		/usr/local/bin/mupibox/dietpi_dashboard.sh off >&3 2>&3

@@ -1479,7 +1479,7 @@ async function refreshToken() {
 }
 
 // Spotify refused the login (invalid_grant: its 6 months are over, or it was withdrawn): the backend tells the parents
-// (app, Telegram) - see backend-api webapp/spotify-auth-age.ts. The mark goes when a refresh works again.
+// (app, Telegram) - see backend-api app-api/spotify-auth-age.ts. The mark goes when a refresh works again.
 const AUTH_REFUSED_FLAG = '/tmp/.spotify_auth_invalid'
 function markLoginRefused(refused) {
   try {

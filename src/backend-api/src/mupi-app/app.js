@@ -17,7 +17,7 @@ const API = '/api/app'
 const BOX_ORIGIN = location.origin
 // Where Spotify sends the browser back after the login: https through the box's web server (port 443) - Spotify takes
 // no http addresses except 127.0.0.1. It has to be entered in the Spotify app. Which one the box uses comes from the box
-// (webapp/oauth.ts redirectModeOf: /app/spotify-callback, or /spotify.php for a box set up before the app).
+// (app-api/oauth.ts redirectModeOf: /app/spotify-callback, or /spotify.php for a box set up before the app).
 const spotifyRedirect = () => spot.access?.redirectUris?.[spot.access.redirectMode] ?? `https://${location.hostname}/app/spotify-callback`
 // numbers and dates in the language of the app (see i18n.js)
 let LOCALE = localeTag()
@@ -4370,7 +4370,7 @@ async function openRadioStation(s) {
   )
 }
 
-/* Auf TIDAL suchen (the box's TIDAL service through webapp/tidal.ts; switched on and signed in on Dienste › TIDAL) */
+/* Auf TIDAL suchen (the box's TIDAL service through app-api/tidal.ts; switched on and signed in on Dienste › TIDAL) */
 
 // the last search (type: what of it is shown), and an artist opened from it (its albums, with the way back); the
 // category is chosen when adding (addSheet) - the one chosen last starts the next sheet, as on Spotify (search.cat)
@@ -5210,7 +5210,7 @@ const NO_PW_MANAGER = 'autocomplete="off" data-1p-ignore data-lpignore="true" da
 
 const spDate = (iso) => (iso ? new Date(iso).toLocaleDateString(LOCALE) : '')
 
-// The player's Spotify login: since when, until when (Spotify: 6 months), refused (see webapp/spotify-auth-age.ts)
+// The player's Spotify login: since when, until when (Spotify: 6 months), refused (see app-api/spotify-auth-age.ts)
 function spotifyLogin(a = spot.access ?? {}) {
   const l = a.login ?? {}
   if (!a.connected) return { state: 'none', text: 'Nicht angemeldet' }
@@ -6620,7 +6620,7 @@ function mountTheme(root, page) {
 
 /* Eigenes Theme ("custom"): the parents' picture and its settings - on the theme page, only while "custom" is the
    theme. A live preview draws the display with the demo covers (tools/theme-preview); every change is saved at once
-   and the box shows it (webapp/custom-theme.ts writes the stylesheet the display adds). */
+   and the box shows it (app-api/custom-theme.ts writes the stylesheet the display adds). */
 
 const CT_FONTS = [
   ['fredoka', 'Fredoka', '"Fredoka", sans-serif', 600],
@@ -6633,7 +6633,7 @@ const CT_SIZES = [
   ['m', 'Normal', 21],
   ['l', 'Groß', 24],
 ]
-// (the same rule as webapp/custom-theme.ts: the dark symbols on the accent must stay readable)
+// (the same rule as app-api/custom-theme.ts: the dark symbols on the accent must stay readable)
 function ctReadable(hex) {
   const lum = (h) => {
     const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(h.slice(i, i + 2), 16) / 255).map((s) => (s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4))
@@ -6869,7 +6869,7 @@ function ctAskPicture(page) {
 
 /* Startbilder › Eigene Bilder: a photo or logo instead of the design's start, goodbye and empty-battery picture. The
    app fits it to the display (fill: cut at the edges; whole: a border in the colour of the picture's edge) and sends a
-   PNG of the display's size; the box puts it in place (webapp/bootscreen-custom.ts, bootscreen_update.sh). */
+   PNG of the display's size; the box puts it in place (app-api/bootscreen-custom.ts, bootscreen_update.sh). */
 
 const BS_OWN = [
   ['splash', 'Start'],
@@ -8059,7 +8059,7 @@ async function loadWlan() {
   const [st, saved, fixed] = await Promise.all([api('/api/network'), api(`${API}/wifi/saved`), api(`${API}/wifi/static`)])
   net.status = st.ok ? st.body : null
   net.saved = saved.ok ? saved.body?.networks ?? [] : null
-  // (the networks with a fixed address, by name - see webapp/wifi-static.ts; reverted: one the box took back to DHCP)
+  // (the networks with a fixed address, by name - see app-api/wifi-static.ts; reverted: one the box took back to DHCP)
   net.fixed = fixed.ok ? fixed.body?.networks ?? {} : {}
   net.reverted = fixed.ok ? fixed.body?.reverted ?? null : null
 }
@@ -8074,7 +8074,7 @@ const WIFI_STATIC_ERRORS = {
   same: 'Die Adresse ist die des Routers',
   host: 'Diese Adresse ist im Netz reserviert – bitte eine andere',
 }
-// The checks of the test before saving (see test in webapp/wifi-static.ts): [text when fine, text when not]
+// The checks of the test before saving (see test in app-api/wifi-static.ts): [text when fine, text when not]
 const WIFI_TESTS = {
   network: ['Router und Adressbereich wie im Netz jetzt', 'Router oder Adressbereich anders als im Netz jetzt – Tippfehler?'],
   own: ['Die Adresse hat die Box gerade selbst', ''],
@@ -8740,7 +8740,7 @@ function mountSecurity(root, page) {
   }
 }
 
-/* Einstellungen › Sicherheit › Verschlüsselung (HTTPS): the box's certificate (webapp/tls.ts, tls_cert.sh) - to
+/* Einstellungen › Sicherheit › Verschlüsselung (HTTPS): the box's certificate (app-api/tls.ts, tls_cert.sh) - to
    install on the phones (then https shows no warning, and Android installs the app), "Nur sichere Verbindung", the
    address for links, an own certificate */
 
@@ -8966,7 +8966,7 @@ function mountSystem(root) {
 }
 
 /* Einstellungen › Audio › Sprachausgabe: the voice (Piper on the box, Google, silent), the voices per language, the
-   automatic announcements and the parents' ones (speech.ts, webapp/speech-routes.ts) */
+   automatic announcements and the parents' ones (speech.ts, app-api/speech-routes.ts) */
 
 const speech = { data: null, lang: null, voices: {}, known: {}, licenses: {}, showAll: false, poll: null }
 const SPEECH_QUALITY = { x_low: 'sehr niedrig', low: 'niedrig', medium: 'mittel', high: 'hoch' }
@@ -10090,7 +10090,7 @@ async function saveLan(page) {
   }, 5000)
 }
 
-// The address of the WiFi (lan: of the cable) fetched anew from the router (see dhcp/renew in webapp/network.ts)
+// The address of the WiFi (lan: of the cable) fetched anew from the router (see dhcp/renew in app-api/network.ts)
 async function renewAddress(lan) {
   const text = lan
     ? 'Die Box holt sich ihre Adresse am Kabel neu vom Router. Die Verbindung ist dabei für einen Moment weg.'
@@ -10191,7 +10191,7 @@ function expertsTop() {
       <div class="btns"><button class="btn primary" id="ex-hostsave">Speichern</button></div></section>`,
     // (beside the host name: both short)
     // (the DietPi-Dashboard has a terminal with root rights: off by default, and switched on reached from here only -
-    // a one-time ticket signs in, see backend-api webapp/dietpi-dashboard.ts)
+    // a one-time ticket signs in, see backend-api app-api/dietpi-dashboard.ts)
     `<section class="card"><h2>Weitere Werkzeuge</h2>
       <div class="row"><span class="lbl"><b>DietPi-Dashboard erlauben</b><small>Systemverwaltung von DietPi mit einem Terminal mit Root-Rechten. Erreichbar nur über diese App, nicht direkt im Netz.</small></span><label class="switch"><input type="checkbox" id="ex-dash" ${adm.dash?.enabled ? 'checked' : ''} aria-label="DietPi-Dashboard erlauben"><span></span></label></div>
       <div class="row"><span class="lbl"><b>Admin-Interface</b><small>${esc('Die bisherige Oberfläche mit PHP. Diese App kann alles, was sie konnte. Aus antwortet auf der Box nichts mehr mit PHP – eine Sicherheitslücke in PHP trifft sie dann nicht.')}</small></span><label class="switch"><input type="checkbox" id="ex-admin" ${adm.legacy ? 'checked' : ''} aria-label="Admin-Interface"><span></span></label></div>
@@ -10593,7 +10593,7 @@ function mountHa(root, page) {
   }
 }
 
-/* TIDAL (backend-api webapp/tidal.ts, unofficial: python-tidal): switched on with a hint, the sign-in with a code */
+/* TIDAL (backend-api app-api/tidal.ts, unofficial: python-tidal): switched on with a hint, the sign-in with a code */
 
 const tidalState = { data: null }
 
@@ -12708,7 +12708,7 @@ boot().catch((err) => {
   wireBootWays()
 })
 
-/* ---------- Start › "Angepinnt" (see webapp/pinned-cards.ts) ----------
+/* ---------- Start › "Angepinnt" (see app-api/pinned-cards.ts) ----------
  * Every card with a heading gets a pin. Pinned, it is on the start page
  *   - as a link (any card): a tile with its heading and page; a tap opens the page, goes to the card and marks it for
  *     a moment - the card is always the real one, nothing is copied;
