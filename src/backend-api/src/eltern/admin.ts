@@ -560,8 +560,10 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     // checked - one that is not readable changes nothing -, then the rest unpacked, then the library written to its
     // place (the last of the two names when a zip has both)
     const libraryEntry = [...LIBRARY_ENTRIES].reverse().find((entry) => files.some((f) => f.name === entry))
-    const libraryDir = libraryEntry ? await fsp.mkdtemp('/tmp/.mupibox-restore-') : ''
+    // (anything that fails in here - /tmp full too - ends as "unzip failed": the restore free again, the upload gone)
+    let libraryDir = ''
     const unzip = await (async () => {
+      if (libraryEntry) libraryDir = await fsp.mkdtemp('/tmp/.mupibox-restore-')
       const library = `${libraryDir}/data.json`
       if (libraryEntry) {
         const r = await run('unzip', ['-o', '-j', '-qq', file, libraryEntry, '-d', libraryDir], 120000)
@@ -575,10 +577,12 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
       const r = rest ? await run('sudo', ['unzip', '-o', file, '-d', '/', '-x', ...LIBRARY_ENTRIES], 3600000) : { ok: true }
       if (!r.ok || !libraryEntry) return r
       return { ok: await withDataLock(() => installFileAs(`${LIBRARY}/data.json`, library)).then((done) => done === true) }
-    })().finally(async () => {
-      restoreRunning = false
-      if (libraryDir) await fsp.rm(libraryDir, { recursive: true, force: true }).catch(() => undefined)
-    })
+    })()
+      .catch(() => ({ ok: false }))
+      .finally(async () => {
+        restoreRunning = false
+        if (libraryDir) await fsp.rm(libraryDir, { recursive: true, force: true }).catch(() => undefined)
+      })
     await cleanup()
     if (!unzip.ok) {
       res.status(500).json({ error: 'unzip failed' })

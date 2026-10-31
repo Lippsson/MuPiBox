@@ -201,6 +201,14 @@ if [ -z "$BRANCH" ]; then
     OWN_SCRIPT=$(mktemp /tmp/mupibox-update-${TARGET_TAG}.XXXXXX)
     if curl -fsSL --retry 3 --retry-delay 3 -m 120 -o "${OWN_SCRIPT}" "https://raw.githubusercontent.com/splitti/MuPiBox/${TARGET_TAG}/update/start_mupibox_update.sh" \
        && bash -n "${OWN_SCRIPT}"; then
+      # (on a box of 5.1: what that version looks for elsewhere than its update leaves it - see migrate_layout.sh)
+      if [ -L /home/dietpi/.mupibox/Sonos-Kids-Controller-master ] \
+         && ! bash /usr/local/bin/mupibox/migrate_layout.sh --for-older; then
+        echo "Error: the folders could not be made ready for ${TARGET_TAG} - nothing was changed, please try again."
+        rm -f "${OWN_SCRIPT}"
+        rm -rf ${PREFLIGHT_DIR}
+        exit 1
+      fi
       echo "MuPiBox ${TARGET_TAG} is installed by its own update script"
       rm -rf ${PREFLIGHT_DIR}
       exec bash "${OWN_SCRIPT}" "$@"
@@ -751,7 +759,7 @@ rm -f /tmp/mupibox-update-failed
 	#CUSTOM
 	ln -s /home/dietpi/MuPiBox/themes/custom-bg.jpg ${MUPI_WWW}/theme-data/custom/custom-bg.jpg
 	# what the user put into theme-data (pictures and fonts of an own theme) comes over from the old program (-n: nothing
-	# the update ships is replaced) - should that fail, the old program stays (see "Finish the update")
+	# the update ships is replaced) - should that fail, the old one is kept in data/kept-<time>/ (see "Finish the update")
 	THEME_DATA_KEPT=1
 	if [ -d "${BAK_DIR}/www/theme-data" ] && [ ! -L "${BAK_DIR}/www/theme-data" ]; then
 		cp -an "${BAK_DIR}/www/theme-data/." "${MUPI_WWW}/theme-data/" >&3 2>&3 || THEME_DATA_KEPT=0
@@ -1365,16 +1373,32 @@ rm -f /tmp/mupibox-update-failed
 	}
 	if [ "${INSTALL_DONE:-0}" = 1 ]; then
 		FINISH_OK=1
+		# What of the old program has to stay goes where nothing clears it up - before "done": a start after a power cut
+		# that finds "done" deletes server.upd-bak (restore_interrupted_update.sh). Its theme-data, when what the user
+		# added to it could not all be taken over (above), to data/kept-<time>/; the whole old program when it holds data
+		# of its own, to server.kept-<time>.
+		KEEP_STAMP=$(date +%Y%m%d-%H%M%S)
+		if [ "${THEME_DATA_KEPT:-1}" != 1 ] && [ -d "${BAK_DIR}/www/theme-data" ] && [ ! -L "${BAK_DIR}/www/theme-data" ]; then
+			if mkdir -p "${MUPI_DATA}/kept-${KEEP_STAMP}" && mv "${BAK_DIR}/www/theme-data" "${MUPI_DATA}/kept-${KEEP_STAMP}/theme-data" >&3 2>&3; then
+				chown -R dietpi:dietpi "${MUPI_DATA}/kept-${KEEP_STAMP}" >&3 2>&3
+				echo "## theme-data of the old program kept in ${MUPI_DATA}/kept-${KEEP_STAMP}/theme-data: what was added to it could not all be taken over" >&3 2>&3
+			else
+				FINISH_OK=0
+			fi
+		fi
+		if [ "${FINISH_OK}" = 1 ] && [ -d "${BAK_DIR}" ] && ! program_only "${BAK_DIR}"; then
+			mv "${BAK_DIR}" "${MUPI_HOME}/server.kept-${KEEP_STAMP}" >&3 2>&3 \
+				&& echo "## ${BAK_DIR} kept as ${MUPI_HOME}/server.kept-${KEEP_STAMP}: it holds data of its own" >&3 2>&3 \
+				|| FINISH_OK=0
+		fi
 		sync
 		# The update counts as done once "done" is on the card: what is left over then is only cleared up - a power cut
 		# while the old installation is being deleted must not bring a half deleted one back
-		mark_update done || FINISH_OK=0
+		[ "${FINISH_OK}" = 1 ] && mark_update done || FINISH_OK=0
 		if [ "${FINISH_OK}" = 1 ]; then
 			for old in "${BAK_DIR}" "${MUPI_HOME}"/server.before-* "${MUPI_HOME}"/player.before-*; do
 				[ -d "${old}" ] || continue
-				if [ "${old}" = "${BAK_DIR}" ] && [ "${THEME_DATA_KEPT:-1}" != 1 ]; then
-					echo "## ${old} kept: what was added to its theme-data could not all be taken over" >&3 2>&3
-				elif program_only "${old}"; then
+				if program_only "${old}"; then
 					rm -rf "${old}" >&3 2>&3
 				else
 					echo "## ${old} kept: it holds data of its own" >&3 2>&3

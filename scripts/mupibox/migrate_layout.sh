@@ -236,6 +236,35 @@ quiet
 [ -e "${MOVING}" ] && RESUMED=1
 touch "${MOVING}" && sync || fail "could not write ${MOVING} (card full?)"
 
+# --for-older: right before the update of a version before 5.1 (update/start_mupibox_update.sh hands over to it). That
+# update moves everything in the program's cache (cache/, through its link) into its own new program folder (5.0.10
+# and later) - what a program before 5.1 looks for elsewhere goes back to its place of before first, as a folder or
+# file, not a link: the small copies of the covers (thumbs/), the podcasts' pictures (www/rss-covers) and feeds and the
+# home lists (server/config, the library's folder). Else a link pointed to nothing after that update. The next run
+# without it (the next update of 5.1) takes them back.
+if [ "${1:-}" = "--for-older" ]; then
+	STEP="for an older version"
+	if [ -L "${SKC}" ] && [ -d "${MUPI_SERVER}" ]; then
+		if [ -L "${H}/thumbs" ] && [ -d "${MUPI_CACHE}/thumbs" ] && [ ! -L "${MUPI_CACHE}/thumbs" ]; then
+			unlink_noted "${H}/thumbs"
+			move "${MUPI_CACHE}/thumbs" "${H}/thumbs"
+		fi
+		if [ -L "${MUPI_WWW}/rss-covers" ]; then
+			unlink_noted "${MUPI_WWW}/rss-covers"
+			[ -d "${MUPI_CACHE}/rss-covers" ] && [ ! -L "${MUPI_CACHE}/rss-covers" ] && move "${MUPI_CACHE}/rss-covers" "${MUPI_WWW}/rss-covers"
+		fi
+		for name in rss-cache home-lists.json; do
+			if [ -e "${MUPI_CACHE}/${name}" ] && [ ! -L "${MUPI_CACHE}/${name}" ] && [ ! -e "${MUPI_LIBRARY}/${name}" ]; then
+				move "${MUPI_CACHE}/${name}" "${MUPI_LIBRARY}/${name}"
+			fi
+		done
+	fi
+	rm -f "${MOVING}"
+	sync
+	log "done (for an older version)"
+	finish 0
+fi
+
 STEP="folders"
 for d in "${MUPI_LIBRARY}" "${MUPI_COVERS}" "${MUPI_LOGS}" "${MUPI_CACHE}"; do
 	make_dir "${d}" || fail "could not make ${d}"
@@ -307,6 +336,10 @@ if [ -d "${MUPI_SERVER}" ]; then
 	place "${MUPI_SERVER}/www/cover" "${MUPI_COVERS}"
 	place "${MUPI_SERVER}/www/rss-covers" "${MUPI_CACHE}/rss-covers"
 	place "${MUPI_SERVER}/cache" "${MUPI_CACHE}"
+	# (put into the library's folder for a version before 5.1: see --for-older)
+	for name in rss-cache home-lists.json; do
+		place "${MUPI_LIBRARY}/${name}" "${MUPI_CACHE}/${name}"
+	done
 	if [ -d "${MUPI_WWW}" ]; then
 		link "${MUPI_COVERS}" "${MUPI_WWW}/cover"
 		link "${MUPI_CACHE}/rss-covers" "${MUPI_WWW}/rss-covers"
