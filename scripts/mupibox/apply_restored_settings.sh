@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# After a backup was restored (the app's eltern/admin.ts and the admin interface's admin.php): what the restored
+# After a backup was restored (the app's webapp/admin.ts and the admin interface's admin.php): what the restored
 # configuration switches on but lives outside it is set up the way the configuration says. A fresh box restored from
 # a backup showed the MuPiHAT as active in the app, while its services, driver and sound card had never been set up
 # ("no HAT found" on the battery page until it was switched off and on in the admin interface). The caller restarts
@@ -33,7 +33,7 @@ elif enabled mupi_hat.service; then
 	"${B}/disable_mupihat.sh" "${CARD_ARG[@]}"
 fi
 
-# the restored sound card in DietPi's configuration (dietpi.txt), as the app chooses it (eltern/hardware.ts), and the
+# the restored sound card in DietPi's configuration (dietpi.txt), as the app chooses it (webapp/hardware.ts), and the
 # MAX98357A's driver for it - or out again for another card while the MuPiHAT is off (amp_driver.sh)
 if [ -n "${CARD}" ]; then
 	current=$(sed -n '/^[[:blank:]]*CONFIG_SOUNDCARD=/{s/^[^=]*=//p;q}' /boot/dietpi.txt 2>/dev/null)

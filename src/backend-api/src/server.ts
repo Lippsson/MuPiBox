@@ -37,16 +37,16 @@ import { loadSpotifyTokenStore } from './spotify-sync/config-loader'
 import { createSpotifySyncRouter } from './spotify-sync/routes'
 import { startScheduler } from './spotify-sync/scheduler'
 import type { RunSyncDeps } from './spotify-sync/state-machine'
-import { buildElternLandingHandler, createElternApiRouter, registerDisplayNetworkRoutes, setOnSpotifyCacheCleared } from './eltern/routes'
-import { startSpotifyLoginWatch } from './eltern/spotify-auth-age'
-import { startTlsWatch } from './eltern/tls'
-import { startWeeklySummary } from './eltern/weekly-summary'
-import { startNightDim } from './eltern/night-dim'
-import { bootConfigPath } from './eltern/boot-paths'
+import { buildElternLandingHandler, createElternApiRouter, registerDisplayNetworkRoutes, setOnSpotifyCacheCleared } from './webapp/routes'
+import { startSpotifyLoginWatch } from './webapp/spotify-auth-age'
+import { startTlsWatch } from './webapp/tls'
+import { startWeeklySummary } from './webapp/weekly-summary'
+import { startNightDim } from './webapp/night-dim'
+import { bootConfigPath } from './webapp/boot-paths'
 import { startSpeech } from './speech'
-import { startBucketCleanup, parseCookie, requireCsrf, requireSession } from './eltern/middleware'
+import { startBucketCleanup, parseCookie, requireCsrf, requireSession } from './webapp/middleware'
 import { registerHaAppRoutes, registerHaDisplayRoute, startHaApi } from './ha/ha-api'
-import { isLoginRequired, SESSION_COOKIE, validateSession } from './eltern/auth'
+import { isLoginRequired, SESSION_COOKIE, validateSession } from './webapp/auth'
 import { type IncomingMessage, request as httpRequest } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { SUDO_BACKUP_SNIPPET, backupBeforeWrite } from './file-backup'
@@ -64,7 +64,7 @@ import { episodeKey, MAX_KEEP, type OfflineEpisode, PodcastOffline } from './pod
 import { setFeedHeadReader } from './podcast-search'
 import { EpisodeState, episodeStateSettings } from './episode-state'
 import { uiScale } from './ui-scale'
-import { confirmDisplayTest, displayTestState } from './eltern/display-profile'
+import { confirmDisplayTest, displayTestState } from './webapp/display-profile'
 import { browserGuard, corsOptionsFor, isAllowedHost, isLoopback, localOnly, localOrElternSession, logValue, PROXY_PORT, setConfiguredHosts, viaProxy } from './request-guard'
 import { CACHE_DIR, COVERS_DIR, DATA_DIR, LIBRARY_DIR, LOGS_DIR, SERVER_CONFIG_DIR } from './paths'
 
@@ -394,7 +394,7 @@ export const app = express()
 // req.ip from X-Forwarded-For only when the request came from the box itself: the web server of port 80 passing the
 // app on (see PROXY_PORT). From anywhere else the header is ignored, a client on the network cannot forge its address.
 app.set('trust proxy', 'loopback')
-// Spotify's way back after the login (the Redirect URI in the parents' Spotify app, see eltern/oauth.ts
+// Spotify's way back after the login (the Redirect URI in the parents' Spotify app, see webapp/oauth.ts
 // buildRedirectUri): https://<box>/app/spotify-callback is handled as /api/app/spotify-oauth/callback; the addresses
 // of before (/api/eltern/…) stay for Spotify apps that still name them
 app.use((req, _res, next) => {
@@ -2957,7 +2957,7 @@ app.get('/api/network/link', async (_req, res) => {
 // adapter that may also be plugged in. Immediate, no reboot needed.
 const ONBOARD_WIFI_SCRIPT = '/usr/local/bin/mupibox/mupi_onboard_wifi.sh'
 
-// The app's switch (eltern/network.ts) also switches the chip off at the start (dtoverlay=disable-wifi): after a restart
+// The app's switch (webapp/network.ts) also switches the chip off at the start (dtoverlay=disable-wifi): after a restart
 // the box had no onboard adapter, the display hid its button - and without LAN or a USB adapter nothing could switch it
 // on again. Such a chip counts as there and off; on takes the line out, and the radio comes after a restart.
 const onboardWifiBootDisabled = async () => /^dtoverlay=disable-wifi\s*$/m.test(await readFile(await bootConfigPath(), 'utf8').catch(() => ''))
@@ -3416,7 +3416,7 @@ app.post('/api/network/ethernet/power', localOrElternSession, async (req, res) =
 })
 
 // The display's WiFi page: a fixed address per WiFi network (/api/wifi/static*), fetching the address anew
-// (/api/network/dhcp/renew) - see eltern/wifi-static.ts and eltern/network.ts
+// (/api/network/dhcp/renew) - see webapp/wifi-static.ts and webapp/network.ts
 registerDisplayNetworkRoutes(app, localOrElternSession)
 
 // Restarts the ethernet interface so a saved config takes effect, mirroring the WiFi "Restart" button.
@@ -5362,7 +5362,7 @@ async function nasPathSelected(raw: string): Promise<boolean> {
   return selected.some((folder) => wanted === folder || wanted.startsWith(`${folder}/`)) && !nasIsHidden(wanted, hidden)
 }
 
-// A cover chosen in the app for a folder of the NAS (the cover picker, see eltern/covers.ts): written as cover.jpg
+// A cover chosen in the app for a folder of the NAS (the cover picker, see webapp/covers.ts): written as cover.jpg
 // (cover.png) into that folder with the box's NAS login - only in the folders the parents selected. A cover there
 // before is kept as cover-previous.*, the box's own cover-online.jpg goes (it would come first); when the upload fails
 // the cover before comes back. An account without write permission: 'denied'.
@@ -8632,13 +8632,13 @@ if (!testServe) {
   startScheduler(spotifySyncDeps)
   // Spotify albums kept as their id only: name and cover into data.json (spotify-album-fill.ts)
   startSpotifyAlbumFill(albumFillDeps)
-  // The Spotify login's 6 months: reminders before the end, a message when Spotify refused it (eltern/spotify-auth-age.ts)
+  // The Spotify login's 6 months: reminders before the end, a message when Spotify refused it (webapp/spotify-auth-age.ts)
   startSpotifyLoginWatch({ getMupiboxConfig: getMupiboxConfigSync, updateMupiboxConfig })
   startTlsWatch({ getMupiboxConfig: getMupiboxConfigSync, updateMupiboxConfig })
   // the Home Assistant API, when it is switched on (ha/ha-api.ts)
   startHaApi(haDeps)
   startWeeklySummary({ getMupiboxConfig: getMupiboxConfigSync, updateMupiboxConfig, currentPlayLogStart })
-  // "Abends dunkler": the display's brightness in the evening (eltern/night-dim.ts)
+  // "Abends dunkler": the display's brightness in the evening (webapp/night-dim.ts)
   startNightDim(getMupiboxConfigSync)
   // the automatic announcements (speech.ts)
   startSpeech(getMupiboxConfigSync)

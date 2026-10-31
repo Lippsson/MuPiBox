@@ -973,7 +973,7 @@ rm -f /tmp/mupibox-update-failed
 		bash /usr/local/bin/mupibox/boot_tuning.sh >&3 2>&3
 	fi
 	# Samba, FTP and VNC on a box that does not have them yet (issue #178): installed and set up, but off - the app's
-	# switches (eltern/services.ts) then only start and stop them, at once and without internet; a fresh installation
+	# switches (webapp/services.ts) then only start and stop them, at once and without internet; a fresh installation
 	# does the same. Only what is missing: a service that is there is left as it is (one that is on stays on), and an
 	# own smb.conf, proftpd.conf or Samba password is never replaced. Debian's packages start their service when they are installed -
 	# policy-rc.d keeps them from it meanwhile (else proftpd ran for a moment with Debian's own config, which lets the

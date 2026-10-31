@@ -72,7 +72,7 @@ export interface OnboardWifiStatus {
   bootDisabled?: boolean
 }
 
-/** A fixed address for one saved WiFi network (see backend eltern/wifi-static.ts); paused: taken back to DHCP. */
+/** A fixed address for one saved WiFi network (see backend webapp/wifi-static.ts); paused: taken back to DHCP. */
 export interface WifiStaticAddress {
   ip: string
   mask: string

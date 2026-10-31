@@ -1963,7 +1963,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         break
       }
       case 'tidal': {
-        // an album or a playlist of TIDAL, played by the box's TIDAL service (see eltern/tidal.ts)
+        // an album or a playlist of TIDAL, played by the box's TIDAL service (see webapp/tidal.ts)
         const id = String(item.id ?? '')
         if (!/^[A-Za-z0-9-]{1,64}$/.test(id)) {
           res.status(400).json({ error: 'tidal_id_missing' })
