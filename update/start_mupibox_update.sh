@@ -269,7 +269,7 @@ older_web_server_undo() {
 # The step after the older update, kept on the card before it begins (a power cut while it runs, or right after it,
 # must not leave the older version behind the app's redirects): a script of its own outside the folders of the program
 # and the scripts (the older update replaces those, leaves others alone), the job (older-web.pending: the version,
-# whether PHP works and the program that ran before) and a unit that runs it at the start while the job is there. Run
+# whether PHP works and the server.js of that version) and a unit that runs it at the start while the job is there. Run
 # here once the older update is done, else at the next start - each time only once that version is installed (its
 # program in place, its number in the config); done, the job and the unit go. An update of 5.1 that got to its "done"
 # takes all of it away (below).
@@ -285,14 +285,14 @@ older_web_server_pending() {
 PENDING=/etc/mupibox/older-web.pending
 E=/etc/lighttpd/conf-enabled
 [ -s "${PENDING}" ] || exit 0
-read -r target php_ok before < "${PENDING}"
-# Only once that version is in place: its program instead of the one that ran before (server.js another than the one
-# this job noted - its update puts it there long before it writes its number; its way back, should it go back, brings
-# the one of before) and the config says that version. Not yet (it runs, it stopped before, or it went back): nothing,
+read -r target php_ok expected < "${PENDING}"
+# Only once that version is in place: its program, whole (server.js exactly the one of its deploy.zip - this job noted
+# it; its update puts it there long before it writes its number, a file cut off while unpacked is another, its way back
+# brings the one of before) and the config says that version. Not yet (it runs, it stopped, or it went back): nothing,
 # the job stays. An update cut off (its mark on the card): its way back first, at the start (mupi_update_recover.service).
 [ -e /home/dietpi/.mupibox/update-state ] && exit 0
 now=$(sha256sum /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server.js 2>/dev/null | cut -d ' ' -f 1)
-[ -n "${now}" ] && [ "${now}" != "${before}" ] || exit 0
+[ -n "${now}" ] && [ "${now}" = "${expected}" ] || exit 0
 /usr/bin/jq -r '.mupibox.version // empty' /etc/mupibox/mupiboxconfig.json 2>/dev/null | tr ' ' '\n' | grep -qxF -- "${target}" || exit 0
 if [ "${php_ok}" = 1 ]; then
 	echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
@@ -313,10 +313,18 @@ EOS
   printf '%s\n' '[Unit]' 'Description=MuPiBox: the web server for the older version installed from 5.1 (older_web_finish.sh)' \
     "ConditionPathExists=${OLDER_WEB_PENDING}" 'After=local-fs.target mupi_update_recover.service' '' '[Service]' 'Type=oneshot' \
     "ExecStart=${OLDER_WEB_FINISH}" '' '[Install]' 'WantedBy=multi-user.target' > "${OLDER_WEB_UNIT}" || return 1
-  # (the program that runs now: the job is due once another one is in place)
-  local before
-  before=$(sha256sum /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server.js 2>/dev/null | cut -d ' ' -f 1)
-  printf '%s %s %s\n' "${1#v}" "${OLDER_PHP_OK}" "${before:-none}" > "${OLDER_WEB_PENDING}" || return 1
+  # (the program of that version: server.js of its deploy.zip, from its tag as its update installs it - the job is due
+  # once exactly that one is in place)
+  local zip expected=""
+  zip=$(mktemp /tmp/mupibox-deploy.XXXXXX) || return 1
+  if curl -fsSL --retry 3 --retry-delay 3 -m 300 -o "${zip}" "https://raw.githubusercontent.com/splitti/MuPiBox/${1}/bin/nodejs/deploy.zip" \
+     && unzip -l "${zip}" server.js > /dev/null 2>&1; then
+    expected=$(unzip -p "${zip}" server.js 2>/dev/null | sha256sum | cut -d ' ' -f 1)
+  fi
+  rm -f "${zip}"
+  # (none, or the one of an empty file: no job - the way back is not started)
+  [ -n "${expected}" ] && [ "${expected}" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ] || return 1
+  printf '%s %s %s\n' "${1#v}" "${OLDER_PHP_OK}" "${expected}" > "${OLDER_WEB_PENDING}" || return 1
   systemctl daemon-reload > /dev/null 2>&1
   systemctl enable mupi_older_web.service > /dev/null 2>&1 || return 1
   sync
@@ -352,6 +360,9 @@ if [ -z "$BRANCH" ]; then
           exit 1
         fi
       fi
+      # (the step after an older version this update put in place before, should it be due: done first, before a new
+      # job takes its place)
+      [ -x "${OLDER_WEB_FINISH}" ] && "${OLDER_WEB_FINISH}"
       # (the web server first: without PHP a version before 5.0.3 has nothing to be set up with - its admin interface is
       # all it has, the app came with 5.0.3; from 5.0.3 on the app does it all, the older version goes on without)
       if ! older_web_server "${TARGET_TAG}"; then
@@ -376,7 +387,7 @@ if [ -z "$BRANCH" ]; then
       if ! older_web_server_pending "${TARGET_TAG}"; then
         older_web_server_pending_off
         older_web_server_undo
-        echo "Error: the step after ${TARGET_TAG} could not be written (card full?) - nothing was changed, please try again."
+        echo "Error: the step after ${TARGET_TAG} could not be prepared (its program not downloaded, or the card full?) - nothing was changed, please try again."
         rm -f "${OWN_SCRIPT}"
         rm -rf ${PREFLIGHT_DIR}
         exit 1
