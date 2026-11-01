@@ -189,6 +189,44 @@ fi
 # programs before 5.1 do not know. A box of 5.1 that goes back to one keeps its folders: the older update finds all of
 # it under the names of before (links), and the next update of 5.1 takes over what the older version wrote meanwhile.
 # (A branch is taken for one of 5.1 or later.)
+#
+# The web server as a version before 5.1 needs it, on a box of 5.1 that goes back: 5.1 took PHP off
+# (remove_legacy_admin.sh) and sends every .php address to the app (92-mupibox-no-php.conf). The older update brings its
+# PHP pages back (www.zip), not PHP. So PHP comes back first (DietPi's software 89, as their installer has it, and the
+# right of its pages to run commands as root, sudoers.d/www-data) - then, with PHP there (no .php file is ever sent as
+# it is):
+#   5.0.12/5.0.13: the admin interface switched off their way (92-mupibox-admin-off.conf, mupibox.legacyAdmin false):
+#     their update switches it off once more and keeps lighttpd's PHP modules for the switch in the app (legacy_admin.sh)
+#   before: the redirect goes, the admin interface is theirs again (before 5.0.3 also the app on port 80, which they
+#     do not have)
+# Without PHP (no internet, the install failed) the redirect stays: the older version runs, without its admin interface.
+older_web_server() {
+  local tag="${1#v}" conf=/etc/lighttpd/conf-enabled/92-mupibox-no-php.conf cfg=/etc/mupibox/mupiboxconfig.json tmp
+  php_there() { dpkg-query -W -f='${Status}\n' 'php*-fpm' 2>/dev/null | grep -q 'install ok installed'; }
+  [ -e "${conf}" ] || return 0
+  if ! php_there; then
+    echo "PHP is installed again for ${1} (its admin interface)..."
+    G_INTERACTIVE=0 timeout 900 /boot/dietpi/dietpi-software install 89 > /dev/null 2>&1
+  fi
+  if ! php_there; then
+    echo "Note: PHP could not be installed again - ${1} runs without its admin interface (the app does it all)."
+    return 0
+  fi
+  echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
+  if [ "$(printf '%s\n' "${tag}" 5.0.12 | sort -V | head -n 1)" = "5.0.12" ]; then
+    mv -f "${conf}" /etc/lighttpd/conf-enabled/92-mupibox-admin-off.conf
+    if [ -s "${cfg}" ] && tmp=$(mktemp /etc/mupibox/.cfg.XXXXXX); then
+      ${PREFLIGHT_DIR}/jq '.mupibox.legacyAdmin = false' "${cfg}" > "${tmp}" 2>/dev/null && [ -s "${tmp}" ] \
+        && chown --reference="${cfg}" "${tmp}" && chmod --reference="${cfg}" "${tmp}" && mv -f "${tmp}" "${cfg}"
+      rm -f "${tmp}"
+    fi
+  else
+    rm -f "${conf}"
+    [ "$(printf '%s\n' "${tag}" 5.0.3 | sort -V | head -n 1)" = "5.0.3" ] || rm -f /etc/lighttpd/conf-enabled/90-mupibox-app.conf
+  fi
+  systemctl restart lighttpd > /dev/null 2>&1
+  return 0
+}
 if [ -z "$BRANCH" ]; then
   TARGET_URL=$(curl -fsSL --retry 3 --retry-delay 3 -m 60 https://raw.githubusercontent.com/splitti/MuPiBox/main/version.json | ${PREFLIGHT_DIR}/jq -r ".release.${RELEASE}[-1].url // empty" 2>/dev/null)
   TARGET_TAG=$(printf '%s' "${TARGET_URL}" | sed -nE 's#^https://github.com/splitti/MuPiBox/archive/refs/tags/([A-Za-z0-9._-]+)\.zip$#\1#p')
@@ -210,6 +248,7 @@ if [ -z "$BRANCH" ]; then
         rm -rf ${PREFLIGHT_DIR}
         exit 1
       fi
+      older_web_server "${TARGET_TAG}"
       echo "MuPiBox ${TARGET_TAG} is installed by its own update script"
       rm -rf ${PREFLIGHT_DIR}
       exec bash "${OWN_SCRIPT}" "$@"
@@ -1214,20 +1253,6 @@ rm -f /tmp/mupibox-update-failed
 	###############################################################################################
 
 
-	# Since 5.1 there is no previous admin interface (PHP) any more - the app does everything it did. Taken off a box that
-	# had it: php-fpm, lighttpd's PHP module, the PHP packages, its pages in /var/www (/var/www/cover stays, the covers of
-	# the radio stations); every .php address goes to the app (92-mupibox-no-php.conf, first: no .php file is ever sent
-	# as it is meanwhile). lighttpd is restarted below.
-	echo -e "XXX\n${STEP}\nRemove the previous admin interface... \nXXX"
-	before=$(date +%s)
-	cp -f ${MUPI_SRC}/config/lighttpd/92-mupibox-no-php.conf /etc/lighttpd/conf-enabled/92-mupibox-no-php.conf >&3 2>&3
-	/usr/local/bin/mupibox/remove_legacy_admin.sh >&3 2>&3
-	chown -h www-data:www-data /var/www/cover >&3 2>&3
-	chown -R dietpi:www-data /home/dietpi/MuPiBox/media/cover >&3 2>&3
-	after=$(date +%s)
-	echo -e "## Previous admin interface removed ##  finished after $((after - $before)) seconds" >&3 2>&3
-	STEP=$(($STEP + 1))
-
 	###############################################################################################
 
 	echo -e "XXX\n${STEP}\nUpdate Config-File... \nXXX"	
@@ -1354,6 +1379,20 @@ rm -f /tmp/mupibox-update-failed
 				fi
 			done
 			( cd "${MUPI_PLAYER}" && rm -rf node_modules auth.js docker-compose.yml dockerfile package.json package-lock.json .gitignore LICENSE README.md ) >&3 2>&3
+			# Since 5.1 there is no previous admin interface (PHP) any more - the app does everything it did. Only now, after
+			# "done": until then a way back finds the old version with all it needs (its pages, the theme previews in
+			# /var/www/images). Taken off: php-fpm, lighttpd's PHP module, the PHP packages, its pages in /var/www
+			# (/var/www/cover stays, the covers of the radio stations); every .php address goes to the app
+			# (92-mupibox-no-php.conf, first: no .php file is ever sent as it is meanwhile). Cut off in between: the start
+			# finishes it (restore_interrupted_update.sh, the mark is cleared after).
+			echo -e "XXX\n99\nRemove the previous admin interface... \nXXX"
+			cp -f ${MUPI_SRC}/config/lighttpd/92-mupibox-no-php.conf /etc/lighttpd/conf-enabled/92-mupibox-no-php.conf >&3 2>&3
+			sync
+			/usr/local/bin/mupibox/remove_legacy_admin.sh >&3 2>&3
+			chown -h www-data:www-data /var/www/cover >&3 2>&3
+			chown -R dietpi:www-data /home/dietpi/MuPiBox/media/cover >&3 2>&3
+			systemctl restart lighttpd >&3 2>&3
+			echo "## Previous admin interface removed ##" >&3 2>&3
 			clear_update_mark
 		fi
 	fi

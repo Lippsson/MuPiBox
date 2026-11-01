@@ -12,7 +12,9 @@
 # lighttpd stays: it serves the app on port 80/443 with the box's certificate. That no .php address answers with PHP and
 # the Spotify login of a box set up before the app (https://<box>/spotify.php) goes on to the app's callback is
 # config/lighttpd/92-mupibox-no-php.conf, which the update puts in place before. lighttpd is not restarted here: the
-# update does that after.
+# update does that after. --keep-packages: all of it but the PHP packages (at the start, after an update cut off here -
+# removing them takes too long then; the next update does it).
+# A box of 5.1 that goes back to a version before gets PHP back from the update (older_web_server).
 
 log() { echo "remove_legacy_admin: $*"; }
 
@@ -28,7 +30,7 @@ done
 # (the switch's own redirect: 92-mupibox-no-php.conf does it now)
 rm -f /etc/lighttpd/conf-enabled/92-mupibox-admin-off.conf
 
-if dpkg-query -W -f='${Status}\n' 'php*' 2>/dev/null | grep -q 'install ok installed'; then
+if [ "${1:-}" != "--keep-packages" ] && dpkg-query -W -f='${Status}\n' 'php*' 2>/dev/null | grep -q 'install ok installed'; then
 	if [ -x /boot/dietpi/dietpi-software ] && G_INTERACTIVE=0 timeout 600 /boot/dietpi/dietpi-software uninstall 89 >/dev/null 2>&1; then
 		log "PHP removed"
 	else

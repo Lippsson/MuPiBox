@@ -334,6 +334,12 @@ if [ -e "${UPDATE_STATE}" ]; then
 					rm -rf "${OLD}" || old_ok=1
 				fi
 			fi
+			# (cut off while it took the previous admin interface off - it had begun when its redirect is in place: the rest
+			# of it, the PHP packages left to the next update, they take too long for the start; lighttpd anew afterwards)
+			if [ -e /etc/lighttpd/conf-enabled/92-mupibox-no-php.conf ] && [ -x /usr/local/bin/mupibox/remove_legacy_admin.sh ]; then
+				/usr/local/bin/mupibox/remove_legacy_admin.sh --keep-packages
+				systemctl --no-block try-restart lighttpd >/dev/null 2>&1
+			fi
 			[ "${old_ok}" = 0 ] && rm -rf "${USERDATA_BAK}" && clear_state || RESULT=1
 			;;
 		rollback)
