@@ -285,7 +285,12 @@ PENDING=/etc/mupibox/older-web.pending
 E=/etc/lighttpd/conf-enabled
 [ -s "${PENDING}" ] || exit 0
 read -r target php_ok < "${PENDING}"
-# (that version not in place - yet, or its update did not get there: nothing; the job stays)
+# Only once that version is in place: its update got to its end - it moves its log to /boot/<date>_update_<version>.log
+# as one of its last steps (after its way back, which ends it before), later than this job was written - and the
+# config says that version. Not yet (it runs, it stopped, or it went back to the version before): nothing, the job
+# stays. An update cut off (its mark on the card): its way back first, at the start (mupi_update_recover.service).
+[ -e /home/dietpi/.mupibox/update-state ] && exit 0
+[ -n "$(find /boot -maxdepth 1 -name "*_update_${target}.log" -newer "${PENDING}" 2>/dev/null | head -n 1)" ] || exit 0
 /usr/bin/jq -r '.mupibox.version // empty' /etc/mupibox/mupiboxconfig.json 2>/dev/null | tr ' ' '\n' | grep -qxF -- "${target}" || exit 0
 if [ "${php_ok}" = 1 ]; then
 	echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
@@ -304,7 +309,7 @@ exit 0
 EOS
   chmod 755 "${OLDER_WEB_FINISH}.new" && mv -f "${OLDER_WEB_FINISH}.new" "${OLDER_WEB_FINISH}" || return 1
   printf '%s\n' '[Unit]' 'Description=MuPiBox: the web server for the older version installed from 5.1 (older_web_finish.sh)' \
-    "ConditionPathExists=${OLDER_WEB_PENDING}" 'After=local-fs.target' '' '[Service]' 'Type=oneshot' \
+    "ConditionPathExists=${OLDER_WEB_PENDING}" 'After=local-fs.target mupi_update_recover.service' '' '[Service]' 'Type=oneshot' \
     "ExecStart=${OLDER_WEB_FINISH}" '' '[Install]' 'WantedBy=multi-user.target' > "${OLDER_WEB_UNIT}" || return 1
   printf '%s %s\n' "${1#v}" "${OLDER_PHP_OK}" > "${OLDER_WEB_PENDING}" || return 1
   systemctl daemon-reload > /dev/null 2>&1
@@ -386,8 +391,10 @@ if [ -z "$BRANCH" ]; then
     exit 1
   fi
 fi
-# (a version of 5.1 again: the step after an older version, should one be left, is not wanted any more)
-{ [ -e "${OLDER_WEB_PENDING}" ] || [ -e "${OLDER_WEB_UNIT}" ]; } && older_web_server_pending_off
+# (a version of 5.1 again, over an older one this update had put in place: should the step after it still be due - that
+# version installed, the step not yet run - it runs now, the older version is there until this update is done. The job
+# goes once this update is done, below: cut off or gone back before, the older version still needs it.)
+[ -x "${OLDER_WEB_FINISH}" ] && "${OLDER_WEB_FINISH}"
 
 killall -s 9 -w -q -r chromium
 
@@ -1514,6 +1521,8 @@ rm -f /tmp/mupibox-update-failed
 				fi
 			done
 			( cd "${MUPI_PLAYER}" && rm -rf node_modules auth.js docker-compose.yml dockerfile package.json package-lock.json .gitignore LICENSE README.md ) >&3 2>&3
+			# (5.1 in place: the step after an older version, should a job be left, is not wanted any more - see above)
+			{ [ -e "${OLDER_WEB_PENDING}" ] || [ -e "${OLDER_WEB_UNIT}" ]; } && older_web_server_pending_off >&3 2>&3
 			# Since 5.1 there is no previous admin interface (PHP) any more - the app does everything it did. Only now, after
 			# "done": until then a way back finds the old version with all it needs (its pages, the theme previews in
 			# /var/www/images). Taken off: php-fpm, lighttpd's PHP module, the PHP packages, its pages in /var/www
