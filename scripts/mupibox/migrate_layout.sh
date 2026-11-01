@@ -236,34 +236,9 @@ quiet
 [ -e "${MOVING}" ] && RESUMED=1
 touch "${MOVING}" && sync || fail "could not write ${MOVING} (card full?)"
 
-# --for-older: right before the update of a version before 5.1 (update/start_mupibox_update.sh hands over to it). That
-# update moves everything in the program's cache (cache/, through its link) into its own new program folder (5.0.10
-# and later) - what a program before 5.1 looks for elsewhere goes back to its place of before first, as a folder or
-# file, not a link: the small copies of the covers (thumbs/), the podcasts' pictures (www/rss-covers) and feeds and the
-# home lists (server/config, the library's folder). Else a link pointed to nothing after that update. The next run
-# without it (the next update of 5.1) takes them back.
-if [ "${1:-}" = "--for-older" ]; then
-	STEP="for an older version"
-	if [ -L "${SKC}" ] && [ -d "${MUPI_SERVER}" ]; then
-		if [ -L "${H}/thumbs" ] && [ -d "${MUPI_CACHE}/thumbs" ] && [ ! -L "${MUPI_CACHE}/thumbs" ]; then
-			unlink_noted "${H}/thumbs"
-			move "${MUPI_CACHE}/thumbs" "${H}/thumbs"
-		fi
-		if [ -L "${MUPI_WWW}/rss-covers" ]; then
-			unlink_noted "${MUPI_WWW}/rss-covers"
-			[ -d "${MUPI_CACHE}/rss-covers" ] && [ ! -L "${MUPI_CACHE}/rss-covers" ] && move "${MUPI_CACHE}/rss-covers" "${MUPI_WWW}/rss-covers"
-		fi
-		for name in rss-cache home-lists.json; do
-			if [ -e "${MUPI_CACHE}/${name}" ] && [ ! -L "${MUPI_CACHE}/${name}" ] && [ ! -e "${MUPI_LIBRARY}/${name}" ]; then
-				move "${MUPI_CACHE}/${name}" "${MUPI_LIBRARY}/${name}"
-			fi
-		done
-	fi
-	rm -f "${MOVING}"
-	sync
-	log "done (for an older version)"
-	finish 0
-fi
+# (--for-older: see the end)
+FOR_OLDER=0
+[ "${1:-}" = "--for-older" ] && FOR_OLDER=1
 
 STEP="folders"
 for d in "${MUPI_LIBRARY}" "${MUPI_COVERS}" "${MUPI_LOGS}" "${MUPI_CACHE}"; do
@@ -361,6 +336,31 @@ STEP="owner"
 # (the program's config.json and monitor.json keep their owner: root, as the update writes them)
 chown -R "${OWNER}" "${MUPI_DATA}" "${MUPI_CACHE}" || fail "could not hand data/ and cache/ to ${OWNER}"
 sync
+
+# --for-older: right before the update of a version before 5.1 (update/start_mupibox_update.sh hands over to it) -
+# after all of the move above, also of one a run before left halfway: that update looks for the library at its place
+# of before, through the links. It moves everything in the program's cache (cache/, through its link) into its own new
+# program folder (5.0.10 and later) - what a program before 5.1 looks for elsewhere goes back to its place of before
+# first, as a folder or file, not a link: the small copies of the covers (thumbs/), the podcasts' pictures
+# (www/rss-covers) and feeds and the home lists (server/config, the library's folder). Else a link pointed to nothing
+# after that update. The next run without it (the next update of 5.1) takes them back.
+if [ "${FOR_OLDER}" = 1 ] && [ -L "${SKC}" ] && [ -d "${MUPI_SERVER}" ]; then
+	STEP="for an older version"
+	if [ -L "${H}/thumbs" ] && [ -d "${MUPI_CACHE}/thumbs" ] && [ ! -L "${MUPI_CACHE}/thumbs" ]; then
+		unlink_noted "${H}/thumbs"
+		move "${MUPI_CACHE}/thumbs" "${H}/thumbs"
+	fi
+	if [ -L "${MUPI_WWW}/rss-covers" ]; then
+		unlink_noted "${MUPI_WWW}/rss-covers"
+		[ -d "${MUPI_CACHE}/rss-covers" ] && [ ! -L "${MUPI_CACHE}/rss-covers" ] && move "${MUPI_CACHE}/rss-covers" "${MUPI_WWW}/rss-covers"
+	fi
+	for name in rss-cache home-lists.json; do
+		if [ -e "${MUPI_CACHE}/${name}" ] && [ ! -L "${MUPI_CACHE}/${name}" ] && [ ! -e "${MUPI_LIBRARY}/${name}" ]; then
+			move "${MUPI_CACHE}/${name}" "${MUPI_LIBRARY}/${name}"
+		fi
+	done
+	sync
+fi
 
 # Done: copies that were the same as the file now in place are not needed
 for f in "${IDENTICAL[@]}"; do

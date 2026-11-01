@@ -317,9 +317,24 @@ if [ -e "${UPDATE_STATE}" ]; then
 	STATE=$(head -n 1 "${UPDATE_STATE}" 2>/dev/null | tr -d '[:space:]')
 	case "${STATE}" in
 		done)
-			# the update got to its end; stopped while it cleared up: only what is left over goes, nothing goes back
+			# the update got to its end; stopped while it cleared up: only what is left over goes, nothing goes back. An
+			# old program with data of its own in it (its library, covers or cache not a link to data/ and cache/) is kept,
+			# as the update keeps it. (Not after an update from before the folders of 5.1: it took the data over from its
+			# own backup, userdata.upd-bak - its old program always holds the data of before.)
 			log "an update finished, clearing up what it left"
-			rm -rf "${USERDATA_BAK}" "${OLD}" && clear_state || RESULT=1
+			old_ok=0
+			if [ -d "${OLD}" ]; then
+				old_own=0
+				[ -d "${USERDATA_BAK}" ] || for d in "${OLD}/server/config" "${OLD}/www/cover" "${OLD}/www/rss-covers" "${OLD}/cache"; do
+					[ -e "${d}" ] && [ ! -L "${d}" ] && old_own=1
+				done
+				if [ "${old_own}" = 1 ]; then
+					mv "${OLD}" "${SKC}.kept-${STAMP}" && log "the previous installation holds data of its own - kept as ${SKC}.kept-${STAMP}" || old_ok=1
+				else
+					rm -rf "${OLD}" || old_ok=1
+				fi
+			fi
+			[ "${old_ok}" = 0 ] && rm -rf "${USERDATA_BAK}" && clear_state || RESULT=1
 			;;
 		rollback)
 			log "a way back to the previous installation stopped halfway - it goes on"

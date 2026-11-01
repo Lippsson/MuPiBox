@@ -201,8 +201,9 @@ if [ -z "$BRANCH" ]; then
     OWN_SCRIPT=$(mktemp /tmp/mupibox-update-${TARGET_TAG}.XXXXXX)
     if curl -fsSL --retry 3 --retry-delay 3 -m 120 -o "${OWN_SCRIPT}" "https://raw.githubusercontent.com/splitti/MuPiBox/${TARGET_TAG}/update/start_mupibox_update.sh" \
        && bash -n "${OWN_SCRIPT}"; then
-      # (on a box of 5.1: what that version looks for elsewhere than its update leaves it - see migrate_layout.sh)
-      if [ -L /home/dietpi/.mupibox/Sonos-Kids-Controller-master ] \
+      # (on a box of 5.1, or one whose move to it was cut off: the move finished, and what that version looks for
+      # elsewhere than its update leaves it - see migrate_layout.sh)
+      if { [ -L /home/dietpi/.mupibox/Sonos-Kids-Controller-master ] || [ -e /home/dietpi/.mupibox/.layout-moving ]; } \
          && ! bash /usr/local/bin/mupibox/migrate_layout.sh --for-older; then
         echo "Error: the folders could not be made ready for ${TARGET_TAG} - nothing was changed, please try again."
         rm -f "${OWN_SCRIPT}"
@@ -1373,29 +1374,31 @@ rm -f /tmp/mupibox-update-failed
 	}
 	if [ "${INSTALL_DONE:-0}" = 1 ]; then
 		FINISH_OK=1
-		# What of the old program has to stay goes where nothing clears it up - before "done": a start after a power cut
-		# that finds "done" deletes server.upd-bak (restore_interrupted_update.sh). Its theme-data, when what the user
-		# added to it could not all be taken over (above), to data/kept-<time>/; the whole old program when it holds data
-		# of its own, to server.kept-<time>.
+		# The old program stays whole until "done" is on the card: until then a power cut brings it back as it was
+		# (restore_interrupted_update.sh). Its theme-data, when what the user added to it could not all be taken over
+		# (above), is copied to data/kept-<time>/ before - after "done" the old program goes. (Cut off between the copy
+		# and "done": the old program comes back with its theme-data, the copy is one too many.) The whole old program,
+		# when it holds data of its own, is kept as server.kept-<time> after "done" (so does the start after a power cut).
 		KEEP_STAMP=$(date +%Y%m%d-%H%M%S)
+		THEME_KEPT_AT=""
 		if [ "${THEME_DATA_KEPT:-1}" != 1 ] && [ -d "${BAK_DIR}/www/theme-data" ] && [ ! -L "${BAK_DIR}/www/theme-data" ]; then
-			if mkdir -p "${MUPI_DATA}/kept-${KEEP_STAMP}" && mv "${BAK_DIR}/www/theme-data" "${MUPI_DATA}/kept-${KEEP_STAMP}/theme-data" >&3 2>&3; then
+			THEME_KEPT_AT="${MUPI_DATA}/kept-${KEEP_STAMP}/theme-data"
+			if mkdir -p "${MUPI_DATA}/kept-${KEEP_STAMP}" && cp -a "${BAK_DIR}/www/theme-data" "${THEME_KEPT_AT}" >&3 2>&3; then
 				chown -R dietpi:dietpi "${MUPI_DATA}/kept-${KEEP_STAMP}" >&3 2>&3
-				echo "## theme-data of the old program kept in ${MUPI_DATA}/kept-${KEEP_STAMP}/theme-data: what was added to it could not all be taken over" >&3 2>&3
 			else
 				FINISH_OK=0
 			fi
-		fi
-		if [ "${FINISH_OK}" = 1 ] && [ -d "${BAK_DIR}" ] && ! program_only "${BAK_DIR}"; then
-			mv "${BAK_DIR}" "${MUPI_HOME}/server.kept-${KEEP_STAMP}" >&3 2>&3 \
-				&& echo "## ${BAK_DIR} kept as ${MUPI_HOME}/server.kept-${KEEP_STAMP}: it holds data of its own" >&3 2>&3 \
-				|| FINISH_OK=0
 		fi
 		sync
 		# The update counts as done once "done" is on the card: what is left over then is only cleared up - a power cut
 		# while the old installation is being deleted must not bring a half deleted one back
 		[ "${FINISH_OK}" = 1 ] && mark_update done || FINISH_OK=0
 		if [ "${FINISH_OK}" = 1 ]; then
+			[ -n "${THEME_KEPT_AT}" ] && echo "## theme-data of the old program kept in ${THEME_KEPT_AT}: what was added to it could not all be taken over" >&3 2>&3
+			if [ -d "${BAK_DIR}" ] && ! program_only "${BAK_DIR}"; then
+				mv "${BAK_DIR}" "${MUPI_HOME}/server.kept-${KEEP_STAMP}" >&3 2>&3 \
+					&& echo "## ${BAK_DIR} kept as ${MUPI_HOME}/server.kept-${KEEP_STAMP}: it holds data of its own" >&3 2>&3
+			fi
 			for old in "${BAK_DIR}" "${MUPI_HOME}"/server.before-* "${MUPI_HOME}"/player.before-*; do
 				[ -d "${old}" ] || continue
 				if program_only "${old}"; then
@@ -1412,6 +1415,11 @@ rm -f /tmp/mupibox-update-failed
 	# before the new one runs and anything is written into it - not only at the next start
 	if [ "${INSTALL_DONE:-0}" != 1 ] || [ "${FINISH_OK:-0}" != 1 ]; then
 		echo "## The update could not be finished - going back to the previous version" >&3 2>&3
+		# (the copy of its theme-data: the old program comes back with it)
+		if [ -n "${THEME_KEPT_AT:-}" ]; then
+			rm -rf "${THEME_KEPT_AT}" >&3 2>&3
+			rmdir "${THEME_KEPT_AT%/*}" >&3 2>&3
+		fi
 		if bash /usr/local/bin/mupibox/restore_interrupted_update.sh --no-restart >&3 2>&3; then
 			fail_update "The update could not be finished (card full?) - the previous version is back, with your data as it was"
 		else
