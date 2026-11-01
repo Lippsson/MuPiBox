@@ -26,7 +26,7 @@ Diese Seite ist für alle, die der Box „unter die Haube“ schauen wollen, zum
 
 | Port | Wer | Wofür |
 | --- | --- | --- |
-| 80 und 443 | Webserver | die App (`/app/`), dieses Handbuch (`/manual/`) und die Admin-Oberfläche. Anfragen für App und Schnittstelle leitet er an den Server weiter |
+| 80 und 443 | Webserver | die App (`/app/`), dieses Handbuch (`/manual/`) und die Cover der Radiosender (`/cover/`). Anfragen für App und Schnittstelle leitet er an den Server weiter |
 | 8200 | Server | Display und Schnittstelle der Box selbst. Das Display läuft über `http://localhost:8200`. Die App ist hier immer per http erreichbar (`/app/`) |
 | 5005 | Player | die Schnittstelle des Players. Sie nimmt nur Befehle von der Box selbst an, nicht aus dem Netzwerk |
 

@@ -26,7 +26,7 @@ This page is for everyone who wants to look “under the hood” of the box, for
 
 | Port | Who | Purpose |
 | --- | --- | --- |
-| 80 and 443 | web server | the app (`/app/`), this manual (`/manual/`) and the admin interface. It passes requests for the app and the interface on to the server |
+| 80 and 443 | web server | the app (`/app/`), this manual (`/manual/`) and the covers of the radio stations (`/cover/`). It passes requests for the app and the interface on to the server |
 | 8200 | server | display and the box's own interface. The display runs via `http://localhost:8200`. The app can always be reached here via http (`/app/`) |
 | 5005 | player | the player's interface. It only accepts commands from the box itself, not from the network |
 

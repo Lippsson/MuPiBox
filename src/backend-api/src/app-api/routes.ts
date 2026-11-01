@@ -57,7 +57,6 @@ import { dropStatic, registerWifiStaticRoutes, startWifiStaticWatch } from './wi
 import { decodeWpaSsid, parseWpaCliScanResults } from '../wpa-ssid'
 import { fanSpeedNow, registerHardwareRoutes } from './hardware'
 import { registerDietpiDashboardRoutes, startDietpiDashboard } from './dietpi-dashboard'
-import { legacyAdminOn, registerLegacyAdminRoutes } from './legacy-admin'
 import { registerServicesRoutes } from './services'
 import { registerTidalRoutes } from './tidal'
 import { registerSystemRoutes } from './system'
@@ -314,9 +313,6 @@ function graceModeOf(block: Record<string, unknown>): GraceMode {
   return block.maxOverrunMinutes === 0 ? 'stop' : 'track'
 }
 
-// one-time tickets for the admin interface (POST /admin-ticket): ticket -> valid until
-const adminTickets = new Map<string, number>()
-
 // The box's address for Spotify: the one of port 8200, registered in the Spotify app - also when the app is used
 // through port 80 (the web server passes it on, see PROXY_PORT)
 // The box's name as the browser uses it, without a port: Spotify's redirect address is https://<box>/…, through the
@@ -433,7 +429,6 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   registerHardwareRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   // (the DietPi-Dashboard behind the app: port 5252 answered by this server, see dietpi-dashboard.ts)
   registerDietpiDashboardRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
-  registerLegacyAdminRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   startDietpiDashboard({ getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerServicesRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerTidalRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
@@ -518,26 +513,6 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
-   * POST /api/app/admin-ticket - a one-time ticket that signs the app's user in to the admin interface (the app's
-   * "Admin-Interface", Legacy), without the password: the admin interface (header.php) redeems it through the box
-   * itself, POST /admin-ticket/redeem {ticket}. 60 seconds, single use.
-   */
-  router.post('/admin-ticket', requireSession, requireCsrf, (_req, res) => {
-    if (!legacyAdminOn(deps.getMupiboxConfig())) return void res.status(409).json({ error: 'admin_off' })
-    const now = Date.now()
-    for (const [t, until] of adminTickets) if (until < now) adminTickets.delete(t)
-    const ticket = randomBytes(32).toString('hex')
-    adminTickets.set(ticket, now + 60_000)
-    res.json({ ticket })
-  })
-  router.post('/admin-ticket/redeem', localOnly, (req, res) => {
-    const ticket = String((req.body as { ticket?: unknown } | undefined)?.ticket ?? '')
-    const until = adminTickets.get(ticket)
-    adminTickets.delete(ticket)
-    res.json({ ok: until !== undefined && until >= Date.now() })
-  })
-
-  /**
    * GET /api/app/magic-link/qr?token=<token>
    * Renders a QR-Code SVG for the magic-link URL. Used by the Box-Frontend
    * Cloud+Batterie-Tap overlay (Phase 15b): box-frontend POSTs to
@@ -602,11 +577,9 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    *  screen can decide whether to offer a password-login form. Returns only
    *  a boolean; never the hash. */
   router.get('/auth-info', (_req, res) => {
-    // (legacyAdmin: whether the login offers the previous admin interface at all)
     res.json({
       passwordConfigured: hasAppPassword(deps.getMupiboxConfig()),
       loginRequired: appLoginRequired(deps.getMupiboxConfig()),
-      legacyAdmin: legacyAdminOn(deps.getMupiboxConfig()),
     })
   })
 
@@ -2292,11 +2265,10 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
 
   /**
    * GET /api/app/theme-preview/:name  (Phase 18 Item 3)
-   * Serves the theme preview PNG that AdminInterface ships under
-   * /var/www/images/<name>.png. Name MUST be in the installed-themes
-   * whitelist — without that check this would be a /var/www/images path
-   * traversal sink. Cache-friendly so the WebApp grid doesn't refetch on
-   * every render.
+   * Serves the theme preview PNG the install and the update put into
+   * /home/dietpi/MuPiBox/themes/previews/<name>.png (themes/previews in the repo; until 5.1 it came with the
+   * admin interface, under /var/www/images). Name MUST be in the installed-themes whitelist — without that check
+   * this would be a path traversal sink. Cache-friendly so the WebApp grid doesn't refetch on every render.
    */
   router.get('/theme-preview/:name', requireSession, (req, res) => {
     const cfg = deps.getMupiboxConfig()
@@ -2316,7 +2288,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     // cached only when there is a picture: a cached "not found" kept a theme without preview for an hour
     const cached = { headers: { 'Cache-Control': 'public, max-age=3600' } }
     // (every theme has its picture, made by tools/theme-preview/render.mjs)
-    res.sendFile(`/var/www/images/${name}.png`, cached, (err) => {
+    res.sendFile(`/home/dietpi/MuPiBox/themes/previews/${name}.png`, cached, (err) => {
       if (err && !res.headersSent) res.status(404).setHeader('Cache-Control', 'no-store').end()
     })
   })

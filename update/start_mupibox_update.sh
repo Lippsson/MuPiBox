@@ -451,20 +451,6 @@ rm -f /tmp/mupibox-update-failed
 		echo -e "## apt-get install ${package}  ##  finished after $((after - $before)) seconds" >&3 2>&3
 	done
 
-	# Security updates of PHP (the previous admin interface's language - PHP2Shell, CVE-2026-109618/-109619 of October
-	# 2026): whoever switches the admin interface on again has the fixed version. Only the PHP packages installed.
-	# Failed twice (the second time with fresh package lists): kept in a file the app shows while the admin interface is
-	# on (with it off no PHP answers); the MuPiBox update itself goes on - the box is fine. The next update tries again.
-	PHP_PKGS=$(dpkg-query -W -f='${Package} ${Status}\n' 'php*' 2>/dev/null | awk '/install ok installed/ {print $1}')
-	if [ -n "${PHP_PKGS}" ]; then
-		if apt-get --yes --only-upgrade install ${PHP_PKGS} >&3 2>&3 || { apt-get update >&3 2>&3; apt-get --yes --only-upgrade install ${PHP_PKGS} >&3 2>&3; }; then
-			rm -f /etc/mupibox/php-security-update.failed
-		else
-			echo "PHP security update failed: ${PHP_PKGS}" >&3
-			date '+%Y-%m-%d %H:%M' > /etc/mupibox/php-security-update.failed
-		fi
-	fi
-
 	# What a part of the box needs (the list of scripts/mupibox/install_missing.sh - mpv plays everything but Spotify,
 	# mplayer is gone; rsvg-convert and Pillow put the start pictures together; xdotool and feh the goodbye picture):
 	# asked once more with fresh package lists when the loop above could not install it
@@ -637,7 +623,7 @@ rm -f /tmp/mupibox-update-failed
 	# Everything the update copies must be there before anything is replaced. If not, stop here:
 	# a half update (admin interface removed, scripts missing) is worse than no update.
 	SOURCE_OK=1
-	for required in scripts/mupibox config/services config/templates update/conf_update.sh AdminInterface/release/www.zip bin/nodejs/deploy.zip
+	for required in scripts/mupibox config/services config/templates update/conf_update.sh themes/previews bin/nodejs/deploy.zip
 	do
 		if [ ! -e "${MUPI_SRC}/${required}" ]; then
 			echo "Error: ${MUPI_SRC}/${required} is missing in the downloaded MuPiBox archive." >&3 2>&3
@@ -727,7 +713,6 @@ rm -f /tmp/mupibox-update-failed
 	[ -L "${BAK_DIR}/www/active_theme.css" ] && cp -a "${BAK_DIR}/www/active_theme.css" "${MUPI_WWW}/active_theme.css" >&3 2>&3
 	chown dietpi:dietpi -R "${MUPI_WWW}" >&3 2>&3
 	cp "${MUPI_SERVER}/spotify-control.js" "${MUPI_PLAYER}/spotify-control.js" >&3 2>&3
-	ln -s /var/www/images/mupif.png "${MUPI_WWW}/mupi.png" >&3 2>&3
 	# The links in the new program's folder (server/config/network.json to /tmp, the names of before): without them the
 	# update is not complete - it goes back to the old program at its end
 	if NO_PM2=1 bash /usr/local/bin/mupibox/migrate_layout.sh >&3 2>&3; then
@@ -773,6 +758,9 @@ rm -f /tmp/mupibox-update-failed
 	chown dietpi:dietpi -R "${MUPI_SERVER}/" >&3 2>&3
 	cp -f ${MUPI_SRC}/themes/km-themes.json /home/dietpi/MuPiBox/themes/km-themes.json >&3 2>&3
 	mv ${MUPI_SRC}/themes/*.css /home/dietpi/MuPiBox/themes/ >&3 2>&3
+	# the pictures of the theme tiles in the app (tools/theme-preview; until 5.1 in the admin interface's /var/www/images)
+	mkdir -p /home/dietpi/MuPiBox/themes/previews >&3 2>&3
+	cp -f ${MUPI_SRC}/themes/previews/*.png /home/dietpi/MuPiBox/themes/previews/ >&3 2>&3
 	mv ${MUPI_SRC}/scripts/chromium-autostart.sh /var/lib/dietpi/dietpi-software/installed/chromium-autostart.sh >&3 2>&3
 	# full colours in the display on a Pi with 2 GB or more: takes DietPi's "low-end device mode" out again (see the file)
 	mkdir -p /etc/chromium.d && tr -d '\r' < ${MUPI_SRC}/config/chromium/zz-mupibox > /etc/chromium.d/zz-mupibox && chmod 644 /etc/chromium.d/zz-mupibox
@@ -1226,37 +1214,18 @@ rm -f /tmp/mupibox-update-failed
 	###############################################################################################
 
 
-	# MED-6: typo `{STEP}` (no $) just printed literal "{STEP}" in the
-	# update progress UI. Plus: `rm -R /var/www/*` then unzip wiped any
-	# admin-customised files (active_theme.css from the theme picker,
-	# the cover/ symlink, theme-data/ for custom-theme backgrounds).
-	# The next admin save would re-create active_theme.css, but custom
-	# themes and cover/-symlink-content were lost. Preserve them around
-	# the wipe.
-	echo -e "XXX\n${STEP}\nUpdate Admin-Interface... \nXXX"
+	# Since 5.1 there is no previous admin interface (PHP) any more - the app does everything it did. Taken off a box that
+	# had it: php-fpm, lighttpd's PHP module, the PHP packages, its pages in /var/www (/var/www/cover stays, the covers of
+	# the radio stations); every .php address goes to the app (92-mupibox-no-php.conf, first: no .php file is ever sent
+	# as it is meanwhile). lighttpd is restarted below.
+	echo -e "XXX\n${STEP}\nRemove the previous admin interface... \nXXX"
 	before=$(date +%s)
-	# Stage user-customised files in /tmp so they survive the wipe.
-	UPDATE_PRESERVE=$(mktemp -d /tmp/mupibox-www-preserve.XXXXXX)
-	for item in active_theme.css cover theme-data; do
-		[ -e "/var/www/${item}" ] && cp -a "/var/www/${item}" "${UPDATE_PRESERVE}/" >&3 2>&3
-	done
-	rm -R /var/www/* >&3 2>&3
-	mv ${MUPI_SRC}/AdminInterface/release/www.zip /var/www/www.zip >&3 2>&3
-	unzip /var/www/www.zip -d /var/www/ >&3 2>&3
-	rm /var/www/www.zip >&3 2>&3
-	# Restore preserved files after the new www/ unzipped so they
-	# overwrite anything the package would otherwise have shipped.
-	for item in active_theme.css cover theme-data; do
-		[ -e "${UPDATE_PRESERVE}/${item}" ] && cp -a "${UPDATE_PRESERVE}/${item}" /var/www/ >&3 2>&3
-	done
-	rm -rf "${UPDATE_PRESERVE}"
-	# `cover` is supposed to be a symlink to /home/dietpi/MuPiBox/media/cover —
-	# only re-create if the preserve step didn't already restore it.
-	[ -L /var/www/cover ] || ln -s /home/dietpi/MuPiBox/media/cover /var/www/cover >&3 2>&3
-	chown -R www-data:www-data /var/www/ >&3 2>&3
-	chmod -R 755 /var/www/ >&3 2>&3
+	cp -f ${MUPI_SRC}/config/lighttpd/92-mupibox-no-php.conf /etc/lighttpd/conf-enabled/92-mupibox-no-php.conf >&3 2>&3
+	/usr/local/bin/mupibox/remove_legacy_admin.sh >&3 2>&3
+	chown -h www-data:www-data /var/www/cover >&3 2>&3
 	chown -R dietpi:www-data /home/dietpi/MuPiBox/media/cover >&3 2>&3
-	echo -e "## Admin-Interface	##  finished after $((after - $before)) seconds" >&3 2>&3
+	after=$(date +%s)
+	echo -e "## Previous admin interface removed ##  finished after $((after - $before)) seconds" >&3 2>&3
 	STEP=$(($STEP + 1))
 
 	###############################################################################################
@@ -1296,7 +1265,7 @@ rm -f /tmp/mupibox-update-failed
 	systemctl enable --now mupi_tls.timer >&3 2>&3
 	# no scripts or pages from the media folder behind /cover (see the file)
 	cp -f ${MUPI_SRC}/config/lighttpd/99-mupibox-media-noexec.conf /etc/lighttpd/conf-enabled/99-mupibox-media-noexec.conf >&3 2>&3
-	# the app on port 80/443 too: its login at /, the app at /app (see the file)
+	# the app on port 80/443 too: / leads to the app at /app (see the file)
 	cp -f ${MUPI_SRC}/config/lighttpd/90-mupibox-app.conf /etc/lighttpd/conf-enabled/90-mupibox-app.conf >&3 2>&3
 	# only names of the home network: a foreign name pointed at the box gets 403 (DNS rebinding, lighttpd_hosts.sh)
 	NO_RESTART=1 /usr/local/bin/mupibox/lighttpd_hosts.sh >&3 2>&3
@@ -1304,29 +1273,6 @@ rm -f /tmp/mupibox-update-failed
 	lighty-enable-mod ssl  >&3 2>&3
 	# restart, not reload: new modules and the new certificate (root only) are only taken over by a new start
 	systemctl restart lighttpd >&3 2>&3
-	# The previous admin interface: off since 5.0.12 on a box where nobody chose (the app does everything it did, and no
-	# PHP answers in the home network) - once, with this update; a marker that outlasts a reset of the configuration
-	# keeps it to this once: switched on again in the app (System › Experten), it stays on. The app's start page says it
-	# was switched off. Afterwards as chosen: an update may bring PHP and lighttpd's PHP module back - off, they go again.
-	if [ -x /usr/local/bin/mupibox/legacy_admin.sh ]; then
-		migrate=""
-		if [ ! -e /etc/mupibox/legacy-admin-default.done ]; then
-			migrate=1
-			if [ -z "$(/usr/bin/jq -r '.mupibox.legacyAdmin // empty' ${CONFIG} 2>/dev/null)" ] && [ "$(/usr/local/bin/mupibox/legacy_admin.sh status)" = "on" ]; then
-				# (the notice first: an update cut off after the switch still explains it - the app shows it only while
-				# the admin interface is off. Switched off below by "apply" as the config now says: "off" is a switch made
-				# by someone and takes the notice away.)
-				touch /etc/mupibox/legacy-admin-off-by-update
-				tmp_cfg=$(mktemp /etc/mupibox/.cfg.XXXXXX) && /usr/bin/jq '.mupibox.legacyAdmin = false' ${CONFIG} > "${tmp_cfg}" && chown --reference=${CONFIG} "${tmp_cfg}" && chmod --reference=${CONFIG} "${tmp_cfg}" && mv -f "${tmp_cfg}" ${CONFIG}
-				rm -f "${tmp_cfg}"
-			fi
-		fi
-		/usr/local/bin/mupibox/legacy_admin.sh apply >&3 2>&3
-		# done only when it holds: chosen on (the key says so) or off - else the next update tries again
-		if [ -n "${migrate}" ] && { [ "$(/usr/bin/jq -r '.mupibox.legacyAdmin' ${CONFIG} 2>/dev/null)" = "true" ] || [ "$(/usr/local/bin/mupibox/legacy_admin.sh status)" = "off" ]; }; then
-			touch /etc/mupibox/legacy-admin-default.done
-		fi
-	fi
 	after=$(date +%s)
 	echo -e "## Network optimization ##  finished after $((after - $before)) seconds" >&3 2>&3
 	STEP=$(($STEP + 1))

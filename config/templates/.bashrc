@@ -93,25 +93,6 @@ alias treed='tree -CAFd'
 alias mountedinfo='df -hT'
 alias reboot='sudo reboot'
 
-function mupi-update-webinterface() {
-	# Download and check first, replace /var/www only afterwards (a failed download used to leave it empty)
-	sudo rm -f /tmp/www.zip
-	sudo wget -q -O /tmp/www.zip https://github.com/splitti/MuPiBox/raw/main/AdminInterface/release/www.zip
-	if ! unzip -tq /tmp/www.zip > /dev/null 2>&1; then
-		echo "Download of the web interface failed or is incomplete - nothing was changed."
-		sudo rm -f /tmp/www.zip
-		return 1
-	fi
-	sudo rm -R /var/www/*
-	sudo unzip /tmp/www.zip -d /var/www/
-	sudo rm /tmp/www.zip
-	sudo ln -s /home/dietpi/MuPiBox/media/cover /var/www/cover
-	sudo chown -R www-data:www-data /var/www/
-	sudo chmod -R 755 /var/www/
-	sudo chown -R dietpi:www-data /home/dietpi/MuPiBox/media/cover
-
-}
-
 function mupi-info() {
 	OS=$(source /etc/os-release ; echo $PRETTY_NAME)
 	RASPI=$(cat /sys/firmware/devicetree/base/model | tr -d '\0' )
@@ -134,7 +115,7 @@ function mupi-info() {
 	echo -e "  ${BCyan}MuPiBox-Version:  ${BIGreen}$(cat /etc/mupibox/mupiboxconfig.json | jq -r .mupibox.version)${Color_Off}"
 	echo -e "  ${BCyan}jq:               ${BIGreen}$(/usr/bin/jq --version)${Color_Off}"
 	echo -e "${Color_Off}"
-	echo -e "  ${BCyan}Admin-UI:         ${BIYellow}http://$(hostname)${Color_Off}"
+	echo -e "  ${BCyan}App:              ${BIYellow}http://$(hostname)/app${Color_Off}"
 	echo -e "  ${BCyan}Web-UI:           ${BIYellow}http://$(hostname):8200${Color_Off}"
 	echo -e "${Color_Off}"
 	echo -e "  ${BCyan}visit MuPiBox:    ${BIPurple}https://mupibox.de${Color_Off}"

@@ -355,7 +355,6 @@ STEP=0
 	cp "${MUPI_SERVER}/spotify-control.js" "${MUPI_PLAYER}/spotify-control.js" >&3 2>&3
 	cp ${MUPI_SRC}/config/templates/spotifycontroller.json "${MUPI_PLAYER}/config/config.json" >&3 2>&3
 	ln -sf /etc/mupibox/mupiboxconfig.json "${MUPI_PLAYER}/config/mupiboxconfig.json" >&3 2>&3
-	ln -sf /var/www/images/mupif.png "${MUPI_WWW}/mupi.png" >&3 2>&3
 	chown -R dietpi:dietpi /home/dietpi/.mupibox >&3 2>&3
 	NO_PM2=1 bash ${MUPI_SRC}/scripts/mupibox/migrate_layout.sh >&3 2>&3
 	after=$(date +%s)
@@ -507,6 +506,9 @@ STEP=0
 	
 	cp -f ${MUPI_SRC}/themes/km-themes.json /home/dietpi/MuPiBox/themes/km-themes.json >&3 2>&3
 	mv ${MUPI_SRC}/themes/*.css /home/dietpi/MuPiBox/themes/ >&3 2>&3
+	# the pictures of the theme tiles in the app (tools/theme-preview)
+	mkdir -p /home/dietpi/MuPiBox/themes/previews >&3 2>&3
+	cp -f ${MUPI_SRC}/themes/previews/*.png /home/dietpi/MuPiBox/themes/previews/ >&3 2>&3
 	mv ${MUPI_SRC}/scripts/mupibox/* /usr/local/bin/mupibox/ >&3 2>&3
 	mv ${MUPI_SRC}/scripts/bluetooth/* /usr/local/bin/mupibox/ >&3 2>&3
 	# The battery of Bluetooth headphones (display and app, issue #176): BlueZ 5.66 takes it from PulseAudio only with
@@ -565,17 +567,17 @@ STEP=0
 
 	###############################################################################################
 
-	echo -e "XXX\n${STEP}\nEnable Admin-Webservice... \nXXX"
+	echo -e "XXX\n${STEP}\nEnable the web server... \nXXX"
 	before=$(date +%s)
-	/boot/dietpi/dietpi-software install 5 84 89 >&3 2>&3
+	/boot/dietpi/dietpi-software install 5 84 >&3 2>&3
+	# lighttpd serves the app on port 80/443 and the covers of the radio stations at /cover - no pages of its own (no
+	# PHP since 5.1: the app does everything the previous admin interface did)
 	rm -Rf /var/www/* >&3 2>&3
-	unzip ${MUPI_SRC}/AdminInterface/release/www.zip -d /var/www/ >&3 2>&3
 	ln -sf /home/dietpi/MuPiBox/media/cover /var/www/cover >&3 2>&3
-	chown -R www-data:www-data /var/www/ >&3 2>&3
-	chmod -R 755 /var/www/ >&3 2>&3
+	chown -h www-data:www-data /var/www/cover >&3 2>&3
 	chown -R dietpi:www-data /home/dietpi/MuPiBox/media/cover >&3 2>&3
 	after=$(date +%s)
-	echo -e "## Admin-Webinterface ## finished after $((after - before)) seconds" >&3 2>&3
+	echo -e "## Web server ## finished after $((after - before)) seconds" >&3 2>&3
 	STEP=$((STEP + 1))
 
 	###############################################################################################
@@ -596,7 +598,6 @@ STEP=0
 	before=$(date +%s)
 	THEME_FILE="${MUPI_WWW}/active_theme.css"
 	ln -sf /home/dietpi/MuPiBox/themes/blue.css ${THEME_FILE} >&3 2>&3
-	echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" | tee /etc/sudoers.d/www-data >&3 2>&3
 	mv -f ${MUPI_SRC}/config/templates/crontab.template /tmp/crontab.template >&3 2>&3
 	chmod 755 /tmp/crontab.template >&3 2>&3
 	chown dietpi:dietpi /tmp/crontab.template >&3 2>&3
@@ -776,21 +777,16 @@ STEP=0
 	fi
 	# no scripts or pages from the media folder behind /cover (see the file)
 	cp -f ${MUPI_SRC}/config/lighttpd/99-mupibox-media-noexec.conf /etc/lighttpd/conf-enabled/99-mupibox-media-noexec.conf >&3 2>&3
-	# the app on port 80/443 too: its login at /, the app at /app (see the file)
+	# the app on port 80/443 too: / leads to the app at /app (see the file)
 	cp -f ${MUPI_SRC}/config/lighttpd/90-mupibox-app.conf /etc/lighttpd/conf-enabled/90-mupibox-app.conf >&3 2>&3
+	# no PHP on the box: a .php address goes to the app, the Spotify login of before (/spotify.php) to its callback
+	cp -f ${MUPI_SRC}/config/lighttpd/92-mupibox-no-php.conf /etc/lighttpd/conf-enabled/92-mupibox-no-php.conf >&3 2>&3
 	# only names of the home network: a foreign name pointed at the box gets 403 (DNS rebinding, lighttpd_hosts.sh)
 	NO_RESTART=1 /usr/local/bin/mupibox/lighttpd_hosts.sh >&3 2>&3
 	lighty-enable-mod proxy >&3 2>&3
 	lighty-enable-mod ssl >&3 2>&3
 	# restart, not reload: new modules and the new certificate (root only) are only taken over by a new start
 	systemctl restart lighttpd >&3 2>&3
-	# The previous admin interface (PHP) is off on a new box: the app does everything it did, and no PHP answers in the
-	# home network (switch: app › System › Experten; see scripts/mupibox/legacy_admin.sh)
-	tmp_cfg=$(mktemp /etc/mupibox/.cfg.XXXXXX) && jq '.mupibox.legacyAdmin = false' /etc/mupibox/mupiboxconfig.json > "$tmp_cfg" && chown --reference=/etc/mupibox/mupiboxconfig.json "$tmp_cfg" && chmod --reference=/etc/mupibox/mupiboxconfig.json "$tmp_cfg" && mv -f "$tmp_cfg" /etc/mupibox/mupiboxconfig.json
-	rm -f "$tmp_cfg"
-	/usr/local/bin/mupibox/legacy_admin.sh off >&3 2>&3
-	# (the update switches it off once on boxes of before - not here again)
-	touch /etc/mupibox/legacy-admin-default.done
 	after=$(date +%s)
 	echo -e "## Activate SSL ## finished after $((after - before)) seconds" >&3 2>&3
 	STEP=$((STEP + 1))

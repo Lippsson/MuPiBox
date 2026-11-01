@@ -1,4 +1,4 @@
-# A production-like MuPiBox for testing a freshly built bin/nodejs/deploy.zip and AdminInterface/release/www.zip:
+# A production-like MuPiBox for testing a freshly built bin/nodejs/deploy.zip:
 # the same files in the same places as autosetup.sh puts them on a box, run by pm2 and lighttpd.
 # Build and run: npm run docker:build, npm run docker:start (see package.json). No audio device, no hardware:
 # the player starts but cannot play, and the scripts that touch WiFi, GPIO or the display fail.
@@ -35,7 +35,6 @@ RUN groupadd -r gpio
 
 # The parts of the repository the installation needs (the release zips and the templates, scripts, themes).
 ARG mupisrc=/home/dietpi/MuPiBoxSource
-COPY ./AdminInterface $mupisrc/AdminInterface
 COPY ./bin  $mupisrc/bin
 COPY ./config  $mupisrc/config
 COPY ./media  $mupisrc/media
@@ -89,7 +88,6 @@ RUN unzip -q $mupisrc/bin/nodejs/deploy.zip -d /home/dietpi/.mupibox/server/ && 
     cp $mupisrc/config/templates/spotifycontroller.json /home/dietpi/.mupibox/player/config/config.json && \
     ln -sf /etc/mupibox/mupiboxconfig.json /home/dietpi/.mupibox/player/config/mupiboxconfig.json && \
     ln -sf /home/dietpi/MuPiBox/themes/blue.css /home/dietpi/.mupibox/server/www/active_theme.css && \
-    ln -sf /var/www/images/mupif.png /home/dietpi/.mupibox/server/www/mupi.png && \
     NO_PM2=1 bash $mupisrc/scripts/mupibox/migrate_layout.sh
 
 # The themes' pictures and fonts: a theme's CSS loads them from /theme-data/<theme>/, which autosetup.sh fills from
@@ -104,26 +102,21 @@ RUN for d in $mupisrc/themes/*/; do t=$(basename "$d"); \
 # Binaries.
 RUN cp $mupisrc/bin/fbv/fbv_64 /usr/bin/fbv && chmod 755 /usr/bin/fbv
 
-# Admin interface: PHP behind lighttpd, and lighttpd passing /app, /api, ... on to the Node server (port 8201),
-# as on the box (config/lighttpd).
+# lighttpd passing /app, /api, ... on to the Node server (port 8201) and serving /cover, as on the box
+# (config/lighttpd; no PHP since 5.1), and the pictures of the app's theme tiles.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    php-cgi \
     lighttpd \
     && rm -rf /var/lib/apt/lists/*
 RUN rm -rf /var/www/* && \
-    unzip -q $mupisrc/AdminInterface/release/www.zip -d /var/www/html && \
-    ln -s /var/www/html/images /var/www/images && \
     ln -s /home/dietpi/MuPiBox/media/cover /var/www/cover && \
-    ln -s /home/dietpi/MuPiBox/media/cover /var/www/html/cover && \
-    cp $mupisrc/config/lighttpd/90-mupibox-app.conf $mupisrc/config/lighttpd/99-mupibox-media-noexec.conf /etc/lighttpd/conf-enabled/ && \
-    lighty-enable-mod proxy fastcgi fastcgi-php
+    cp $mupisrc/config/lighttpd/90-mupibox-app.conf $mupisrc/config/lighttpd/92-mupibox-no-php.conf $mupisrc/config/lighttpd/99-mupibox-media-noexec.conf /etc/lighttpd/conf-enabled/ && \
+    lighty-enable-mod proxy && \
+    mkdir -p /home/dietpi/MuPiBox/themes/previews && \
+    cp -f $mupisrc/themes/previews/*.png /home/dietpi/MuPiBox/themes/previews/
 
-# Rights etc. for www-data and dietpi (the admin interface runs the box's scripts with sudo).
-RUN echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" | tee /etc/sudoers.d/www-data && \
-    chown -R www-data:www-data /var/www/ && \
-    chmod -R 755 /var/www/ && \
-    chown -R dietpi:dietpi /home/dietpi/.mupibox /home/dietpi/MuPiBox && \
+# Rights for dietpi and the web server (/cover).
+RUN chown -R dietpi:dietpi /home/dietpi/.mupibox /home/dietpi/MuPiBox && \
     chown -R dietpi:www-data /home/dietpi/MuPiBox/media/cover
 
 EXPOSE 8200

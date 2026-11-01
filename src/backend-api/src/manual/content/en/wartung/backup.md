@@ -13,7 +13,7 @@ Tap **Download** next to the kind you want. The file lands on your PC or phone. 
 
 ## Restoring
 
-Under **Restore** tap **Choose backup file**, choose the file and tap **Restore backup**. This works with backups of this app and of the admin interface. Afterwards the box restarts.
+Under **Restore** tap **Choose backup file**, choose the file and tap **Restore backup**. This works with backups of this app and of the former admin interface (up to MuPiBox 5.0). Afterwards the box restarts.
 
 > [!WARNING]
 > Restoring **overwrites** the current settings and the library. It is meant as a way back when something is broken, not as a change during operation.

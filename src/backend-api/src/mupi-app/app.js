@@ -945,7 +945,7 @@ function wire(root, page) {
   if (search) search.addEventListener('input', () => showHits(search.value))
 }
 
-// Pages outside the app: the previous admin interface (port 80) and the DietPi dashboard (port 5252)
+// Pages outside the app: the manual and the DietPi dashboard (port 5252)
 async function openExternal(which) {
   if (which === 'manual') return openManual()
   const host = location.hostname
@@ -966,22 +966,6 @@ async function openExternal(which) {
     } else location.href = url
     return
   }
-  // the admin interface, signed in with a one-time ticket of this app's session (no second login there). The window
-  // opens at once: one opened after waiting for the ticket is blocked as a popup.
-  const win = window.open('', '_blank')
-  let url = `${location.protocol === 'https:' ? 'https' : 'http'}://${host}/index.php`
-  const r = await api(`${API}/admin-ticket`, { method: 'POST' })
-  if (r.status === 409 && r.body?.error === 'admin_off') {
-    win?.close()
-    return toast('Das Admin-Interface ist aus – unter System › Experten einschalten', 'info')
-  }
-  if (r.ok && r.body?.ticket) url += `?app_ticket=${r.body.ticket}`
-  if (!win) {
-    location.href = url
-    return
-  }
-  win.opener = null
-  win.location.href = url
 }
 
 // the building block as shown (a connected page may have filled in its own options), else the schema's
@@ -1093,7 +1077,6 @@ function startSkeleton() {
       ${navRow('telegram', 'Telegram', 'Eltern-Bot', 'tg')}
       ${navRow('g-system', 'System', 'Über die Box, Neustart, Updates', 'gear')}
       ${navRow('ext:manual', 'Handbuch', 'Anleitung zu Box, Display und App', 'book')}
-      ${startState.legacyAdmin === false ? '' : navRow('ext:admin', 'Admin-Interface', 'Legacy · die bisherige Oberfläche', 'ext')}
     </div></section>`,
   ]
 }
@@ -1105,8 +1088,7 @@ function tile(target, ic, label, val, id) {
 
 // (playtimeEnabled: the daily limit as last seen - the start page is drawn with or without "+15 min" before its status
 // has come, so the button does not show up and go again on every visit)
-// (legacyAdmin: the previous admin interface switched on - System › Experten; off, the start page does not offer it)
-const startState = { maxVolume: 100, volTimer: null, sleep: null, quietUntil: 0, playtimeEnabled: null, legacyAdmin: null }
+const startState = { maxVolume: 100, volTimer: null, sleep: null, quietUntil: 0, playtimeEnabled: null }
 
 // After a quick action: the start page's state now and twice more (the player takes a change over within seconds)
 function statusSoon(root) {
@@ -1116,12 +1098,6 @@ function statusSoon(root) {
 
 function mountStart(root) {
   drawPins(root)
-  api(`${API}/legacy-admin`).then((r) => {
-    startState.legacyAdmin = !(r.ok && r.body?.on === false)
-    const row = $('[data-go="ext:admin"]', root)
-    if (!startState.legacyAdmin) row?.remove()
-    else if (!row) $('.start-more .navlist', root)?.insertAdjacentHTML('beforeend', navRow('ext:admin', 'Admin-Interface', 'Legacy · die bisherige Oberfläche', 'ext'))
-  })
   loadOutput(root)
   every(15000, () => loadOutput(root))
   root.addEventListener('click', (e) => {
@@ -1422,30 +1398,14 @@ function nextQuiet(schedule) {
 }
 
 async function loadNotices(root) {
-  const [hat, sync, access, auth, tools, legacy] = await Promise.all([
+  const [hat, sync, access, auth, tools] = await Promise.all([
     api('/api/mupihat'),
     api('/api/spotify-sync/status'),
     api(`${API}/spotify-access`),
     api(`${API}/auth-state`),
     api(`${API}/missing-programs`),
-    api(`${API}/legacy-admin`),
   ])
   const notes = []
-  // the update to 5.0.12 switched the previous admin interface off (no PHP in the home network): said once, until it is
-  // closed or switched (System › Experten)
-  if (legacy.ok && legacy.body?.offByUpdate && !remembered('mupi-admin-off-notice')) {
-    notes.push([
-      'lock',
-      'Admin-Interface ausgeschaltet',
-      'Seit diesem Update ist die bisherige Oberfläche aus – sicherer, diese App kann alles, was sie konnte. Antippen, um sie unter System › Experten wieder einzuschalten.',
-      'experten',
-      () => remember('mupi-admin-off-notice', '1'),
-    ])
-  }
-  // the admin interface on, and the update could not install PHP's security update: its PHP may be open to attacks
-  if (legacy.ok && legacy.body?.phpUpdateFailed) {
-    notes.push(['lock', 'PHP-Sicherheitsupdate fehlgeschlagen', 'Das Admin-Interface ist an und nutzt noch eine angreifbare PHP-Version. Antippen, um es auszuschalten – oder das Update später noch einmal starten.', 'experten'])
-  }
   // a new display model waiting for its answer (Display & Bedienung): from the start page too, first of all - without
   // an answer the box goes back to the display before
   const dm = await api(`${API}/display-profile`)
@@ -8615,7 +8575,7 @@ function securityTop() {
     : `<p class="help">${st.keptDevices ? (st.keptDevices === 1 ? '1 Gerät bleibt angemeldet („Angemeldet bleiben“).' : `${st.keptDevices} Geräte bleiben angemeldet („Angemeldet bleiben“).`) : 'Kein Gerät bleibt dauerhaft angemeldet.'}</p>`
   return [
     `<section class="card" data-col="1"><div class="card-head"><h2>Passwort</h2><span class="chip ${st.passwordSet && !st.defaultPassword ? 'ok' : 'warn'}">${st.passwordSet ? (st.defaultPassword ? 'Standardpasswort' : 'gesetzt') : 'nicht gesetzt'}</span></div>
-      <p class="help">Ein Passwort für diese App und das bisherige Admin-Interface.</p>
+      <p class="help">Ein Passwort für diese App.</p>
       ${st.defaultPassword ? `<div class="note warn">${icon('info', 18)}<span>${st.defaultOnly ? 'Es gilt noch das Standardpasswort, das in jeder Anleitung steht. Leg hier ein eigenes fest – das bisherige brauchst du dafür nicht.' : 'Es gilt noch das Standardpasswort, das in jeder Anleitung steht. Leg hier ein eigenes fest.'}</span></div>` : ''}
       ${st.resetOpen && !st.defaultOnly ? `<div class="note">${icon('info', 18)}<span>Du bist über den QR-Code oder Telegram hereingekommen: Ein paar Minuten lang geht ein neues Passwort ohne das alte.</span></div>` : ''}
       ${st.passwordSet && !st.resetOpen && !st.defaultOnly ? `<div class="field"><label for="sec-cur">Aktuelles Passwort</label><div class="input-wrap"><input class="input has-eye" id="sec-cur" type="password" autocomplete="current-password">${eye}</div></div>` : ''}
@@ -8641,7 +8601,7 @@ function askLoginOff() {
     let answer = false
     openSheet(
       `<h2>${esc('Anmeldung ausschalten?')}</h2>
-       <div class="note warn">${icon('info', 18)}<span>${esc('Ohne Anmeldung kann jeder im Heimnetz die Box einstellen – auch Gäste im WLAN und Geräte, die du nicht kennst: Inhalte löschen, Spotify verbinden, die Box ausschalten und das Admin-Interface mit allen Rechten bedienen.')}</span></div>
+       <div class="note warn">${icon('info', 18)}<span>${esc('Ohne Anmeldung kann jeder im Heimnetz die Box einstellen – auch Gäste im WLAN und Geräte, die du nicht kennst: Inhalte löschen, Spotify verbinden, die Box ausschalten und ihre Einstellungen mit allen Rechten ändern.')}</span></div>
        <div class="row"><span class="lbl"><b>${esc('Verstanden')}</b><small>${esc('Ich möchte die Box trotzdem ohne Passwort betreiben.')}</small></span>
          <label class="switch"><input type="checkbox" data-agree aria-label="${esc('Verstanden')}"><span></span></label></div>
        <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn danger" data-ok disabled>${esc('Ausschalten')}</button></div>`,
@@ -8701,7 +8661,7 @@ function mountSecurity(root, page) {
     if (password !== $('#sec-new2', root).value) return toast('Die beiden neuen Passwörter sind verschieden', 'info')
     const r = await api(`${API}/auth/password`, { method: 'POST', body: { current, password } })
     if (!r.ok) return toast(r.body?.error === 'wrong_password' ? 'Das aktuelle Passwort stimmt nicht' : r.status === 429 ? 'Zu viele Versuche – bitte kurz warten' : 'Nicht gespeichert', 'info')
-    toast('Passwort gespeichert – es gilt auch im Admin-Interface')
+    toast('Passwort gespeichert')
     await loadAuthState()
     renderPage(page, false)
   }
@@ -8715,7 +8675,7 @@ function mountSecurity(root, page) {
     })
   $('#sec-login', root).onchange = async (e) => {
     const required = e.target.checked
-    const agreed = required ? await ask('Anmeldung einschalten', 'Die App und das Admin-Interface fragen dann nach dem Passwort.', 'Einschalten') : await askLoginOff()
+    const agreed = required ? await ask('Anmeldung einschalten', 'Die App fragt dann nach dem Passwort.', 'Einschalten') : await askLoginOff()
     if (!agreed) {
       e.target.checked = !required
       return
@@ -9526,7 +9486,7 @@ function restartTop() {
     ['display', 'display', 'Display neu starten', 'Chromium startet neu (ein paar Sekunden schwarz). Die Wiedergabe läuft weiter.'],
     ['player', 'music', 'Player neu starten', 'Spotify und die lokale Wiedergabe starten neu – was läuft, stoppt.'],
     ['services', 'sync', 'Dienste neu starten', 'Player und Server der Box; die App ist dabei kurz nicht erreichbar.'],
-    ['apply', 'gear', 'Einstellungen übernehmen', 'Schreibt alle Einstellungen neu in die Dienste und startet das Display neu (wie „Update settings“ im Admin-Interface).'],
+    ['apply', 'gear', 'Einstellungen übernehmen', 'Schreibt alle Einstellungen neu in die Dienste und startet das Display neu.'],
   ]
   // (both across the whole width; on a wide screen their entries in two columns - no small card beside a long one)
   return [
@@ -10156,13 +10116,11 @@ const lanCtrl = { load: loadNetOptions, sections: lanSections, change: changeNet
 /* Experten */
 
 async function loadExperts() {
-  const [json, info, dash, legacy] = await Promise.all([
+  const [json, info, dash] = await Promise.all([
     api(`${API}/json-file?key=${adm.json.key}`),
     api(`${API}/system`),
     api(`${API}/dietpi-dashboard`),
-    api(`${API}/legacy-admin`),
   ])
-  adm.legacy = legacy.ok ? legacy.body?.on !== false : true
   adm.json.keys = json.body?.keys ?? []
   adm.json.text = json.body?.text ?? ''
   adm.host = info.body?.hostname ?? ''
@@ -10194,8 +10152,7 @@ function expertsTop() {
     // a one-time ticket signs in, see backend-api app-api/dietpi-dashboard.ts)
     `<section class="card"><h2>Weitere Werkzeuge</h2>
       <div class="row"><span class="lbl"><b>DietPi-Dashboard erlauben</b><small>Systemverwaltung von DietPi mit einem Terminal mit Root-Rechten. Erreichbar nur über diese App, nicht direkt im Netz.</small></span><label class="switch"><input type="checkbox" id="ex-dash" ${adm.dash?.enabled ? 'checked' : ''} aria-label="DietPi-Dashboard erlauben"><span></span></label></div>
-      <div class="row"><span class="lbl"><b>Admin-Interface</b><small>${esc('Die bisherige Oberfläche mit PHP. Diese App kann alles, was sie konnte. Aus antwortet auf der Box nichts mehr mit PHP – eine Sicherheitslücke in PHP trifft sie dann nicht.')}</small></span><label class="switch"><input type="checkbox" id="ex-admin" ${adm.legacy ? 'checked' : ''} aria-label="Admin-Interface"><span></span></label></div>
-      <div class="navlist">${adm.dash?.enabled ? navRow('ext:dietpi', 'DietPi-Dashboard', adm.dash.active ? 'öffnet sich in einem neuen Fenster' : 'startet gerade …', 'ext') : ''}${adm.legacy ? navRow('ext:admin', 'Admin-Interface', 'Legacy · die bisherige Oberfläche', 'ext') : ''}</div></section>`,
+      <div class="navlist">${adm.dash?.enabled ? navRow('ext:dietpi', 'DietPi-Dashboard', adm.dash.active ? 'öffnet sich in einem neuen Fenster' : 'startet gerade …', 'ext') : ''}</div></section>`,
     `<section class="card wide"><h2>Konfiguration direkt bearbeiten</h2>
       <div class="note warn">${icon('info', 18)}<span>Fehler hier können die Box lahmlegen. Nur ändern, was du kennst – vorher ein Backup ziehen.</span></div>
       <div class="field"><label for="ex-file">Datei</label><select class="input" id="ex-file">${adm.json.keys.map((k) => `<option value="${k}"${k === adm.json.key ? ' selected' : ''}>${esc(JSON_LABEL[k] ?? k)}</option>`).join('')}</select></div>
@@ -10210,18 +10167,6 @@ function expertsTop() {
 }
 
 function mountExperts(root, page) {
-  $('#ex-admin', root).onchange = async (e) => {
-    const on = e.target.checked
-    e.target.disabled = true
-    const r = await api(`${API}/legacy-admin`, { method: 'POST', body: { on } })
-    toast(r.ok && r.body?.ok ? (on ? 'Admin-Interface eingeschaltet' : 'Admin-Interface aus') : 'Das hat nicht geklappt', r.ok && r.body?.ok ? 'ok' : 'info')
-    // (not asked again at once: the web server reads its config again right after the answer - see legacy-admin.ts)
-    if (r.ok && r.body?.ok) {
-      adm.legacy = on
-      startState.legacyAdmin = on
-    }
-    if (currentPage()?.id === page.id) renderPage(page, false)
-  }
   $('#ex-dash', root).onchange = async (e) => {
     const on = e.target.checked
     e.target.disabled = true
@@ -12516,70 +12461,6 @@ function renderLoginBar() {
   $('#theme-btn').addEventListener('click', toggleTheme)
 }
 
-// Where the login leads: this app (the recommended one) or the previous admin interface (legacy: PHP on port 80/443,
-// same password). The choice
-// is remembered in this browser. The start page of port 80 (/) opens the login with ?portal, also when signed in.
-const PORTALS = [
-  ['app', 'Web-App', 'Empfohlen', 'grid'],
-  ['admin', 'Admin-Interface', 'Legacy · die bisherige Oberfläche', 'gear'],
-]
-const adminUrl = () => `${location.protocol}//${location.hostname}/index.php`
-
-function portalChoice() {
-  try {
-    return localStorage.getItem('mupi-portal') === 'admin' ? 'admin' : 'app'
-  } catch {
-    return 'app'
-  }
-}
-
-function setPortalChoice(v) {
-  try {
-    localStorage.setItem('mupi-portal', v)
-  } catch {
-    // private mode: only for this visit
-  }
-}
-
-// The admin interface takes the password in a form of its own (field "password", any of its pages) - with its CSRF
-// token, like every form it takes: its login page carries it. So the page is read first; that works where the admin
-// interface is the same origin, i.e. on port 80/443. From port 8200 the login of port 80 does it (admin chosen).
-async function openAdmin(password) {
-  const url = adminUrl()
-  if (password === undefined) {
-    location.href = url
-    return
-  }
-  if (new URL(url).origin !== location.origin) {
-    location.href = `${location.protocol}//${location.hostname}/app/?portal=admin`
-    return
-  }
-  // (?login_form: the admin interface sends anyone not signed in to this login - but not this request)
-  const html = await fetch(`${url}?login_form=1`, { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.text(), () => '')
-  const token = /name="csrf_token" value="([^"]+)"/.exec(html)?.[1]
-  // (no login form: signed in there already, or no login asked for)
-  if (!token || !/name="password"/.test(html)) {
-    location.href = url
-    return
-  }
-  const form = document.createElement('form')
-  form.method = 'post'
-  form.action = url
-  form.hidden = true
-  for (const [name, value] of [
-    ['password', password],
-    ['csrf_token', token],
-  ]) {
-    const input = document.createElement('input')
-    input.type = 'hidden'
-    input.name = name
-    input.value = value
-    form.append(input)
-  }
-  document.body.append(form)
-  form.submit()
-}
-
 // "Angemeldet bleiben": as chosen last time on this device; the first time on when the app runs from the home screen
 function keepSignedIn() {
   const last = remembered('mupi-keep-signed-in')
@@ -12595,32 +12476,17 @@ async function renderLogin(hasSession = state.loginHasSession ?? false) {
   $('#shell').classList.add('no-nav')
   renderLoginBar()
   const info = (await fetch(`${API}/auth-info`, { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null), () => null)) ?? {}
-  // (?portal=admin: sent here from port 8200 with the admin interface chosen)
-  if (new URLSearchParams(location.search).get('portal') === 'admin') setPortalChoice('admin')
-  // (the admin interface switched off - System › Experten: only the app; the choice is not offered)
-  const portals = info.legacyAdmin === false ? PORTALS.filter(([id]) => id !== 'admin') : PORTALS
-  let choice = info.legacyAdmin === false ? 'app' : portalChoice()
   const draw = () => {
     // Without a password there is nothing to type in: for the app the page says how to get in instead (a password field
     // that can only fail made people think there was a default password)
-    const noPassword = choice === 'app' && !hasSession && info.passwordConfigured === false
-    const needPassword = choice === 'admin' ? info.loginRequired === true : !hasSession && !noPassword
+    const noPassword = !hasSession && info.passwordConfigured === false
+    const needPassword = !hasSession && !noPassword
     $('#content').innerHTML = `
     <div class="login">
       <div class="logo">${mupiImg('width="64" height="67"')}</div>
       <div class="login-brand">${LOGO}<span class="ed-tag" translate="no">CLASSIC</span></div>
-      <div class="login-head"><h1>Willkommen zurück</h1>${portals.length > 1 ? '<p class="help">Wohin möchtest du?</p>' : ''}</div>
+      <div class="login-head"><h1>Willkommen zurück</h1></div>
       <form class="card" id="login-form">
-        ${
-          portals.length > 1
-            ? `<div class="portal-pick" role="radiogroup" aria-label="Wohin möchtest du?">${portals
-                .map(
-                  ([id, name, sub, ic]) =>
-                    `<button type="button" class="portal-opt" role="radio" data-portal="${id}" aria-checked="${id === choice}">${icon(ic, 22)}<span class="lbl"><b>${esc(name)}</b><small>${esc(sub)}</small></span></button>`,
-                )
-                .join('')}</div>`
-            : ''
-        }
         ${
           noPassword
             ? `<p class="help" style="margin:0">Auf dieser Box ist noch kein Passwort gesetzt. Hinein geht es mit dem QR-Code am Display oder dem Telegram-Bot (unten), danach diese Seite neu laden.</p>
@@ -12628,11 +12494,10 @@ async function renderLogin(hasSession = state.loginHasSession ?? false) {
             : `${
                 needPassword
                   ? `<div class="field"><label for="pw">Passwort</label>
-                      <div class="input-wrap"><input class="input has-eye" id="pw" type="password" autocomplete="current-password" required><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
-                      ${portals.length > 1 ? '<small>Dasselbe Passwort für die Web-App und das Admin-Interface.</small>' : ''}</div>`
+                      <div class="input-wrap"><input class="input has-eye" id="pw" type="password" autocomplete="current-password" required><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div></div>`
                   : ''
               }${
-                needPassword && choice === 'app'
+                needPassword
                   ? `<div class="row login-keep"><span class="lbl"><b>Angemeldet bleiben</b><small>90 Tage ab der letzten Nutzung, auch nach einem Neustart der Box</small></span>
                       <label class="switch"><input type="checkbox" id="login-keep" ${keepSignedIn() ? 'checked' : ''} aria-label="Angemeldet bleiben"><span></span></label></div>`
                   : ''
@@ -12642,7 +12507,7 @@ async function renderLogin(hasSession = state.loginHasSession ?? false) {
         }
       </form>
       ${
-        choice === 'app' && !hasSession
+        !hasSession
           ? `<div class="login-other">
         <p class="eyebrow">Ohne Passwort</p>
         <div class="entry">${icon('display', 18)}<span class="lbl"><b>QR-Code am Display</b><small>Die Statusanzeige oben am Display lange drücken, dann den Code scannen.</small></span></div>
@@ -12651,14 +12516,6 @@ async function renderLogin(hasSession = state.loginHasSession ?? false) {
           : ''
       }
     </div>`
-    for (const b of document.querySelectorAll('[data-portal]')) {
-      b.onclick = () => {
-        if (b.dataset.portal === choice) return
-        choice = b.dataset.portal
-        setPortalChoice(choice)
-        draw()
-      }
-    }
     $('#login-reload')?.addEventListener('click', () => location.reload())
     const pw = $('#pw')
     // the cursor in the field at once, but not on a phone (the keyboard would cover the page)
@@ -12669,15 +12526,12 @@ async function renderLogin(hasSession = state.loginHasSession ?? false) {
     $('#login-form').addEventListener('submit', async (e) => {
       e.preventDefault()
       if (!needPassword) {
-        if (choice === 'admin') openAdmin()
-        else location.href = location.pathname // the app, without ?portal
+        location.href = location.pathname // the app, without ?portal
         return
       }
       const msg = $('#login-msg')
       const keep = $('#login-keep')
       if (keep) remember('mupi-keep-signed-in', keep.checked ? '1' : '0')
-      // (also for the admin interface: the password is checked here first, a typo shows on this page and not on the
-      // admin interface's own login; a correct one signs in to the app as well)
       const r = await fetch(`${API}/login`, {
         method: 'POST',
         credentials: 'same-origin',
@@ -12685,8 +12539,7 @@ async function renderLogin(hasSession = state.loginHasSession ?? false) {
         body: JSON.stringify({ password: pw.value, remember: keep?.checked === true }),
       }).catch(() => null)
       if (r?.ok) {
-        if (choice === 'admin') openAdmin(pw.value)
-        else location.href = location.pathname
+        location.href = location.pathname
         return
       }
       msg.hidden = false
