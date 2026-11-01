@@ -199,6 +199,13 @@ clear_state() {
 	rm -f "${UPDATE_STATE}" "${UPDATE_STATE}.new"
 	sync
 }
+# 0 when the version installed is 5.1 or later, as the config says (an update writes it before its "done"; one from a
+# branch has no number there and is taken for 5.1 or later, as the update takes it)
+installed_5_1() {
+	local v
+	v=$(jq -r '.mupibox.version // empty' "${MUPI_CONFIG:-/etc/mupibox/mupiboxconfig.json}" 2>/dev/null | grep -oE '(^| )[0-9]+\.[0-9]+(\.[0-9]+)?( |$)' | head -n 1 | tr -d ' ')
+	[ -z "${v}" ] || [ "$(printf '%s\n' "${v}" 5.1 | sort -V | head -n 1)" = "5.1" ]
+}
 
 # The old installation back in place of the new one. Marked "rollback" first: stopped anywhere in between (a power
 # cut again), the next run takes it up where it stopped - the new installation aside (as .broken), the old one back
@@ -337,8 +344,10 @@ if [ -e "${UPDATE_STATE}" ]; then
 			# (the previous admin interface goes after "done" of an update of 5.1, which says so on the mark's second line
 			# - cut off before or while it went: all of it again, it does nothing twice; the PHP packages left to the next
 			# update, they take too long for the start; lighttpd anew afterwards. A "done" of an older update has no such
-			# line: a version before 5.1 keeps its admin interface.)
-			if [ "$(sed -n 2p "${UPDATE_STATE}" 2>/dev/null | tr -d '[:space:]')" = "legacy-admin" ] && [ -x /usr/local/bin/mupibox/remove_legacy_admin.sh ]; then
+			# line, and a version before 5.1 in place - the mark left, an older one installed over it - keeps its admin
+			# interface too.)
+			if [ "$(sed -n 2p "${UPDATE_STATE}" 2>/dev/null | tr -d '[:space:]')" = "legacy-admin" ] && installed_5_1 \
+				&& [ -x /usr/local/bin/mupibox/remove_legacy_admin.sh ]; then
 				/usr/local/bin/mupibox/remove_legacy_admin.sh --keep-packages
 				systemctl --no-block try-restart lighttpd >/dev/null 2>&1
 			fi

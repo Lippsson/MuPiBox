@@ -201,7 +201,8 @@ fi
 #       the same redirect, and mupibox.legacyAdmin false) - their update switches it off its way and keeps the modules
 #       for the switch in the app (legacy_admin.sh)
 #   older_web_server_undo takes that back (the step after it failed).
-#   after the older update, once the config says that version is installed (older_web_server_after):
+#   after the older update, once the config says that version is installed (older_web_finish.sh, kept on the card
+#   before the older update begins - see older_web_server_pending):
 #     - the right of its PHP pages to run commands as root (sudoers.d/www-data, as their installer has it)
 #     - before 5.0.12 (no switch there): the redirects go, the admin interface is theirs again; before 5.0.3 also the
 #       app on port 80/443 (90-mupibox-app.conf - they do not have the app)
@@ -265,17 +266,56 @@ older_web_server_undo() {
   OLDER_WEB_UNITS="" OLDER_WEB_MODS="" OLDER_WEB_SWITCH=""
   systemctl restart lighttpd > /dev/null 2>&1
 }
-older_web_server_after() {
-  local v="${1#v}" E=/etc/lighttpd/conf-enabled
-  # (only once that version is in place: its update writes its number into the config at its end)
-  /usr/bin/jq -r '.mupibox.version // empty' /etc/mupibox/mupiboxconfig.json 2>/dev/null | tr ' ' '\n' | grep -qxF -- "${v}" || return 0
-  [ "${OLDER_PHP_OK}" = 1 ] || return 0
-  echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
-  if [ "$(printf '%s\n' "${v}" 5.0.12 | sort -V | head -n 1)" != "5.0.12" ]; then
-    rm -f ${E}/92-mupibox-no-php.conf ${E}/92-mupibox-admin-off.conf
-    [ "$(printf '%s\n' "${v}" 5.0.3 | sort -V | head -n 1)" = "5.0.3" ] || rm -f ${E}/90-mupibox-app.conf
-  fi
-  systemctl restart lighttpd > /dev/null 2>&1
+# The step after the older update, kept on the card before it begins (a power cut while it runs, or right after it,
+# must not leave the older version behind the app's redirects): a script of its own outside the folders of the program
+# and the scripts (the older update replaces those, leaves others alone), the job (older-web.pending: the version and
+# whether PHP works) and a unit that runs it at the start while the job is there. Run here once the older update is
+# done, else at the next start - each time only once the config says that version is installed (its update writes
+# its number into the config); done, the job and the unit go. An update of 5.1 takes all of it away (below).
+OLDER_WEB_FINISH=/usr/local/lib/mupibox/older_web_finish.sh
+OLDER_WEB_PENDING=/etc/mupibox/older-web.pending
+OLDER_WEB_UNIT=/etc/systemd/system/mupi_older_web.service
+older_web_server_pending() {
+  mkdir -p "${OLDER_WEB_FINISH%/*}" || return 1
+  cat > "${OLDER_WEB_FINISH}.new" <<'EOS' || return 1
+#!/bin/bash
+# Written by the update of MuPiBox 5.1 going back to an older version (update/start_mupibox_update.sh, "The web server
+# as the older version needs it"): what that version needs of the web server once it is installed.
+PENDING=/etc/mupibox/older-web.pending
+E=/etc/lighttpd/conf-enabled
+[ -s "${PENDING}" ] || exit 0
+read -r target php_ok < "${PENDING}"
+# (that version not in place - yet, or its update did not get there: nothing; the job stays)
+/usr/bin/jq -r '.mupibox.version // empty' /etc/mupibox/mupiboxconfig.json 2>/dev/null | tr ' ' '\n' | grep -qxF -- "${target}" || exit 0
+if [ "${php_ok}" = 1 ]; then
+	echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
+	if [ "$(printf '%s\n' "${target}" 5.0.12 | sort -V | head -n 1)" != "5.0.12" ]; then
+		rm -f ${E}/92-mupibox-no-php.conf ${E}/92-mupibox-admin-off.conf
+		[ "$(printf '%s\n' "${target}" 5.0.3 | sort -V | head -n 1)" = "5.0.3" ] || rm -f ${E}/90-mupibox-app.conf
+	fi
+	sync
+	systemctl --no-block try-restart lighttpd > /dev/null 2>&1
+fi
+# (without PHP the redirects stay: no .php file is ever sent as it is)
+rm -f "${PENDING}"
+sync
+systemctl disable mupi_older_web.service > /dev/null 2>&1
+exit 0
+EOS
+  chmod 755 "${OLDER_WEB_FINISH}.new" && mv -f "${OLDER_WEB_FINISH}.new" "${OLDER_WEB_FINISH}" || return 1
+  printf '%s\n' '[Unit]' 'Description=MuPiBox: the web server for the older version installed from 5.1 (older_web_finish.sh)' \
+    "ConditionPathExists=${OLDER_WEB_PENDING}" 'After=local-fs.target' '' '[Service]' 'Type=oneshot' \
+    "ExecStart=${OLDER_WEB_FINISH}" '' '[Install]' 'WantedBy=multi-user.target' > "${OLDER_WEB_UNIT}" || return 1
+  printf '%s %s\n' "${1#v}" "${OLDER_PHP_OK}" > "${OLDER_WEB_PENDING}" || return 1
+  systemctl daemon-reload > /dev/null 2>&1
+  systemctl enable mupi_older_web.service > /dev/null 2>&1 || return 1
+  sync
+}
+older_web_server_pending_off() {
+  systemctl disable mupi_older_web.service > /dev/null 2>&1
+  rm -f "${OLDER_WEB_PENDING}" "${OLDER_WEB_UNIT}" "${OLDER_WEB_FINISH}"
+  rmdir "${OLDER_WEB_FINISH%/*}" 2> /dev/null
+  systemctl daemon-reload > /dev/null 2>&1
 }
 if [ -z "$BRANCH" ]; then
   TARGET_URL=$(curl -fsSL --retry 3 --retry-delay 3 -m 60 https://raw.githubusercontent.com/splitti/MuPiBox/main/version.json | ${PREFLIGHT_DIR}/jq -r ".release.${RELEASE}[-1].url // empty" 2>/dev/null)
@@ -289,6 +329,19 @@ if [ -z "$BRANCH" ]; then
     OWN_SCRIPT=$(mktemp /tmp/mupibox-update-${TARGET_TAG}.XXXXXX)
     if curl -fsSL --retry 3 --retry-delay 3 -m 120 -o "${OWN_SCRIPT}" "https://raw.githubusercontent.com/splitti/MuPiBox/${TARGET_TAG}/update/start_mupibox_update.sh" \
        && bash -n "${OWN_SCRIPT}"; then
+      # (an update that stopped before - its mark on the card: undone or finished first, by this version's own way
+      # back, which knows its mark - left there, the start after the older version would find it, and that version's
+      # update does not know it)
+      if [ -e /home/dietpi/.mupibox/update-state ]; then
+        if [ ! -x /usr/local/bin/mupibox/restore_interrupted_update.sh ] \
+           || ! /usr/local/bin/mupibox/restore_interrupted_update.sh --no-restart \
+           || [ -e /home/dietpi/.mupibox/update-state ]; then
+          echo "Error: an update that stopped before could not be finished - nothing was changed; restart the box and try again."
+          rm -f "${OWN_SCRIPT}"
+          rm -rf ${PREFLIGHT_DIR}
+          exit 1
+        fi
+      fi
       # (the web server first: without PHP a version before 5.0.3 has nothing to be set up with - its admin interface is
       # all it has, the app came with 5.0.3; from 5.0.3 on the app does it all, the older version goes on without)
       if ! older_web_server "${TARGET_TAG}"; then
@@ -310,13 +363,21 @@ if [ -z "$BRANCH" ]; then
         rm -rf ${PREFLIGHT_DIR}
         exit 1
       fi
+      if ! older_web_server_pending "${TARGET_TAG}"; then
+        older_web_server_pending_off
+        older_web_server_undo
+        echo "Error: the step after ${TARGET_TAG} could not be written (card full?) - nothing was changed, please try again."
+        rm -f "${OWN_SCRIPT}"
+        rm -rf ${PREFLIGHT_DIR}
+        exit 1
+      fi
       echo "MuPiBox ${TARGET_TAG} is installed by its own update script"
       rm -rf ${PREFLIGHT_DIR}
-      # (not exec: what its version needs once it is in place comes after - older_web_server_after)
+      # (not exec: what its version needs once it is in place comes after)
       bash "${OWN_SCRIPT}" "$@"
       OWN_RC=$?
       rm -f "${OWN_SCRIPT}"
-      older_web_server_after "${TARGET_TAG}"
+      "${OLDER_WEB_FINISH}"
       exit ${OWN_RC}
     fi
     echo "Error: the update script of ${TARGET_TAG} could not be downloaded - nothing was changed, please try again."
@@ -325,6 +386,8 @@ if [ -z "$BRANCH" ]; then
     exit 1
   fi
 fi
+# (a version of 5.1 again: the step after an older version, should one be left, is not wanted any more)
+{ [ -e "${OLDER_WEB_PENDING}" ] || [ -e "${OLDER_WEB_UNIT}" ]; } && older_web_server_pending_off
 
 killall -s 9 -w -q -r chromium
 
