@@ -268,10 +268,11 @@ older_web_server_undo() {
 }
 # The step after the older update, kept on the card before it begins (a power cut while it runs, or right after it,
 # must not leave the older version behind the app's redirects): a script of its own outside the folders of the program
-# and the scripts (the older update replaces those, leaves others alone), the job (older-web.pending: the version and
-# whether PHP works) and a unit that runs it at the start while the job is there. Run here once the older update is
-# done, else at the next start - each time only once the config says that version is installed (its update writes
-# its number into the config); done, the job and the unit go. An update of 5.1 takes all of it away (below).
+# and the scripts (the older update replaces those, leaves others alone), the job (older-web.pending: the version,
+# whether PHP works and the program that ran before) and a unit that runs it at the start while the job is there. Run
+# here once the older update is done, else at the next start - each time only once that version is installed (its
+# program in place, its number in the config); done, the job and the unit go. An update of 5.1 that got to its "done"
+# takes all of it away (below).
 OLDER_WEB_FINISH=/usr/local/lib/mupibox/older_web_finish.sh
 OLDER_WEB_PENDING=/etc/mupibox/older-web.pending
 OLDER_WEB_UNIT=/etc/systemd/system/mupi_older_web.service
@@ -284,13 +285,14 @@ older_web_server_pending() {
 PENDING=/etc/mupibox/older-web.pending
 E=/etc/lighttpd/conf-enabled
 [ -s "${PENDING}" ] || exit 0
-read -r target php_ok < "${PENDING}"
-# Only once that version is in place: its update got to its end - it moves its log to /boot/<date>_update_<version>.log
-# as one of its last steps (after its way back, which ends it before), later than this job was written - and the
-# config says that version. Not yet (it runs, it stopped, or it went back to the version before): nothing, the job
-# stays. An update cut off (its mark on the card): its way back first, at the start (mupi_update_recover.service).
+read -r target php_ok before < "${PENDING}"
+# Only once that version is in place: its program instead of the one that ran before (server.js another than the one
+# this job noted - its update puts it there long before it writes its number; its way back, should it go back, brings
+# the one of before) and the config says that version. Not yet (it runs, it stopped before, or it went back): nothing,
+# the job stays. An update cut off (its mark on the card): its way back first, at the start (mupi_update_recover.service).
 [ -e /home/dietpi/.mupibox/update-state ] && exit 0
-[ -n "$(find /boot -maxdepth 1 -name "*_update_${target}.log" -newer "${PENDING}" 2>/dev/null | head -n 1)" ] || exit 0
+now=$(sha256sum /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server.js 2>/dev/null | cut -d ' ' -f 1)
+[ -n "${now}" ] && [ "${now}" != "${before}" ] || exit 0
 /usr/bin/jq -r '.mupibox.version // empty' /etc/mupibox/mupiboxconfig.json 2>/dev/null | tr ' ' '\n' | grep -qxF -- "${target}" || exit 0
 if [ "${php_ok}" = 1 ]; then
 	echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
@@ -311,7 +313,10 @@ EOS
   printf '%s\n' '[Unit]' 'Description=MuPiBox: the web server for the older version installed from 5.1 (older_web_finish.sh)' \
     "ConditionPathExists=${OLDER_WEB_PENDING}" 'After=local-fs.target mupi_update_recover.service' '' '[Service]' 'Type=oneshot' \
     "ExecStart=${OLDER_WEB_FINISH}" '' '[Install]' 'WantedBy=multi-user.target' > "${OLDER_WEB_UNIT}" || return 1
-  printf '%s %s\n' "${1#v}" "${OLDER_PHP_OK}" > "${OLDER_WEB_PENDING}" || return 1
+  # (the program that runs now: the job is due once another one is in place)
+  local before
+  before=$(sha256sum /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server.js 2>/dev/null | cut -d ' ' -f 1)
+  printf '%s %s %s\n' "${1#v}" "${OLDER_PHP_OK}" "${before:-none}" > "${OLDER_WEB_PENDING}" || return 1
   systemctl daemon-reload > /dev/null 2>&1
   systemctl enable mupi_older_web.service > /dev/null 2>&1 || return 1
   sync
