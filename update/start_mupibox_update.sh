@@ -190,68 +190,92 @@ fi
 # it under the names of before (links), and the next update of 5.1 takes over what the older version wrote meanwhile.
 # (A branch is taken for one of 5.1 or later.)
 #
-# The web server as a version before 5.1 needs it, on a box of 5.1 that goes back: 5.1 took PHP off
-# (remove_legacy_admin.sh) and sends every .php address to the app (92-mupibox-no-php.conf). The older update brings its
-# PHP pages back (www.zip), not PHP. So PHP comes back first, working: installed when it is not (DietPi's software 89, as
-# their installer has it), php-fpm on and lighttpd's PHP modules in (5.1 switched them off - an update cut off and
-# finished at the start leaves the packages), checked; and the right of its pages to run commands as root
-# (sudoers.d/www-data). Then, with PHP there (no .php file is ever sent as it is):
-#   5.0.12/5.0.13: the admin interface switched off their way (92-mupibox-admin-off.conf, mupibox.legacyAdmin false):
-#     their update switches it off once more and keeps lighttpd's PHP modules for the switch in the app (legacy_admin.sh)
-#   before: the redirect goes, the admin interface is theirs again (before 5.0.3 also the app on port 80, which they
-#     do not have)
-# 1 when PHP could not be brought back (no internet, the install failed) - the redirect stays then, the box as it was.
-# older_web_server_undo puts the web server of 5.1 back (when the step after fails).
+# The web server as the older version needs it - by that version and what is there, whatever the box ran before (5.1,
+# or a 5.0.x that came from 5.1: 5.1 took PHP off and sends every .php address to the app, 92-mupibox-no-php.conf, and
+# the older update brings its PHP pages back - www.zip - but not PHP):
+#   before the older update, only what keeps the box as it is meanwhile (cut off there - a power cut - the version
+#   before goes on working):
+#     - PHP working: installed when it is not (DietPi's software 89, as their installer has it), php-fpm on and
+#       lighttpd's PHP modules in (5.1 and the switch of 5.0.12 took them off), checked - 1 when it is not
+#     - for 5.0.12/5.0.13, after 5.1: their switch "off" (92-mupibox-admin-off.conf in place of 92-mupibox-no-php.conf,
+#       the same redirect, and mupibox.legacyAdmin false) - their update switches it off its way and keeps the modules
+#       for the switch in the app (legacy_admin.sh)
+#   older_web_server_undo takes that back (the step after it failed).
+#   after the older update, once the config says that version is installed (older_web_server_after):
+#     - the right of its PHP pages to run commands as root (sudoers.d/www-data, as their installer has it)
+#     - before 5.0.12 (no switch there): the redirects go, the admin interface is theirs again; before 5.0.3 also the
+#       app on port 80/443 (90-mupibox-app.conf - they do not have the app)
+#     Without PHP the redirects stay: no .php file is ever sent as it is.
+older_web_fpm_units() { systemctl list-unit-files 'php*-fpm.service' --no-legend 2>/dev/null | awk '{print $1}'; }
 older_web_server() {
-  local tag="${1#v}" conf=/etc/lighttpd/conf-enabled/92-mupibox-no-php.conf cfg=/etc/mupibox/mupiboxconfig.json tmp unit mod
-  OLDER_WEB_CHANGED=0
-  [ -e "${conf}" ] || return 0
-  fpm_units() { systemctl list-unit-files 'php*-fpm.service' --no-legend 2>/dev/null | awk '{print $1}'; }
+  local cfg=/etc/mupibox/mupiboxconfig.json E=/etc/lighttpd/conf-enabled unit mod tmp running=""
+  OLDER_WEB_UNITS="" OLDER_WEB_MODS="" OLDER_WEB_SWITCH="" OLDER_PHP_OK=0
   if ! dpkg-query -W -f='${Status}\n' 'php*-fpm' 2>/dev/null | grep -q 'install ok installed'; then
     echo "PHP is installed again for ${1} (its admin interface)..."
     G_INTERACTIVE=0 timeout 900 /boot/dietpi/dietpi-software install 89 > /dev/null 2>&1
   fi
-  OLDER_WEB_CHANGED=1
-  for unit in $(fpm_units); do
+  for unit in $(older_web_fpm_units); do
+    systemctl is-enabled -q "${unit}" && systemctl is-active -q "${unit}" && continue
     systemctl enable --now "${unit}" > /dev/null 2>&1
+    OLDER_WEB_UNITS="${OLDER_WEB_UNITS} ${unit}"
   done
   for mod in fastcgi fastcgi-php-fpm; do
-    ls /etc/lighttpd/conf-enabled/[0-9][0-9]-${mod}.conf > /dev/null 2>&1 || lighty-enable-mod "${mod}" > /dev/null 2>&1
+    ls ${E}/[0-9][0-9]-${mod}.conf > /dev/null 2>&1 && continue
+    lighty-enable-mod "${mod}" > /dev/null 2>&1
+    OLDER_WEB_MODS="${OLDER_WEB_MODS} ${mod}"
   done
   # (working: php-fpm runs, and lighttpd hands .php to it)
-  local running=""
-  for unit in $(fpm_units); do
+  for unit in $(older_web_fpm_units); do
     systemctl is-active -q "${unit}" && running=1
   done
-  if [ -z "${running}" ] || ! ls /etc/lighttpd/conf-enabled/[0-9][0-9]-fastcgi-php-fpm.conf > /dev/null 2>&1; then
+  if [ -z "${running}" ] || ! ls ${E}/[0-9][0-9]-fastcgi-php-fpm.conf > /dev/null 2>&1; then
     older_web_server_undo
     return 1
   fi
-  echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
-  if [ "$(printf '%s\n' "${tag}" 5.0.12 | sort -V | head -n 1)" = "5.0.12" ]; then
-    mv -f "${conf}" /etc/lighttpd/conf-enabled/92-mupibox-admin-off.conf
+  OLDER_PHP_OK=1
+  if [ "$(printf '%s\n' "${1#v}" 5.0.12 | sort -V | head -n 1)" = "5.0.12" ] && [ -e ${E}/92-mupibox-no-php.conf ]; then
+    OLDER_WEB_SWITCH=$(${PREFLIGHT_DIR}/jq -c '.mupibox.legacyAdmin' "${cfg}" 2>/dev/null)
+    [ -n "${OLDER_WEB_SWITCH}" ] || OLDER_WEB_SWITCH=null
+    mv -f ${E}/92-mupibox-no-php.conf ${E}/92-mupibox-admin-off.conf
     if [ -s "${cfg}" ] && tmp=$(mktemp /etc/mupibox/.cfg.XXXXXX); then
       ${PREFLIGHT_DIR}/jq '.mupibox.legacyAdmin = false' "${cfg}" > "${tmp}" 2>/dev/null && [ -s "${tmp}" ] \
         && chown --reference="${cfg}" "${tmp}" && chmod --reference="${cfg}" "${tmp}" && mv -f "${tmp}" "${cfg}"
       rm -f "${tmp}"
-    fi
-  else
-    rm -f "${conf}"
-    if [ "$(printf '%s\n' "${tag}" 5.0.3 | sort -V | head -n 1)" != "5.0.3" ]; then
-      cp -f /etc/lighttpd/conf-enabled/90-mupibox-app.conf ${PREFLIGHT_DIR}/90-mupibox-app.conf 2>/dev/null \
-        && rm -f /etc/lighttpd/conf-enabled/90-mupibox-app.conf
     fi
   fi
   systemctl restart lighttpd > /dev/null 2>&1
   return 0
 }
 older_web_server_undo() {
-  [ "${OLDER_WEB_CHANGED:-0}" = 1 ] || return 0
-  [ -e /etc/lighttpd/conf-enabled/90-mupibox-app.conf ] || cp -f ${PREFLIGHT_DIR}/90-mupibox-app.conf /etc/lighttpd/conf-enabled/90-mupibox-app.conf 2>/dev/null
-  # (all of 5.1 again but the packages: the redirect from conf-available, php-fpm and the modules off, sudoers.d/www-data)
-  /usr/local/bin/mupibox/remove_legacy_admin.sh --keep-packages > /dev/null 2>&1
+  local cfg=/etc/mupibox/mupiboxconfig.json E=/etc/lighttpd/conf-enabled unit mod tmp
+  if [ -n "${OLDER_WEB_SWITCH}" ]; then
+    mv -f ${E}/92-mupibox-admin-off.conf ${E}/92-mupibox-no-php.conf
+    if [ -s "${cfg}" ] && tmp=$(mktemp /etc/mupibox/.cfg.XXXXXX); then
+      ${PREFLIGHT_DIR}/jq --argjson v "${OLDER_WEB_SWITCH}" 'if $v == null then del(.mupibox.legacyAdmin) else .mupibox.legacyAdmin = $v end' "${cfg}" > "${tmp}" 2>/dev/null \
+        && [ -s "${tmp}" ] && chown --reference="${cfg}" "${tmp}" && chmod --reference="${cfg}" "${tmp}" && mv -f "${tmp}" "${cfg}"
+      rm -f "${tmp}"
+    fi
+  fi
+  for mod in ${OLDER_WEB_MODS}; do
+    lighty-disable-mod "${mod}" > /dev/null 2>&1
+  done
+  for unit in ${OLDER_WEB_UNITS}; do
+    systemctl disable --now "${unit}" > /dev/null 2>&1
+  done
+  OLDER_WEB_UNITS="" OLDER_WEB_MODS="" OLDER_WEB_SWITCH=""
   systemctl restart lighttpd > /dev/null 2>&1
-  OLDER_WEB_CHANGED=0
+}
+older_web_server_after() {
+  local v="${1#v}" E=/etc/lighttpd/conf-enabled
+  # (only once that version is in place: its update writes its number into the config at its end)
+  /usr/bin/jq -r '.mupibox.version // empty' /etc/mupibox/mupiboxconfig.json 2>/dev/null | tr ' ' '\n' | grep -qxF -- "${v}" || return 0
+  [ "${OLDER_PHP_OK}" = 1 ] || return 0
+  echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
+  if [ "$(printf '%s\n' "${v}" 5.0.12 | sort -V | head -n 1)" != "5.0.12" ]; then
+    rm -f ${E}/92-mupibox-no-php.conf ${E}/92-mupibox-admin-off.conf
+    [ "$(printf '%s\n' "${v}" 5.0.3 | sort -V | head -n 1)" = "5.0.3" ] || rm -f ${E}/90-mupibox-app.conf
+  fi
+  systemctl restart lighttpd > /dev/null 2>&1
 }
 if [ -z "$BRANCH" ]; then
   TARGET_URL=$(curl -fsSL --retry 3 --retry-delay 3 -m 60 https://raw.githubusercontent.com/splitti/MuPiBox/main/version.json | ${PREFLIGHT_DIR}/jq -r ".release.${RELEASE}[-1].url // empty" 2>/dev/null)
@@ -288,7 +312,12 @@ if [ -z "$BRANCH" ]; then
       fi
       echo "MuPiBox ${TARGET_TAG} is installed by its own update script"
       rm -rf ${PREFLIGHT_DIR}
-      exec bash "${OWN_SCRIPT}" "$@"
+      # (not exec: what its version needs once it is in place comes after - older_web_server_after)
+      bash "${OWN_SCRIPT}" "$@"
+      OWN_RC=$?
+      rm -f "${OWN_SCRIPT}"
+      older_web_server_after "${TARGET_TAG}"
+      exit ${OWN_RC}
     fi
     echo "Error: the update script of ${TARGET_TAG} could not be downloaded - nothing was changed, please try again."
     rm -f "${OWN_SCRIPT}"
@@ -358,10 +387,12 @@ fail_update() {
 # brings the old installation back, whole. Written next to it, checked, on the card - and only then the update goes
 # on (1 when any of it failed: the caller stops the update before it touches anything).
 UPDATE_STATE=/home/dietpi/.mupibox/update-state
+# (a second word on the next line: what the start still has to do after "done" - read by restore_interrupted_update.sh
+# of 5.1; the older ones read only the first line)
 mark_update() {
 	local next="${UPDATE_STATE}.new"
 	rm -f "${next}"
-	if printf '%s\n' "$1" > "${next}" && [ "$(head -n 1 "${next}" 2>/dev/null)" = "$1" ] \
+	if printf '%s\n' "$1" ${2:+"$2"} > "${next}" && [ "$(head -n 1 "${next}" 2>/dev/null)" = "$1" ] \
 		&& { sync "${next}" 2>/dev/null || sync; } && mv -f "${next}" "${UPDATE_STATE}" && sync; then
 		return 0
 	fi
@@ -1401,8 +1432,10 @@ rm -f /tmp/mupibox-update-failed
 		fi
 		sync
 		# The update counts as done once "done" is on the card: what is left over then is only cleared up - a power cut
-		# while the old installation is being deleted must not bring a half deleted one back
-		[ "${FINISH_OK}" = 1 ] && mark_update done || FINISH_OK=0
+		# while the old installation is being deleted must not bring a half deleted one back. ("legacy-admin": the previous
+		# admin interface goes after "done", below - cut off, the start does it; a "done" of an older update has no such
+		# line, its admin interface stays)
+		[ "${FINISH_OK}" = 1 ] && mark_update done legacy-admin || FINISH_OK=0
 		if [ "${FINISH_OK}" = 1 ]; then
 			[ -n "${THEME_KEPT_AT}" ] && echo "## theme-data of the old program kept in ${THEME_KEPT_AT}: what was added to it could not all be taken over" >&3 2>&3
 			if [ -d "${BAK_DIR}" ] && ! program_only "${BAK_DIR}"; then

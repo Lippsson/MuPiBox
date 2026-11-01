@@ -334,11 +334,11 @@ if [ -e "${UPDATE_STATE}" ]; then
 					rm -rf "${OLD}" || old_ok=1
 				fi
 			fi
-			# (the previous admin interface goes after "done" - cut off before or while it went: all of it again, it does
-			# nothing twice; the PHP packages left to the next update, they take too long for the start; lighttpd anew
-			# afterwards. A "done" found here is always one of an update of 5.1 or later: an older one brings its own copy
-			# of this script before.)
-			if [ -x /usr/local/bin/mupibox/remove_legacy_admin.sh ]; then
+			# (the previous admin interface goes after "done" of an update of 5.1, which says so on the mark's second line
+			# - cut off before or while it went: all of it again, it does nothing twice; the PHP packages left to the next
+			# update, they take too long for the start; lighttpd anew afterwards. A "done" of an older update has no such
+			# line: a version before 5.1 keeps its admin interface.)
+			if [ "$(sed -n 2p "${UPDATE_STATE}" 2>/dev/null | tr -d '[:space:]')" = "legacy-admin" ] && [ -x /usr/local/bin/mupibox/remove_legacy_admin.sh ]; then
 				/usr/local/bin/mupibox/remove_legacy_admin.sh --keep-packages
 				systemctl --no-block try-restart lighttpd >/dev/null 2>&1
 			fi
