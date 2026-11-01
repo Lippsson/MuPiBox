@@ -192,25 +192,40 @@ fi
 #
 # The web server as a version before 5.1 needs it, on a box of 5.1 that goes back: 5.1 took PHP off
 # (remove_legacy_admin.sh) and sends every .php address to the app (92-mupibox-no-php.conf). The older update brings its
-# PHP pages back (www.zip), not PHP. So PHP comes back first (DietPi's software 89, as their installer has it, and the
-# right of its pages to run commands as root, sudoers.d/www-data) - then, with PHP there (no .php file is ever sent as
-# it is):
+# PHP pages back (www.zip), not PHP. So PHP comes back first, working: installed when it is not (DietPi's software 89, as
+# their installer has it), php-fpm on and lighttpd's PHP modules in (5.1 switched them off - an update cut off and
+# finished at the start leaves the packages), checked; and the right of its pages to run commands as root
+# (sudoers.d/www-data). Then, with PHP there (no .php file is ever sent as it is):
 #   5.0.12/5.0.13: the admin interface switched off their way (92-mupibox-admin-off.conf, mupibox.legacyAdmin false):
 #     their update switches it off once more and keeps lighttpd's PHP modules for the switch in the app (legacy_admin.sh)
 #   before: the redirect goes, the admin interface is theirs again (before 5.0.3 also the app on port 80, which they
 #     do not have)
-# Without PHP (no internet, the install failed) the redirect stays: the older version runs, without its admin interface.
+# 1 when PHP could not be brought back (no internet, the install failed) - the redirect stays then, the box as it was.
+# older_web_server_undo puts the web server of 5.1 back (when the step after fails).
 older_web_server() {
-  local tag="${1#v}" conf=/etc/lighttpd/conf-enabled/92-mupibox-no-php.conf cfg=/etc/mupibox/mupiboxconfig.json tmp
-  php_there() { dpkg-query -W -f='${Status}\n' 'php*-fpm' 2>/dev/null | grep -q 'install ok installed'; }
+  local tag="${1#v}" conf=/etc/lighttpd/conf-enabled/92-mupibox-no-php.conf cfg=/etc/mupibox/mupiboxconfig.json tmp unit mod
+  OLDER_WEB_CHANGED=0
   [ -e "${conf}" ] || return 0
-  if ! php_there; then
+  fpm_units() { systemctl list-unit-files 'php*-fpm.service' --no-legend 2>/dev/null | awk '{print $1}'; }
+  if ! dpkg-query -W -f='${Status}\n' 'php*-fpm' 2>/dev/null | grep -q 'install ok installed'; then
     echo "PHP is installed again for ${1} (its admin interface)..."
     G_INTERACTIVE=0 timeout 900 /boot/dietpi/dietpi-software install 89 > /dev/null 2>&1
   fi
-  if ! php_there; then
-    echo "Note: PHP could not be installed again - ${1} runs without its admin interface (the app does it all)."
-    return 0
+  OLDER_WEB_CHANGED=1
+  for unit in $(fpm_units); do
+    systemctl enable --now "${unit}" > /dev/null 2>&1
+  done
+  for mod in fastcgi fastcgi-php-fpm; do
+    ls /etc/lighttpd/conf-enabled/[0-9][0-9]-${mod}.conf > /dev/null 2>&1 || lighty-enable-mod "${mod}" > /dev/null 2>&1
+  done
+  # (working: php-fpm runs, and lighttpd hands .php to it)
+  local running=""
+  for unit in $(fpm_units); do
+    systemctl is-active -q "${unit}" && running=1
+  done
+  if [ -z "${running}" ] || ! ls /etc/lighttpd/conf-enabled/[0-9][0-9]-fastcgi-php-fpm.conf > /dev/null 2>&1; then
+    older_web_server_undo
+    return 1
   fi
   echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
   if [ "$(printf '%s\n' "${tag}" 5.0.12 | sort -V | head -n 1)" = "5.0.12" ]; then
@@ -222,10 +237,21 @@ older_web_server() {
     fi
   else
     rm -f "${conf}"
-    [ "$(printf '%s\n' "${tag}" 5.0.3 | sort -V | head -n 1)" = "5.0.3" ] || rm -f /etc/lighttpd/conf-enabled/90-mupibox-app.conf
+    if [ "$(printf '%s\n' "${tag}" 5.0.3 | sort -V | head -n 1)" != "5.0.3" ]; then
+      cp -f /etc/lighttpd/conf-enabled/90-mupibox-app.conf ${PREFLIGHT_DIR}/90-mupibox-app.conf 2>/dev/null \
+        && rm -f /etc/lighttpd/conf-enabled/90-mupibox-app.conf
+    fi
   fi
   systemctl restart lighttpd > /dev/null 2>&1
   return 0
+}
+older_web_server_undo() {
+  [ "${OLDER_WEB_CHANGED:-0}" = 1 ] || return 0
+  [ -e /etc/lighttpd/conf-enabled/90-mupibox-app.conf ] || cp -f ${PREFLIGHT_DIR}/90-mupibox-app.conf /etc/lighttpd/conf-enabled/90-mupibox-app.conf 2>/dev/null
+  # (all of 5.1 again but the packages: the redirect from conf-available, php-fpm and the modules off, sudoers.d/www-data)
+  /usr/local/bin/mupibox/remove_legacy_admin.sh --keep-packages > /dev/null 2>&1
+  systemctl restart lighttpd > /dev/null 2>&1
+  OLDER_WEB_CHANGED=0
 }
 if [ -z "$BRANCH" ]; then
   TARGET_URL=$(curl -fsSL --retry 3 --retry-delay 3 -m 60 https://raw.githubusercontent.com/splitti/MuPiBox/main/version.json | ${PREFLIGHT_DIR}/jq -r ".release.${RELEASE}[-1].url // empty" 2>/dev/null)
@@ -239,16 +265,27 @@ if [ -z "$BRANCH" ]; then
     OWN_SCRIPT=$(mktemp /tmp/mupibox-update-${TARGET_TAG}.XXXXXX)
     if curl -fsSL --retry 3 --retry-delay 3 -m 120 -o "${OWN_SCRIPT}" "https://raw.githubusercontent.com/splitti/MuPiBox/${TARGET_TAG}/update/start_mupibox_update.sh" \
        && bash -n "${OWN_SCRIPT}"; then
+      # (the web server first: without PHP a version before 5.0.3 has nothing to be set up with - its admin interface is
+      # all it has, the app came with 5.0.3; from 5.0.3 on the app does it all, the older version goes on without)
+      if ! older_web_server "${TARGET_TAG}"; then
+        if [ "$(printf '%s\n' "${TARGET_TAG#v}" 5.0.3 | sort -V | head -n 1)" != "5.0.3" ]; then
+          echo "Error: PHP could not be installed again, and ${TARGET_TAG} needs it (its admin interface) - nothing was changed, please try again."
+          rm -f "${OWN_SCRIPT}"
+          rm -rf ${PREFLIGHT_DIR}
+          exit 1
+        fi
+        echo "Note: PHP could not be installed again - ${TARGET_TAG} runs without its admin interface (the app does it all)."
+      fi
       # (on a box of 5.1, or one whose move to it was cut off: the move finished, and what that version looks for
       # elsewhere than its update leaves it - see migrate_layout.sh)
       if { [ -L /home/dietpi/.mupibox/Sonos-Kids-Controller-master ] || [ -e /home/dietpi/.mupibox/.layout-moving ]; } \
          && ! bash /usr/local/bin/mupibox/migrate_layout.sh --for-older; then
+        older_web_server_undo
         echo "Error: the folders could not be made ready for ${TARGET_TAG} - nothing was changed, please try again."
         rm -f "${OWN_SCRIPT}"
         rm -rf ${PREFLIGHT_DIR}
         exit 1
       fi
-      older_web_server "${TARGET_TAG}"
       echo "MuPiBox ${TARGET_TAG} is installed by its own update script"
       rm -rf ${PREFLIGHT_DIR}
       exec bash "${OWN_SCRIPT}" "$@"
@@ -1292,6 +1329,8 @@ rm -f /tmp/mupibox-update-failed
 	cp -f ${MUPI_SRC}/config/lighttpd/99-mupibox-media-noexec.conf /etc/lighttpd/conf-enabled/99-mupibox-media-noexec.conf >&3 2>&3
 	# the app on port 80/443 too: / leads to the app at /app (see the file)
 	cp -f ${MUPI_SRC}/config/lighttpd/90-mupibox-app.conf /etc/lighttpd/conf-enabled/90-mupibox-app.conf >&3 2>&3
+	# no PHP since 5.1: made ready, switched on with the removal of the previous admin interface after "done" (below)
+	cp -f ${MUPI_SRC}/config/lighttpd/92-mupibox-no-php.conf /etc/lighttpd/conf-available/92-mupibox-no-php.conf >&3 2>&3
 	# only names of the home network: a foreign name pointed at the box gets 403 (DNS rebinding, lighttpd_hosts.sh)
 	NO_RESTART=1 /usr/local/bin/mupibox/lighttpd_hosts.sh >&3 2>&3
 	lighty-enable-mod proxy  >&3 2>&3
@@ -1383,11 +1422,9 @@ rm -f /tmp/mupibox-update-failed
 			# "done": until then a way back finds the old version with all it needs (its pages, the theme previews in
 			# /var/www/images). Taken off: php-fpm, lighttpd's PHP module, the PHP packages, its pages in /var/www
 			# (/var/www/cover stays, the covers of the radio stations); every .php address goes to the app
-			# (92-mupibox-no-php.conf, first: no .php file is ever sent as it is meanwhile). Cut off in between: the start
-			# finishes it (restore_interrupted_update.sh, the mark is cleared after).
+			# (92-mupibox-no-php.conf, from conf-available - first: no .php file is ever sent as it is meanwhile). Cut off
+			# anywhere after "done": the start does it all again (restore_interrupted_update.sh; the mark is cleared after).
 			echo -e "XXX\n99\nRemove the previous admin interface... \nXXX"
-			cp -f ${MUPI_SRC}/config/lighttpd/92-mupibox-no-php.conf /etc/lighttpd/conf-enabled/92-mupibox-no-php.conf >&3 2>&3
-			sync
 			/usr/local/bin/mupibox/remove_legacy_admin.sh >&3 2>&3
 			chown -h www-data:www-data /var/www/cover >&3 2>&3
 			chown -R dietpi:www-data /home/dietpi/MuPiBox/media/cover >&3 2>&3
