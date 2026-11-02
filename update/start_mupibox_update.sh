@@ -315,8 +315,20 @@ if [ -z "$BRANCH" ]; then
         fi
       fi
       echo "MuPiBox ${TARGET_TAG} is installed by its own update script"
+      # (run by this one, not in its place: when it stopped before its version was in place - its download, a check,
+      # its own way back - the box is still 5.1, and what was made ready for it goes again, the right of PHP pages to
+      # run commands as root above all. 5.1 is still there as long as its link is: that update moves it aside and puts
+      # its own folder there. Cut off - a power cut - the next start of 5.1 takes that right away,
+      # restore_interrupted_update.sh. All of it in this block: that update replaces this script's file meanwhile.)
+      bash "${OWN_SCRIPT}" "$@"
+      rc=$?
+      if [ -n "${BOX_5_1}" ] && [ -L /home/dietpi/.mupibox/Sonos-Kids-Controller-master ]; then
+        older_web_server_undo
+        echo "Note: ${TARGET_TAG} was not installed - the box stays on this version, as it was before."
+      fi
+      rm -f "${OWN_SCRIPT}"
       rm -rf ${PREFLIGHT_DIR}
-      exec bash "${OWN_SCRIPT}" "$@"
+      exit ${rc}
     fi
     echo "Error: the update script of ${TARGET_TAG} could not be downloaded - nothing was changed, please try again."
     rm -f "${OWN_SCRIPT}"
