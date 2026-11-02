@@ -202,12 +202,13 @@ fi
 #   - its switch "off" (92-mupibox-admin-off.conf in place of 92-mupibox-no-php.conf - the same redirect - and
 #     mupibox.legacyAdmin false): its update switches it off its way and keeps the modules for the switch in the app
 #     (legacy_admin.sh)
-#   - the right of its PHP pages to run commands as root (sudoers.d/www-data, as its installer has it)
+# The right of its PHP pages to run commands as root (sudoers.d/www-data) is not written here: that version's own
+# update gives it, once it is in place - written before, a power cut or an update that stopped left it on 5.1.
 # older_web_server_undo takes it back (the step after it failed).
 older_web_fpm_units() { systemctl list-unit-files 'php*-fpm.service' --no-legend 2>/dev/null | awk '{print $1}'; }
 older_web_server() {
   local cfg=/etc/mupibox/mupiboxconfig.json E=/etc/lighttpd/conf-enabled unit mod tmp running=""
-  OLDER_WEB_UNITS="" OLDER_WEB_MODS="" OLDER_WEB_SWITCH="" OLDER_WEB_SUDO=""
+  OLDER_WEB_UNITS="" OLDER_WEB_MODS="" OLDER_WEB_SWITCH=""
   if ! dpkg-query -W -f='${Status}\n' 'php*-fpm' 2>/dev/null | grep -q 'install ok installed'; then
     echo "PHP is installed again for ${1} (its admin interface)..."
     G_INTERACTIVE=0 timeout 900 /boot/dietpi/dietpi-software install 89 > /dev/null 2>&1
@@ -240,17 +241,12 @@ older_web_server() {
       rm -f "${tmp}"
     fi
   fi
-  if [ ! -e /etc/sudoers.d/www-data ]; then
-    echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data
-    OLDER_WEB_SUDO=1
-  fi
   sync
   systemctl restart lighttpd > /dev/null 2>&1
   return 0
 }
 older_web_server_undo() {
   local cfg=/etc/mupibox/mupiboxconfig.json E=/etc/lighttpd/conf-enabled unit mod tmp
-  [ -n "${OLDER_WEB_SUDO}" ] && rm -f /etc/sudoers.d/www-data
   if [ -n "${OLDER_WEB_SWITCH}" ]; then
     mv -f ${E}/92-mupibox-admin-off.conf ${E}/92-mupibox-no-php.conf
     if [ -s "${cfg}" ] && tmp=$(mktemp /etc/mupibox/.cfg.XXXXXX); then
@@ -265,7 +261,7 @@ older_web_server_undo() {
   for unit in ${OLDER_WEB_UNITS}; do
     systemctl disable --now "${unit}" > /dev/null 2>&1
   done
-  OLDER_WEB_UNITS="" OLDER_WEB_MODS="" OLDER_WEB_SWITCH="" OLDER_WEB_SUDO=""
+  OLDER_WEB_UNITS="" OLDER_WEB_MODS="" OLDER_WEB_SWITCH=""
   systemctl restart lighttpd > /dev/null 2>&1
 }
 if [ -z "$BRANCH" ]; then
@@ -316,10 +312,9 @@ if [ -z "$BRANCH" ]; then
       fi
       echo "MuPiBox ${TARGET_TAG} is installed by its own update script"
       # (run by this one, not in its place: when it stopped before its version was in place - its download, a check,
-      # its own way back - the box is still 5.1, and what was made ready for it goes again, the right of PHP pages to
-      # run commands as root above all. 5.1 is still there as long as its link is: that update moves it aside and puts
-      # its own folder there. Cut off - a power cut - the next start of 5.1 takes that right away,
-      # restore_interrupted_update.sh. All of it in this block: that update replaces this script's file meanwhile.)
+      # its own way back - the box is still 5.1, and what was made ready for it goes again (PHP on, its switch). 5.1 is
+      # still there as long as its link is: that update moves it aside and puts its own folder there. All of it in this
+      # block: that update replaces this script's file meanwhile.)
       bash "${OWN_SCRIPT}" "$@"
       rc=$?
       if [ -n "${BOX_5_1}" ] && [ -L /home/dietpi/.mupibox/Sonos-Kids-Controller-master ]; then

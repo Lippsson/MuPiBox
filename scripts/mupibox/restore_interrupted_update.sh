@@ -388,15 +388,6 @@ elif [ -d "${USERDATA_BAK}/config" ] && [ "$(entries "${USERDATA_BAK}/config/dat
 	fi
 fi
 
-# 5.1 runs no PHP: the right of PHP pages to run commands as root (sudoers.d/www-data) goes where a way back to 5.0.14
-# wrote it for that version and was cut off while 5.1 stayed - a power cut before or during its update (the update
-# itself takes it back when that update stops). 5.1 is in place as long as Sonos-Kids-Controller-master is its link:
-# the update of a version before 5.1 moves it aside and puts a folder of its own there - that version keeps the right.
-SUDOERS_WWW="${SUDOERS_WWW:-/etc/sudoers.d/www-data}"
-if [ -L "${MUPI_HOME}/Sonos-Kids-Controller-master" ] && [ -e "${SUDOERS_WWW}" ]; then
-	rm -f "${SUDOERS_WWW}" && log "removed the right of PHP pages to run commands as root (5.1 runs no PHP)" || RESULT=1
-fi
-
 sync
 release_writers
 start_apps
