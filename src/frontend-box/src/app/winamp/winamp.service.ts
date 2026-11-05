@@ -498,7 +498,7 @@ export class WinampService {
     crop: (positions) => this.queueDo(`crop?pos=${positions.join(',')}`),
     newList: () => this.queueDo('new'),
     sort: (mode: SortMode) => this.queueDo(`sort/${mode}`),
-    dirs: (path) => this.queueGet<{ path: string; audio: number; folders: { name: string; path: string; audio: number }[] }>(`dirs?path=${encodeURIComponent(path)}`),
+    dirs: (path) => this.queueGet<{ path: string; audio: number; canAdd?: boolean; folders: { name: string; path: string; audio: number }[] }>(`dirs?path=${encodeURIComponent(path)}`),
     addDir: (path) => this.queueDo(`add?path=${encodeURIComponent(path)}`),
     info: (position) => this.queueGet(`info?pos=${position}`),
     lists: async () => (await this.queueGet<{ lists: { name: string; count: number }[] }>('lists'))?.lists ?? [],
@@ -530,7 +530,7 @@ export class WinampService {
     try {
       // (a local album is the queue the player has: that list, which the menus edit; else the album's folder)
       const queue: { editable: boolean; entries: { position: number; name: string }[] } | null =
-        media.type === 'library'
+        media.type === 'library' || media.type === 'nas'
           ? await firstValueFrom(this.http.get<{ editable: boolean; entries: { position: number; name: string }[] }>(`${environment.backend.playerUrl}/queue`)).catch((): null => null)
           : null
       this.queueEditable.set(queue?.editable === true)

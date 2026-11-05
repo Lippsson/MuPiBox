@@ -30,7 +30,7 @@ export interface QueueApi {
   newList(): Promise<boolean>
   sort(mode: SortMode): Promise<boolean>
   /** the folders of the library below `path` ('' = the library), each with the number of audio files in it */
-  dirs(path: string): Promise<{ path: string; audio: number; folders: { name: string; path: string; audio: number }[] } | null>
+  dirs(path: string): Promise<{ path: string; audio: number; canAdd?: boolean; folders: { name: string; path: string; audio: number }[] } | null>
   /** the audio files of a folder at the end of the list (an empty list: they start playing) */
   addDir(path: string): Promise<boolean>
   info(position: number): Promise<{ file: string; folder: string; extension: string; size: number } | null>
@@ -343,7 +343,8 @@ export class WinampPlaylistView {
     const listing = await q.dirs(path)
     if (!listing) return this.menu([this.act('CAN NOT READ THE LIBRARY', () => undefined, true)], 'ADD DIR')
     const rows: MenuRow[] = []
-    if (listing.audio > 0) rows.push(this.act(`ADD THIS DIR (${listing.audio})`, async () => this.said(await q.addDir(listing.path), 'ADDED', 'NOTHING ADDED')))
+    // (a folder of the NAS says nothing of how many files it holds: it is tried)
+    if (listing.canAdd ?? listing.audio > 0) rows.push(this.act(`ADD THIS DIR${listing.audio > 0 ? ` (${listing.audio})` : ''}`, async () => this.said(await q.addDir(listing.path), 'ADDED', 'NOTHING ADDED')))
     if (path) rows.push({ text: '.. UP', fn: () => void this.browse(path.split('/').slice(0, -1).join('/')) })
     for (const f of listing.folders) rows.push({ text: `${f.name.toUpperCase()}${f.audio > 0 ? ` (${f.audio})` : ''}`, fn: () => void this.browse(f.path) })
     if (rows.length === 0) rows.push(this.act('EMPTY', () => undefined, true))

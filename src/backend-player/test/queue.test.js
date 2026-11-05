@@ -121,3 +121,9 @@ test('where an entry comes from, readable: a library file, a NAS album behind th
   assert.equal(Q.describeSource('http://radio.example/live%20stream/high.mp3', root).folder, '/live stream')
   assert.equal(Q.describeSource('https://x/%E0%A4%A.mp3', root).file.length > 0, true) // (an address that does not decode: left as it is)
 })
+
+test('a sort by title goes by the title the caller gives (the NAS\'s own name for a track), not by the file name', () => {
+  const list = [{ id: 1, filename: '/m/a.mp3', title: 'Zebra' }, { id: 2, filename: '/m/b.mp3', title: 'Apple' }]
+  assert.deepEqual(Q.sortedIds(list, 'title'), [2, 1])
+  assert.deepEqual(Q.sortedIds(list, 'file'), [1, 2])
+})

@@ -44,7 +44,7 @@ function describeSource(filename, root) {
  * random. `random` is Math.random (or a pretend one in a test). The ids come back as a new array.
  */
 function sortedIds(entries, mode, random = Math.random) {
-  const list = entries.map((e) => ({ id: e.id, name: nameOfFile(e.filename), file: path.basename(String(e.filename)), full: String(e.filename) }))
+  const list = entries.map((e) => ({ id: e.id, name: e.title ?? nameOfFile(e.filename), file: path.basename(String(e.filename)), full: String(e.filename) }))
   if (mode === 'title') list.sort((a, b) => collator.compare(a.name, b.name))
   else if (mode === 'file') list.sort((a, b) => collator.compare(a.file, b.file))
   else if (mode === 'path') list.sort((a, b) => collator.compare(a.full, b.full))

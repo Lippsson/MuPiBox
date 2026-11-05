@@ -2527,6 +2527,7 @@ async function playNasList(nasPath, resume = null) {
       return
     }
     currentNasTracks = tracks
+    rememberNasTracks(tracks)
     // Tracks of a CUE album all point at the same file: it is loaded once and the tracks are found by time.
     const cueMode = tracks.length > 1 && tracks.every((track) => track.cue === true)
     currentCue = cueMode ? { tracks, fileLength: 0 } : null
@@ -3727,29 +3728,55 @@ function playCd() {
 }
 
 // --- The queue: the Winamp playlist window edits what plays ---
-// The playlist of a local album (a folder of the library) is mpv's own playlist; the display's Winamp playlist window selects
-// entries, removes them (remove, crop, new list), sorts them, adds a folder of the library and saves and loads lists
-// (queue.js has the logic around it). Nothing here touches a file or a folder: only what is queued changes. An audio CD, a NAS
-// folder, TIDAL and Spotify have no such queue (their lists are not files of the box); /queue says so (editable: false).
+// The playlist of a local album (a folder of the library) or of a NAS album is mpv's own playlist; the display's Winamp playlist
+// window selects entries, removes them (remove, crop, new list), sorts them, adds a folder (of the library, or of the NAS) and
+// saves and loads lists (queue.js has the logic around it). Nothing here touches a file or a folder, on the box or on the NAS:
+// only what is queued changes. An audio CD, a CUE album of the NAS, TIDAL and Spotify have no such queue (their lists are not
+// files); /queue says so (editable: false). A queue holds files of one kind: the library's, or the NAS's.
 const MEDIA_ROOT = '/home/dietpi/MuPiBox/media'
+const NAS_PREFIX = 'nas:' // (in a path of the folder browser and in a saved list: a path on the NAS)
 const queueLists = Q.createListStore('/home/dietpi/.mupibox/winamp-lists')
 
-const queueEditable = () =>
-  currentMeta.currentPlayer === 'mplayer' && currentMeta.currentType === 'local' && !isCdFolder(currentMeta.path) && typeof player.list === 'object'
-
-/** [{ position, id, file, name }] of the playlist as it is now; null when mpv did not answer */
-async function queueEntries() {
-  const entries = await player.list.entries()
-  return entries ? entries.map((e, i) => ({ position: i + 1, id: e.id, file: e.filename, name: Q.nameOfFile(e.filename), current: e.current })) : null
+// The tracks of the NAS, by their path: kept from every NAS list that was played or added, so the names of a queue that was
+// sorted or cut down are known (the playlist of mpv holds only the stream addresses)
+const nasTrackByPath = new Map()
+const rememberNasTracks = (tracks) => {
+  for (const track of tracks) if (track?.path) nasTrackByPath.set(track.path, track)
+}
+const nasStreamUrl = (track) => {
+  const url = `http://localhost:8200/api/nas/stream?path=${encodeURIComponent(track.path)}`
+  return /\.wma$/i.test(track.path) ? `ffmpeg://${url}` : url
 }
 
-// After an edit: the player's own count and place follow the playlist (the next track change would only tell it later)
+/** 'local', 'nas', or null: what kind of queue plays now (null - nothing, a CD, a CUE album, TIDAL, Spotify: no queue to edit) */
+function queueKind() {
+  if (currentMeta.currentPlayer !== 'mplayer' || typeof player.list !== 'object') return null
+  if (currentMeta.currentType === 'local' && !isCdFolder(currentMeta.path)) return 'local'
+  if (currentMeta.currentType === 'nas' && currentCue === null) return 'nas'
+  return null
+}
+const queueEditable = () => queueKind() !== null
+
+/** [{ position, id, file, source, name, current }] of the playlist as it is now; null when mpv did not answer */
+async function queueEntries() {
+  const entries = await player.list.entries()
+  if (!entries) return null
+  return entries.map((e, i) => {
+    const source = Q.describeSource(e.filename, MEDIA_ROOT)
+    const nas = nasTrackByPath.get(source.full)
+    return { position: i + 1, id: e.id, file: e.filename, source, name: nas ? String(nas.name).replace(/\.[^./]+$/, '') : Q.nameOfFile(source.full), current: e.current }
+  })
+}
+
+// After an edit: the player's own count and place follow the playlist (the next track change would only tell it later); a NAS
+// queue's track list (the names the player shows) is put in the order of the playlist
 async function queueFollowEdit() {
   const entries = await queueEntries()
   if (!entries) return null
   currentMeta.totalTracks = entries.length
   const at = entries.findIndex((e) => e.current)
   if (at >= 0) currentMeta.currentTracknr = at + 1
+  if (currentMeta.currentType === 'nas') currentNasTracks = entries.map((e) => nasTrackByPath.get(e.source.full) ?? { path: e.source.full, name: e.source.file })
   return entries
 }
 
@@ -3759,7 +3786,7 @@ app.get('/queue', async (_req, res) => {
   if (!queueEditable()) return res.json({ editable: false, entries: [] })
   const entries = await queueEntries()
   if (!entries) return res.json({ editable: false, entries: [] })
-  res.json({ editable: true, current: entries.findIndex((e) => e.current) + 1, entries: entries.map(({ position, name, file }) => ({ position, name, file })) })
+  res.json({ editable: true, current: entries.findIndex((e) => e.current) + 1, entries: entries.map(({ position, name, source }) => ({ position, name, file: source.file })) })
 })
 
 // remove the entries at ?pos=1,3 (1-based, as the display counts), or everything else (crop)
@@ -3787,7 +3814,8 @@ app.get('/queue/sort/:mode', async (req, res) => {
   if (!entries) return res.status(503).json({ ok: false })
   let target
   try {
-    target = Q.sortedIds(entries.map((e) => ({ id: e.id, filename: e.file })), req.params.mode)
+    // (the title of a NAS entry is the NAS's own name for it; the file and path are those on the NAS)
+    target = Q.sortedIds(entries.map((e) => ({ id: e.id, filename: e.source.full, title: e.name })), req.params.mode)
   } catch {
     return res.status(400).json({ ok: false, error: 'unknown sort' })
   }
@@ -3799,33 +3827,91 @@ app.get('/queue/sort/:mode', async (req, res) => {
 // a new list: what plays stops, nothing is queued
 app.get('/queue/new', async (_req, res) => {
   if (!queueEditable()) return queueNotEditable(res)
+  const nas = currentMeta.currentType === 'nas'
   stop()
   await new Promise((resolve) => setTimeout(resolve, 300))
   await player.list.clear()
+  if (nas) currentNasTracks = []
   currentMeta.totalTracks = 0
   currentMeta.currentTracknr = 0
   res.json({ ok: true })
 })
 
-// the folders of the library to add from (?path= the folder, '' the library itself)
-app.get('/queue/dirs', (req, res) => {
-  const listing = Q.listFolders(MEDIA_ROOT, String(req.query.path ?? ''))
+// ---- the folders to add from: the library's, or the NAS's (a path that starts with "nas:") ----
+
+// the NAS's own lists (the box's backend API; they cost a call to the NAS): the folders shown on the box, or the ones below a folder
+async function nasFolders(nasPath, ms = 25000) {
+  const url = nasPath ? `http://localhost:8200/api/nas/children?path=${encodeURIComponent(nasPath)}` : 'http://localhost:8200/api/nas/artists?expand=1'
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(ms) })
+    const list = response.ok ? await response.json() : null
+    if (!Array.isArray(list)) return null
+    return list
+      .filter((entry) => entry?.nasPath)
+      .map((entry) => ({ name: String(entry.title || entry.artist || path.posix.basename(entry.nasPath)), path: `${NAS_PREFIX}${entry.nasPath}`, audio: 0 }))
+  } catch {
+    return null
+  }
+}
+
+// the audio tracks of a NAS folder, as the NAS tab plays them (an album with a cue sheet is one file: it is not added)
+async function nasFolderTracks(nasPath) {
+  try {
+    const response = await fetch(`http://localhost:8200/api/nas/tracklist?path=${encodeURIComponent(nasPath)}`, { signal: AbortSignal.timeout(25000) })
+    const list = response.ok ? await response.json() : null
+    return Array.isArray(list) ? list.filter((t) => t?.path && t.cue !== true) : []
+  } catch {
+    return []
+  }
+}
+
+// the folders of the library to add from (?path= the folder, '' the library itself). A queue of the NAS adds from the NAS; with nothing
+// queued the browser starts at the library and has the NAS (when it has folders to show) as a folder of its own.
+app.get('/queue/dirs', async (req, res) => {
+  const wanted = String(req.query.path ?? '')
+  const kind = queueKind()
+  if (wanted.startsWith(NAS_PREFIX) || (kind === 'nas' && wanted === '')) {
+    const nasPath = wanted.slice(NAS_PREFIX.length)
+    const folders = await nasFolders(nasPath)
+    if (!folders) return res.status(502).json({ ok: false, error: 'NAS not reachable' })
+    return res.json({ ok: true, path: wanted, audio: 0, canAdd: nasPath !== '', folders })
+  }
+  if (kind === 'nas') return res.status(409).json({ ok: false, error: 'not the same kind' })
+  const listing = Q.listFolders(MEDIA_ROOT, wanted)
   if (!listing) return res.status(404).json({ ok: false })
-  res.json({ ok: true, ...listing })
+  if (wanted === '' && kind === null && (await nasFolders('', 4000))?.length) listing.folders.push({ name: 'NAS', path: NAS_PREFIX, audio: 0 })
+  res.json({ ok: true, ...listing, canAdd: listing.audio > 0 })
 })
 
 // the audio files directly in ?path= are queued after the last entry (an empty queue: they start playing)
 app.get('/queue/add', async (req, res) => {
-  const relative = String(req.query.path ?? '')
-  const files = Q.audioFilesIn(MEDIA_ROOT, relative)
-  if (!files || files.length === 0) return res.status(404).json({ ok: false, error: 'no audio there' })
+  const wanted = String(req.query.path ?? '')
   if (typeof player.list !== 'object') return res.status(409).json({ ok: false })
-  const entries = queueEditable() ? await queueEntries() : null
-  if (entries && entries.length > 0) {
+  const kind = queueKind()
+  if (wanted.startsWith(NAS_PREFIX)) {
+    const nasPath = wanted.slice(NAS_PREFIX.length)
+    if (!nasPath) return res.status(400).json({ ok: false })
+    if (kind === 'local') return res.status(409).json({ ok: false, error: 'not the same kind' })
+    if (kind === null) {
+      // nothing queued: the folder plays as an album of the NAS does (its list is asked for, the start held while paused, ...)
+      await playNasList(encodeURIComponent(nasPath))
+      return res.json({ ok: true })
+    }
+    const tracks = await nasFolderTracks(nasPath)
+    if (tracks.length === 0) return res.status(404).json({ ok: false, error: 'no audio there' })
+    rememberNasTracks(tracks)
+    await player.list.append(tracks.map(nasStreamUrl))
+    await queueFollowEdit()
+    return res.json({ ok: true, added: tracks.length })
+  }
+  if (kind === 'nas') return res.status(409).json({ ok: false, error: 'not the same kind' })
+  const files = Q.audioFilesIn(MEDIA_ROOT, wanted)
+  if (!files || files.length === 0) return res.status(404).json({ ok: false, error: 'no audio there' })
+  if (kind === 'local') {
     await player.list.append(files)
     await queueFollowEdit()
   } else {
-    await playQueueFiles(files, relative)
+    await playQueueFiles(files, wanted)
   }
   res.json({ ok: true, added: files.length })
 })
@@ -3837,6 +3923,7 @@ async function playQueueFiles(files, label) {
   resetLocalShuffle()
   clearLibraryResumeTimers()
   switchToMplayer()
+  currentCue = null
   currentMeta.currentType = 'local'
   currentMeta.trackFile = undefined
   currentMeta.finished = false
@@ -3849,14 +3936,39 @@ async function playQueueFiles(files, label) {
   player.setVolume(volumeStart)
 }
 
-// save the queue under a name (?name=; without one: the album and the day)
+// the same for tracks of the NAS (a loaded list of the NAS)
+async function playQueueNas(tracks, label) {
+  playbackGeneration++
+  playbackRequest++
+  resetLocalShuffle()
+  clearLibraryResumeTimers()
+  switchToMplayer()
+  currentCue = null
+  rememberNasTracks(tracks)
+  currentNasTracks = tracks
+  currentMeta.currentType = 'nas'
+  currentMeta.trackFile = undefined
+  currentMeta.finished = false
+  currentMeta.pause = false
+  currentMeta.currentTracknr = 0
+  currentMeta.path = label
+  currentMeta.album = label
+  currentMeta.totalTracks = tracks.length
+  currentMeta.currentTrackname = String(tracks[0]?.name ?? label).replace(/\.[^./]+$/, '')
+  writeplayerstatePlay()
+  await player.list.replace(tracks.map(nasStreamUrl))
+  player.setVolume(volumeStart)
+}
+
+// save the queue under a name (?name=; without one: the album and the day). A NAS queue is saved as paths on the NAS.
 app.get('/queue/save', async (req, res) => {
   if (!queueEditable()) return queueNotEditable(res)
   const entries = await queueEntries()
   if (!entries || entries.length === 0) return res.status(409).json({ ok: false, error: 'nothing to save' })
   const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '.')
   const fallback = `${String(currentMeta.album || 'List').replace(/[^\p{L}\p{N} ._()-]/gu, ' ').trim().slice(0, 40) || 'List'} ${stamp}`
-  const name = queueLists.save(req.query.name ?? fallback, entries.map((e) => e.file))
+  const nas = currentMeta.currentType === 'nas'
+  const name = queueLists.save(req.query.name ?? fallback, entries.map((e) => (nas ? `${NAS_PREFIX}${e.source.full}` : e.file)))
   if (!name) return res.status(400).json({ ok: false, error: 'bad name' })
   res.json({ ok: true, name })
 })
@@ -3864,11 +3976,17 @@ app.get('/queue/save', async (req, res) => {
 app.get('/queue/lists', (_req, res) => res.json({ ok: true, lists: queueLists.list() }))
 
 app.get('/queue/load', async (req, res) => {
-  const saved = queueLists.load(req.query.name)
-  // (a file that is gone from the box is left out of the list)
-  const files = (saved ?? []).filter((f) => f.startsWith(`${MEDIA_ROOT}/`) && !f.includes('..') && fs.existsSync(f))
-  if (files.length === 0) return res.status(404).json({ ok: false, error: 'list not found or empty' })
+  const saved = queueLists.load(req.query.name) ?? []
   if (typeof player.list !== 'object') return res.status(409).json({ ok: false })
+  if (saved[0]?.startsWith(NAS_PREFIX)) {
+    // (a list of the NAS: its tracks - a track the NAS does not have any more is skipped by mpv when it comes to it)
+    const tracks = saved.filter((f) => f.startsWith(NAS_PREFIX)).map((f) => f.slice(NAS_PREFIX.length)).map((p) => nasTrackByPath.get(p) ?? { path: p, name: path.posix.basename(p) })
+    await playQueueNas(tracks, String(req.query.name))
+    return res.json({ ok: true, count: tracks.length })
+  }
+  // (a file that is gone from the box is left out of the list)
+  const files = saved.filter((f) => f.startsWith(`${MEDIA_ROOT}/`) && !f.includes('..') && fs.existsSync(f))
+  if (files.length === 0) return res.status(404).json({ ok: false, error: 'list not found or empty' })
   await playQueueFiles(files, String(req.query.name))
   res.json({ ok: true, count: files.length })
 })
@@ -3880,16 +3998,15 @@ app.get('/queue/info', async (req, res) => {
   const entries = await queueEntries()
   const entry = entries?.[Q.indexesOf(req.query.pos, entries?.length ?? 0)[0]]
   if (!entry) return res.status(404).json({ ok: false })
-  const source = Q.describeSource(entry.file, MEDIA_ROOT)
   let size = 0
-  if (source.inLibrary) {
+  if (entry.source.inLibrary) {
     try {
-      size = fs.statSync(entry.file).size
+      size = fs.statSync(entry.source.full).size
     } catch {
       // gone
     }
   }
-  res.json({ ok: true, position: entry.position, name: entry.name, file: source.file, folder: source.folder, size, extension: source.extension })
+  res.json({ ok: true, position: entry.position, name: entry.name, file: entry.source.file, folder: entry.source.folder, size, extension: entry.source.extension })
 })
 
 /*endpoint to return all local metainformation*/
