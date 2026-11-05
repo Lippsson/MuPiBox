@@ -17,6 +17,29 @@ function nameOfFile(filename) {
 }
 
 /**
+ * Where a queued entry comes from, in words a person can read: the file name, the folder and the ending. A file of the library is
+ * a path; an album on the NAS is played through the box's own stream address, which carries the path percent-encoded
+ * ("...stream?path=%2Fmusic%2FAlbum%2F01%20Song.mp3") - that path is taken out and decoded. `root` is the library's root folder.
+ */
+function describeSource(filename, root) {
+  const text = String(filename)
+  let full = text
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      const url = new URL(text)
+      // (searchParams decodes the percent signs; a plain address is decoded by hand, and left as it is when it does not decode)
+      full = url.searchParams.get('path') ?? url.searchParams.get('file') ?? decodeURIComponent(url.pathname)
+    } catch {
+      full = text
+    }
+  }
+  const inLibrary = full.startsWith(`${root}/`)
+  const relative = inLibrary ? full.slice(root.length + 1) : full
+  const folder = path.posix.dirname(relative)
+  return { file: path.posix.basename(relative), folder: folder === '.' ? '' : folder, extension: path.extname(relative).slice(1).toUpperCase(), inLibrary, full }
+}
+
+/**
  * The order of the ids a sort asks for. entries: [{ id, filename }] in the order they are in; mode: title, file, path, reverse or
  * random. `random` is Math.random (or a pretend one in a test). The ids come back as a new array.
  */
@@ -177,4 +200,4 @@ function createListStore(dir) {
   }
 }
 
-module.exports = { AUDIO, nameOfFile, sortedIds, movesFor, indexesOf, others, insideRoot, listFolders, audioFilesIn, listName, createListStore }
+module.exports = { AUDIO, nameOfFile, describeSource, sortedIds, movesFor, indexesOf, others, insideRoot, listFolders, audioFilesIn, listName, createListStore }

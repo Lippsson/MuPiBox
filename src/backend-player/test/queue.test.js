@@ -107,3 +107,17 @@ test('saved lists: saved, listed newest first, loaded, removed; an empty list is
   assert.equal(store.remove('First'), false)
   assert.deepEqual(store.list().map((l) => l.name), ['Second'])
 })
+
+test('where an entry comes from, readable: a library file, a NAS album behind the box\'s stream address, a plain address', () => {
+  const root = '/home/dietpi/MuPiBox/media'
+  assert.deepEqual(Q.describeSource(`${root}/other/Käse Müller & Söhne/1 Lied.wav`, root), {
+    file: '1 Lied.wav', folder: 'other/Käse Müller & Söhne', extension: 'WAV', inLibrary: true, full: `${root}/other/Käse Müller & Söhne/1 Lied.wav`,
+  })
+  const nas = Q.describeSource('http://localhost:8200/api/nas/stream?path=%2Fmusic%2Fbarn%2FBarnradio%2FBamsesaga%2F01%20Kapitel%20%C3%A4.mp3', root)
+  assert.equal(nas.file, '01 Kapitel ä.mp3')
+  assert.equal(nas.folder, '/music/barn/Barnradio/Bamsesaga')
+  assert.equal(nas.extension, 'MP3')
+  assert.equal(nas.inLibrary, false)
+  assert.equal(Q.describeSource('http://radio.example/live%20stream/high.mp3', root).folder, '/live stream')
+  assert.equal(Q.describeSource('https://x/%E0%A4%A.mp3', root).file.length > 0, true) // (an address that does not decode: left as it is)
+})

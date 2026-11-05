@@ -3880,14 +3880,16 @@ app.get('/queue/info', async (req, res) => {
   const entries = await queueEntries()
   const entry = entries?.[Q.indexesOf(req.query.pos, entries?.length ?? 0)[0]]
   if (!entry) return res.status(404).json({ ok: false })
+  const source = Q.describeSource(entry.file, MEDIA_ROOT)
   let size = 0
-  try {
-    size = fs.statSync(entry.file).size
-  } catch {
-    // a stream, or gone
+  if (source.inLibrary) {
+    try {
+      size = fs.statSync(entry.file).size
+    } catch {
+      // gone
+    }
   }
-  const inLibrary = entry.file.startsWith(`${MEDIA_ROOT}/`)
-  res.json({ ok: true, position: entry.position, name: entry.name, file: path.basename(entry.file), folder: inLibrary ? path.dirname(entry.file.slice(MEDIA_ROOT.length + 1)) : '', size, extension: path.extname(entry.file).slice(1).toUpperCase() })
+  res.json({ ok: true, position: entry.position, name: entry.name, file: source.file, folder: source.folder, size, extension: source.extension })
 })
 
 /*endpoint to return all local metainformation*/
