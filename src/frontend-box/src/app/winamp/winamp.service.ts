@@ -11,6 +11,7 @@ import type { CurrentSpotify } from '../current.spotify'
 import { CurrentMediaService } from '../current-media.service'
 import type { Media } from '../media'
 import { MediaService } from '../media.service'
+import { CdService } from '../cd.service'
 import { PlayerCmds, PlayerService } from '../player.service'
 import { SpotifyService } from '../spotify.service'
 import { KmThemeService } from '../theme/km-theme.service'
@@ -44,6 +45,7 @@ export class WinampService {
   private readonly kmTheme = inject(KmThemeService)
   private readonly mediaService = inject(MediaService)
   private readonly player = inject(PlayerService)
+  private readonly cd = inject(CdService)
   private readonly spotifyService = inject(SpotifyService)
   private readonly background = inject(BackgroundPlaybackService)
   private readonly currentMedia = inject(CurrentMediaService)
@@ -327,6 +329,15 @@ export class WinampService {
   }
 
   /** Eject / ADD: the library, to start something else. */
+  /**
+   * The eject button: with a CD drive on the box it opens the drive's tray (and closes it again), as on a real player;
+   * the library, which the button opens otherwise, is one tap on the EQ / PL button away (or the app's own top bar).
+   */
+  ejectOrLibrary(): void {
+    if (this.cd.state().drive) this.cd.eject()
+    else this.showLibrary()
+  }
+
   showLibrary(): void {
     this.show('lib')
     if (!this.router.url.startsWith('/home') && !this.router.url.startsWith('/player')) void this.router.navigate(['/home'])

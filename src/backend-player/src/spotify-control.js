@@ -5,7 +5,7 @@ const path = require('node:path')
 const dns = require('node:dns')
 const SpotifyWebApi = require('spotify-web-api-node')
 const createMpv = require('./mpv-wrapper.js')
-const { createCdWatcher, DEVICE: CD_DEVICE } = require('./cd-drive.js')
+const { createCdWatcher, driveCommand, DEVICE: CD_DEVICE } = require('./cd-drive.js')
 const { downloadCover, lookupDisc, musicBrainzDiscId } = require('./cd-lookup.js')
 const { isPlaylistUrl, pointsAtBox, resolveStreamUrl } = require('./playlist-url.js')
 const googleTTS = require('google-tts-api')
@@ -543,6 +543,7 @@ player.on('playlist-finish', () => {
   // the album or episode played to its end (not a stop: that empties currentPlayer first) - the display goes back
   // to its list at once instead of waiting 10 s for the player to stay silent
   if (currentMeta.currentPlayer === 'mplayer') currentMeta.finished = true
+  if (isCdFolder(currentMeta.path)) spinDownCd(1500) // (the disc played to its end)
   // Library album finished naturally — drop its resume entry so the user
   // isn't offered "weiterhören" at the very end next time. Spotify and RSS
   // are skipped: Spotify gives no clean end-of-album signal via the
@@ -1951,6 +1952,7 @@ function stop() {
         if (stopGeneration === playbackGeneration) player.stop()
       }, delay)
     }
+    if (isCdFolder(currentMeta.path)) spinDownCd()
     //currentMeta.playing = false;
     writeplayerstatePause()
     currentMeta.bitrate = 0
@@ -3653,7 +3655,28 @@ cdWatcher.start()
 // (what the display needs: the disc and what is known of it; the table of contents stays here)
 app.get('/cd', (_req, res) => {
   const { present, tracks, id, starts } = cdWatcher.state
-  res.json({ present, tracks, id, ...(starts ? { starts } : {}), ...(cdInfo ? { artist: cdInfo.artist, album: cdInfo.album, source: cdInfo.source, cover: !!cdInfo.hasCover } : {}) })
+  res.json({ present, tracks, id, drive: cdWatcher.drive, ...(starts ? { starts } : {}), ...(cdInfo ? { artist: cdInfo.artist, album: cdInfo.album, source: cdInfo.source, cover: !!cdInfo.hasCover } : {}) })
+})
+
+// The disc stops spinning when it is stopped or has played to its end (the drive would turn on for minutes otherwise), and the
+// tray opens - or closes again - from the display's eject button. mpv has to let go of the disc first: a stop is given a moment.
+function spinDownCd(afterMs = 2500) {
+  const generation = playbackGeneration
+  setTimeout(() => {
+    if (generation === playbackGeneration) void driveCommand('stop', CD_DEVICE)
+  }, afterMs)
+}
+app.get('/cd/eject', async (_req, res) => {
+  if (!cdWatcher.drive) return res.status(404).json({ ok: false, error: 'no drive' })
+  // (what plays from the disc stops first - a disc that is read cannot be taken out)
+  if (isCdFolder(currentMeta.path) && currentMeta.currentPlayer === 'mplayer') {
+    stop()
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+  }
+  const result = await driveCommand('eject', CD_DEVICE)
+  if (result.ok && !result.closing) cdWatcher.ejected()
+  log.debug(`${now()}: [Spotify Control] CD drive: ${result.ok ? (result.closing ? 'tray closed' : 'tray opened') : `eject failed (${result.error ?? result.errno ?? '?'})`}`)
+  res.json(result)
 })
 
 const cdTrackTitle = (nr) => cdInfo?.tracks?.[nr - 1]?.title || `Track ${nr}`

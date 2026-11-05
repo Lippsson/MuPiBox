@@ -177,7 +177,7 @@ export class WinampShellComponent implements OnDestroy {
       pause: () => svc.pause(),
       stop: () => svc.stop(),
       next: () => svc.next(),
-      eject: () => svc.showLibrary(),
+      eject: () => svc.ejectOrLibrary(),
       seek: (f) => svc.seek(f),
       setVolume: (p) => svc.setVolume(p),
       setBalance: (b) => svc.setBalance(b),
@@ -212,7 +212,7 @@ export class WinampShellComponent implements OnDestroy {
       pause: () => svc.pause(),
       stop: () => svc.stop(),
       next: () => svc.next(),
-      eject: () => svc.showLibrary(),
+      eject: () => svc.ejectOrLibrary(),
       close: () => svc.setRight('pl'),
     }, plHeight)
     place(this.plView.node, plHeight, this.right)

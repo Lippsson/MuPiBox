@@ -10,6 +10,8 @@ export interface CdState {
   present: boolean
   tracks: number
   id: number
+  // a CD drive is on the box (also without a disc in it): the eject button opens its tray
+  drive?: boolean
   // what the player found on the internet (Discogs, MusicBrainz): artist, album and whether a cover came with it
   artist?: string
   album?: string
@@ -23,18 +25,24 @@ export interface CdState {
 @Injectable({ providedIn: 'root' })
 export class CdService {
   readonly state = signal<CdState>({ present: false, tracks: 0, id: 0 })
+  private readonly http = inject(HttpClient)
 
   constructor() {
     if (!isPlatformBrowser(inject(PLATFORM_ID))) return
-    const http = inject(HttpClient)
+    const http = this.http
     timer(0, 3000)
       .pipe(switchMap(() => http.get<CdState>(`${environment.backend.playerUrl}/cd`).pipe(catchError(() => of(null)))))
       .subscribe((state) => {
         // (a player that does not answer for a moment, or an old one without /cd: no change, or no CD)
         if (!state) return
         const now = this.state()
-        if (state.present !== now.present || state.tracks !== now.tracks || state.id !== now.id || state.album !== now.album || state.cover !== now.cover) this.state.set(state)
+        if (state.present !== now.present || state.tracks !== now.tracks || state.id !== now.id || state.album !== now.album || state.cover !== now.cover || state.drive !== now.drive) this.state.set(state)
       })
+  }
+
+  /** The tray of the drive opens (closes, when it is open): the player stops what plays from the disc first. */
+  eject(): void {
+    this.http.get(`${environment.backend.playerUrl}/cd/eject`).subscribe({ error: () => undefined })
   }
 
   /** The disc as a local album: the player's page plays it from the first track. Its place is never kept for "Fortsetzen". */

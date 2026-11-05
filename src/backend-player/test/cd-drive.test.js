@@ -186,3 +186,37 @@ test('a drive that was not readable is opened at once, every few seconds', async
   await w.tick()
   assert.equal(fixes, 2)
 })
+
+test('a drive with no disc in it is a drive; a box without one is not', async () => {
+  const d = pretendDrive()
+  const { w } = watch(d)
+  assert.equal(w.drive, false)
+  d.quick = { drive: 'none' }
+  await w.tick()
+  assert.equal(w.drive, true)
+  assert.equal(w.state.present, false)
+  const none = watch(pretendDrive())
+  none.w.tick()
+  const gone = pretendDrive()
+  gone.quick = { drive: 'nodrive' }
+  const g = watch(gone)
+  await g.w.tick()
+  assert.equal(g.w.drive, false)
+})
+
+test('the tray opened by us: no disc at once; the same disc put back is a new one', async () => {
+  const d = pretendDrive()
+  const { w } = watch(d)
+  d.quick = { drive: 'ok' }
+  d.full = { drive: 'ok', disc: 'audio', tracks: 12, lbas: [0, 100, 200] }
+  await w.tick()
+  assert.equal(w.state.present, true)
+  w.ejected()
+  assert.equal(w.state.present, false)
+  d.quick = { drive: 'open' }
+  await w.tick()
+  d.quick = { drive: 'ok' }
+  await w.tick()
+  assert.equal(w.state.present, true)
+  assert.equal(w.state.id, 2)
+})

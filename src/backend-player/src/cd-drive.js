@@ -69,6 +69,49 @@ function probeDevice(device = DEVICE, full = false) {
   })
 }
 
+// A command to the drive: "stop" lets the disc stop spinning (CDROMSTOP is the START STOP UNIT command with the motor off),
+// "eject" opens the tray - or closes it when it is open (CDROMEJECT 0x5309, CDROMCLOSETRAY 0x5319; the door lock is taken off first)
+const COMMAND_PY = `
+import fcntl, json, os, sys, time
+dev, cmd = sys.argv[1], sys.argv[2]
+try:
+    fd = os.open(dev, os.O_RDONLY | os.O_NONBLOCK)
+    if cmd == "stop":
+        fcntl.ioctl(fd, 0x5307, 0)
+    elif cmd == "eject":
+        opened = fcntl.ioctl(fd, 0x5326, 0) == 2
+        try:
+            fcntl.ioctl(fd, 0x5329, 0)
+        except OSError:
+            pass
+        fcntl.ioctl(fd, 0x5319 if opened else 0x5309, 0)
+        if opened:
+            # (many slim USB drives refuse to close their tray by command - the kernel says nothing: is it closed?)
+            for _ in range(8):
+                time.sleep(0.75)
+                if fcntl.ioctl(fd, 0x5326, 0) != 2:
+                    print(json.dumps({"ok": True, "closing": True})); sys.exit(0)
+            print(json.dumps({"ok": False, "closing": True, "error": "tray stays open"})); sys.exit(0)
+        print(json.dumps({"ok": True, "closing": False})); sys.exit(0)
+    print(json.dumps({"ok": True}))
+except OSError as e:
+    print(json.dumps({"ok": False, "errno": e.errno}))
+`
+
+/** "stop" or "eject" to the drive; resolves to { ok, closing?, errno?, error? }, never rejects. */
+function driveCommand(command, device = DEVICE) {
+  return new Promise((resolve) => {
+    execFile('python3', ['-c', COMMAND_PY, device, command], { timeout: 15000 }, (err, stdout) => {
+      if (err) return resolve({ ok: false })
+      try {
+        resolve(JSON.parse(String(stdout).trim()))
+      } catch {
+        resolve({ ok: false })
+      }
+    })
+  })
+}
+
 /** What the display is told: an audio CD with its tracks, or nothing. */
 const NO_CD = Object.freeze({ present: false, tracks: 0, id: 0 })
 // (a state also carries `starts`: the start of each track in seconds and the end of the disc, when the drive told them)
@@ -172,7 +215,17 @@ function createCdWatcher({ probe = (full) => probeDevice(DEVICE, full), onChange
     get state() {
       return state
     },
+    /** There is a CD drive on the box (seen once, or there now) - also without a disc in it. */
+    get drive() {
+      return seen || (lastDrive !== 'unknown' && lastDrive !== 'nodrive' && lastDrive !== 'error')
+    },
+    /** The tray was opened by us: no disc any more, at once (the next question finds the tray open anyway). */
+    ejected() {
+      lastToc = ''
+      lastDrive = 'open'
+      set(NO_CD)
+    },
   }
 }
 
-module.exports = { createCdWatcher, probeDevice, NO_CD, DEVICE, POLL_MS }
+module.exports = { createCdWatcher, probeDevice, driveCommand, NO_CD, DEVICE, POLL_MS }
