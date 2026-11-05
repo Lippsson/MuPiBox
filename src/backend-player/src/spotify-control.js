@@ -3879,6 +3879,8 @@ app.get('/queue/dirs', async (req, res) => {
   if (kind === 'nas') return res.status(409).json({ ok: false, error: 'not the same kind' })
   const listing = Q.listFolders(MEDIA_ROOT, wanted)
   if (!listing) return res.status(404).json({ ok: false })
+  // (the library's root holds the three categories - the other folders there are the box's own: covers, the NAS copy, downloads)
+  if (wanted === '') listing.folders = listing.folders.filter((f) => ['audiobook', 'music', 'other'].includes(f.name))
   if (wanted === '' && kind === null && (await nasFolders('', 4000))?.length) listing.folders.push({ name: 'NAS', path: NAS_PREFIX, audio: 0 })
   res.json({ ok: true, ...listing, canAdd: listing.audio > 0 })
 })
@@ -3894,6 +3896,8 @@ app.get('/queue/add', async (req, res) => {
     if (kind === 'local') return res.status(409).json({ ok: false, error: 'not the same kind' })
     if (kind === null) {
       // nothing queued: the folder plays as an album of the NAS does (its list is asked for, the start held while paused, ...)
+      switchToMplayer()
+      currentMeta.currentType = 'nas'
       await playNasList(encodeURIComponent(nasPath))
       return res.json({ ok: true })
     }
