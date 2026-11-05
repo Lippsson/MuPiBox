@@ -33,10 +33,19 @@ export class CurrentMediaService {
 
   private activeSeconds = 0
   private worthResume = false
+  // the queue was edited in the Winamp playlist (entries removed, sorted, added, another list loaded): the album's own track
+  // numbers no longer fit it
+  private queueEdited = false
+
+  /** the playing list is not the album any more (see queueEdited) */
+  markQueueEdited(): void {
+    this.queueEdited = true
+  }
 
   set(media: Media | null): void {
     this.activeSeconds = 0
     this.worthResume = false
+    this.queueEdited = false
     this.currentMedia$.next(media ? { ...media } : null)
   }
 
@@ -67,6 +76,6 @@ export class CurrentMediaService {
   // consistent and based on actual listening, not wall-clock time.
   shouldPersistResume(): boolean {
     // (an audio CD is not kept for "Fortsetzen": the disc may be gone, or another one in the drive, when it is picked)
-    return this.worthResume && !isCdMedia(this.currentMedia$.value)
+    return this.worthResume && !isCdMedia(this.currentMedia$.value) && !this.queueEdited
   }
 }

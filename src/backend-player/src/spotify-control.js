@@ -7,6 +7,7 @@ const SpotifyWebApi = require('spotify-web-api-node')
 const createMpv = require('./mpv-wrapper.js')
 const { createCdWatcher, driveCommand, DEVICE: CD_DEVICE } = require('./cd-drive.js')
 const { downloadCover, lookupDisc, musicBrainzDiscId } = require('./cd-lookup.js')
+const Q = require('./queue.js')
 const { isPlaylistUrl, pointsAtBox, resolveStreamUrl } = require('./playlist-url.js')
 const googleTTS = require('google-tts-api')
 const fs = require('node:fs')
@@ -3724,6 +3725,170 @@ function playCd() {
   currentMeta.album = cdInfo?.album || 'Audio-CD'
   currentMeta.totalTracks = cdWatcher.state.tracks
 }
+
+// --- The queue: the Winamp playlist window edits what plays ---
+// The playlist of a local album (a folder of the library) is mpv's own playlist; the display's Winamp playlist window selects
+// entries, removes them (remove, crop, new list), sorts them, adds a folder of the library and saves and loads lists
+// (queue.js has the logic around it). Nothing here touches a file or a folder: only what is queued changes. An audio CD, a NAS
+// folder, TIDAL and Spotify have no such queue (their lists are not files of the box); /queue says so (editable: false).
+const MEDIA_ROOT = '/home/dietpi/MuPiBox/media'
+const queueLists = Q.createListStore('/home/dietpi/.mupibox/winamp-lists')
+
+const queueEditable = () =>
+  currentMeta.currentPlayer === 'mplayer' && currentMeta.currentType === 'local' && !isCdFolder(currentMeta.path) && typeof player.list === 'object'
+
+/** [{ position, id, file, name }] of the playlist as it is now; null when mpv did not answer */
+async function queueEntries() {
+  const entries = await player.list.entries()
+  return entries ? entries.map((e, i) => ({ position: i + 1, id: e.id, file: e.filename, name: Q.nameOfFile(e.filename), current: e.current })) : null
+}
+
+// After an edit: the player's own count and place follow the playlist (the next track change would only tell it later)
+async function queueFollowEdit() {
+  const entries = await queueEntries()
+  if (!entries) return null
+  currentMeta.totalTracks = entries.length
+  const at = entries.findIndex((e) => e.current)
+  if (at >= 0) currentMeta.currentTracknr = at + 1
+  return entries
+}
+
+const queueNotEditable = (res) => res.status(409).json({ ok: false, error: 'not editable' })
+
+app.get('/queue', async (_req, res) => {
+  if (!queueEditable()) return res.json({ editable: false, entries: [] })
+  const entries = await queueEntries()
+  if (!entries) return res.json({ editable: false, entries: [] })
+  res.json({ editable: true, current: entries.findIndex((e) => e.current) + 1, entries: entries.map(({ position, name, file }) => ({ position, name, file })) })
+})
+
+// remove the entries at ?pos=1,3 (1-based, as the display counts), or everything else (crop)
+for (const [route, keepChosen] of [['remove', false], ['crop', true]]) {
+  app.get(`/queue/${route}`, async (req, res) => {
+    if (!queueEditable()) return queueNotEditable(res)
+    const entries = await queueEntries()
+    if (!entries) return res.status(503).json({ ok: false })
+    const chosen = Q.indexesOf(req.query.pos, entries.length)
+    const gone = keepChosen ? Q.others(chosen, entries.length) : chosen
+    if (gone.length >= entries.length || gone.length === 0) {
+      // (nothing chosen, or everything: the list is not emptied by accident - "new list" does that)
+      return res.json({ ok: gone.length === 0, removed: 0 })
+    }
+    await player.list.remove(gone)
+    await queueFollowEdit()
+    res.json({ ok: true, removed: gone.length })
+  })
+}
+
+// sort: title, file, path, reverse, random - the entry that plays keeps playing (mpv moves entries, it does not restart them)
+app.get('/queue/sort/:mode', async (req, res) => {
+  if (!queueEditable()) return queueNotEditable(res)
+  const entries = await queueEntries()
+  if (!entries) return res.status(503).json({ ok: false })
+  let target
+  try {
+    target = Q.sortedIds(entries.map((e) => ({ id: e.id, filename: e.file })), req.params.mode)
+  } catch {
+    return res.status(400).json({ ok: false, error: 'unknown sort' })
+  }
+  for (const [from, to] of Q.movesFor(entries.map((e) => e.id), target)) await player.list.move(from, to)
+  await queueFollowEdit()
+  res.json({ ok: true })
+})
+
+// a new list: what plays stops, nothing is queued
+app.get('/queue/new', async (_req, res) => {
+  if (!queueEditable()) return queueNotEditable(res)
+  stop()
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  await player.list.clear()
+  currentMeta.totalTracks = 0
+  currentMeta.currentTracknr = 0
+  res.json({ ok: true })
+})
+
+// the folders of the library to add from (?path= the folder, '' the library itself)
+app.get('/queue/dirs', (req, res) => {
+  const listing = Q.listFolders(MEDIA_ROOT, String(req.query.path ?? ''))
+  if (!listing) return res.status(404).json({ ok: false })
+  res.json({ ok: true, ...listing })
+})
+
+// the audio files directly in ?path= are queued after the last entry (an empty queue: they start playing)
+app.get('/queue/add', async (req, res) => {
+  const relative = String(req.query.path ?? '')
+  const files = Q.audioFilesIn(MEDIA_ROOT, relative)
+  if (!files || files.length === 0) return res.status(404).json({ ok: false, error: 'no audio there' })
+  if (typeof player.list !== 'object') return res.status(409).json({ ok: false })
+  const entries = queueEditable() ? await queueEntries() : null
+  if (entries && entries.length > 0) {
+    await player.list.append(files)
+    await queueFollowEdit()
+  } else {
+    await playQueueFiles(files, relative)
+  }
+  res.json({ ok: true, added: files.length })
+})
+
+// these files are the playlist and play from the first (a folder added to an empty queue, a loaded list)
+async function playQueueFiles(files, label) {
+  playbackGeneration++
+  playbackRequest++
+  resetLocalShuffle()
+  clearLibraryResumeTimers()
+  switchToMplayer()
+  currentMeta.currentType = 'local'
+  currentMeta.trackFile = undefined
+  currentMeta.finished = false
+  currentMeta.pause = false
+  currentMeta.currentTracknr = 0
+  currentMeta.path = label
+  currentMeta.totalTracks = files.length
+  writeplayerstatePlay()
+  await player.list.replace(files)
+  player.setVolume(volumeStart)
+}
+
+// save the queue under a name (?name=; without one: the album and the day)
+app.get('/queue/save', async (req, res) => {
+  if (!queueEditable()) return queueNotEditable(res)
+  const entries = await queueEntries()
+  if (!entries || entries.length === 0) return res.status(409).json({ ok: false, error: 'nothing to save' })
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '.')
+  const fallback = `${String(currentMeta.album || 'List').replace(/[^\p{L}\p{N} ._()-]/gu, ' ').trim().slice(0, 40) || 'List'} ${stamp}`
+  const name = queueLists.save(req.query.name ?? fallback, entries.map((e) => e.file))
+  if (!name) return res.status(400).json({ ok: false, error: 'bad name' })
+  res.json({ ok: true, name })
+})
+
+app.get('/queue/lists', (_req, res) => res.json({ ok: true, lists: queueLists.list() }))
+
+app.get('/queue/load', async (req, res) => {
+  const saved = queueLists.load(req.query.name)
+  // (a file that is gone from the box is left out of the list)
+  const files = (saved ?? []).filter((f) => f.startsWith(`${MEDIA_ROOT}/`) && !f.includes('..') && fs.existsSync(f))
+  if (files.length === 0) return res.status(404).json({ ok: false, error: 'list not found or empty' })
+  if (typeof player.list !== 'object') return res.status(409).json({ ok: false })
+  await playQueueFiles(files, String(req.query.name))
+  res.json({ ok: true, count: files.length })
+})
+
+app.get('/queue/deletelist', (req, res) => res.json({ ok: queueLists.remove(req.query.name) }))
+
+// what is known of the entry at ?pos=
+app.get('/queue/info', async (req, res) => {
+  const entries = await queueEntries()
+  const entry = entries?.[Q.indexesOf(req.query.pos, entries?.length ?? 0)[0]]
+  if (!entry) return res.status(404).json({ ok: false })
+  let size = 0
+  try {
+    size = fs.statSync(entry.file).size
+  } catch {
+    // a stream, or gone
+  }
+  const inLibrary = entry.file.startsWith(`${MEDIA_ROOT}/`)
+  res.json({ ok: true, position: entry.position, name: entry.name, file: path.basename(entry.file), folder: inLibrary ? path.dirname(entry.file.slice(MEDIA_ROOT.length + 1)) : '', size, extension: path.extname(entry.file).slice(1).toUpperCase() })
+})
 
 /*endpoint to return all local metainformation*/
 /*only used if sonos-kids-player is modified*/

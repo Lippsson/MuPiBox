@@ -138,6 +138,25 @@ const createPlayer = (options = {}) => {
     if (meta) pending.set(id, meta)
     sock.write(`${JSON.stringify({ command, request_id: id })}\n`)
   }
+  // A question whose answer the caller waits for (the playlist, the result of an edit): resolves to mpv's reply, or null when mpv
+  // is not reachable or does not answer in time
+  const ask = (command, ms = 3000) =>
+    new Promise((resolve) => {
+      if (!sock || sock.destroyed) return resolve(null)
+      const id = ++requestId
+      const timer = setTimeout(() => {
+        pending.delete(id)
+        resolve(null)
+      }, ms)
+      timer.unref?.()
+      pending.set(id, {
+        resolve: (msg) => {
+          clearTimeout(timer)
+          resolve(msg)
+        },
+      })
+      sock.write(`${JSON.stringify({ command, request_id: id })}\n`)
+    })
   const getProps = (props) => {
     for (const prop of props) {
       const name = PROPERTY[prop]
@@ -208,6 +227,7 @@ const createPlayer = (options = {}) => {
       const meta = pending.get(msg.request_id)
       pending.delete(msg.request_id)
       if (!meta) return
+      if (meta.resolve) return meta.resolve(msg)
       if (meta.prop && msg.error === 'success') {
         const val = CONVERT[meta.prop](msg.data)
         out.emit('prop', meta.prop, val)
@@ -435,6 +455,45 @@ const createPlayer = (options = {}) => {
       const options = [`start=#${n}`, n < count ? `end=#${n + 1}` : '', device ? `cdda-device=${device}` : ''].filter(Boolean).join(',')
       send(['loadfile', 'cdda://', n === 1 ? 'replace' : 'append', -1, options])
     }
+  }
+  // The playlist, edited (the Winamp playlist window: remove, crop, sort, add, new list). What plays goes on where it can: mpv takes an
+  // entry out of the list under the playing one and plays the next.
+  out.list = {
+    /** [{ id, filename, current }] in the order of the playlist; null when mpv did not answer */
+    entries: async () => {
+      const reply = await ask(['get_property', 'playlist'])
+      return reply?.error === 'success' && Array.isArray(reply.data) ? reply.data.map((e) => ({ id: e.id, filename: String(e.filename ?? ''), current: e.current === true })) : null
+    },
+    position: () => playlistPos,
+    /** the entries at these indexes (0-based) go, the highest first so the others keep their places */
+    remove: async (indexes) => {
+      for (const index of [...indexes].sort((a, b) => b - a)) await ask(['playlist-remove', index])
+      shuffler.reset()
+      if (shuffleOn) shuffler.visit(playlistPos)
+    },
+    /** entry `from` goes in front of the entry now at `to` */
+    move: (from, to) => ask(['playlist-move', from, to]),
+    /** nothing plays and nothing is queued */
+    clear: async () => {
+      await ask(['stop'])
+      await ask(['playlist-clear'])
+      shuffler.reset()
+    },
+    /** the files after the last entry (a list that is empty: they start playing, see playFiles) */
+    append: async (files) => {
+      for (const file of files) await ask(['loadfile', String(file), 'append'])
+    },
+    /** these files are the playlist, the first one plays */
+    replace: async (files) => {
+      if (startPending) setStart('none')
+      shuffler.reset()
+      send(['set_property', 'pause', false])
+      let first = true
+      for (const file of files) {
+        await ask(['loadfile', String(file), first ? 'replace' : 'append'])
+        first = false
+      }
+    },
   }
   // Levelling of the loudness (mupibox.loudness): 'soft' = EBU R128 loudnorm, leaves an audiobook its dynamics;
   // 'strong' = dynaudnorm, evens out more (music, radio); 'off' = no filter in the chain. Set live, playback goes on.

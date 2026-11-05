@@ -202,11 +202,8 @@ export class WinampShellComponent implements OnDestroy {
     const plHeight = this.compact ? PL_H : Math.floor(areaH / WIDE_SCALE)
     this.plView = new WinampPlaylistView(skin, {
       play: (entry) => svc.playEntry(entry),
-      add: () => svc.showLibrary(),
-      rem: () => svc.stop(),
-      sel: () => this.plView?.scrollToCurrent(),
-      misc: () => this.toast(`${svc.entries().length} tracks`),
-      list: () => svc.showLibrary(),
+      queue: svc.queue,
+      say: (text) => this.toast(text),
       prev: () => svc.prev(),
       playPause: () => svc.play(),
       pause: () => svc.pause(),

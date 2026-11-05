@@ -17,7 +17,7 @@ import { SpotifyService } from '../spotify.service'
 import { KmThemeService } from '../theme/km-theme.service'
 import { EQ_FLAT, type EqPresetHost, type EqState, type EqValues } from './winamp-eq-view'
 import type { MainState, PlayState } from './winamp-main-view'
-import type { PlaylistEntry } from './winamp-playlist-view'
+import type { PlaylistEntry, QueueApi, SortMode } from './winamp-playlist-view'
 import { type SkinMeta, Skin } from './winamp-skin'
 
 /** what is shown: the library (the app's pages), the playlist, the equaliser - and, only in the compact layout, the player */
@@ -145,6 +145,10 @@ export class WinampService {
   // ---- the playlist window ----
   readonly entries = signal<PlaylistEntry[]>([])
   private loadedFor = ''
+  /** the list is the queue of the box's own files (a local album): the playlist's menus can edit it */
+  readonly queueEditable = signal(false)
+  /** counts up after an edit of the queue: the playlist is read again */
+  private readonly queueTick = signal(0)
 
   readonly main = computed<MainState>(() => {
     const l = this.report()
@@ -283,7 +287,7 @@ export class WinampService {
     effect(() => {
       const media = this.media()
       if (!this.active() || this.right() !== 'pl' || !media) return
-      const key = `${media.type}|${media.id ?? ''}|${media.playlistid ?? ''}|${media.libraryPath ?? ''}|${media.nasPath ?? ''}|${media.title ?? ''}`
+      const key = `${media.type}|${media.id ?? ''}|${media.playlistid ?? ''}|${media.libraryPath ?? ''}|${media.nasPath ?? ''}|${media.title ?? ''}|${this.queueTick()}`
       if (key === this.loadedFor) return
       this.loadedFor = key
       void this.loadEntries(media)
@@ -487,12 +491,52 @@ export class WinampService {
 
   // ---------- playlist ----------
 
+  /** What the menus of the playlist's buttons do to the queue (the player's /queue routes); the list is read again after each. */
+  readonly queue: QueueApi = {
+    editable: () => this.queueEditable(),
+    remove: (positions) => this.queueDo(`remove?pos=${positions.join(',')}`),
+    crop: (positions) => this.queueDo(`crop?pos=${positions.join(',')}`),
+    newList: () => this.queueDo('new'),
+    sort: (mode: SortMode) => this.queueDo(`sort/${mode}`),
+    dirs: (path) => this.queueGet<{ path: string; audio: number; folders: { name: string; path: string; audio: number }[] }>(`dirs?path=${encodeURIComponent(path)}`),
+    addDir: (path) => this.queueDo(`add?path=${encodeURIComponent(path)}`),
+    info: (position) => this.queueGet(`info?pos=${position}`),
+    lists: async () => (await this.queueGet<{ lists: { name: string; count: number }[] }>('lists'))?.lists ?? [],
+    save: async () => (await this.queueGet<{ name?: string }>('save'))?.name ?? null,
+    load: (name) => this.queueDo(`load?name=${encodeURIComponent(name)}`),
+    deleteList: async (name) => void (await this.queueGet(`deletelist?name=${encodeURIComponent(name)}`)),
+  }
+
+  private async queueGet<T>(path: string): Promise<T | null> {
+    try {
+      return (await firstValueFrom(this.http.get<T>(`${environment.backend.playerUrl}/queue/${path}`))) ?? null
+    } catch {
+      return null
+    }
+  }
+
+  private async queueDo(path: string): Promise<boolean> {
+    const answer = await this.queueGet<{ ok?: boolean }>(path)
+    // (an edited queue is no longer the album: its place is not kept for "Fortsetzen")
+    this.currentMedia.markQueueEdited()
+    this.queueTick.update((n) => n + 1)
+    return answer?.ok === true
+  }
+
   private async loadEntries(media: Media): Promise<void> {
     type Row = PlaylistEntry & { id?: string }
     const spotify = this.spotifyService
     let rows: Row[] = []
     try {
-      if (media.type === 'library' || media.type === 'nas') {
+      // (a local album is the queue the player has: that list, which the menus edit; else the album's folder)
+      const queue: { editable: boolean; entries: { position: number; name: string }[] } | null =
+        media.type === 'library'
+          ? await firstValueFrom(this.http.get<{ editable: boolean; entries: { position: number; name: string }[] }>(`${environment.backend.playerUrl}/queue`)).catch((): null => null)
+          : null
+      this.queueEditable.set(queue?.editable === true)
+      if (queue?.editable) {
+        rows = queue.entries.map((t) => ({ position: t.position, id: `${t.position}`, name: t.name }))
+      } else if (media.type === 'library' || media.type === 'nas') {
         const tracks = await firstValueFrom(media.type === 'library' ? this.player.getLocalTracklist(media) : this.player.getNasTracklist(media))
         rows = (tracks ?? []).map((t) => ({ position: t.position, id: `${t.position}`, name: t.name }))
       } else if (media.playlistid) {

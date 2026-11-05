@@ -105,6 +105,82 @@ setInterval(() => {
   }
 }, 250)
 
+// the queue of the pretend player: what the playlist window's menus edit (the real one is mpv's playlist, see backend-player queue.js)
+const savedLists = new Map()
+const libraryFolders = { audiobook: { 'Bedtime Story': 4 }, music: { 'Demo Album One': 6, 'Demo Album Two': 14, 'Radio Hits': 3 }, other: {} }
+const queueNames = () => player.album?.tracks ?? []
+function queueSet(tracks, current) {
+  player.album = { ...player.album, tracks }
+  player.track = Math.max(1, Math.min(tracks.length, current))
+}
+function queueRoute(p, url, res) {
+  const a = player.album
+  const editable = !!a && !a.isCd
+  const q = (k) => url.searchParams.get(k) ?? ''
+  const positions = () => [...new Set(q('pos').split(',').map(Number).filter((n) => n >= 1 && n <= queueNames().length))].sort((x, y) => x - y)
+  if (p === '/queue') return json(res, editable ? { editable, current: player.track, entries: queueNames().map((name, i) => ({ position: i + 1, name, file: `${name}.mp3` })) } : { editable: false, entries: [] })
+  const route = p.slice('/queue/'.length)
+  if (route === 'dirs') {
+    const [top, sub] = q('path').split('/').filter(Boolean)
+    if (!top) return json(res, { ok: true, path: '', audio: 0, folders: Object.keys(libraryFolders).map((n) => ({ name: n, path: n, audio: 0 })) })
+    if (sub && libraryFolders[top]?.[sub]) return json(res, { ok: true, path: `${top}/${sub}`, audio: libraryFolders[top][sub], folders: [] })
+    if (!libraryFolders[top] || sub) return json(res, { ok: false }, 404)
+    return json(res, { ok: true, path: top, audio: 0, folders: Object.entries(libraryFolders[top]).map(([name, audio]) => ({ name, path: `${top}/${name}`, audio })) })
+  }
+  if (route === 'add') {
+    const [top, name] = q('path').split('/').filter(Boolean)
+    const count = libraryFolders[top]?.[name]
+    if (!count) return json(res, { ok: false, error: 'no audio there' }, 404)
+    const added = Array.from({ length: count }, (_, i) => `${name} - ${i + 1}`)
+    if (editable) queueSet([...queueNames(), ...added], player.track)
+    else start({ name, category: top, tracks: added })
+    return json(res, { ok: true, added: count })
+  }
+  if (route === 'lists') return json(res, { ok: true, lists: [...savedLists].map(([name, t]) => ({ name, count: t.length, savedAt: 0 })) })
+  if (route === 'deletelist') return json(res, { ok: savedLists.delete(q('name')) })
+  if (route === 'load') {
+    const tracks = savedLists.get(q('name'))
+    if (!tracks) return json(res, { ok: false }, 404)
+    start({ name: q('name'), category: 'music', tracks: [...tracks] })
+    return json(res, { ok: true, count: tracks.length })
+  }
+  if (route === 'info') {
+    const n = Number(q('pos'))
+    const name = queueNames()[n - 1]
+    return name ? json(res, { ok: true, position: n, name, file: `${name}.mp3`, folder: `music/${a?.name ?? ''}`, size: 3400000 + n * 1000, extension: 'MP3' }) : json(res, { ok: false }, 404)
+  }
+  if (!editable) return json(res, { ok: false, error: 'not editable' }, 409)
+  if (route === 'remove' || route === 'crop') {
+    const chosen = positions()
+    const gone = route === 'crop' ? queueNames().map((_, i) => i + 1).filter((n) => !chosen.includes(n)) : chosen
+    if (gone.length === 0 || gone.length >= queueNames().length) return json(res, { ok: gone.length === 0, removed: 0 })
+    const keep = queueNames().filter((_, i) => !gone.includes(i + 1))
+    queueSet(keep, player.track - gone.filter((n) => n < player.track).length)
+    return json(res, { ok: true, removed: gone.length })
+  }
+  if (route.startsWith('sort/')) {
+    const mode = route.slice(5)
+    const t = [...queueNames()]
+    if (mode === 'reverse') t.reverse()
+    else if (mode === 'random') t.sort(() => Math.random() - 0.5)
+    else t.sort((x, y) => x.localeCompare(y, undefined, { numeric: true }))
+    const now = queueNames()[player.track - 1]
+    queueSet(t, t.indexOf(now) + 1)
+    return json(res, { ok: true })
+  }
+  if (route === 'new') {
+    player.album = null
+    player.generation++
+    return json(res, { ok: true })
+  }
+  if (route === 'save') {
+    const name = q('name') || `${a.name} 2026-11-05 21.30`
+    savedLists.set(name, [...queueNames()])
+    return json(res, { ok: true, name })
+  }
+  return json(res, { ok: false }, 404)
+}
+
 function localState() {
   const a = player.album
   const dur = a ? durationOf(a, player.track - 1) : 0
@@ -265,6 +341,7 @@ createServer(async (req, res) => {
   }
   if (p.startsWith('/display/')) return json(res, { ok: true })
   if (p === '/cd') return json(res, CD)
+  if (p === '/queue' || p.startsWith('/queue/')) return queueRoute(p, url, res)
   if (p === '/sandbox/cd') {
     const tracks = Math.max(0, Number(url.searchParams.get('tracks')) || 0)
     const named = url.searchParams.get('named') === '1'
