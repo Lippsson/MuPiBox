@@ -25,6 +25,7 @@ NETWORKCONFIG="/tmp/network.json"
 OLDSTATE="starting"
 TRUESTATE="online"
 FALSESTATE="offline"
+MISSES=0                 # checks in a row without an answer
 DATA_LOCK="/tmp/.data.lock"
 RESUME_LOCK="/tmp/.resume.lock"
 
@@ -84,9 +85,12 @@ ensure_symlink() {
 	local target="$1"
 	local link="$2"
 	if [ ! -L "$link" ] || [ "$(readlink "$link")" != "$target" ]; then
-		rm -f "$link"
-		ln -s "$target" "$link"
-		chown -h dietpi:dietpi "$link" 2>/dev/null || sudo chown -h dietpi:dietpi "$link"
+		# (replaced in one step: between rm and ln a request for the library found no file)
+		local new="${link}.new.$$"
+		rm -f "$new"
+		ln -s "$target" "$new"
+		chown -h dietpi:dietpi "$new" 2>/dev/null || sudo chown -h dietpi:dietpi "$new"
+		mv -Tf "$new" "$link"
 	fi
 }
 
@@ -103,12 +107,20 @@ do
 	# ONLINESTATE keeps its "online"/"offline" values for downstream
 	# consumers of /tmp/network.json.
 	if /usr/bin/python3 /usr/local/bin/mupibox/check_network.py; then
+		MISSES=0
 		ONLINESTATE=${TRUESTATE}
 		# Reconcile every tick (cheap when it is a no-op) instead of only on
 		# state change — self-healing if a symlink was wrong.
 		ensure_symlink "${DATA_FILE}" "${ACTIVE_FILE}"
 		ensure_symlink "${RESUME_FILE}" "${ACTIVERESUME_FILE}"
 	else
+		MISSES=$((MISSES + 1))
+		# Online before: one answer missing (5 s without one, a moment of the WiFi between two access points) is no reason
+		# to switch the display and the library to offline - asked again in a few seconds, offline only when that fails too.
+		if [ "${OLDSTATE}" = "${TRUESTATE}" ] && [ "${MISSES}" -lt 2 ]; then
+			sleep 3
+			continue
+		fi
 		ONLINESTATE=${FALSESTATE}
 		if [ ! -f ${OFFLINE_FILE} ]; then
 			echo -n "[" > ${OFFLINE_FILE}

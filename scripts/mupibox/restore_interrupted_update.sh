@@ -51,6 +51,10 @@ OLD="${SKC}.upd-bak"
 USERDATA_BAK="${USERDATA_BAK:-${MUPI_HOME}/userdata.upd-bak}"
 UPDATE_STATE="${UPDATE_STATE:-${MUPI_HOME}/update-state}"
 PLAYER_DIR="${PLAYER_DIR:-${MUPI_HOME}/spotifycontroller-main}"
+# the right of PHP pages to run commands as root, and the note that an update of 5.0.14 or later wrote it on its way
+# back from 5.1 (see roll_back): a way back to 5.1 takes it away again, "done" keeps it and drops the note
+SUDOERS_WWW="${SUDOERS_WWW:-/etc/sudoers.d/www-data}"
+SUDOERS_BY_UPDATE="${SUDOERS_BY_UPDATE:-/etc/mupibox/sudoers-www-data.by-update}"
 JQ=/usr/bin/jq
 [ -x "${JQ}" ] || JQ=jq
 STAMP=$(date +%Y%m%d-%H%M%S)
@@ -244,6 +248,11 @@ roll_back() {
 		mv "${USERDATA_BAK}" "${USERDATA_BAK}.kept-${STAMP}" || return 1
 	fi
 	chown -R dietpi:dietpi "${SKC}" 2>/dev/null
+	# the right of PHP pages to run commands as root, when this update wrote it (on its way back from 5.1, see the
+	# update): the version that is back did not have it
+	if [ -e "${SUDOERS_BY_UPDATE}" ]; then
+		rm -f "${SUDOERS_WWW}" && rm -f "${SUDOERS_BY_UPDATE}" || return 1
+	fi
 	sync
 	clear_state
 	log "the previous installation is back, with its data - the update can be run again"
@@ -351,6 +360,8 @@ if [ -e "${UPDATE_STATE}" ]; then
 				/usr/local/bin/mupibox/remove_legacy_admin.sh --keep-packages
 				systemctl --no-block try-restart lighttpd >/dev/null 2>&1
 			fi
+			# (the right an update of 5.0.14 gave the PHP pages stays: the note goes)
+			rm -f "${SUDOERS_BY_UPDATE}"
 			[ "${old_ok}" = 0 ] && rm -rf "${USERDATA_BAK}" && clear_state || RESULT=1
 			;;
 		rollback)
