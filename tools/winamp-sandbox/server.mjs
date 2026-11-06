@@ -340,7 +340,8 @@ createServer(async (req, res) => {
     return json(res, { ok: true })
   }
   if (p.startsWith('/display/')) return json(res, { ok: true })
-  if (p === '/cd') return json(res, CD)
+  if (p === '/ext/cd/state') return json(res, { ...CD, drive: true })
+  if (p === '/ext/cd/eject') return json(res, { ok: true })
   if (p === '/queue' || p.startsWith('/queue/')) return queueRoute(p, url, res)
   if (p === '/sandbox/cd') {
     const tracks = Math.max(0, Number(url.searchParams.get('tracks')) || 0)
@@ -405,7 +406,7 @@ async function parentsApi(req, res, url, api) {
       return json(res, { ok: true, reloaded: true })
     }
     const { discogsToken, ...shown } = OPTIONS
-    return json(res, { hiddenCategories: [], startCategory: 'audiobook', resume: 9, listviewTimer: 2.5, settingsAccessTimer: 3, resX: 1920, resY: 480, limitWindow: false, brightness: null, nightDim: {}, rotation: {}, dsi: null, hideScrollbar: false, scrollbarStyle: 'standard', cdLookup: true, discogsTokenSet: !!discogsToken, ...shown })
+    return json(res, { hiddenCategories: [], startCategory: 'audiobook', resume: 9, listviewTimer: 2.5, settingsAccessTimer: 3, resX: 1920, resY: 480, limitWindow: false, brightness: null, nightDim: {}, rotation: {}, dsi: null, hideScrollbar: false, scrollbarStyle: 'standard', ...shown })
   }
   if (api === '/power-config') return json(res, { idleDisplayOff: 10 })
   if (api === '/display/custom-theme') return json(res, { mode: 'auto', resolved: 'dark', veil: 0, accent: null, font: 'fredoka', size: 'm', v: 0, hasPicture: false, active: THEME === 'custom' })
@@ -468,9 +469,17 @@ createServer((req, res) => {
     if (!path.extname(rel)) return send(res, path.join(APP_DIR, 'index.html'))
     return res.writeHead(404).end()
   }
-  if (p === '/api/cd-cover') {
+  if (p === '/api/ext/cd/cover') {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml' })
     return res.end(coverSvg(3, 'Pretend Album'))
+  }
+  // extensions: the CD one is on in the sandbox - its files are served from the repository as the box would
+  if (p === '/api/ext/active') return json(res, [{ id: 'cd', name: 'USB-CD-Laufwerk', version: '1.0.0', display: '/ext/cd/display.js', icon: '/ext/cd/icon.svg', settings: {} }])
+  if (p.startsWith('/ext/cd/')) {
+    const rel = p.slice('/ext/cd/'.length)
+    const f = inside(path.join(here, '../../extensions/cd'), rel)
+    if (f && isFile(f) && /\.(js|svg|json)$/.test(rel) && !/^(player|api)\.js$/.test(rel)) return send(res, f)
+    return res.writeHead(404).end()
   }
   if (p.startsWith('/api/')) {
     const api = p.slice(4)

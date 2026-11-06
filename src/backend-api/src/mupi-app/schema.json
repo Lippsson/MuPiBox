@@ -4009,6 +4009,16 @@
    "sections": []
   },
   {
+   "id": "erweiterungen",
+   "slug": "extensions",
+   "area": "einstellungen",
+   "parent": "g-system",
+   "title": "Erweiterungen",
+   "description": "Zusatzfunktionen installieren, zum Beispiel das USB-CD-Laufwerk",
+   "icon": "plug",
+   "sections": []
+  },
+  {
    "id": "rechtliches",
    "slug": "legal",
    "area": "einstellungen",
@@ -4950,6 +4960,12 @@
        "label": "Updates",
        "target": "updates",
        "subtitle": "MuPiBox-Versionen, Betriebssystem"
+      },
+      {
+       "type": "nav",
+       "label": "Erweiterungen",
+       "target": "erweiterungen",
+       "subtitle": "Zusatzfunktionen installieren, zum Beispiel das USB-CD-Laufwerk"
       },
       {
        "type": "nav",
@@ -6378,6 +6394,16 @@
    "l": "Speicherplatz",
    "where": "System › Zustand der Box",
    "id": "zustand"
+  },
+  {
+   "l": "Erweiterungen",
+   "where": "System › Erweiterungen",
+   "id": "erweiterungen"
+  },
+  {
+   "l": "USB-CD-Laufwerk",
+   "where": "System › Erweiterungen",
+   "id": "erweiterungen"
   },
   {
    "l": "Rechtliches",

@@ -37,6 +37,7 @@ import { loadSpotifyTokenStore } from './spotify-sync/config-loader'
 import { createSpotifySyncRouter } from './spotify-sync/routes'
 import { startScheduler } from './spotify-sync/scheduler'
 import type { RunSyncDeps } from './spotify-sync/state-machine'
+import { mountExtensions } from './eltern/extensions'
 import { buildElternLandingHandler, createElternApiRouter, registerDisplayNetworkRoutes, setOnSpotifyCacheCleared } from './eltern/routes'
 import { startSpotifyLoginWatch } from './eltern/spotify-auth-age'
 import { startTlsWatch } from './eltern/tls'
@@ -8099,14 +8100,6 @@ app.get('/api/track-cover', async (req, res) => {
   await sendThumbnail(res, thumb)
 })
 
-// The picture of the audio CD in the drive (what the player found on the internet, see backend-player cd-lookup.js): the
-// player keeps it in this file while the disc is in. The display's "CD" category shows it as the cover.
-app.get('/api/cd-cover', async (_req, res) => {
-  const file = '/tmp/mupibox-cd-cover.jpg'
-  await stat(file)
-    .then(() => sendThumbnail(res, file))
-    .catch(() => res.status(404).set('Cache-Control', 'no-store').send('no cd cover'))
-})
 
 function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
   return stat(thumb).then((info) => {
@@ -8485,6 +8478,9 @@ app.use(
     },
   }),
 )
+// Extensions (docs/extensions.md): their files for the display and the app (/ext/<id>/...), the list of the ones that are on
+// (/api/ext/active) and the API parts they bring along (/api/ext/<id>/...). Installing and removing is in the app's routes.
+mountExtensions(app, { getMupiboxConfig: getMupiboxConfigSync, updateMupiboxConfig })
 // The parents' web app (/parents, first /eltern) is replaced by the app: its addresses lead there, with a login link's
 // token (bookmarks, home-screen icons, Telegram messages sent before)
 app.use(['/parents', '/eltern'], (req, res) => {

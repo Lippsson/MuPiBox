@@ -1,0 +1,19 @@
+[
+  {
+    "id": "cd",
+    "name": "USB-CD-Laufwerk",
+    "version": "1.0.0",
+    "description": "Audio-CDs vom USB-Laufwerk abspielen, mit Titelnamen und Cover aus dem Internet.",
+    "hostApi": 1,
+    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/cd-1.0.0.mpx",
+    "sha256": "3851237ac2767a3b6e1dd0f9bbc8b4e12fb6dbd06d744fb2a37a2a7e4b4d9792",
+    "size": 14257,
+    "system": {
+      "udev": 1,
+      "groups": [
+        "cdrom"
+      ],
+      "packages": []
+    }
+  }
+]

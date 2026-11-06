@@ -1,6 +1,7 @@
-import { Injectable } from '@angular/core'
+import { Injectable, inject } from '@angular/core'
 import { BehaviorSubject } from 'rxjs'
-import { isCdMedia, type Media } from './media'
+import { ExtensionHostService } from './extension-host.service'
+import type { Media } from './media'
 
 // Tracks the Media that the player most recently started playing. Set by
 // PlayerService.playMedia / resumeMedia. Read by the global resume-on-cap
@@ -30,6 +31,7 @@ export class CurrentMediaService {
   private static readonly RESUME_THRESHOLD_S = 30
 
   readonly currentMedia$ = new BehaviorSubject<Media | null>(null)
+  private readonly extensions = inject(ExtensionHostService)
 
   private activeSeconds = 0
   private worthResume = false
@@ -75,7 +77,7 @@ export class CurrentMediaService {
   // saveResumeFiles, AppComponent global cap saver) so the gating is
   // consistent and based on actual listening, not wall-clock time.
   shouldPersistResume(): boolean {
-    // (an audio CD is not kept for "Fortsetzen": the disc may be gone, or another one in the drive, when it is picked)
-    return this.worthResume && !isCdMedia(this.currentMedia$.value) && !this.queueEdited
+    // (an extension's album like the audio CD is not kept for "Fortsetzen": the disc may be gone, or another one in the drive, when it is picked)
+    return this.worthResume && !this.extensions.noResume(this.currentMedia$.value) && !this.queueEdited
   }
 }

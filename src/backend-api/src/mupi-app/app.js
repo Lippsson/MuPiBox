@@ -7088,8 +7088,6 @@ async function loadDisplaySettings() {
   state.values.set('resX', String(o.resX))
   state.values.set('resY', String(o.resY))
   state.values.set('resLimit', o.limitWindow === true)
-  state.values.set('cdOn', o.cdLookup !== false)
-  state.values.set('discogsToken', '')
   state.values.set('clockOn', o.clockShow !== false)
   state.values.set('clockStyle', o.clockStyle === 'analog' ? 'Analog' : 'Digital')
   state.values.set('clockHours', o.clockHours === 12 ? '12 Stunden' : '24 Stunden')
@@ -10248,6 +10246,66 @@ function mountTidal(root, page) {
   }
 }
 
+/* Extensions (docs/extensions.md): the catalog on GitHub, install / switch off / remove, and the settings the installed ones declare */
+
+const exts = { installed: [], catalog: [], catalogError: null }
+async function loadExtensions() {
+  const r = await api(`${API}/extensions`)
+  if (!r.ok) throw new Error(`extensions ${r.status}`)
+  Object.assign(exts, { installed: [], catalog: [], catalogError: null }, r.body)
+  for (const e of exts.installed) {
+    for (const [k, t] of Object.entries(e.settingTypes ?? {})) state.values.set(`ext.${e.id}.${k}`, t === 'secret' ? '' : e.settings?.[k])
+  }
+}
+
+// What an extension sets up on the box, in words (shown before it is installed)
+function extSystemNote(system) {
+  const parts = []
+  const rules = Array.isArray(system?.udev) ? system.udev.length : Number(system?.udev ?? 0)
+  if (rules === 1) parts.push('Legt eine Geräteregel an (Zugriffsrechte für ein Gerät).')
+  else if (rules > 1) parts.push('Legt Geräteregeln an (Zugriffsrechte für Geräte).')
+  if (system?.groups?.length) parts.push(`Nimmt den Benutzer der Box in die Gruppe ${system.groups.join(', ')} auf.`)
+  if (system?.packages?.length) parts.push(`Installiert Pakete: ${system.packages.join(', ')}.`)
+  return parts.length ? parts.join(' ') : 'Richtet nichts am System ein.'
+}
+
+// The install or removal runs on the box (a download, the setup, then the services start again): watched until it is over
+async function watchExtensionJob(id, doneText) {
+  for (let i = 0; i < 400; i++) {
+    await new Promise((r) => setTimeout(r, 1500))
+    const r = await api(`${API}/extensions`)
+    // (the services start again at the end: the box does not answer for a moment - that is the end)
+    if (!r.ok) {
+      toast(`${doneText} Die Dienste starten neu …`)
+      await new Promise((resolve) => setTimeout(resolve, 12000))
+      break
+    }
+    const all = [...(r.body.installed ?? []), ...(r.body.catalog ?? [])]
+    const job = all.find((e) => e.id === id)?.job
+    if (job && !job.running) {
+      if (job.ok === false) {
+        toast(`Hat nicht geklappt: ${job.error ?? ''}`, 'info')
+        return renderPage(currentPage(), true)
+      }
+      toast(`${doneText} Die Dienste starten neu …`)
+      await new Promise((resolve) => setTimeout(resolve, 12000))
+      break
+    }
+    if (!job) break
+  }
+  if (currentPage()?.id === 'erweiterungen') renderPage(currentPage(), true)
+}
+
+async function extensionAction(path, id, askTitle, askText, askOk, doneText) {
+  if (!(await ask(askTitle, askText, askOk))) return
+  const r = await api(`${API}/extensions/${path}`, { method: 'POST', body: { id } })
+  if (!r.ok) return toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+  toast('Wird erledigt …')
+  watchExtensionJob(id, doneText)
+}
+
+const extControlKey = (key) => /^ext\.([a-z][a-z0-9-]*)\.(.+)$/.exec(key)
+
 const CONTROLLERS = {
   spielzeit: {
     load: loadCaps,
@@ -10805,23 +10863,6 @@ const CONTROLLERS = {
           ],
         },
         {
-          title: 'Audio-CD',
-          help: 'Liegt eine Audio-CD im USB-Laufwerk, zeigt das Display oben den Reiter „CD“. Die Box sucht dann im Internet nach den Namen der Titel und nach dem Cover: zuerst bei Discogs, danach bei MusicBrainz.',
-          items: [
-            { type: 'toggle', key: 'cdOn', label: 'Titel und Cover im Internet suchen' },
-            {
-              type: 'text',
-              kind: 'password',
-              key: 'discogsToken',
-              label: 'Discogs-Token',
-              placeholder: disp.opts?.discogsTokenSet ? 'gespeichert' : '',
-              dep: 'cdOn',
-              help: 'Discogs lässt nur Angemeldete suchen und findet eine CD nur über den Strichcode, den manche CDs mitbringen. Den Token erzeugst du auf discogs.com unter Settings › Developers › „Generate new token“. Ohne Token oder wenn Discogs nichts findet, fragt die Box MusicBrainz – das erkennt eine CD an ihrem Inhaltsverzeichnis.',
-            },
-            { type: 'buttons', dep: 'cdOn', buttons: [['Token speichern', 'primary', 'toast:Gespeichert']] },
-          ],
-        },
-        {
           title: 'Uhrzeit',
           help: 'Die Uhrzeit steht in der Kopfzeile des Displays, rechts neben der Akkuanzeige. Gilt sofort, das Display lädt dafür kurz neu.',
           items: [
@@ -10856,7 +10897,6 @@ const CONTROLLERS = {
         const rl = await api(`${API}/display/reload-page`, { method: 'POST', body: {} })
         return toast(`${Number(v) === 0 ? 'Display bleibt an' : `Display aus nach ${v} min`}. ${rl.body?.ok ? 'Das Display lädt neu.' : ''}`.trim())
       }
-      if (key === 'cdOn') return saveDisplayOptions({ cdLookup: !!v }, v ? 'Die Box sucht Titel und Cover im Internet' : 'Die Box sucht nicht mehr im Internet')
       if (key === 'clockOn') return saveDisplayOptions({ clockShow: !!v }, v ? 'Uhrzeit wird angezeigt' : 'Uhrzeit ist ausgeblendet')
       if (key === 'clockStyle') return saveDisplayOptions({ clockStyle: v === 'Analog' ? 'analog' : 'digital' }, v === 'Analog' ? 'Analoge Uhr' : 'Digitale Uhr')
       if (key === 'clockHours') return saveDisplayOptions({ clockHours: v === '12 Stunden' ? 12 : 24 }, v === '12 Stunden' ? '12-Stunden-Anzeige' : '24-Stunden-Anzeige')
@@ -10875,17 +10915,6 @@ const CONTROLLERS = {
       }
     },
     byLabel: {
-      async 'Token speichern'() {
-        const token = String(state.values.get('discogsToken') ?? '').trim()
-        if (!token) return toast('Bitte den Token eintragen', 'info')
-        if (!/^[A-Za-z0-9_-]+$/.test(token)) return toast('Das sieht nicht wie ein Discogs-Token aus', 'info')
-        const r = await saveDisplayOptions({ discogsToken: token }, 'Token gespeichert')
-        if (r) {
-          disp.opts.discogsTokenSet = true
-          state.values.set('discogsToken', '')
-          renderPage(currentPage(), false)
-        }
-      },
       async 'Auflösung übernehmen'() {
         const resX = Number(state.values.get('resX'))
         const resY = Number(state.values.get('resY'))
@@ -10895,6 +10924,113 @@ const CONTROLLERS = {
         if (!(await ask('Auflösung ändern', `Das Display startet mit ${resX} × ${resY} Pixeln neu${limitWindow ? ' und zeigt die Seite nur in dieser Größe' : ''}. Das dauert ein paar Sekunden.`, 'Übernehmen'))) return
         if (await saveDisplayOptions({ resX, resY, limitWindow }, 'Auflösung gespeichert')) Object.assign(disp.opts, { resX, resY, limitWindow })
       },
+    },
+  },
+  erweiterungen: {
+    load: loadExtensions,
+    sections: () => {
+      const out = []
+      const name = (e) => `<b>${esc(e.name)}</b> <small>${esc(e.version)}</small>`
+      if (exts.installed.length) {
+        out.push({
+          title: 'Installiert',
+          help: 'Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.',
+          items: exts.installed.map((e) => ({
+            type: 'html',
+            html: `<div class="field"><label>${name(e)}${e.enabled ? '' : ' – aus'}</label><small>${esc(e.description)}</small>
+              <div class="btns"><button type="button" class="btn sm" data-ext-toggle="${esc(e.id)}" data-on="${e.enabled}">${e.enabled ? 'Ausschalten' : 'Einschalten'}</button><button type="button" class="btn sm danger" data-ext-remove="${esc(e.id)}">Entfernen</button></div></div>`,
+          })),
+        })
+        // the settings each installed extension declares (a card of its own)
+        for (const e of exts.installed.filter((x) => x.enabled && x.ui)) {
+          out.push({
+            title: e.ui.title,
+            help: e.ui.help ?? '',
+            items: [
+              ...e.ui.items.map((it) => {
+                const key = `ext.${e.id}.${it.key}`
+                const type = e.settingTypes?.[it.key]
+                const dep = it.dep ? `ext.${e.id}.${it.dep}` : undefined
+                if (type === 'boolean') return { type: 'toggle', key, label: it.label, help: it.help, dep }
+                const secret = type === 'secret'
+                return { type: 'text', kind: secret ? 'password' : type === 'number' ? 'number' : 'text', key, label: it.label, help: it.help, placeholder: secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : '', dep }
+              }),
+              ...(Object.values(e.settingTypes ?? {}).includes('secret')
+                ? [{ type: 'html', html: `<div class="btns"><button type="button" class="btn primary" data-ext-save="${esc(e.id)}">Speichern</button></div>` }]
+                : []),
+            ],
+          })
+        }
+      }
+      const offered = exts.catalog.filter((e) => e.installedVersion !== e.version)
+      out.push({
+        title: 'Verfügbar',
+        help: 'Aus dem Katalog auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert.',
+        items: exts.catalogError
+          ? [{ type: 'note', text: 'Der Katalog ist gerade nicht erreichbar. Die Box braucht dafür das Internet.' }]
+          : offered.length
+            ? offered.map((e) => ({
+                type: 'html',
+                html: `<div class="field"><label>${name(e)}</label><small>${esc(e.description)}</small><small>${esc(extSystemNote(e.system))}</small>
+                  <div class="btns"><button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">${e.installedVersion ? 'Neue Version installieren' : 'Installieren'}</button></div></div>`,
+              }))
+            : [{ type: 'note', text: 'Alles Verfügbare ist installiert.' }],
+      })
+      return out
+    },
+    mount(root) {
+      const entry = (id) => exts.installed.find((e) => e.id === id) ?? exts.catalog.find((e) => e.id === id)
+      for (const b of root.querySelectorAll('[data-ext-install]')) {
+        const e = entry(b.dataset.extInstall)
+        b.onclick = () =>
+          extensionAction('install', e.id, `${e.name} installieren`, `${extSystemNote(e.system)} Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, e.installedVersion ? 'Neue Version installieren' : 'Installieren', `${e.name} ist installiert.`)
+      }
+      for (const b of root.querySelectorAll('[data-ext-remove]')) {
+        const e = entry(b.dataset.extRemove)
+        b.onclick = () => extensionAction('remove', e.id, `${e.name} entfernen`, 'Die Erweiterung und ihre Geräteregeln werden entfernt. Ihre Einstellungen bleiben, falls du sie wieder installierst. Danach starten die Dienste der Box neu.', 'Entfernen', `${e.name} ist entfernt.`)
+      }
+      for (const b of root.querySelectorAll('[data-ext-toggle]')) {
+        const e = entry(b.dataset.extToggle)
+        b.onclick = async () => {
+          const enabled = b.dataset.on !== 'true'
+          if (!(await ask(`${e.name} ${enabled ? 'einschalten' : 'ausschalten'}`, 'Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.', enabled ? 'Einschalten' : 'Ausschalten'))) return
+          const r = await api(`${API}/extensions/enable`, { method: 'POST', body: { id: e.id, enabled } })
+          if (!r.ok) return toast('Hat nicht geklappt', 'info')
+          toast('Die Dienste starten neu …')
+          setTimeout(() => currentPage()?.id === 'erweiterungen' && renderPage(currentPage(), true), 13000)
+        }
+      }
+      for (const b of root.querySelectorAll('[data-ext-save]')) {
+        b.onclick = async () => {
+          const e = entry(b.dataset.extSave)
+          // only the secrets here (typed and not saved yet); the other settings are saved as they change
+          const values = {}
+          for (const [k, t] of Object.entries(e.settingTypes ?? {})) {
+            const v = String(state.values.get(`ext.${e.id}.${k}`) ?? '').trim()
+            if (t === 'secret' && v) values[k] = v
+          }
+          if (!Object.keys(values).length) return toast('Bitte etwas eintragen', 'info')
+          const r = await api(`${API}/ext/${e.id}/settings`, { method: 'POST', body: { values } })
+          if (!r.ok) return toast(r.body?.error ? 'Das sieht nicht richtig aus' : 'Nicht gespeichert', 'info')
+          toast('Gespeichert')
+          for (const k of Object.keys(values)) state.values.set(`ext.${e.id}.${k}`, '')
+          await loadExtensions()
+          renderPage(currentPage(), false)
+        }
+      }
+    },
+    async change(key, v) {
+      const m = extControlKey(key)
+      if (!m) return
+      const e = exts.installed.find((x) => x.id === m[1])
+      // (a secret is saved with its button, not on every key)
+      if (!e || e.settingTypes?.[m[2]] === 'secret') return
+      const r = await api(`${API}/ext/${e.id}/settings`, { method: 'POST', body: { values: { [m[2]]: v } } })
+      if (!r.ok) {
+        toast('Nicht gespeichert', 'info')
+        return false
+      }
+      toast('Gespeichert')
     },
   },
   bedienung: {

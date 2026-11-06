@@ -1044,11 +1044,11 @@ rm -f /tmp/mupibox-update-failed
 		cp -f ${MUPI_SRC}/config/udev/99-mupibox-eth.rules /etc/udev/rules.d/99-mupibox-eth.rules >&3 2>&3
 		udevadm control --reload >&3 2>&3
 	fi
-	# the CD drive: readable by the kiosk user at once, also after a USB reset (see the rule)
-	if [ -f ${MUPI_SRC}/config/udev/99-mupibox-cdrom.rules ]; then
-		cp -f ${MUPI_SRC}/config/udev/99-mupibox-cdrom.rules /etc/udev/rules.d/99-mupibox-cdrom.rules >&3 2>&3
+	# the CD drive is an extension now (extensions/cd, installed from the app): its rule comes with it - the one the base used to
+	# install is taken away
+	if [ -f /etc/udev/rules.d/99-mupibox-cdrom.rules ]; then
+		rm -f /etc/udev/rules.d/99-mupibox-cdrom.rules >&3 2>&3
 		udevadm control --reload >&3 2>&3
-		udevadm trigger --subsystem-match=block --action=change >&3 2>&3
 	fi
 	systemctl daemon-reload >&3 2>&3
 	# remote display: a VNC that is running keeps its old settings (open to the network) until it starts again

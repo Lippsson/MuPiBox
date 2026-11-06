@@ -1,7 +1,7 @@
 // Who is this CD? (src/cd-lookup.js) over a pretend internet: no network needed (npm test).
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const L = require('../src/cd-lookup.js')
+const L = require('../cd-lookup.js')
 
 // a real disc of MusicBrainz (Nirvana - Nevermind, 12 tracks): its id and table of contents as MusicBrainz lists them
 const REAL = { id: '2y0jFMwYQP7gb9iSUKagmoT6DIw-', offsets: [150, 22767, 41887, 58317, 72102, 91375, 104652, 115380, 132165, 143932, 159870, 174597], sectors: 267225 }

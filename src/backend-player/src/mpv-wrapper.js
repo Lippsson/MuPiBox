@@ -443,19 +443,17 @@ const createPlayer = (options = {}) => {
     exec('loadlist', [fileOrUrl])
     if (opts?.track > 1) send(['playlist-play-index', Math.trunc(opts.track) - 1])
   }
-  // An audio CD: mpv plays the whole disc as one file with a chapter per track (cdda://), so each track becomes a playlist
-  // entry of its own - the same disc opened from track N up to the start of track N + 1. That keeps next / previous, the
-  // track number, shuffle and repeat the playlist's. The last track plays to the end of the disc.
-  out.playCd = (tracks, device) => {
+  // A playlist made of entries with their own options (an audio CD: the same disc once per track, each from the start of its track
+  // to the start of the next - start=#N,end=#N+1): the first entry replaces what plays, the others follow. `entries`:
+  // [{ file, options? }], options as mpv's "loadfile" takes them ("start=#2,end=#3").
+  out.playEntries = (entries) => {
     if (startPending) setStart('none')
     shuffler.reset()
     send(['set_property', 'pause', false])
-    const count = Math.max(1, Math.trunc(Number(tracks)) || 1)
-    for (let n = 1; n <= count; n++) {
-      const options = [`start=#${n}`, n < count ? `end=#${n + 1}` : '', device ? `cdda-device=${device}` : ''].filter(Boolean).join(',')
-      send(['loadfile', 'cdda://', n === 1 ? 'replace' : 'append', -1, options])
-    }
+    entries.forEach((entry, i) => send(['loadfile', String(entry.file), i === 0 ? 'replace' : 'append', -1, entry.options ?? '']))
   }
+  // A question to mpv whose answer is waited for ([{ command, ...}] as mpv's JSON IPC takes it); null when mpv does not answer
+  out.command = (command) => ask(command)
   // The playlist, edited (the Winamp playlist window: remove, crop, sort, add, new list). What plays goes on where it can: mpv takes an
   // entry out of the list under the playing one and plays the next.
   out.list = {

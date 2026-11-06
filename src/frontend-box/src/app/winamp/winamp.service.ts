@@ -11,7 +11,7 @@ import type { CurrentSpotify } from '../current.spotify'
 import { CurrentMediaService } from '../current-media.service'
 import type { Media } from '../media'
 import { MediaService } from '../media.service'
-import { CdService } from '../cd.service'
+import { ExtensionHostService } from '../extension-host.service'
 import { PlayerCmds, PlayerService } from '../player.service'
 import { SpotifyService } from '../spotify.service'
 import { KmThemeService } from '../theme/km-theme.service'
@@ -45,7 +45,7 @@ export class WinampService {
   private readonly kmTheme = inject(KmThemeService)
   private readonly mediaService = inject(MediaService)
   private readonly player = inject(PlayerService)
-  private readonly cd = inject(CdService)
+  private readonly extensions = inject(ExtensionHostService)
   private readonly spotifyService = inject(SpotifyService)
   private readonly background = inject(BackgroundPlaybackService)
   private readonly currentMedia = inject(CurrentMediaService)
@@ -332,14 +332,12 @@ export class WinampService {
     if (view === 'lib' && this.router.url.startsWith('/player')) this.nav.back()
   }
 
-  /** Eject / ADD: the library, to start something else. */
   /**
-   * The eject button: with a CD drive on the box it opens the drive's tray (and closes it again), as on a real player;
-   * the library, which the button opens otherwise, is one tap on the EQ / PL button away (or the app's own top bar).
+   * The eject button: an extension may take it over (the CD drive opens its tray, and closes it again, as on a real player);
+   * otherwise it opens the library, to start something else. (The library is one tap on the EQ / PL button away too.)
    */
   ejectOrLibrary(): void {
-    if (this.cd.state().drive) this.cd.eject()
-    else this.showLibrary()
+    if (!this.extensions.eject()) this.showLibrary()
   }
 
   showLibrary(): void {

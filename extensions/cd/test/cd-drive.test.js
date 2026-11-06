@@ -1,7 +1,7 @@
 // The CD watcher (src/cd-drive.js) over a pretend drive: no drive, Python or disc needed (npm test).
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { createCdWatcher, NO_CD } = require('../src/cd-drive.js')
+const { createCdWatcher, NO_CD } = require('../cd-drive.js')
 
 // a drive whose answers the test sets; counts the questions of each kind
 function pretendDrive() {

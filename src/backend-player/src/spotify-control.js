@@ -5,8 +5,7 @@ const path = require('node:path')
 const dns = require('node:dns')
 const SpotifyWebApi = require('spotify-web-api-node')
 const createMpv = require('./mpv-wrapper.js')
-const { createCdWatcher, driveCommand, DEVICE: CD_DEVICE } = require('./cd-drive.js')
-const { downloadCover, lookupDisc, musicBrainzDiscId } = require('./cd-lookup.js')
+const { createExtensionHost, redactSecrets } = require('./extensions.js')
 const Q = require('./queue.js')
 const { isPlaylistUrl, pointsAtBox, resolveStreamUrl } = require('./playlist-url.js')
 const googleTTS = require('google-tts-api')
@@ -233,7 +232,7 @@ const apiAccessToken = {
 
 player.on('percent_pos', (val) => {
   //console.log('track progress is', val);
-  if (!isCuePlayback() && !cdPlaying()) currentMeta.progressTime = val
+  if (!isCuePlayback() && !albumNow()?.progress) currentMeta.progressTime = val
 })
 
 // --- CUE albums (one audio file, tracks by start time - see /api/nas/tracklist) ---
@@ -270,10 +269,20 @@ function cueSeek(seconds) {
 
 player.on('length', (val) => {
   if (currentCue) currentCue.fileLength = val
-  if (!isCuePlayback() && !cdPlaying()) currentMeta.durationSeconds = val
+  if (!isCuePlayback() && !albumNow()?.progress) currentMeta.durationSeconds = val
 })
 player.on('time_pos', (seconds) => {
-  if (cdPlaying()) return cdProgress(seconds)
+  // an album that is no folder (an extension's: the audio CD) says where in its track the playing time of the whole is
+  const album = currentMeta.currentPlayer === 'mplayer' ? albumNow() : undefined
+  if (album?.progress) {
+    const at = album.progress(seconds, player.trackIndex?.() ?? currentMeta.currentTracknr - 1)
+    if (at) {
+      currentMeta.positionSeconds = at.position
+      if (at.duration !== undefined) currentMeta.durationSeconds = at.duration
+      if (at.progress !== undefined) currentMeta.progressTime = at.progress
+    } else currentMeta.positionSeconds = seconds
+    return
+  }
   if (!isCuePlayback()) {
     pendingCueSeek = null
     currentMeta.positionSeconds = seconds
@@ -359,9 +368,9 @@ player.on('metadata', (val) => {
   } else if (currentMeta.currentType === 'tidal') {
     const track = currentTidalTracks[currentMeta.currentTracknr - 1]
     if (track) currentMeta.currentTrackname = track.name
-  } else if (isCdFolder(currentMeta.path)) {
-    // (the disc has no file names: its tracks are numbered, and a title the disc carries - CD-TEXT - is used)
-    currentMeta.currentTrackname = val.Title || cdTrackTitle(currentMeta.currentTracknr)
+  } else if (albumNow()) {
+    // (an album that is no folder - an extension's - names its tracks)
+    currentMeta.currentTrackname = albumNow().trackName?.(currentMeta.currentTracknr, val) || val.Title
   } else if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio') {
     currentMeta.currentTrackname = val.Title
   }
@@ -476,7 +485,7 @@ player.on('time_pos', checkSilence)
 
 player.on('filename', (val) => {
   log.debug('track name is', val)
-  if (!currentMeta.currentTrackname && currentMeta.currentPlayer !== 'spotify' && !isCdFolder(currentMeta.path)) {
+  if (!currentMeta.currentTrackname && currentMeta.currentPlayer !== 'spotify' && !albumNow()) {
     currentMeta.currentTrackname = val
       .split('.mp3')[0]
       .split('.flac')[0]
@@ -495,7 +504,7 @@ player.on('path', (val) => {
     currentMeta.trackFile =
       typeof val === 'string' && val.startsWith(mediaRoot) ? `local:${val.slice(mediaRoot.length)}` : undefined
   }
-  if (!['rss', 'radio', 'nas', 'tidal'].includes(currentMeta.currentType) && !isCdFolder(currentMeta.path)) {
+  if (!['rss', 'radio', 'nas', 'tidal'].includes(currentMeta.currentType) && !albumNow()) {
     // The folder holding the file, whatever the folder depth (was: fixed 7th segment).
     const pathParts = val.split('/')
     if (pathParts.length > 2) {
@@ -544,7 +553,8 @@ player.on('playlist-finish', () => {
   // the album or episode played to its end (not a stop: that empties currentPlayer first) - the display goes back
   // to its list at once instead of waiting 10 s for the player to stay silent
   if (currentMeta.currentPlayer === 'mplayer') currentMeta.finished = true
-  if (isCdFolder(currentMeta.path)) spinDownCd(1500) // (the disc played to its end)
+  albumNow()?.onFinished?.() // (an album that is no folder: it played to its end)
+  extensions.emit('finished')
   // Library album finished naturally — drop its resume entry so the user
   // isn't offered "weiterhören" at the very end next time. Spotify and RSS
   // are skipped: Spotify gives no clean end-of-album signal via the
@@ -1953,7 +1963,8 @@ function stop() {
         if (stopGeneration === playbackGeneration) player.stop()
       }, delay)
     }
-    if (isCdFolder(currentMeta.path)) spinDownCd()
+    albumNow()?.onStop?.()
+    extensions.emit('stop')
     //currentMeta.playing = false;
     writeplayerstatePause()
     currentMeta.bitrate = 0
@@ -2458,7 +2469,8 @@ function scheduleResumeJumps(trackNr, progressPct, firstJumpMs) {
 
 // resume: { track, percent } - where the album goes on (only an engine that starts there takes it, see playListAtTrack)
 function playList(playedList, resume) {
-  if (isCdFolder(decodeURI(playedList).replace(/:/g, '/'))) return playCd()
+  const album = extensions.albumFor(decodeURI(playedList).replace(/:/g, '/'))
+  if (album) return playAlbumProvider(album)
   playbackGeneration++
   currentMeta.trackFile = undefined // the new album's first file sets it (see the path event)
   clearLibraryResumeTimers()
@@ -3032,10 +3044,10 @@ function seek(progress) {
     }
   } else if (currentMeta.currentPlayer === 'mplayer') {
     if (progress > 1) {
-      const cdRange = cdPlaying() ? cdTrackRange(player.trackIndex?.() ?? currentMeta.currentTracknr - 1) : null
-      if (cdRange) {
-        // (a place in the track of the disc: percent of the track, as an absolute time of the disc)
-        player.exec('seek', [cdRange.start + ((cdRange.end - cdRange.start) * progress) / 100, '2'])
+      // (an album that is no folder: a place in its track, as an absolute time of the whole)
+      const albumSeek = albumNow()?.seek?.(progress, player.trackIndex?.() ?? currentMeta.currentTracknr - 1)
+      if (typeof albumSeek === 'number') {
+        player.exec('seek', [albumSeek, '2'])
       } else if (isCuePlayback()) {
         const index = Math.max(0, currentMeta.currentTracknr - 1)
         const track = currentCue.tracks[index]
@@ -3561,170 +3573,48 @@ app.post('/winamp/presets', (req, res) => {
   fs.writeFile(WINAMP_PRESETS_FILE, JSON.stringify(set), (err) => (err ? res.status(500).json({ error: 'write_failed' }) : res.json({ ok: true })))
 })
 
-// --- The CD drive ---
-// An audio CD in the drive: the display shows a "CD" category (GET /cd) that plays it. It is played like a local album
-// of a folder that does not exist (CD_FOLDER): the album routes and the display's player page work as they do for any
-// album - the track list, next / previous, a tap on a track, shuffle, repeat.
-const CD_FOLDER = '_audio_cd_'
-const isCdFolder = (folder) => folder === CD_FOLDER
-// What the internet knows about the disc (cd-lookup.js: Discogs, then MusicBrainz): artist, album, the names of the tracks and a
-// cover. Kept on the card by the disc's id, so a disc that was in the drive before is known at once - and without the internet.
-let cdInfo = null
-const CD_CACHE_DIR = '/home/dietpi/.mupibox/cd-cache'
-const CD_COVER_FILE = '/tmp/mupibox-cd-cover.jpg' // (the picture of the disc in the drive: the box's API shows it, /api/cd-cover)
-let cdLookupRun = 0
-// discs the internet did not know, and when it was asked (not again for half an hour: a drive that flaps - a weak power supply
-// resets its USB port every now and then - would ask MusicBrainz and Discogs over and over)
-const cdMisses = new Map()
-const CD_MISS_MS = 30 * 60 * 1000
-
-function cdLookupWanted() {
-  return muPiBoxConfig?.mupibox?.cdLookup !== false
-}
-
-async function startCdLookup(state) {
-  const run = ++cdLookupRun
-  cdInfo = null
-  // (at once, not later: the picture of this disc may be written right below)
-  fs.rmSync(CD_COVER_FILE, { force: true })
-  if (!state.present || !cdLookupWanted() || !Array.isArray(state.lbas)) return
-  const first = state.first ?? 1
-  const disc = { first, last: first + state.tracks - 1, lbas: state.lbas, barcode: state.mcn }
-  const key = musicBrainzDiscId(disc.first, disc.last, disc.lbas).replace(/[^A-Za-z0-9._-]/g, '_')
-  const done = (info) => {
-    if (run !== cdLookupRun) return false // (another disc came in meanwhile)
-    cdInfo = info
-    if (info.tracks?.length && currentMeta.path === CD_FOLDER) {
-      const title = info.tracks[currentMeta.currentTracknr - 1]?.title
-      if (title) currentMeta.currentTrackname = title
-      if (info.album) currentMeta.album = info.album
-    }
-    return true
-  }
-  try {
-    const cached = JSON.parse(fs.readFileSync(`${CD_CACHE_DIR}/${key}.json`, 'utf8'))
-    if (done(cached)) {
-      if (cached.hasCover) {
-        try {
-          fs.copyFileSync(`${CD_CACHE_DIR}/${key}.jpg`, CD_COVER_FILE)
-        } catch {
-          cdInfo = { ...cdInfo, hasCover: false } // (the picture is gone from the card)
-        }
-      }
-      log.debug(`${now()}: [Spotify Control] CD: ${cached.artist} - ${cached.album} (from the card)`)
-    }
-    return
-  } catch {
-    // not seen before
-  }
-  if (Date.now() - (cdMisses.get(key) ?? 0) < CD_MISS_MS) return
-  const info = await lookupDisc(disc, {
-    token: String(muPiBoxConfig?.discogs?.token ?? '').trim(),
-    log: (message) => log.debug(`${now()}: [Spotify Control] CD lookup - ${message}`),
-  })
-  if (!info) {
-    cdMisses.set(key, Date.now())
-    return
-  }
-  if (run !== cdLookupRun) return
-  const cover = await downloadCover(info)
-  if (run !== cdLookupRun) return
-  const stored = { source: info.source, artist: info.artist, album: info.album, tracks: info.tracks, hasCover: !!cover }
-  if (!done(stored)) return
-  try {
-    fs.mkdirSync(CD_CACHE_DIR, { recursive: true })
-    fs.writeFileSync(`${CD_CACHE_DIR}/${key}.json`, JSON.stringify(stored))
-    if (cover) {
-      fs.writeFileSync(`${CD_CACHE_DIR}/${key}.jpg`, cover)
-      fs.writeFileSync(CD_COVER_FILE, cover)
-    }
-  } catch (err) {
-    log.debug(`${now()}: [Spotify Control] CD: could not keep the answer: ${err.message}`)
-  }
-}
-
-const cdWatcher = createCdWatcher({
-  onChange: (state) => {
-    log.debug(`${now()}: [Spotify Control] CD drive: ${state.present ? `audio CD, ${state.tracks} tracks` : 'no CD'}`)
-    void startCdLookup(state).catch((err) => log.debug(`${now()}: [Spotify Control] CD lookup failed: ${err.message}`))
+// --- Extensions (docs/extensions.md) ---
+// Files that extensions bring along (~/.mupibox/extensions/<id>/player.js) are loaded here: they add routes (/ext/<id>/...), listen to
+// what the player does and may be the source of albums that are no folders - the player asks them where it has a folder name
+// (albumFor). The audio CD is such an extension. An error in one of them is caught and switches it off, not the player.
+const extensions = createExtensionHost({
+  app,
+  log: {
+    debug: (text) => log.debug(`${now()}: [Spotify Control] ${text}`),
+    info: (text) => log.info(`${now()}: [Spotify Control] ${text}`),
+    warn: (text) => console.warn(`${now()}: [Spotify Control] ${text}`),
   },
-  // (the drive belongs to root:cdrom, and this user is not in that group: it is opened for reading - again after a new plug-in; libcdio also wants write access for its commands to the drive)
-  fixAccess: () => {
-    cmdCall(`sudo -n chmod a+rw ${CD_DEVICE}`).catch(() => undefined)
+  getConfig: () => redactSecrets(muPiBoxConfig ?? {}),
+  getMeta: () => currentMeta,
+  engine: {
+    command: (command) => (typeof player.command === 'function' ? player.command(command) : Promise.resolve(null)),
+    playEntries: (entries) => player.playEntries?.(entries),
+    setVolume: (percent) => player.setVolume(percent),
+    startVolume: () => volumeStart,
+    trackIndex: () => player.trackIndex?.() ?? -1,
   },
+  stop: () => stop(),
+  generation: () => playbackGeneration,
 })
-cdWatcher.start()
-// (what the display needs: the disc and what is known of it; the table of contents stays here)
-app.get('/cd', (_req, res) => {
-  const { present, tracks, id, starts } = cdWatcher.state
-  res.json({ present, tracks, id, drive: cdWatcher.drive, ...(starts ? { starts } : {}), ...(cdInfo ? { artist: cdInfo.artist, album: cdInfo.album, source: cdInfo.source, cover: !!cdInfo.hasCover } : {}) })
-})
+extensions.load()
 
-// The disc stops spinning when it is stopped or has played to its end (the drive would turn on for minutes otherwise), and the
-// tray opens - or closes again - from the display's eject button. mpv has to let go of the disc first: a stop is given a moment.
-function spinDownCd(afterMs = 2500) {
-  const generation = playbackGeneration
-  setTimeout(() => {
-    if (generation === playbackGeneration) void driveCommand('stop', CD_DEVICE)
-  }, afterMs)
-}
-app.get('/cd/eject', async (_req, res) => {
-  if (!cdWatcher.drive) return res.status(404).json({ ok: false, error: 'no drive' })
-  // (what plays from the disc stops first - a disc that is read cannot be taken out)
-  if (isCdFolder(currentMeta.path) && currentMeta.currentPlayer === 'mplayer') {
-    stop()
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-  }
-  const result = await driveCommand('eject', CD_DEVICE)
-  if (result.ok && !result.closing) cdWatcher.ejected()
-  log.debug(`${now()}: [Spotify Control] CD drive: ${result.ok ? (result.closing ? 'tray closed' : 'tray opened') : `eject failed (${result.error ?? result.errno ?? '?'})`}`)
-  res.json(result)
-})
+/** The album that plays, when its folder name is an extension's (the audio CD), else undefined. */
+const albumNow = () => extensions.albumFor(currentMeta.path)
 
-const cdTrackTitle = (nr) => cdInfo?.tracks?.[nr - 1]?.title || `Track ${nr}`
-function cdTracklist() {
-  const count = cdWatcher.state.tracks
-  return Array.from({ length: count }, (_, i) => ({ position: i + 1, name: cdTrackTitle(i + 1) }))
-}
-
-// A CD plays as a playlist of the same disc, each entry from the start of its track to the start of the next (mpv-wrapper
-// playCd): mpv tells the time of the whole disc, so the place in the track and its length are worked out from where the
-// tracks start (the drive's table of contents)
-const cdPlaying = () => isCdFolder(currentMeta.path) && currentMeta.currentPlayer === 'mplayer' && cdWatcher.state.present
-function cdTrackRange(index) {
-  const starts = cdWatcher.state.starts
-  return Array.isArray(starts) && index >= 0 && index + 1 < starts.length ? { start: starts[index], end: starts[index + 1] } : null
-}
-function cdProgress(seconds) {
-  const index = player.trackIndex?.() ?? currentMeta.currentTracknr - 1
-  const range = cdTrackRange(index)
-  if (!range || range.end <= range.start) {
-    currentMeta.positionSeconds = seconds
-    return
-  }
-  const length = range.end - range.start
-  const at = Math.max(0, Math.min(length, seconds - range.start))
-  currentMeta.positionSeconds = at
-  currentMeta.durationSeconds = length
-  currentMeta.progressTime = Math.round((at / length) * 100)
-}
-
-// (a CD plays through mpv only: it reads the disc itself)
-function playCd() {
+// An album of an extension starts: it puts its tracks in mpv's playlist (host.engine.playEntries) and says what it is; the rest -
+// counting, the volume, the state - is as for a folder. Nothing to play (no disc): nothing changes.
+async function playAlbumProvider(album) {
   playbackGeneration++
   currentMeta.trackFile = undefined
   clearLibraryResumeTimers()
-  if (!cdWatcher.state.present || typeof player.playCd !== 'function') {
-    log.debug(`${now()}: [Spotify Control] CD: nothing to play`)
-    return
-  }
+  const started = await album.play()
+  if (!started) return
   writeplayerstatePlay()
-  player.playCd(cdWatcher.state.tracks, CD_DEVICE)
   player.setVolume(volumeStart)
   currentMeta.currentTracknr = 0
-  currentMeta.path = CD_FOLDER
-  currentMeta.album = cdInfo?.album || 'Audio-CD'
-  currentMeta.totalTracks = cdWatcher.state.tracks
+  currentMeta.path = album.folder
+  if (started.album) currentMeta.album = started.album
+  if (started.totalTracks) currentMeta.totalTracks = started.totalTracks
 }
 
 // --- The queue: the Winamp playlist window edits what plays ---
@@ -3751,7 +3641,7 @@ const nasStreamUrl = (track) => {
 /** 'local', 'nas', or null: what kind of queue plays now (null - nothing, a CD, a CUE album, TIDAL, Spotify: no queue to edit) */
 function queueKind() {
   if (currentMeta.currentPlayer !== 'mplayer' || typeof player.list !== 'object') return null
-  if (currentMeta.currentType === 'local' && !isCdFolder(currentMeta.path)) return 'local'
+  if (currentMeta.currentType === 'local' && !albumNow()) return 'local'
   if (currentMeta.currentType === 'nas' && currentCue === null) return 'nas'
   return null
 }
@@ -4045,8 +3935,9 @@ app.get('/local/tracklist/:encoded', (req, res) => {
     res.status(400).json({ error: 'invalid path' })
     return
   }
-  if (isCdFolder(playedTitelmod)) {
-    res.json(cdTracklist())
+  const album = extensions.albumFor(playedTitelmod)
+  if (album?.tracklist) {
+    res.json(album.tracklist())
     return
   }
 
