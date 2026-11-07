@@ -22,6 +22,21 @@ elif [ "$1" = "branch" ]; then
     echo "Error: Branch '${BRANCH}' does not exist on GitHub repo '${REPO}'"
     exit 1
   fi
+  # A box with the folders of 5.1 takes a branch only when it knows them too (scripts/mupibox/mupi_paths.sh, there from
+  # 5.1 on): the program of an older branch was put in server/ and player/ and looked for its data where 5.1 does not
+  # keep it - the library empty, the settings gone. Unlike a release (its tag), a branch is not handed to its own update
+  # script, so it stops here, before anything is changed. (Could it not be asked - no network, GitHub not answering: it
+  # stops too, nothing is known.)
+  if [ -L /home/dietpi/.mupibox/Sonos-Kids-Controller-master ] || [ -e /home/dietpi/.mupibox/.layout-moving ]; then
+    PATHS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 30 "https://raw.githubusercontent.com/${REPO}/${BRANCH}/scripts/mupibox/mupi_paths.sh")
+    if [ "$PATHS_CODE" = "404" ]; then
+      echo "Error: branch '${BRANCH}' of '${REPO}' is a version before 5.1 - this box has the folders of 5.1, and an older branch cannot be installed on it. Nothing was changed. Back to an older version only by a channel (stable, beta or dev)."
+      exit 1
+    elif [ "$PATHS_CODE" != "200" ]; then
+      echo "Error: could not check whether branch '${BRANCH}' of '${REPO}' is 5.1 or later (answer ${PATHS_CODE:-none}) - nothing was changed, please try again."
+      exit 1
+    fi
+  fi
 else
 	RELEASE="stable"
 fi
