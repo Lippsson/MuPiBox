@@ -1,11 +1,10 @@
-// The users, display part: a round badge with the first letter of the current user in the header (right of the battery). A tap opens a
-// page with one tile per user; a tap on a tile switches to that user - the box loads their settings and library and restarts, and the
-// display loads itself again. The setting "displaySwitch" off: the badge only shows who is signed in.
+// The users, display part: a dot in the colour of the current user in the header (right of the battery). A tap on the dot opens a page
+// with one tile per user, with colour and name; a tap on a tile switches to that user - the box loads their settings and library and
+// restarts, and the display loads itself again. The setting "displaySwitch" off: the dot only shows who is signed in.
 
-/** The letter in the badge: the first letter or digit of the name, upper case. */
-export function initialOf(name) {
-  const match = /[\p{L}\p{N}]/u.exec(String(name ?? ''))
-  return match ? match[0].toLocaleUpperCase() : '?'
+/** The colour of a user as the API part gives it (#RRGGBB); anything else is grey. */
+export function colorOf(user) {
+  return /^#[0-9a-fA-F]{6}$/.test(String(user?.color ?? '')) ? user.color : '#808080'
 }
 
 export function activate(api) {
@@ -15,9 +14,11 @@ export function activate(api) {
 
   const paint = () => {
     for (const badge of badges) {
-      badge.textContent = state ? initialOf(state.users.find((u) => u.id === state.current)?.name) : ''
-      badge.title = state ? (state.users.find((u) => u.id === state.current)?.name ?? '') : ''
-      badge.hidden = !state || state.users.length < 2
+      const me = state?.users.find((u) => u.id === state.current)
+      badge.firstChild.style.background = colorOf(me)
+      badge.setAttribute('aria-label', me ? `Benutzer: ${me.name}` : 'Benutzer')
+      // (not `hidden`: the display of the style below would win over it)
+      badge.style.display = !state || state.users.length < 2 ? 'none' : 'flex'
     }
   }
 
@@ -67,8 +68,7 @@ export function activate(api) {
             tile.setAttribute('aria-pressed', String(mine))
             tile.style.cssText = `width:132px;height:132px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:20px;border:3px solid ${mine ? 'var(--ion-color-primary, currentColor)' : 'rgba(255,255,255,.25)'};background:rgba(255,255,255,.08);color:inherit;font:600 18px/1.2 var(--ion-font-family,inherit);padding:8px;cursor:${mine || !canSwitch ? 'default' : 'pointer'}`
             const letter = document.createElement('span')
-            letter.textContent = initialOf(user.name)
-            letter.style.cssText = 'font-size:44px;font-weight:700;line-height:1'
+            letter.style.cssText = `width:52px;height:52px;border-radius:50%;background:${colorOf(user)};box-shadow:0 0 0 3px rgba(0,0,0,.35)`
             const name = document.createElement('span')
             name.textContent = user.name
             name.style.cssText = 'max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
@@ -89,7 +89,6 @@ export function activate(api) {
       const badge = document.createElement(canSwitch ? 'button' : 'span')
       if (canSwitch) {
         badge.type = 'button'
-        badge.setAttribute('aria-label', 'Benutzer wechseln')
         // (the status bar ignores the pointer, and a tap on it opens its own page: the badge takes the pointer back and keeps the tap to itself)
         badge.onclick = (ev) => {
           ev.stopPropagation()
@@ -97,9 +96,12 @@ export function activate(api) {
         }
         for (const type of ['pointerdown', 'pointerup', 'touchstart', 'mousedown']) badge.addEventListener(type, (ev) => ev.stopPropagation())
       }
-      badge.hidden = true
       badge.style.cssText =
-        'display:flex;align-items:center;justify-content:center;width:26px;height:26px;flex:none;border-radius:50%;border:2px solid currentColor;background:transparent;color:inherit;font:700 15px/1 var(--ion-font-family,inherit);padding:0;margin-right:6px;pointer-events:auto;cursor:pointer'
+        'display:flex;align-items:center;justify-content:center;width:34px;height:34px;flex:none;border:0;background:transparent;padding:0;margin-right:4px;pointer-events:auto;cursor:pointer;display:none'
+      // (the dot itself is small; the button around it is a target a finger can hit)
+      const dot = document.createElement('span')
+      dot.style.cssText = 'width:16px;height:16px;border-radius:50%;background:#808080;box-shadow:0 0 0 2px rgba(0,0,0,.4)'
+      badge.append(dot)
       host.append(badge)
       badges.add(badge)
       paint()

@@ -47,7 +47,7 @@ test('a name is one line of at most 24 characters', () => {
 
 test('the first start has one user, "Standard"', () => {
   const { store } = box()
-  assert.deepEqual(store.state(), { current: 'main', users: [{ id: 'main', name: 'Standard' }] })
+  assert.deepEqual(store.state(), { current: 'main', users: [{ id: 'main', name: 'Standard', color: '#FFFFFF' }] })
 })
 
 test('a new user gets the settings of the one who creates it and an empty library', () => {
@@ -62,13 +62,13 @@ test('a new user gets the settings of the one who creates it and an empty librar
   assert.equal(read('library/data.json'), '[{"name":"Album"}]')
 })
 
-test('names are unique and there are at most twelve users', () => {
+test('names are unique and there are as many users as colours (nine)', () => {
   const { store } = box()
   assert.equal(store.add('Mia').error, undefined)
   assert.equal(store.add('mia').error, 'exists')
   assert.equal(store.add('standard').error, 'exists')
   assert.equal(store.add('  ').error, 'name')
-  for (let i = 0; i < 10; i++) assert.equal(store.add(`U${i}`).error, undefined)
+  for (let i = 0; i < 7; i++) assert.equal(store.add(`U${i}`).error, undefined)
   assert.equal(store.add('Zu viele').error, 'full')
 })
 
@@ -158,4 +158,20 @@ test('an unknown user cannot be chosen, and the current one is a no-op', async (
   assert.equal((await store.select('../etc')).error, 'id')
   assert.equal((await store.select('main')).same, true)
   assert.equal(read('library/data.json'), '[1]')
+})
+
+test('every user has their own colour, the first one nobody has; a user from before gets one too', () => {
+  const { store, root } = box()
+  const a = store.add('A').id
+  const b = store.add('B').id
+  const colours = store.state().users.map((u) => u.color)
+  assert.deepEqual(colours, _test.COLORS.slice(0, 3))
+  // (a deleted user gives their colour back)
+  store.remove(a)
+  const c = store.add('C').id
+  assert.equal(store.state().users.find((u) => u.id === c).color, '#FF0000')
+  assert.notEqual(b, c)
+  // (users.json of version 1.0.0 had no colours)
+  fs.writeFileSync(path.join(root, 'ext-data', 'users.json'), JSON.stringify({ current: 'main', users: [{ id: 'main', name: 'Standard' }, { id: 'x1', name: 'X', color: 'red' }] }))
+  assert.deepEqual(store.state().users.map((u) => u.color), ['#FFFFFF', '#FF0000'])
 })

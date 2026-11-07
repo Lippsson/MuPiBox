@@ -6,9 +6,9 @@
 // the library (albums, resume positions, offline lists), hidden covers, today's play time, the play log, the settings of the other
 // extensions. The same for everybody: the Spotify login, Wi-Fi and network, NAS, hardware, the parents' password, the name of the box.
 //
-//   GET  /api/ext/users/state    -> { current: { id, name }, users: [{ id, name }], busy }          (the display; no login)
+//   GET  /api/ext/users/state    -> { current: id, users: [{ id, name, color }], busy }              (the display; no login)
 //   POST /api/ext/users/switch   { id }                                                              (the display; setting "displaySwitch")
-//   GET  /api/ext/users/list     -> { current: id, users: [{ id, name }], busy }                     (the app; parents' login)
+//   GET  /api/ext/users/list     -> { current: id, users: [{ id, name, color }], busy }              (the app; parents' login)
 //   POST /api/ext/users/add      { name }  /  POST .../remove { id }  /  POST .../select { id }      (the app; parents' login)
 
 const fs = require('node:fs')
@@ -53,7 +53,10 @@ const DATA_FILES = ['hidden-covers.json', 'playtime-checkpoint.json']
 const LOG_FILES = ['play_log.jsonl']
 
 const ID = /^[a-z0-9]{2,12}$/
-const MAX_USERS = 12
+// Every user has a colour; the display shows only that dot in its header (the names are on the page behind it). The first colour
+// that nobody has is given to a new user - so there are as many users as colours.
+const COLORS = ['#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FF7F00', '#808080']
+const MAX_USERS = COLORS.length
 const NAME_MAX = 24
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
@@ -108,14 +111,25 @@ function createStore({ dataDir, libraryDir, boxDataDir, logsDir, settingsDir, co
   const usersFile = path.join(dataDir, 'users.json')
   const profile = (id) => path.join(dataDir, 'profiles', id)
 
+  /** A user without a (known) colour gets the first one nobody has - also one who was made by the first version of this extension. */
+  const coloured = (state) => {
+    const used = new Set(state.users.map((u) => u.color).filter((c) => COLORS.includes(c)))
+    for (const user of state.users) {
+      if (!COLORS.includes(user.color)) {
+        user.color = COLORS.find((c) => !used.has(c)) ?? COLORS[0]
+        used.add(user.color)
+      }
+    }
+    return state
+  }
   const read = () => {
     try {
       const parsed = JSON.parse(fs.readFileSync(usersFile, 'utf8'))
-      if (Array.isArray(parsed?.users) && parsed.users.length && parsed.users.some((u) => u.id === parsed.current)) return parsed
+      if (Array.isArray(parsed?.users) && parsed.users.length && parsed.users.some((u) => u.id === parsed.current)) return coloured(parsed)
     } catch {
       // (not there yet, or not readable: the first start)
     }
-    return { current: 'main', users: [{ id: 'main', name: 'Standard' }] }
+    return coloured({ current: 'main', users: [{ id: 'main', name: 'Standard' }] })
   }
   const write = (state) => writeAtomic(usersFile, `${JSON.stringify(state, null, 2)}\n`)
 
@@ -208,7 +222,7 @@ function createStore({ dataDir, libraryDir, boxDataDir, logsDir, settingsDir, co
       // (an empty library: lists with nothing in them, the files the box needs to start)
       for (const file of ['data.json', 'offline_data.json', 'resume.json', 'offline_resume.json']) writeAtomic(path.join(dir, 'library', file), '[]\n')
       copyFiles(settingsDir, path.join(dir, 'settings'), settingFiles())
-      state.users.push({ id, name })
+      state.users.push({ id, name, color: COLORS.find((c) => !state.users.some((u) => u.color === c)) })
       write(state)
       return { id }
     },
@@ -268,7 +282,7 @@ exports.activate = (host) => {
 
   const view = () => {
     const s = store.state()
-    return { current: s.current, users: s.users.map(({ id, name }) => ({ id, name })), busy: working || restarting }
+    return { current: s.current, users: s.users.map(({ id, name, color }) => ({ id, name, color })), busy: working || restarting }
   }
 
   const refuse = (res, error) => res.status(error === 'busy' ? 409 : 400).json({ ok: false, error })
@@ -333,4 +347,4 @@ exports.activate = (host) => {
   host.route('post', '/select', (req, res) => change(String(req.body?.id ?? ''), res), { session: true })
 }
 
-exports._test = { createStore, cleanName, USER_KEYS, USER_SECTIONS }
+exports._test = { createStore, cleanName, USER_KEYS, USER_SECTIONS, COLORS }

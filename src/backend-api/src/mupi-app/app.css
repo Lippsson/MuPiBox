@@ -1256,6 +1256,7 @@ textarea[hidden] { display: none; }
 .ext-roster li { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--mp-border); border-radius: var(--mp-r); background: var(--mp-surface); font-size: 15px; font-weight: 600; }
 .ext-roster li.current { border-color: var(--mp-primary); }
 .ext-roster .ext-roster-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-roster .ext-roster-dot { flex: none; width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(128, 128, 128, .6); }
 .ext-roster .ext-roster-mark { font-size: 13px; color: var(--mp-primary); padding: 0 8px; }
 .ext-roster .btn { min-height: 36px; padding: 0 12px; }
 .ext-roster .btn:disabled { opacity: .4; }

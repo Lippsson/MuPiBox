@@ -3245,7 +3245,7 @@
  "{}: Löschen",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.",
  "Für jeden Benutzer merkt sich die Box seine eigenen Einstellungen (Theme, Lautstärken, Startseite, Spielzeit, Ruhezeiten und mehr), seine Bibliothek mit Alben, Fortsetzen-Positionen und Offline-Listen sowie seine Wiedergabe-Historie. Das gilt auch für die Einstellungen der anderen Erweiterungen. Gemeinsam für alle bleiben der Spotify-Login, WLAN und Netzwerk, NAS, Hardware (Lüfter, Akku, LEDs, Drehgeber), das Elternpasswort und der Name der Box. Ein neuer Benutzer startet mit den Einstellungen dessen, der ihn anlegt, und einer leeren Bibliothek. Beim Wechseln hält die Wiedergabe an und die Box startet kurz neu.",
- "Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.",
  "Am Display wechseln",
  "Aus: Das Zeichen oben im Display zeigt nur, wer angemeldet ist. Gewechselt wird dann nur in der Webapp."
 ]

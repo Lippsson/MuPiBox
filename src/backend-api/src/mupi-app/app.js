@@ -11538,6 +11538,13 @@ function extensionDetails(e, installed) {
           list.textContent = ''
           for (const u of r.body.users) {
             const li = document.createElement('li')
+            // (the colour the user has on the display)
+            if (/^#[0-9a-fA-F]{6}$/.test(String(u.color ?? ''))) {
+              const dot = document.createElement('span')
+              dot.className = 'ext-roster-dot'
+              dot.style.background = u.color
+              li.append(dot)
+            }
             const name = document.createElement('span')
             name.className = 'ext-roster-name'
             name.textContent = u.name

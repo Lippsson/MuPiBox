@@ -4,11 +4,11 @@ const assert = require('node:assert/strict')
 
 const load = () => import('../display.js')
 
-test('the badge shows the first letter or digit of the name, in upper case', async () => {
-  const { initialOf } = await load()
-  assert.equal(initialOf('mia'), 'M')
-  assert.equal(initialOf('  émile'), 'É')
-  assert.equal(initialOf('2. Kind'), '2')
-  assert.equal(initialOf('...'), '?')
-  assert.equal(initialOf(undefined), '?')
+test('the dot has the colour of the user; whatever is no colour is grey', async () => {
+  const { colorOf } = await load()
+  assert.equal(colorOf({ color: '#FF0000' }), '#FF0000')
+  assert.equal(colorOf({ color: '#00ffff' }), '#00ffff')
+  assert.equal(colorOf({ color: 'red' }), '#808080')
+  assert.equal(colorOf({ color: 'url(x)' }), '#808080')
+  assert.equal(colorOf(undefined), '#808080')
 })
