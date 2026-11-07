@@ -11342,7 +11342,10 @@ function extensionDetails(e, installed) {
           }
         }
         sheet.querySelector(`[data-xlookup="${CSS.escape(item.key)}"]`).onclick = search
-        input.onkeydown = (ev) => ev.key === 'Enter' && search()
+        // (a block body: an arrow that returns false for the other keys would cancel them, and no letter would appear)
+        input.onkeydown = (ev) => {
+          if (ev.key === 'Enter') search()
+        }
         // (it searches while one types, a moment after the last letter)
         input.oninput = () => {
           clearTimeout(timer)
@@ -11731,7 +11734,9 @@ const CONTROLLERS = {
         save({ url: /^https?:\/\//i.test(v) ? v : `http://${v}`, allow: true }, 'Erlaubt')
       }
       $('#fh-add', root).onclick = add
-      $('#fh-new', root).onkeydown = (e) => e.key === 'Enter' && add()
+      $('#fh-new', root).onkeydown = (e) => {
+        if (e.key === 'Enter') add()
+      }
     },
     async change(key, v) {
       const field = { svcPod: 'podcastSearch', svcRadio: 'radioSearch' }[key]
