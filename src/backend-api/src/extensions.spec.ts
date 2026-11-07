@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import { readZip } from './app-api/winamp-skin'
-import { verifyPackage, checkManifest, checkSettings, checkUdevRules, type Manifest } from './app-api/extensions'
+import { verifyPackage, checkManifest, checkSettings, checkUdevRules, checkUnitFile, type Manifest } from './app-api/extensions'
 
 const files = (...names: string[]) => new Set(['manifest.json', ...names])
 const base = (extra: Record<string, unknown> = {}) => ({ id: 'cd', name: 'CD', version: '1.0.0', hostApi: 1, resources: {}, ...extra })
@@ -162,5 +162,38 @@ describe('an uploaded extension file', () => {
   it('refuses a file that is no zip, and an empty one', () => {
     assert.strictEqual(verifyPackage(Buffer.from('hello')).ok, false)
     assert.strictEqual(verifyPackage(Buffer.alloc(0)).ok, false)
+  })
+})
+
+describe('systemd units of an extension', () => {
+  const service = '[Unit]\nDescription=Test\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/usr/bin/node @EXT_DIR@/daemon.js\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\n'
+  it('accepts a plain service and a plain timer', () => {
+    assert.strictEqual(checkUnitFile(service, 'service'), null)
+    assert.strictEqual(checkUnitFile('[Timer]\nOnCalendar=*-*-* 03:00:00\nPersistent=yes\n\n[Install]\nWantedBy=timers.target\n', 'timer'), null)
+  })
+  it('refuses what changes who runs it or lifts a restriction', () => {
+    for (const extra of ['User=root', 'Group=root', 'AmbientCapabilities=CAP_NET_ADMIN', 'PermissionsStartOnly=yes', 'ExecStartPre=+/bin/sh /tmp/x', 'ExecStartPost=!/bin/true', 'Environment=A=b\nPrivateDevices=no']) {
+      assert.ok(checkUnitFile(service.replace('Restart=on-failure', extra), 'service'), extra)
+    }
+  })
+  it('refuses a program without an absolute path, a continued line, other sections and a service without ExecStart', () => {
+    assert.ok(checkUnitFile(service.replace('/usr/bin/node', 'node'), 'service'))
+    assert.ok(checkUnitFile(service.replace('Restart=on-failure', 'Restart=on-failure \\nalways'), 'service'))
+    assert.ok(checkUnitFile(`${service}[Socket]\nListenStream=1234\n`, 'service'))
+    assert.ok(checkUnitFile('[Unit]\nDescription=x\n[Service]\nType=simple\n', 'service'))
+    assert.ok(checkUnitFile('[Install]\nWantedBy=graphical.target\n[Service]\nExecStart=/bin/true\n', 'service'))
+    assert.ok(checkUnitFile('[Timer]\nPersistent=yes\n', 'timer'))
+    assert.ok(checkUnitFile(service, 'timer'))
+  })
+  it('the manifest names the unit by its extension, has its file, and says it in the resources', () => {
+    const base = { id: 'xy', name: 'X', version: '1.0.0', hostApi: 2 }
+    const ok = { ...base, system: { units: [{ name: 'mpx-xy.service', file: 'units/mpx-xy.service' }] }, resources: { services: [{ name: 'mpx-xy.service', provides: true }] } }
+    const files = new Set(['manifest.json', 'units/mpx-xy.service'])
+    assert.strictEqual(checkManifest(ok, files), null)
+    assert.match(String(checkManifest({ ...ok, system: { units: [{ name: 'other.service', file: 'units/mpx-xy.service' }] } }, files)), /bad unit name/)
+    assert.match(String(checkManifest({ ...ok, system: { units: [{ name: 'mpx-xy.timer', file: 'units/mpx-xy.service' }] } }, files)), /unit file missing/)
+    assert.match(String(checkManifest(ok, new Set(['manifest.json']))), /unit file missing/)
+    assert.match(String(checkManifest({ ...ok, resources: {} }, files)), /not in resources.services/)
+    assert.match(String(checkManifest({ ...ok, resources: { services: [{ name: 'mpx-xy.service' }] } }, files)), /not in resources.services/)
   })
 })

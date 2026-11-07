@@ -4,7 +4,8 @@
 //  - what the display and the app read (/api/ext/active, the files of an extension under /ext/<id>/...)
 //  - the extensions' own API parts (api.js, loaded at the start, routes under /api/ext/<id>/...)
 // An extension is a program of the user dietpi without any protection: it comes from the catalog only, its file is checked
-// against the catalog's checksum, and what it asks to have set up as root is limited to a few checked kinds (udev rules, groups, packages).
+// against the catalog's checksum, and what it asks to have set up as root is limited to a few checked kinds (udev rules, systemd units,
+// groups, packages).
 
 import { execFile, spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
@@ -39,6 +40,8 @@ const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/
 const FILE = /^[A-Za-z0-9_][A-Za-z0-9_./-]{0,100}$/
 // what a package may hold (a file of another kind is a reason to refuse it)
 const ALLOWED_FILES = /\.(js|mjs|json|svg|png|jpg|css|txt|md|rules|html)$/i
+// ... and what a package may hold beyond that: the unit files of its systemd services (never served to a browser)
+const PACKAGE_FILES = /\.(js|mjs|json|svg|png|jpg|css|txt|md|rules|html|service|timer)$/i
 const GROUPS = new Set(['cdrom', 'audio', 'video', 'plugdev'])
 const PACKAGE = /^[a-z0-9][a-z0-9+.-]{1,60}$/
 const SECRET_SETTING = 'secret'
@@ -56,7 +59,7 @@ export interface Manifest {
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup'; search?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
-  system?: { udev?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
+  system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
   resources?: Resources
 }
@@ -72,7 +75,7 @@ export interface CatalogEntry {
   url: string
   sha256: string
   size: number
-  system?: { udev?: number; groups?: string[]; packages?: string[] }
+  system?: { udev?: number; units?: string[]; groups?: string[]; packages?: string[] }
   resources?: Resources
 }
 
@@ -186,6 +189,79 @@ export function checkUdevRules(text: string): string | null {
   return null
 }
 
+// What a unit file of an extension may say: a few plain keys of the sections of a service or a timer. Nothing that changes who runs it
+// (the box adds User=dietpi itself), what it may do as root, or what else it pulls in. The file is checked line by line.
+const UNIT_KEYS: Record<string, Set<string>> = {
+  Unit: new Set(['Description', 'After', 'Before', 'Wants', 'Requires']),
+  Service: new Set(['Type', 'ExecStart', 'ExecStartPre', 'ExecStartPost', 'ExecStop', 'ExecReload', 'Restart', 'RestartSec', 'WorkingDirectory', 'Environment', 'TimeoutStartSec', 'TimeoutStopSec', 'RemainAfterExit', 'StandardOutput', 'StandardError', 'SyslogIdentifier', 'Nice', 'KillMode']),
+  Timer: new Set(['OnCalendar', 'OnBootSec', 'OnStartupSec', 'OnActiveSec', 'OnUnitActiveSec', 'OnUnitInactiveSec', 'Persistent', 'AccuracySec', 'RandomizedDelaySec']),
+  Install: new Set(['WantedBy']),
+}
+const UNIT_ENUMS: Record<string, string[]> = {
+  Type: ['simple', 'exec', 'oneshot', 'notify', 'forking'],
+  Restart: ['no', 'on-failure', 'on-abnormal', 'on-success', 'always'],
+  RemainAfterExit: ['yes', 'no'],
+  StandardOutput: ['journal', 'null', 'inherit'],
+  StandardError: ['journal', 'null', 'inherit'],
+  KillMode: ['control-group', 'mixed', 'process'],
+  Persistent: ['yes', 'no'],
+  WantedBy: ['multi-user.target', 'timers.target'],
+}
+const UNIT_REF = /^[A-Za-z0-9@:._-]{1,80}\.(target|service|socket|timer|mount)$/
+const UNIT_TIME = /^[0-9A-Za-z:*,./ _-]{1,80}$/
+// where a program of the unit may be: an absolute path, or in the folder of the extension (the box puts the folder in for @EXT_DIR@)
+const UNIT_PATH = /^(@EXT_DIR@|\/)[A-Za-z0-9@_./:+=-]*$/
+
+/**
+ * A unit file (a systemd service or timer) of an extension: only the keys above, no line continuation, programs by absolute path and
+ * without the prefixes that lift the restrictions ("+" and "!"), a service has an ExecStart, a timer a time.
+ */
+export function checkUnitFile(text: string, kind: 'service' | 'timer'): string | null {
+  if (text.length > 4000 || text.includes('\0')) return 'the unit file is too large'
+  let section = ''
+  let hasExec = false
+  let hasTime = false
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (!line || line.startsWith('#') || line.startsWith(';')) continue
+    if (line.endsWith('\\')) return 'a line may not continue on the next one'
+    const head = /^\[([A-Za-z]+)\]$/.exec(line)
+    if (head) {
+      if (!UNIT_KEYS[head[1]] || (kind === 'service' && head[1] === 'Timer') || (kind === 'timer' && head[1] === 'Service')) return `section not allowed: [${head[1]}]`
+      section = head[1]
+      continue
+    }
+    const kv = /^([A-Za-z]+)=(.*)$/.exec(line)
+    if (!kv || !section) return `not a plain setting: ${line.slice(0, 40)}`
+    const [, key, value] = kv
+    if (!UNIT_KEYS[section].has(key)) return `not allowed in a unit: ${section}/${key}`
+    if (value.length > 500) return `too long: ${key}`
+    if (UNIT_ENUMS[key] && !UNIT_ENUMS[key].includes(value.trim())) return `${key}: not one of ${UNIT_ENUMS[key].join(', ')}`
+    if (key.startsWith('Exec')) {
+      if (/^[-@:]*[+!]/.test(value)) return `${key}: the prefixes + and ! are not allowed`
+      const program = value.replace(/^[-@:]+/, '').split(/\s/)[0]
+      if (!UNIT_PATH.test(program)) return `${key}: the program needs an absolute path`
+      if (key === 'ExecStart') hasExec = true
+    } else if (key === 'WorkingDirectory') {
+      if (!UNIT_PATH.test(value.trim())) return 'WorkingDirectory: an absolute path'
+    } else if (['After', 'Before', 'Wants', 'Requires'].includes(key)) {
+      if (!value.trim().split(/\s+/).every((u) => UNIT_REF.test(u))) return `${key}: unit names only`
+    } else if (['OnCalendar', 'OnBootSec', 'OnStartupSec', 'OnActiveSec', 'OnUnitActiveSec', 'OnUnitInactiveSec'].includes(key)) {
+      if (!UNIT_TIME.test(value.trim())) return `${key}: not a time`
+      hasTime = true
+    } else if (['RestartSec', 'TimeoutStartSec', 'TimeoutStopSec', 'AccuracySec', 'RandomizedDelaySec'].includes(key)) {
+      if (!/^[0-9a-z]{1,20}$/.test(value.trim())) return `${key}: not a time`
+    } else if (key === 'Nice') {
+      if (!/^\d{1,2}$/.test(value.trim()) || Number(value) > 19) return 'Nice: 0 to 19'
+    } else if (key === 'SyslogIdentifier') {
+      if (!/^[A-Za-z0-9._-]{1,40}$/.test(value.trim())) return 'SyslogIdentifier: a plain name'
+    }
+  }
+  if (kind === 'service' && !hasExec) return 'a service needs an ExecStart'
+  if (kind === 'timer' && !hasTime) return 'a timer needs a time (OnCalendar, OnBootSec ...)'
+  return null
+}
+
 /** What is wrong with a manifest (null: nothing). `files`: the names in the package. */
 export function checkManifest(m: unknown, files: Set<string>): string | null {
   const x = m as Manifest
@@ -239,6 +315,13 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
   }
   const badResources = checkResources(x.resources)
   if (badResources) return badResources
+  if ((system.units ?? []).length > 4) return 'too many units'
+  for (const unit of system.units ?? []) {
+    if (!new RegExp(`^mpx-${x.id}[a-z0-9-]*\\.(service|timer)$`).test(String(unit?.name))) return `bad unit name: ${unit?.name}`
+    if (!FILE.test(String(unit.file)) || unit.file.includes('..') || !files.has(unit.file) || !unit.file.endsWith(unit.name.slice(unit.name.lastIndexOf('.')))) return `unit file missing: ${unit?.file}`
+    // (the box tests what is taken before an install: so every unit has to be said in the resources, too)
+    if (!(x.resources?.services ?? []).some((sv) => sv.name === unit.name && sv.provides === true)) return `unit ${unit.name} is not in resources.services with "provides": true`
+  }
   for (const g of system.groups ?? []) if (!GROUPS.has(g)) return `group not allowed: ${g}`
   for (const p of system.packages ?? []) if (!PACKAGE.test(p)) return `bad package name: ${p}`
   return null
@@ -335,7 +418,7 @@ function packageFiles(entries: { name: string; data: Buffer }[]): Map<string, Bu
   for (const entry of entries) {
     const name = entry.name.replace(/^\.\//, '')
     if (!FILE.test(name) || name.includes('..') || name.startsWith('/')) return `bad file name: ${name.slice(0, 40)}`
-    if (!ALLOWED_FILES.test(name)) return `not allowed in a package: ${name}`
+    if (!PACKAGE_FILES.test(name)) return `not allowed in a package: ${name}`
     files.set(name, entry.data)
   }
   return files
@@ -367,6 +450,10 @@ export function verifyPackage(bytes: Buffer): { ok: true; pkg: Package } | { ok:
   for (const rule of manifest.system?.udev ?? []) {
     const problem = checkUdevRules(files.get(rule.file)?.toString('utf8') ?? '')
     if (problem) return { ok: false, error: `${rule.name}: ${problem}` }
+  }
+  for (const unit of manifest.system?.units ?? []) {
+    const problem = checkUnitFile(files.get(unit.file)?.toString('utf8') ?? '', unit.name.endsWith('.timer') ? 'timer' : 'service')
+    if (problem) return { ok: false, error: `${unit.name}: ${problem}` }
   }
   return { ok: true, pkg: { files, manifest } }
 }
@@ -403,11 +490,13 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
       // what it asks to have set up must be what the catalog said (the app showed that before the install)
       const said = entry.system ?? {}
       const asked = m.system ?? {}
-      if ((asked.udev ?? []).length !== (said.udev ?? 0) || JSON.stringify(asked.groups ?? []) !== JSON.stringify(said.groups ?? []) || JSON.stringify(asked.packages ?? []) !== JSON.stringify(said.packages ?? [])) return fail('the package asks for more than the catalog says')
+      if ((asked.udev ?? []).length !== (said.udev ?? 0) || JSON.stringify((asked.units ?? []).map((u) => u.name)) !== JSON.stringify(said.units ?? []) || JSON.stringify(asked.groups ?? []) !== JSON.stringify(said.groups ?? []) || JSON.stringify(asked.packages ?? []) !== JSON.stringify(said.packages ?? [])) return fail('the package asks for more than the catalog says')
     }
     const { files, manifest } = pkg
     if (manifest.id !== id) return fail('the package is not the extension asked for')
     const sys = manifest.system ?? {}
+    // (the units of the version that is installed now: what the new one no longer has is removed)
+    const before = await readManifest(id)
 
     // what the package says it needs must be what was shown before (the catalog's entry), and it must not collide with anything
     if (!uploaded) {
@@ -462,6 +551,11 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
       const r = await run('sudo', ['usermod', '-aG', group, 'dietpi'], 20000)
       if (!r.ok) return fail(`group ${group}: ${r.out.slice(0, 100)}`)
     }
+    if ((sys.units ?? []).length > 0 || (before?.system?.units ?? []).length > 0) {
+      job.step = 'services'
+      const problem = await setUpUnits(before?.system?.units ?? [], sys.units ?? [], files, path.join(EXT_DIR, id), id)
+      if (problem) return fail(problem)
+    }
     if ((sys.packages ?? []).length > 0) {
       job.step = 'packages'
       const r = await run('sudo', ['apt-get', 'install', '-y', '--no-install-recommends', ...(sys.packages as string[])], 600000, { DEBIAN_FRONTEND: 'noninteractive' })
@@ -478,10 +572,63 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
   }
 }
 
+const UNIT_DIR = '/etc/systemd/system'
+
+/** Put a root-owned file in place (sudo install, from a temporary file). Returns what went wrong, or null. */
+async function installRootFile(name: string, data: string, to: string): Promise<string | null> {
+  const tmp = `/tmp/mpx-${process.pid}-${randomBytes(4).toString('hex')}`
+  await fsp.writeFile(tmp, data)
+  const r = await run('sudo', ['install', '-m', '644', '-o', 'root', '-g', 'root', tmp, to], 20000)
+  await fsp.rm(tmp, { force: true })
+  return r.ok ? null : `${name}: ${r.out.slice(0, 100)}`
+}
+
+/** The systemd units an extension brought are taken out again: stopped, switched off, the files removed. */
+async function removeUnits(units: { name: string }[]): Promise<void> {
+  for (const u of units) {
+    await run('sudo', ['systemctl', 'disable', '--now', u.name], 30000)
+    await run('sudo', ['rm', '-rf', `${UNIT_DIR}/${u.name}`, `${UNIT_DIR}/${u.name}.d`], 20000)
+  }
+  if (units.length > 0) await run('sudo', ['systemctl', 'daemon-reload'], 20000)
+}
+
+/**
+ * The systemd units of an extension: the files go into /etc/systemd/system (a service gets a drop-in that makes it run as the user of
+ * the box, without new privileges), then they are switched on and started. Units of the version before that the new one no longer has
+ * are removed. Returns what went wrong, or null.
+ */
+async function setUpUnits(before: { name: string }[], units: { name: string; file: string }[], files: Map<string, Buffer>, dir: string, id: string): Promise<string | null> {
+  await removeUnits(before.filter((b) => !units.some((u) => u.name === b.name)))
+  for (const u of units) {
+    // (@EXT_DIR@ is the folder of the extension)
+    const text = (files.get(u.file) as Buffer).toString('utf8').split('@EXT_DIR@').join(dir)
+    const bad = await installRootFile(`unit ${u.name}`, text, `${UNIT_DIR}/${u.name}`)
+    if (bad) return bad
+    if (u.name.endsWith('.service')) {
+      const made = await run('sudo', ['install', '-d', '-m', '755', `${UNIT_DIR}/${u.name}.d`], 20000)
+      if (!made.ok) return `unit ${u.name}: ${made.out.slice(0, 100)}`
+      const dropin = await installRootFile(`unit ${u.name}`, `# made by the extension ${id}: it runs as the user of the box\n[Service]\nUser=dietpi\nNoNewPrivileges=yes\n`, `${UNIT_DIR}/${u.name}.d/10-mupibox.conf`)
+      if (dropin) return dropin
+    }
+  }
+  if (units.length > 0) {
+    const r = await run('sudo', ['systemctl', 'daemon-reload'], 20000)
+    if (!r.ok) return `systemd: ${r.out.slice(0, 100)}`
+    for (const u of units) {
+      // (restart: a version that was running before has to run the new file)
+      await run('sudo', ['systemctl', 'enable', u.name], 20000)
+      const started = await run('sudo', ['systemctl', 'restart', u.name], 30000)
+      if (!started.ok) return `${u.name} did not start: ${started.out.slice(-150)}`
+    }
+  }
+  return null
+}
+
 async function removeExtension(id: string): Promise<void> {
   const job = jobs.get(id) as Job
   try {
     const manifest = await readManifest(id)
+    await removeUnits(manifest?.system?.units ?? [])
     for (const rule of manifest?.system?.udev ?? []) await run('sudo', ['rm', '-f', `/etc/udev/rules.d/${rule.name}`], 20000)
     if ((manifest?.system?.udev ?? []).length > 0) await run('sudo', ['udevadm', 'control', '--reload'], 20000)
     await fsp.rm(path.join(EXT_DIR, id), { recursive: true, force: true })
@@ -589,7 +736,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
       name: m.name,
       version: m.version,
       description: m.description ?? '',
-      system: { udev: (m.system?.udev ?? []).length, groups: m.system?.groups ?? [], packages: m.system?.packages ?? [] },
+      system: { udev: (m.system?.udev ?? []).length, units: (m.system?.units ?? []).map((u) => u.name), groups: m.system?.groups ?? [], packages: m.system?.packages ?? [] },
       resources: describeResources(m.resources),
       conflicts: await testResources(m, deps),
       installedVersion: state[m.id]?.version ?? null,
@@ -616,6 +763,8 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     }
     state[id].enabled = enabled
     await writeState(state)
+    // (its systemd services run while it is on)
+    for (const u of (await readManifest(id))?.system?.units ?? []) await run('sudo', ['systemctl', enabled ? 'enable' : 'disable', '--now', u.name], 30000)
     res.json({ ok: true })
     restartServices()
   })

@@ -137,6 +137,7 @@ const entry = {
   resources: manifest.resources,
   system: {
     udev: (manifest.system?.udev ?? []).length,
+    units: (manifest.system?.units ?? []).map((u) => u.name),
     groups: manifest.system?.groups ?? [],
     packages: manifest.system?.packages ?? [],
   },

@@ -11127,6 +11127,8 @@ function mountTidal(root, page) {
 
 /* Extensions (docs/extensions.md): the catalog on GitHub, install / switch off / remove, and the settings the installed ones declare */
 
+// the guideline for people who write extensions (English), in the repository
+const EXT_GUIDELINE_URL = 'https://github.com/Lippsson/MuPiBox/blob/dev5.1/extensions/README.md'
 const exts = { installed: [], catalog: [], catalogError: null }
 async function loadExtensions() {
   const r = await api(`${API}/extensions`)
@@ -11164,6 +11166,9 @@ function extSystemItems(system) {
   const rules = Array.isArray(system?.udev) ? system.udev.length : Number(system?.udev ?? 0)
   if (rules === 1) items.push('Adds a device rule (access rights for a device)')
   else if (rules > 1) items.push('Adds device rules (access rights for devices)')
+  // (the catalog names them as text, an installed extension has the objects of its manifest)
+  const units = (system?.units ?? []).map((u) => (typeof u === 'string' ? u : u.name))
+  if (units.length) items.push(`Adds and starts the systemd ${units.length === 1 ? 'service' : 'services'}: ${units.join(', ')}`)
   if (system?.groups?.length) items.push(`Adds the box's user to the group: ${system.groups.join(', ')}`)
   if (system?.packages?.length) items.push(`Installs packages: ${system.packages.join(', ')}`)
   return items
@@ -12098,7 +12103,7 @@ const CONTROLLERS = {
             { type: 'html', html: `<h2 class="ext-title">Alle Erweiterungen</h2>${note}<div class="ext-grid">${cards.join('') || '<p class="help">Keine Erweiterungen verfügbar.</p>'}</div>` },
             {
               type: 'html',
-              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/Lippsson/MuPiBox/tree/dev5.1/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.</span></div>`,
+              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/Lippsson/MuPiBox/tree/dev5.1/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab. <span translate="no">Please read more about the extension <a href="${EXT_GUIDELINE_URL}" target="_blank" rel="noopener noreferrer">guideline</a> here.</span></span></div>`,
             },
           ],
         },

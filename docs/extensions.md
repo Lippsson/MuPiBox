@@ -68,14 +68,23 @@ nie den Kern.
   antwortet mit `[{ label, values }]`, ein Tipp auf einen Treffer speichert dessen `values` (Einstellungen der Extension).
   Secrets haben einen eigenen „Speichern“-Knopf. Hat die Extension einen
   Display-Teil, lädt das Display nach dem Speichern der Einstellungen neu.
-- `system`: was bei der Installation als root eingerichtet wird. **Nur diese drei Arten, jede geprüft:**
+- `system`: was bei der Installation als root eingerichtet wird. **Nur diese vier Arten, jede geprüft:**
   - `udev`: `{ name, file }` – die Regel-Datei aus dem Paket kommt als `99-mpx-<id>….rules` nach `/etc/udev/rules.d/`. Erlaubt
     sind nur Vergleiche (`KERNEL`, `SUBSYSTEM`, `ATTRS{…}` …) und die Zuweisungen `MODE`, `GROUP`, `OWNER`, `TAG`, `SYMLINK`;
     `RUN`, `PROGRAM`, `IMPORT` und `ENV{…}=` lehnt der Kern ab.
+  - `units`: `{ name, file }` – systemd-Dienste und -Timer aus dem Paket (höchstens vier). Der Name beginnt mit `mpx-<id>` und endet auf
+    `.service` oder `.timer`; die Datei (`units/…`) kommt nach `/etc/systemd/system/`. **Jede Unit muss auch in `resources.services` mit
+    `"provides": true` stehen** (damit der Test sie kennt). Die Datei darf nur wenige einfache Schlüssel enthalten (`[Unit]`: Description,
+    After, Before, Wants, Requires; `[Service]`: Type, ExecStart…, Restart, RestartSec, WorkingDirectory, Environment, Timeout…, StandardOutput/Error,
+    SyslogIdentifier, Nice, KillMode; `[Timer]`: OnCalendar, OnBootSec …, Persistent; `[Install]`: `WantedBy=multi-user.target|timers.target`),
+    Programme mit absolutem Pfad (`@EXT_DIR@` = der Ordner der Extension), ohne die Präfixe `+`/`!` und ohne Zeilenfortsetzung. `User`, `Group`,
+    Capabilities und alles andere lehnt der Kern ab. Ein Dienst läuft **nicht** als root: der Kern legt ein Drop-in `10-mupibox.conf` mit
+    `User=dietpi` und `NoNewPrivileges=yes` dazu. Nach der Installation werden die Units eingeschaltet und (neu) gestartet; beim Ausschalten der
+    Extension gestoppt, beim Entfernen samt Dateien gelöscht (ebenso Units, die eine neue Version nicht mehr hat).
   - `groups`: der Benutzer `dietpi` kommt in diese Gruppen; erlaubt nur `cdrom`, `audio`, `video`, `plugdev`.
   - `packages`: Debian-Pakete (`apt-get install`), Namen nach `^[a-z0-9][a-z0-9+.-]{1,60}$`; die Webapp zeigt sie vor
     der Installation.
-  Beim Entfernen nimmt der Kern genau das wieder weg, was er angelegt hat (Regel-Dateien; Gruppen und Pakete bleiben, weil
+  Beim Entfernen nimmt der Kern genau das wieder weg, was er angelegt hat (Regel-Dateien und Units; Gruppen und Pakete bleiben, weil
   andere sie brauchen können).
 - `resources` (**Pflicht**, `{}` heißt „braucht nichts“): was die Extension von der Box braucht. Sie sagt es **vorher**, die Box
   prüft es **vor** der Installation gegen das, was schon belegt ist.
@@ -104,11 +113,11 @@ nie den Kern.
 ```json
 [{ "id": "cd", "name": "USB-CD-Laufwerk", "version": "1.0.0", "description": "…", "hostApi": 1,
    "url": "https://raw.githubusercontent.com/<repo>/<branch>/extensions/dist/cd-1.0.0.mpx",
-   "sha256": "…", "size": 12345, "system": { "udev": 1, "groups": ["cdrom"], "packages": [] }, "resources": {} }]
+   "sha256": "…", "size": 12345, "system": { "udev": 1, "units": [], "groups": ["cdrom"], "packages": [] }, "resources": {} }]
 ```
 
 Die Box lädt die Datei, prüft die Größe (höchstens 4 MB) und die SHA-256, prüft Dateinamen und Manifest, vergleicht es mit dem
-Katalogeintrag (Id, Version, Systemschritte, `resources`) und testet die Ressourcen gegen die Box und installiert erst dann (Dateien, Regeln, Gruppen, Pakete; danach starten
+Katalogeintrag (Id, Version, Systemschritte, `resources`) und testet die Ressourcen gegen die Box und installiert erst dann (Dateien, Regeln, Units, Gruppen, Pakete; danach starten
 `server` und `spotify-control` neu, das Display lädt neu). Gebaut wird mit `node tools/mpx/pack.mjs <id>`:
 das macht aus `extensions/<id>/` die `.mpx` in `extensions/dist/` und trägt Größe und Prüfsumme in den Katalog ein.
 
@@ -196,6 +205,8 @@ bräuchten (`gpio`/`spi`/`i2c`, Pause/Weiter im Player), steht mit dem Abgleich 
 Dort steht auch, dass `EXT_DIR` (API und Player) beim Umzug auf die vier Ordner von 5.1 über `paths.ts` gehen soll.
 
 ## Eine Extension bauen
+
+Die Richtlinien für Autoren (auf Englisch, mit Checkliste) stehen in [`extensions/README.md`](../extensions/README.md); die Webapp verlinkt sie auf der Seite „Erweiterungen“.
 
 `extensions/<id>/` mit `manifest.json` und den Teilen, dann `node tools/mpx/pack.mjs <id>` (packt nach `extensions/dist/`, trägt den Katalog
 ein) und beides einchecken. Tests der Extension (`extensions/<id>/test/*.test.js`) kommen nicht ins Paket: `node --test extensions/cd/test/*.test.js`.
