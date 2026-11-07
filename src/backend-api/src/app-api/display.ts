@@ -17,7 +17,7 @@ import { applyNightDim, nightDimmed, nightDimOf, parseNightDim } from './night-d
 import { CUSTOM_THEME_CSS, customThemeCss, customThemeOf } from './custom-theme'
 import { bootConfigPath } from './boot-paths'
 import { DSI_SCREEN_CONF, DSI_TOUCH_CONF, dsiConfig, dsiOutput, isDsiRotation } from './dsi-rotation'
-import { activateSkin, addSkin, listSkins, removeSkinById } from './winamp-skin'
+import { activateSkin, addSkin, ensureDefaultSkin, listSkins, removeSkinById } from './winamp-skin'
 import { WWW_DIR } from '../paths'
 
 export interface DisplayDeps {
@@ -100,6 +100,8 @@ const num = (v: unknown, min: number, max: number, step = 1): number | undefined
 }
 
 export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
+  // (the theme "winamp" shows the classic base skin until the parents upload another one)
+  ensureDefaultSkin().catch((err: Error) => console.error(`[display] default Winamp skin: ${err.message}`))
   /** GET /api/app/display-options - everything the pages Ansicht, Vorlesen, Display and Bedienung show. */
   router.get('/display-options', requireSession, async (_req, res) => {
     const cfg = deps.getMupiboxConfig() as Record<string, Record<string, unknown> | undefined> | undefined

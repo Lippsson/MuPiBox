@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { activateSkin, addSkin, bmpSize, installSkin, listSkins, parsePledit, parseViscolors, readSkinMeta, readZip, removeSkinById, type SkinDirs } from './app-api/winamp-skin'
+import { activateSkin, addSkin, bmpSize, ensureDefaultSkin, installSkin, listSkins, parsePledit, parseViscolors, readSkinMeta, readZip, removeSkinById, type SkinDirs } from './app-api/winamp-skin'
 
 // A zip with stored (not packed) files - what a skin needs, made here so the test has no file of anyone else's.
 function zip(files: Record<string, Buffer>): Buffer {
@@ -130,6 +130,32 @@ describe('winamp skins', () => {
     await assert.rejects(addSkin(zip({ 'readme.txt': Buffer.from('hi') }), 'Nope.wsz', d), /not a Winamp skin/)
     await assert.rejects(addSkin(Buffer.from('this is not a zip at all, just text'), 'Nope.wsz', d), /not a zip/)
     assert.equal((await listSkins(d)).length, 1)
+  })
+
+  it('the base skin comes once: first skin of a box, never again after it was taken out', async () => {
+    const d = dirs()
+    const root = mkdtempSync(path.join(tmpdir(), 'skin-default-'))
+    const file = path.join(root, 'base-2.91.wsz')
+    const mark = path.join(root, '.default-skin-done')
+    // (no file yet: nothing happens, the next start tries again)
+    assert.equal(await ensureDefaultSkin(file, mark, d), false)
+    assert.equal(existsSync(mark), false)
+    writeFileSync(file, skinZip())
+    assert.equal(await ensureDefaultSkin(file, mark, d), true)
+    const list = await listSkins(d)
+    assert.deepEqual(list.map((s) => [s.name, s.active]), [['base-2.91', true]])
+    assert.ok(existsSync(path.join(d.active, 'main.bmp')))
+    // (taken out by the parents: it does not come back)
+    assert.equal(await removeSkinById(list[0].id, d), true)
+    assert.equal(await ensureDefaultSkin(file, mark, d), false)
+    assert.equal((await listSkins(d)).length, 0)
+    // (a box that has a skin already: marked, not changed)
+    const d2 = dirs()
+    const mark2 = path.join(root, '.mark2')
+    await addSkin(skinZip(), 'Mine.wsz', d2)
+    assert.equal(await ensureDefaultSkin(file, mark2, d2), false)
+    assert.ok(existsSync(mark2))
+    assert.deepEqual((await listSkins(d2)).map((s) => s.name), ['Mine'])
   })
 
   it('small helpers: zip entries, bitmap size, the colours', () => {

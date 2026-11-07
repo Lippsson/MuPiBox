@@ -159,6 +159,7 @@ the packages in the bundles.
 
 | Component | Use | License | Notes |
 | --- | --- | --- | --- |
+| Winamp base skin (base-2.91) | theme "winamp": the skin shown until another one is uploaded (`themes/winamp/base-2.91.wsz`) | Nullsoft (the default skin of Winamp 2.91, freely distributed with it) | bitmaps only, unchanged; the parents can upload any other .wsz skin |
 | Fredoka font | web app and kids' themes (`mupi-app/fonts`, `themes/_fonts`) | SIL Open Font License 1.1 | `OFL-Fredoka.txt` next to the font |
 | Nunito Sans font | web app (`mupi-app/fonts`) | SIL Open Font License 1.1 | `OFL-NunitoSans.txt` next to the font |
 | Baloo 2 font | kids' themes (`themes/_fonts`) | SIL Open Font License 1.1 | `OFL-Baloo2.txt` next to the font |

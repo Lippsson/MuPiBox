@@ -252,6 +252,29 @@ export async function listSkins(dirs: SkinDirs = DEFAULT_DIRS): Promise<StoredSk
   return out.sort((a, b) => b.version - a.version)
 }
 
+/** The skin that comes with the theme (the update copies themes/winamp/ into theme-data/winamp/) and the mark that it was offered. */
+export const DEFAULT_SKIN_FILE = `${WWW_DIR}/theme-data/winamp/base-2.91.wsz`
+export const DEFAULT_SKIN_MARK = `${WWW_DIR}/theme-data/winamp/.default-skin-done`
+
+/**
+ * The classic base skin (base-2.91) is the first skin of a box, so the theme shows something at once. Only once: when the
+ * box has a skin already, or one was taken out of the list later, nothing comes back. Nothing happens when its file is not
+ * there (yet): the next start tries again. Returns whether the skin was added.
+ */
+export async function ensureDefaultSkin(file = DEFAULT_SKIN_FILE, mark = DEFAULT_SKIN_MARK, dirs: SkinDirs = DEFAULT_DIRS): Promise<boolean> {
+  if (await exists(mark)) return false
+  let wsz: Buffer
+  try {
+    wsz = await fsp.readFile(file)
+  } catch {
+    return false
+  }
+  const has = (await listSkins(dirs)).length > 0
+  if (!has) await addSkin(wsz, path.basename(file), dirs)
+  await fsp.writeFile(mark, new Date().toISOString())
+  return !has
+}
+
 /** Takes a skin out of the library; the one shown is taken away too when it is that one. */
 export async function removeSkinById(id: string, dirs: SkinDirs = DEFAULT_DIRS): Promise<boolean> {
   if (!ID.test(id)) return false

@@ -343,6 +343,12 @@ function themeFonts() {
 const STATIC = {
   shipped: [
     [
+      'Winamp base skin (base-2.91)',
+      'theme "winamp": the skin shown until another one is uploaded (`themes/winamp/base-2.91.wsz`)',
+      'Nullsoft (the default skin of Winamp 2.91, freely distributed with it)',
+      'bitmaps only, unchanged; the parents can upload any other .wsz skin',
+    ],
+    [
       'Fredoka font',
       "web app and kids' themes (`mupi-app/fonts`, `themes/_fonts`)",
       'SIL Open Font License 1.1',

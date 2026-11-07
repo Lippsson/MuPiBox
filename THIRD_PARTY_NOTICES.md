@@ -159,6 +159,7 @@ the packages in the bundles.
 
 | Component | Use | License | Notes |
 | --- | --- | --- | --- |
+| Winamp base skin (base-2.91) | theme "winamp": the skin shown until another one is uploaded (`themes/winamp/base-2.91.wsz`) | Nullsoft (the default skin of Winamp 2.91, freely distributed with it) | bitmaps only, unchanged; the parents can upload any other .wsz skin |
 | Fredoka font | web app and kids' themes (`mupi-app/fonts`, `themes/_fonts`) | SIL Open Font License 1.1 | `OFL-Fredoka.txt` next to the font |
 | Nunito Sans font | web app (`mupi-app/fonts`) | SIL Open Font License 1.1 | `OFL-NunitoSans.txt` next to the font |
 | Baloo 2 font | kids' themes (`themes/_fonts`) | SIL Open Font License 1.1 | `OFL-Baloo2.txt` next to the font |
@@ -226,7 +227,6 @@ The installer (or the box, when a function needs them) fetches these from their 
 | noVNC | git clone to /usr/share/novnc (autosetup, update where missing; used only when remote control is switched on) | MPL-2.0 (parts under other licenses) | https://github.com/novnc/noVNC |
 | Piper | 2023.11.14-2 (piper_linux_aarch64.tar.gz from github.com/rhasspy/piper), only when the first voice is loaded under Speech output | MIT; the archive also holds espeak-ng and its data (GPL-3.0-or-later), ONNX Runtime 1.14.1 (MIT), piper-phonemize (MIT) and the libtashkeel model (MIT) | https://github.com/rhasspy/piper - speaks announcements and names offline |
 | Piper voices | each one when it is loaded under Speech output (huggingface.co/rhasspy/piper-voices) | per voice (e.g. CC0, CC BY 4.0, MIT) - the app shows each voice's licence and source | https://huggingface.co/rhasspy/piper-voices |
-| tidalapi (python-tidal) | 0.8.11 from PyPI with its dependencies, into its own Python at /opt/mupibox-tidal - only when TIDAL is switched on in the app (scripts/mupibox/tidal_setup.sh) | LGPL-3.0-or-later (dependencies per package) | https://github.com/EbbLabs/python-tidal - the unofficial TIDAL connection; not endorsed by TIDAL, use at your own risk |
 
 ## C. Installed from Debian / Raspberry Pi OS / DietPi packages
 
