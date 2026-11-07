@@ -18,6 +18,8 @@ test('reads an answer of Open-Meteo', () => {
     hourly: {
       time: ['2026-11-06T23:00', '2026-11-07T00:00', '2026-11-07T01:00', '2026-11-07T02:00'],
       temperature_2m: [-10, -11, -11.5, -12],
+      relative_humidity_2m: [50, 52, 54, 56],
+      pressure_msl: [1010, 1011, 1012, 1013],
       precipitation: [0.5, 0.25, 0, 3],
       wind_direction_10m: [350, 10, 20, 90],
     },
@@ -36,6 +38,19 @@ test('reads an answer of Open-Meteo', () => {
   assert.equal(r.tempMin, -11.6)
   assert.equal(r.tempMax, -10)
   assert.equal(r.windDirAvg, 7)
+  assert.equal(r.humMin, 50)
+  assert.equal(r.humMax, 56)
+  assert.equal(r.pressMin, 1010)
+  assert.equal(r.pressMax, 1012.4)
+  // (three hours ago: only three hours are in the answer before now, so the trend is against the first)
+  assert.deepEqual(r.trend, { temp: -1, hum: 1, press: 1 })
+})
+
+test('tells a trend from a small change', () => {
+  assert.equal(_test.trendOf(1012.4, 1011, 1), 1)
+  assert.equal(_test.trendOf(1011.4, 1012, 1), 0)
+  assert.equal(_test.trendOf(5, 7, 1), -1)
+  assert.equal(_test.trendOf(5, undefined, 1), 0)
 })
 
 test('reads an answer of MET Norway (m/s become km/h, the rain is the forecast)', () => {

@@ -1,7 +1,8 @@
 // The weather, API part: fetches the values of the chosen place from the chosen weather server and gives the display one plain answer
 // (the same fields from either server), and searches places by name. Both servers are free and need no key.
 //   GET /api/ext/weather/data           -> { configured, provider, place, timeText, temperature, humidity, windSpeed, windGust, windDir,
-//                                            windDirAvg, pressure, rain24, rainKind, tempMin, tempMax }
+//                                            windDirAvg, pressure, rain24, rainKind, tempMin, tempMax, humMin, humMax, pressMin,
+//                                            pressMax, trend: { temp, hum, press } (-1, 0, 1) }
 //   GET /api/ext/weather/places?q=name  -> [{ label, values: { placeName, lat, lon } }]
 
 const CACHE_MS = 10 * 60 * 1000
@@ -21,6 +22,15 @@ function circularMean(degrees) {
   return (Math.round((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360
 }
 
+/** -1, 0 or 1: the value fell, stayed or rose by at least `step` (the dials show it as an arrow); 0 when one of the values is missing. */
+function trendOf(now, before, step) {
+  if (!Number.isFinite(now) || !Number.isFinite(before)) return 0
+  return now - before >= step ? 1 : before - now >= step ? -1 : 0
+}
+
+const minOf = (values) => round(Math.min(...values.filter((v) => Number.isFinite(v))))
+const maxOf = (values) => round(Math.max(...values.filter((v) => Number.isFinite(v))))
+
 /** Open-Meteo: measured values of now and the hours before (hourly, 24 h back). */
 function parseOpenMeteo(body) {
   const c = body?.current
@@ -29,7 +39,12 @@ function parseOpenMeteo(body) {
   const times = Array.isArray(h.time) ? h.time : []
   // (the hours up to now; the last hour of the answer may lie ahead)
   const past = times.map((t, i) => i).filter((i) => String(times[i]).slice(0, 13) <= String(c.time).slice(0, 13))
-  const temps = [...past.map((i) => h.temperature_2m?.[i]), c.temperature_2m].filter((v) => Number.isFinite(v))
+  const series = (key, now) => [...past.map((i) => h[key]?.[i]), now].filter((v) => Number.isFinite(v))
+  const temps = series('temperature_2m', c.temperature_2m)
+  const hums = series('relative_humidity_2m', c.relative_humidity_2m)
+  const press = series('pressure_msl', c.pressure_msl)
+  // (the trend: now against three hours ago)
+  const ago = (key) => h[key]?.[past[Math.max(0, past.length - 4)]]
   return {
     timeText: String(c.time).slice(11, 16),
     temperature: round(c.temperature_2m),
@@ -41,8 +56,13 @@ function parseOpenMeteo(body) {
     pressure: round(c.pressure_msl),
     rain24: round(past.slice(-24).reduce((sum, i) => sum + (Number(h.precipitation?.[i]) || 0), 0)),
     rainKind: 'past',
-    tempMin: round(Math.min(...temps)),
-    tempMax: round(Math.max(...temps)),
+    tempMin: minOf(temps),
+    tempMax: maxOf(temps),
+    humMin: minOf(hums),
+    humMax: maxOf(hums),
+    pressMin: minOf(press),
+    pressMax: maxOf(press),
+    trend: { temp: trendOf(c.temperature_2m, ago('temperature_2m'), 1), hum: trendOf(c.relative_humidity_2m, ago('relative_humidity_2m'), 5), press: trendOf(c.pressure_msl, ago('pressure_msl'), 1) },
   }
 }
 
@@ -55,6 +75,8 @@ function parseMetNo(body) {
   const day = series.slice(0, 24)
   const temps = day.map((e) => e?.data?.instant?.details?.air_temperature).filter((v) => Number.isFinite(v))
   const dirs = day.slice(0, 3).map((e) => e?.data?.instant?.details?.wind_from_direction)
+  const at = (hour, key) => series[hour]?.data?.instant?.details?.[key]
+  const all = (key) => day.map((e) => e?.data?.instant?.details?.[key])
   const kmh = (ms) => (Number.isFinite(ms) ? ms * 3.6 : NaN)
   return {
     timeText: new Date(first.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
@@ -67,8 +89,14 @@ function parseMetNo(body) {
     pressure: round(d.air_pressure_at_sea_level),
     rain24: round(day.reduce((sum, e) => sum + (Number(e?.data?.next_1_hours?.details?.precipitation_amount) || 0), 0)),
     rainKind: 'forecast',
-    tempMin: round(Math.min(...temps)),
-    tempMax: round(Math.max(...temps)),
+    tempMin: minOf(temps),
+    tempMax: maxOf(temps),
+    humMin: minOf(all('relative_humidity')),
+    humMax: maxOf(all('relative_humidity')),
+    pressMin: minOf(all('air_pressure_at_sea_level')),
+    pressMax: maxOf(all('air_pressure_at_sea_level')),
+    // (the model has no hours before: the trend is where the next three hours go)
+    trend: { temp: trendOf(at(3, 'air_temperature'), d.air_temperature, 1), hum: trendOf(at(3, 'relative_humidity'), d.relative_humidity, 5), press: trendOf(at(3, 'air_pressure_at_sea_level'), d.air_pressure_at_sea_level, 1) },
   }
 }
 
@@ -88,7 +116,7 @@ const SOURCES = {
   openmeteo: async (lat, lon) =>
     parseOpenMeteo(
       await getJson(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,precipitation,wind_direction_10m&past_hours=24&forecast_hours=1&wind_speed_unit=kmh&timezone=auto`,
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,relative_humidity_2m,pressure_msl,precipitation,wind_direction_10m&past_hours=24&forecast_hours=1&wind_speed_unit=kmh&timezone=auto`,
       ),
     ),
   metno: async (lat, lon) => parseMetNo(await getJson(`https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`)),
@@ -154,4 +182,4 @@ exports.activate = (host) => {
   })
 }
 
-exports._test = { parseOpenMeteo, parseMetNo, circularMean, placeOf }
+exports._test = { parseOpenMeteo, parseMetNo, circularMean, placeOf, trendOf }

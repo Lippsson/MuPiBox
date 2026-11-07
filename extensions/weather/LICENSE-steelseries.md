@@ -1,4 +1,4 @@
-Copyright (c) 2011, Gerrit Grunwald, Mark Crossley, Nicolas Vanhoren
+Copyright (c) 2011, Gerrit Grunwald, Mark Crossley
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification, are permitted
