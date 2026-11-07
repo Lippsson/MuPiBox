@@ -11339,9 +11339,13 @@ function extensionDetails(e, installed) {
   const fields = installed && e.enabled && e.ui ? e.ui.items : []
   const type = (it) => e.settingTypes?.[it.key]
   const form = fields
-    .map((it) => {
+    .map((it, index) => {
       const k = esc(it.key)
       const help = it.help ? `<small class="help">${esc(it.help)}</small>` : ''
+      if (it.type === 'roster') {
+        // a list the extension keeps itself (the users of the box, say): to look at, to add to, to take from and to choose from
+        return `<div class="field"><label>${esc(it.label)}</label><ul class="ext-roster" data-xroster="${index}" aria-live="polite"></ul><div class="row" style="gap:8px"><input class="input" type="text" maxlength="24" data-xradd="${index}" placeholder="Name" autocomplete="off" aria-label="${esc(it.label)}" ${NO_PW_MANAGER}><button type="button" class="btn" data-xraddgo="${index}">Anlegen</button></div>${help}</div>`
+      }
       if (type(it) === 'boolean') {
         return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
       }
@@ -11367,7 +11371,7 @@ function extensionDetails(e, installed) {
       return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xk-${k}">${esc(it.label)}</label><input class="input" id="xk-${k}" type="${kind}" data-xk="${k}" data-secret="${secret}" value="${secret ? '' : esc(e.settings?.[it.key] ?? '')}" placeholder="${secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : ''}" ${NO_PW_MANAGER}>${help}</div>`
     })
     .join('')
-  const hasText = fields.some((it) => type(it) !== 'boolean' && !it.choices && it.type !== 'lookup')
+  const hasText = fields.some((it) => type(it) !== 'boolean' && !it.choices && it.type !== 'lookup' && it.type !== 'roster')
   openSheet(
     `<h2>${esc(e.name)} <small>${esc(e.version)}</small></h2>
      <p class="help" style="margin:0">${esc(e.description)}</p>
@@ -11517,6 +11521,100 @@ function extensionDetails(e, installed) {
           keep()
         })
       }
+      // (a roster: the extension's list route says who is there and who is the current one; a change goes through the add, remove
+      // and select routes. Choosing takes the box a while - it restarts - so the app waits for it and then loads itself again.)
+      fields.forEach((item, index) => {
+        if (item.type !== 'roster') return
+        const list = sheet.querySelector(`[data-xroster="${index}"]`)
+        const input = sheet.querySelector(`[data-xradd="${index}"]`)
+        let busy = false
+        const post = (route, body) => api(route, { method: 'POST', body, timeoutMs: 20000 })
+        const draw = async () => {
+          const r = await api(item.list, { timeoutMs: 15000 })
+          if (!r.ok || !Array.isArray(r.body?.users)) {
+            list.textContent = 'Die Liste konnte nicht geladen werden.'
+            return null
+          }
+          list.textContent = ''
+          for (const u of r.body.users) {
+            const li = document.createElement('li')
+            const name = document.createElement('span')
+            name.className = 'ext-roster-name'
+            name.textContent = u.name
+            li.append(name)
+            if (u.id === r.body.current) {
+              li.classList.add('current')
+              const mark = document.createElement('span')
+              mark.className = 'ext-roster-mark'
+              mark.textContent = 'Aktiv'
+              li.append(mark)
+            } else {
+              const go = document.createElement('button')
+              go.type = 'button'
+              go.className = 'btn'
+              go.textContent = 'Wechseln'
+              go.onclick = () => choose(u)
+              li.append(go)
+            }
+            const del = document.createElement('button')
+            del.type = 'button'
+            del.className = 'btn'
+            del.textContent = 'Löschen'
+            del.setAttribute('aria-label', `${u.name}: Löschen`)
+            del.disabled = u.id === r.body.current || r.body.users.length < 2
+            del.onclick = () => remove(u)
+            li.append(del)
+            list.append(li)
+          }
+          return r.body
+        }
+        const choose = async (u) => {
+          if (busy) return
+          if (!(await ask('Benutzer wechseln', `Die Box lädt die Einstellungen und die Bibliothek von „${u.name}“ und startet dabei neu. Das dauert etwa eine halbe Minute.`, 'Wechseln'))) return
+          busy = true
+          const r = await post(item.select, { id: u.id })
+          if (!r.ok) {
+            busy = false
+            return toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+          }
+          toast('Wird gewechselt …')
+          list.textContent = 'Wird gewechselt …'
+          // (the box restarts: it answers again when it is through; the app loads itself again then, with the settings of the user)
+          const until = Date.now() + 120_000
+          const wait = async () => {
+            const st = await api(item.list, { timeoutMs: 5000 })
+            if (st.ok && st.body?.current === u.id && !st.body?.busy) return location.reload()
+            if (Date.now() < until) setTimeout(wait, 3000)
+            else {
+              busy = false
+              toast('Die Box antwortet nicht – bitte kurz warten und die App neu laden.', 'info')
+            }
+          }
+          setTimeout(wait, 8000)
+        }
+        const remove = async (u) => {
+          if (busy) return
+          if (!(await ask('Benutzer löschen', `„${u.name}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.`, 'Löschen'))) return
+          const r = await post(item.remove, { id: u.id })
+          if (!r.ok) toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+          else toast('Gelöscht')
+          draw()
+        }
+        const add = async () => {
+          const name = input.value.trim()
+          if (!name || busy) return
+          const r = await post(item.add, { name })
+          if (!r.ok) return toast(r.body?.error === 'exists' ? 'Den Namen gibt es schon' : r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+          input.value = ''
+          toast('Angelegt')
+          draw()
+        }
+        sheet.querySelector(`[data-xraddgo="${index}"]`).onclick = add
+        input.onkeydown = (ev) => {
+          if (ev.key === 'Enter') add()
+        }
+        draw()
+      })
       // (a choice from a few: saved at once, as a switch is)
       for (const group of sheet.querySelectorAll('[data-xseg]')) {
         const key = group.dataset.xseg

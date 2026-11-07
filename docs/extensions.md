@@ -135,9 +135,9 @@ Webapp › Einstellungen › System › **Erweiterungen**: Karten wie auf der Er
 was der Katalog bietet, steht mit „Installieren“ dahinter. Nur mit Anmeldung (Eltern). Nach einer Änderung starten Player, API und Display neu (eine Wiedergabe
 bricht dabei ab; die Webapp sagt es vorher).
 
-## Die Schnittstellen (`hostApi` 1, 2 und 3)
+## Die Schnittstellen (`hostApi` 1 bis 4)
 
-Die Nummer 2 (Wetter) bringt zum Display `api.overlay`, `api.fetchApi` und im Manifest `lookup`, `options`, `min`/`max`. Ein Paket mit `hostApi: 1` läuft unverändert. Die Nummer 3 (Wetter 1.5) bringt im Manifest `type: "order"`: eine Liste, die man in der Webapp per Drag and Drop sortiert (`choices` = Namen und Beschriftungen, die Einstellung ist ein `string` mit den Namen, durch Komma getrennt; der Standardwert nennt jeden Eintrag einmal).
+Die Nummer 2 (Wetter) bringt zum Display `api.overlay`, `api.fetchApi` und im Manifest `lookup`, `options`, `min`/`max`. Ein Paket mit `hostApi: 1` läuft unverändert. Die Nummer 3 (Wetter 1.5) bringt im Manifest `type: "order"`: eine Liste, die man in der Webapp per Drag and Drop sortiert (`choices` = Namen und Beschriftungen, die Einstellung ist ein `string` mit den Namen, durch Komma getrennt; der Standardwert nennt jeden Eintrag einmal). Die Nummer 4 (Benutzer) bringt im Manifest `type: "roster"`: eine Liste, die die Extension selbst führt (Benutzer, zum Beispiel), mit den vier Adressen `list`, `add`, `remove` und `select` (Routen mit Anmeldung unter `/api/ext/<id>/…`; ohne Einstellung, ohne `key`), und im API-Teil `host.updateConfig`, `host.paths` und `host.restartServices` (unten).
 
 ### Player: `activate(host)`
 
@@ -163,6 +163,9 @@ Die Nummer 2 (Wetter) bringt zum Display `api.overlay`, `api.fetchApi` und im Ma
 - `host.route('get' | 'post', '/sub', handler, { session: true })` – Route unter `/api/ext/<id>/sub`; ohne `session` für das Netz
   der Box, mit `session` nur mit der Anmeldung der Eltern (POST dann mit CSRF-Token). Fehler im Handler werden gefangen (500).
 - `host.playerUrl` – die Adresse des Players
+- `host.updateConfig(mutate)` (`hostApi` 4) – ändert die Konfiguration der Box (`mupiboxconfig.json`) unter ihrer Sperre: `mutate(cfg)` ändert das Objekt, das Ergebnis wird gespeichert. Gehört zu den Dingen, die nur eine Extension tun darf, der man vertraut.
+- `host.paths` (`hostApi` 4) – `{ library, data, extensions }`: wo die Box ihre Bibliothek, ihre Daten und die Extensions hält
+- `host.restartServices()` (`hostApi` 4) – startet Player und Server neu und lädt danach das Display; der API-Teil läuft im Server, also ist das das Letzte, was er tut
 
 Dazu liefert der Kern selbst: `GET /api/app/extensions` (Katalog und Installiertes), `POST /api/app/extensions/install|remove|enable`,
 `GET/POST /api/app/ext/<id>/settings`, die Dateien der Extension unter `/ext/<id>/…` und `GET /api/ext/active` (die Liste für das Display).
@@ -196,7 +199,7 @@ Einstellungen, Dateien, Installieren/Entfernen, Katalog), Display (`extension-ho
 „Erweiterungen“), `tools/mpx/pack.mjs`, die CD-Anbindung als erste Extension (`extensions/cd/`). Die Uhr in der Kopfzeile ist die zweite
 Extension (`extensions/clock/`, `api.header` im Display); sie ist nicht mehr im Kern. Die dritte ist das Wetter (`extensions/weather/`,
 `hostApi` 2: `api.overlay`, `api.fetchApi`, `lookup`): Open-Meteo oder MET Norway, die Anzeigen sind die SteelSeries-Messuhren
-(BSD-2, im Paket mitgeliefert).
+(BSD-2, im Paket mitgeliefert). Die vierte sind die Benutzer (`extensions/users/`, `hostApi` 4): jeder Benutzer hat seine Einstellungen und seine Bibliothek, gewechselt wird am Display (rundes Zeichen in der Kopfzeile) oder in der Webapp; der Spotify-Login, WLAN, NAS und die Hardware sind für alle gleich. Beim Wechsel sichert die Extension den Stand des bisherigen Benutzers in ihrem Ordner, lädt den des neuen, und die Box startet neu.
 
 ## Offen (für Foto/Immich, Taster/NFC)
 

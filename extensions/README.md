@@ -62,13 +62,17 @@ settings card from what the manifest declares.
 - **`id`**: lowercase letters, digits and `-`, 2–31 characters, starting with a letter. It never changes.
 - **`version`**: `major.minor.patch`. Raise it with every change you publish; the box offers an update when the catalog has a higher
   number than the installed one.
-- **`hostApi`**: the number of the interface you wrote the extension for (`1`, `2` or `3`; `3` is needed for an `order` field, see below). A box does not load an extension made for a
+- **`hostApi`**: the number of the interface you wrote the extension for (`1` to `4`; `3` is needed for an `order` field, `4` for a `roster`, see below). A box does not load an extension made for a
   newer interface than its own.
 - **`resources`** is **required** (`{}` means "needs nothing"), see section 4.
 - **`settings`** and **`ui`**: what the extension stores and how the settings card looks. Types are `boolean`, `string`, `number`
   and `secret` (a token or password: the box never sends it back to the app, only whether one is set).
   A `ui` item can also be a list the user puts in order by dragging (`hostApi` 3): `"type": "order"` with `choices` (the names and
   labels), for a `string` setting whose value is the names, comma separated, in the chosen order (the default must name every choice once).
+  A `ui` item can also be a `roster` (`hostApi` 4): a list the extension keeps itself, such as the users of the box. It has no setting and no `key`, but four
+  addresses of the extension's own API part, `list` (GET, `{ current, users: [{ id, name }], busy }`), `add` (`{ name }`), `remove` (`{ id }`) and `select` (`{ id }`);
+  the app shows the entries with buttons to switch and delete, and a field to add one. With `hostApi` 4 the API part also gets `host.updateConfig(mutate)`,
+  `host.paths` (`{ library, data, extensions }`) and `host.restartServices()`.
 - **`system`**: what the box sets up as root, see section 5.
 - Texts in the manifest are shown as written. The app translates a text only if it knows it exactly, so write yours in English
   unless the extension is meant for one language only. (The extensions shipped in this repository are written in German, the source

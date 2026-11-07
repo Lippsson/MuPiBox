@@ -46,7 +46,7 @@ describe('manifest of an extension', () => {
   it('refuses a bad id, a missing part and a newer host', () => {
     assert.ok(checkManifest(base({ id: '../x' }), files()))
     assert.ok(checkManifest(base({ player: 'player.js' }), files()))
-    assert.ok(checkManifest(base({ hostApi: 4 }), files()))
+    assert.ok(checkManifest(base({ hostApi: 5 }), files()))
     assert.ok(checkManifest(base({ version: '1.0' }), files()))
   })
   it('refuses file names that leave the folder', () => {
@@ -142,6 +142,15 @@ describe('the weather extension of this repository', () => {
     assert.ok(lookup({ a: { type: 'boolean' } }, { key: 'a', label: 'A', type: 'lookup', search: '/api/ext/xy/places' }))
     assert.strictEqual(lookup(str, { key: 'a', label: 'A', type: 'lookup', search: '/api/ext/xy/places' }), null)
   })
+  it('a roster: four routes of the extension itself, no setting', () => {
+    const roster = { type: 'roster', label: 'R', list: '/api/ext/xy/list', add: '/api/ext/xy/add', remove: '/api/ext/xy/remove', select: '/api/ext/xy/select' }
+    const manifest = (item: unknown, hostApi = 4) => base({ id: 'xy', hostApi, ui: { title: 'T', items: [item] } })
+    assert.strictEqual(checkManifest(manifest(roster), files()), null)
+    assert.ok(checkManifest(manifest(roster, 3), files()), 'needs hostApi 4')
+    assert.ok(checkManifest(manifest({ ...roster, add: 'https://example.com/x' }), files()), 'a route of another place')
+    assert.ok(checkManifest(manifest({ ...roster, remove: '/api/ext/other/remove' }), files()), 'a route of another extension')
+    assert.ok(checkManifest(manifest({ ...roster, select: undefined }), files()), 'a route missing')
+  })
   it('an order field: a text that names every choice once', () => {
     const choices = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }, { value: 'c', label: 'C' }]
     const manifest = (settings: unknown, item: unknown = { key: 'o', label: 'O', type: 'order', choices }) => base({ id: 'xy', hostApi: 3, settings, ui: { title: 'T', items: [item] } })
@@ -162,6 +171,15 @@ describe('the weather extension of this repository', () => {
     const bytes = readFileSync(path.join(extDir, 'dist', `weather-${entry.version}.mpx`))
     assert.strictEqual(createHash('sha256').update(bytes).digest('hex'), entry.sha256)
     assert.strictEqual(verifyPackage(bytes).ok, true)
+  })
+})
+
+describe('the users extension of this repository', () => {
+  const extDir = path.join(process.cwd(), '..', '..', 'extensions')
+  const users = JSON.parse(readFileSync(path.join(extDir, 'users', 'manifest.json'), 'utf8')) as Manifest
+  it('has a manifest the installer accepts, with a roster of four routes of its own', () => {
+    assert.strictEqual(checkManifest(users, files('api.js', 'display.js', 'icon.svg')), null)
+    assert.strictEqual(users.ui?.items[0].type, 'roster')
   })
 })
 

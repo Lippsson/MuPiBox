@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, promises as fsp, readFileSync, renameSync } from
 import path from 'node:path'
 import express, { type NextFunction, type Request, type RequestHandler, type Response, type Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
-import { EXTENSIONS_DIR, EXTENSIONS_DIR_BEFORE } from '../paths'
+import { DATA_DIR, EXTENSIONS_DIR, EXTENSIONS_DIR_BEFORE, LIBRARY_DIR } from '../paths'
 import { checkResources, type Conflict, describeResources, findConflicts, gatherTaken, realProbe, type Resources, sameResources } from './extension-resources'
 import { localNetworkOnly, requireCsrf, requireSession } from './middleware'
 import { readZip } from './winamp-skin'
@@ -32,7 +32,7 @@ if (!process.env.MUPIBOX_EXT_DIR && process.env.NODE_ENV !== 'test' && process.e
     // (the other process was faster, or it is not possible: then they stay where they are and are not found - logged by the load)
   }
 }
-export const HOST_API = 3
+export const HOST_API = 4
 const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/catalog.json'
 // the largest package (the file as it is sent and downloaded; what is in it may be three times that, unpacked)
 const MAX_MPX = 16 * 1024 * 1024
@@ -58,7 +58,7 @@ export interface Manifest {
   display?: string
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
-  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order'; search?: string }[] }
+  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster'; search?: string; list?: string; add?: string; remove?: string; select?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -293,24 +293,33 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
   if (x.ui !== undefined) {
     const ui = x.ui
     if (typeof ui?.title !== 'string' || ui.title.length > 60 || (ui.help !== undefined && (typeof ui.help !== 'string' || ui.help.length > 800)) || !Array.isArray(ui.items) || ui.items.length > 20) return 'bad ui'
+    const settings = x.settings ?? {}
     for (const item of ui.items) {
-      if (!x.settings?.[item?.key]) return `ui: no such setting: ${item?.key}`
+      // (a roster is a list of things the extension keeps itself - users, say - and needs no setting)
+      if (item?.type !== 'roster' && !settings[item?.key]) return `ui: no such setting: ${item?.key}`
       if (typeof item.label !== 'string' || item.label.length > 100 || (item.help !== undefined && (typeof item.help !== 'string' || item.help.length > 800))) return `ui: bad text: ${item.key}`
-      if (item.dep !== undefined && x.settings?.[item.dep]?.type !== 'boolean') return `ui: dep must be a switch: ${item.key}`
-      if (item.type === 'order') {
+      if (item.dep !== undefined && settings[item.dep]?.type !== 'boolean') return `ui: dep must be a switch: ${item.key}`
+      if (item.type === 'roster') {
+        // a list to look at, to add to, to take from and to choose from (hostApi 4): four routes of the extension's own API part
+        if (x.hostApi < 4 || item.choices !== undefined) return `ui: a roster needs hostApi 4: ${item.label}`
+        for (const part of ['list', 'add', 'remove', 'select'] as const) {
+          if (typeof item[part] !== 'string' || !new RegExp(`^/api/ext/${x.id}/[a-z]{1,30}$`).test(item[part] as string)) return `ui: bad roster address (${part}): ${item.label}`
+        }
+      } else if (item.type === 'order') {
+        if (x.hostApi < 3) return `ui: an order needs hostApi 3: ${item.key}`
         // a list to put in order by dragging (hostApi 3): the setting is a text with the names of the choices, comma separated
         const names = (item.choices ?? []).map((c) => c?.value)
-        if (x.settings[item.key].type !== 'string' || !Array.isArray(item.choices) || item.choices.length < 2 || item.choices.length > 12) return `ui: bad order: ${item.key}`
+        if (settings[item.key].type !== 'string' || !Array.isArray(item.choices) || item.choices.length < 2 || item.choices.length > 12) return `ui: bad order: ${item.key}`
         if (item.choices.some((c) => typeof c?.value !== 'string' || !/^[a-z][a-z0-9]{0,11}$/.test(c.value) || typeof c.label !== 'string' || c.label.length > 60) || new Set(names).size !== names.length) return `ui: bad order choices: ${item.key}`
-        const def = x.settings[item.key].default
+        const def = settings[item.key].default
         if (def !== undefined && !isOrderOf(def, names as string[])) return `ui: the default of an order must name every choice once: ${item.key}`
       } else if (item.type !== undefined) {
         // a search: a text field with a button; the extension's own API part answers with the places to choose from (see the app)
-        if (item.type !== 'lookup' || x.settings[item.key].type !== 'string' || item.choices !== undefined) return `ui: bad type: ${item.key}`
+        if (item.type !== 'lookup' || settings[item.key].type !== 'string' || item.choices !== undefined) return `ui: bad type: ${item.key}`
         if (typeof item.search !== 'string' || !new RegExp(`^/api/ext/${x.id}/[a-z]{1,30}$`).test(item.search)) return `ui: bad search address: ${item.key}`
       }
       if (item.choices !== undefined && item.type !== 'order') {
-        const options = x.settings[item.key].options
+        const options = settings[item.key].options
         if (!options || !Array.isArray(item.choices) || item.choices.length !== options.length) return `ui: choices must name every option: ${item.key}`
         if (item.choices.some((c) => !options.includes(c?.value as never) || typeof c.label !== 'string' || c.label.length > 60)) return `ui: bad choices: ${item.key}`
       }
@@ -918,6 +927,15 @@ export function mountExtensions(app: express.Express, deps: ExtensionDeps): void
           settings: () => readSettings(manifest),
           config: () => deps.getMupiboxConfig(),
           playerUrl: 'http://127.0.0.1:5005',
+          // (hostApi 4) change the box's configuration (the one file of the core, under its lock); where the box keeps its library
+          // and its data; restart the player and the server (and load the display again) - the caller is part of the server, so this
+          // is the last thing it does
+          updateConfig: (mutate: (cfg: Record<string, unknown>) => void) => {
+            if (!deps.updateMupiboxConfig) return Promise.reject(new Error('the box cannot change its configuration here'))
+            return deps.updateMupiboxConfig(mutate)
+          },
+          paths: { library: LIBRARY_DIR, data: DATA_DIR, extensions: EXT_DIR },
+          restartServices,
           route: (method: 'get' | 'post', sub: string, handler: RequestHandler, options?: { session?: boolean }) => {
             const chain: RequestHandler[] = options?.session ? [requireSession, ...(method === 'post' ? [requireCsrf] : []), guarded(handler)] : [guarded(handler)]
             router[method](sub, ...chain)
