@@ -19,6 +19,22 @@
 <li id='linews' class='linews'>One answer from the internet missing no longer switches the display and the library to offline: the box asks again after a few seconds and goes offline only when that fails too (on a WiFi with several access points the display showed offline for a moment again and again).</li>
 <li id='linews' class='linews'>Debian 13 (trixie), old admin interface: with one USB WiFi driver installed, the choice also offered the other one with an "Install driver" button that did nothing. It now offers only the drivers that are there, to remove them.</li>
 </ul>
+<b>Updates</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>A dev version could show "null" instead of its date (e.g. "DEV 5.0.14 null") when GitHub did not answer the question for it - too many questions from the home network in an hour. The day of the update stands there then.</li>
+<li id='linews' class='linews'>Only one update at a time: an update started while another one still ran (in the terminal while the one from the app or the admin interface went on, or twice in the terminal) took the other one's download away and stopped with a strange error ("Expected source directory ... not found"), both replacing the installation at once. A second update now stops at once and changes nothing, with a note that one is running; the box's restart waits for the running update too.</li>
+</ul>
+<b>MQTT</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>A command sent to the box as a retained message (volume, play, pause, reboot, shutdown - some smart home systems send them that way) came again from the broker with every connection, so after every start of the box: it started at that volume, or played on its own. Retained commands are now ignored; send them without retain.</li>
+</ul>
+<b>Play history</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>A title that began right after the box was switched on could count the whole time the box had been off (25 hours of radio on one day), on the day it was last switched off: the box has no clock of its own and runs with the time it last saved until the network sets it. Lengths are now measured independently of the clock. Entries already in the history stay as they are until they are older than 7 days.</li>
+</ul>
 <b>Support</b>
 </ul>
 <ul id='ulnews' class='ulnews'>
