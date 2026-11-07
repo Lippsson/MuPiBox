@@ -11137,6 +11137,23 @@ async function loadExtensions() {
   }
 }
 
+// "1.4.2" > "1.4.1": true when version a is newer than b (numbers part by part; a missing part is 0)
+function versionNewer(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0)
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (d) return d > 0
+  }
+  return false
+}
+
+// The catalog's entry for an installed extension, when it is a newer version than the installed one
+function newerInCatalog(installedExt) {
+  const c = exts.catalog.find((x) => x.id === installedExt.id)
+  return c && versionNewer(c.version, installedExt.version) ? c : null
+}
+
 // What an extension sets up on the box, in words (shown before it is installed)
 function extSystemNote(system) {
   const parts = []
@@ -12033,18 +12050,23 @@ const CONTROLLERS = {
         // (an extension that is not installed yet has its switch too: off - switching it on installs it, after the question)
         const action = installed
           ? `<button type="button" class="btn sm danger" data-ext-remove="${esc(e.id)}">Entfernen</button>`
-          : `<button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">${e.installedVersion ? 'Neue Version installieren' : 'Installieren'}</button>`
+          : `<button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">Installieren</button>`
         const sw = installed
           ? `<label class="switch"><input type="checkbox" data-ext-toggle="${esc(e.id)}" ${e.enabled ? 'checked' : ''} aria-label="${esc(e.name)}"><span></span></label>`
-          : e.installedVersion
-            ? ''
-            : `<label class="switch"><input type="checkbox" data-ext-install-toggle="${esc(e.id)}" aria-label="${esc(e.name)}"><span></span></label>`
+          : `<label class="switch"><input type="checkbox" data-ext-install-toggle="${esc(e.id)}" aria-label="${esc(e.name)}"><span></span></label>`
+        // a newer version in the catalog: a line of text under the buttons (like the notice of WordPress), no card of its own
+        const next = installed ? newerInCatalog(e) : null
+        const upd = next
+          ? `<p class="ext-update">${icon('sync', 16)}<span>${esc(`Es gibt eine neue Version von ${e.name}: ${next.version}.`)} <button type="button" class="linkbtn" data-ext-details="${esc(e.id)}" data-installed="false" data-ext-new="true">Details ansehen</button> oder <button type="button" class="linkbtn" data-ext-update="${esc(e.id)}">jetzt aktualisieren</button>.</span></p>`
+          : ''
         return `<div class="ext-card${installed ? '' : ' offer'}" data-q="${esc(q)}">
           <div class="ext-head">${ico}<div class="ext-text"><b>${esc(e.name)}</b> <small>${esc(e.version)}</small><p>${esc(e.description)}</p></div></div>
           <div class="ext-foot"><button type="button" class="btn sm" data-ext-details="${esc(e.id)}" data-installed="${installed}">Details</button>${action}<span class="grow"></span>${sw}</div>
+          ${upd}
         </div>`
       }
-      const offered = exts.catalog.filter((e) => e.installedVersion !== e.version)
+      // (what the catalog offers and is not installed; a newer version of an installed one shows in its own card)
+      const offered = exts.catalog.filter((e) => !e.installedVersion)
       const note = exts.catalogError ? '<p class="help">Der Katalog ist gerade nicht erreichbar. Die Box braucht dafür das Internet.</p>' : ''
       const cards = [...exts.installed.map((e) => card(e, true)), ...offered.map((e) => card(e, false))]
       return [
@@ -12131,7 +12153,15 @@ const CONTROLLERS = {
         toast('Wird erledigt …')
         watchExtensionJob(go.body.id, `${body.name} ist installiert.`)
       })
-      for (const b of root.querySelectorAll('[data-ext-details]')) b.onclick = () => extensionDetails(entry(b.dataset.extDetails), b.dataset.installed === 'true')
+      for (const b of root.querySelectorAll('[data-ext-details]')) {
+        // ("Details ansehen" in the update line shows the new version, as the catalog describes it)
+        b.onclick = () => (b.dataset.extNew ? extensionDetails(exts.catalog.find((x) => x.id === b.dataset.extDetails), false) : extensionDetails(entry(b.dataset.extDetails), b.dataset.installed === 'true'))
+      }
+      for (const b of root.querySelectorAll('[data-ext-update]')) {
+        const c = exts.catalog.find((x) => x.id === b.dataset.extUpdate)
+        b.onclick = () =>
+          extensionAction('install', c.id, `${c.name} installieren`, `Neue Version ${c.version} (jetzt ${c.installedVersion ?? 'älter'}). ${extSystemNote(c.system)} Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, 'Aktualisieren', `${c.name} ist aktualisiert.`)
+      }
     },
   },
   bedienung: {

@@ -1233,5 +1233,9 @@ textarea[hidden] { display: none; }
 .ext-ico.letter { display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; }
 .ext-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .ext-foot .grow { flex: 1; }
+/* a newer version: a line of text under the buttons, in the card (the notice of WordPress) */
+.ext-update { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 8px 10px; border-left: 3px solid var(--mp-primary); border-radius: 6px; background: var(--mp-primary-soft); font-size: 13px; line-height: 1.4; }
+.ext-update svg { flex: none; margin-top: 1px; color: var(--mp-primary-text); }
+.linkbtn { padding: 0; border: 0; background: none; font: inherit; color: var(--mp-primary-text); text-decoration: underline; cursor: pointer; }
 .ext-bar { display: flex; gap: 10px; align-items: center; }
 .ext-bar .search { flex: 1; }
