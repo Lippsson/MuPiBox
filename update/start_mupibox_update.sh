@@ -1535,14 +1535,28 @@ rm -f /tmp/mupibox-update-failed
 		if [ "${FINISH_OK}" = 1 ]; then
 			[ -n "${THEME_KEPT_AT}" ] && echo "## theme-data of the old program kept in ${THEME_KEPT_AT}: what was added to it could not all be taken over" >&3 2>&3
 			# The podcasts' pictures in an old program folder (a way back to a version before 5.1 put them there, see
-			# migrate_layout.sh --for-older) into the cache of 5.1 first - what is not there yet; the copy in the old
-			# folder goes only when that worked. Else that folder counted as one with data of its own and stayed, after
-			# every way back and forth one more.
+			# migrate_layout.sh --for-older) into the cache of 5.1 first - else that folder counted as one with data of its
+			# own and stayed, after every way back and forth one more. A picture the cache does not have is copied next to
+			# its place, written out and only then renamed (a cut off copy never stands under the name). The old folder's
+			# pictures go only when every one of them is in the cache with the same content - one that differs there (a
+			# newer picture, or a copy a power cut left half) keeps the old folder as it is.
+			rss_into_cache() {
+				local src="$1/www/rss-covers" dst="${MUPI_CACHE}/rss-covers" f t ok=0
+				[ -d "${src}" ] && [ ! -L "${src}" ] || return 0
+				while IFS= read -r -d '' f; do
+					t="${dst}/${f#"${src}"/}"
+					if [ ! -e "${t}" ]; then
+						mkdir -p "$(dirname "${t}")" && cp -p "${f}" "${t}.mupibox-new" && sync "${t}.mupibox-new" \
+							&& mv -f "${t}.mupibox-new" "${t}" || { rm -f "${t}.mupibox-new"; ok=1; }
+					fi
+					cmp -s "${f}" "${t}" || ok=1
+				done < <(find "${src}" -type f -print0)
+				[ "${ok}" = 0 ] && sync && rm -rf "${src}"
+				return 0
+			}
 			if [ -d "${MUPI_CACHE}/rss-covers" ] && [ ! -L "${MUPI_CACHE}/rss-covers" ]; then
 				for old in "${BAK_DIR}" "${MUPI_HOME}"/server.before-*; do
-					if [ -d "${old}/www/rss-covers" ] && [ ! -L "${old}/www/rss-covers" ]; then
-						cp -an "${old}/www/rss-covers/." "${MUPI_CACHE}/rss-covers/" >&3 2>&3 && rm -rf "${old}/www/rss-covers" >&3 2>&3
-					fi
+					rss_into_cache "${old}" >&3 2>&3
 				done
 				chown -R dietpi:dietpi "${MUPI_CACHE}/rss-covers" >&3 2>&3
 			fi
