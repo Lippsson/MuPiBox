@@ -26,12 +26,12 @@ export const UNITS = {
   },
   rain: {
     mm: { label: 'mm', from: (v) => v, decimals: 1, steps: [10, 25, 50, 100, 200, 400] },
-    inch: { label: 'inch', from: (v) => v / 25.4, decimals: 2, steps: [0.5, 1, 2, 4, 8, 16] },
+    inch: { label: 'inch', from: (v) => v / 25.4, decimals: 2, scaleDecimals: 1, steps: [0.5, 1, 2, 4, 8, 16] },
   },
   press: {
     hpa: { label: 'hPa', from: (v) => v, decimals: 1, base: { min: 960, max: 1060, step: 10 } },
     mb: { label: 'mb', from: (v) => v, decimals: 1, base: { min: 960, max: 1060, step: 10 } },
-    inhg: { label: 'inHg', from: (v) => v * 0.02953, decimals: 2, base: { min: 28, max: 31.5, step: 0.5 } },
+    inhg: { label: 'inHg', from: (v) => v * 0.02953, decimals: 2, scaleDecimals: 1, base: { min: 28, max: 31.5, step: 0.5 } },
     kpa: { label: 'kPa', from: (v) => v / 10, decimals: 2, base: { min: 96, max: 106, step: 1 } },
   },
   wind: {
@@ -143,9 +143,9 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
     // (the red band: from the wind to the gust)
     { id: 'wind', kind: 'radial', title: 'Windstärke', unit: U.wind.label, min: 0, max: windMax, value: windSpeed, decimals: U.wind.decimals, sections: [], areas: range(windSpeed, windGust, 0, windMax), trend: null, caption: Number.isFinite(windGust) ? `Böen bis ${fmt(windGust, U.wind.decimals)} ${U.wind.label}` : '' },
     { id: 'dir', kind: 'direction', title: 'Windrichtung', latest: data.windDir, average: data.windDirAvg, caption: 'legend' },
-    { id: 'baro', kind: 'radial', title: 'Luftdruck', unit: U.press.label, min: p.min, max: p.max, value: pressure, decimals: U.press.decimals, sections: [], areas: [{ start: p.min, stop: pLow, color: warn }, { start: pHigh, stop: p.max, color: warn }], minMeasured: press(data.pressMin), maxMeasured: press(data.pressMax), trend: data.trend?.press ?? 0, caption: '' },
+    { id: 'baro', kind: 'radial', title: 'Luftdruck', unit: U.press.label, min: p.min, max: p.max, value: pressure, decimals: U.press.decimals, scaleDecimals: U.press.scaleDecimals ?? 0, sections: [], areas: [{ start: p.min, stop: pLow, color: warn }, { start: pHigh, stop: p.max, color: warn }], minMeasured: press(data.pressMin), maxMeasured: press(data.pressMax), trend: data.trend?.press ?? 0, caption: '' },
     {
-      id: 'rain', kind: 'radial', title: 'Regenmenge', unit: `${U.rain.label} / ${data.rainKind === 'forecast' ? 'nächste 24 h' : '24 h'}`, min: 0, max: rainMax, value: rain24, decimals: U.rain.decimals,
+      id: 'rain', kind: 'radial', title: 'Regenmenge', unit: `${U.rain.label} / ${data.rainKind === 'forecast' ? 'nächste 24 h' : '24 h'}`, min: 0, max: rainMax, value: rain24, decimals: U.rain.decimals, scaleDecimals: U.rain.scaleDecimals ?? 0,
       sections: [
         { start: 0, stop: rainMax * 0.5, color: 'rgb(0,170,60)' },
         { start: rainMax * 0.5, stop: rainMax * 0.8, color: WARM },
@@ -262,6 +262,9 @@ export function activate(api) {
               titleString: dial.title,
               unitString: dial.unit,
               lcdDecimals: dial.decimals,
+              // (a scale in inHg or inch has labels like 29.5, not 30)
+              fractionalScaleDecimals: dial.scaleDecimals ?? 0,
+              ...(dial.scaleDecimals ? { labelNumberFormat: ss.LabelNumberFormat.FRACTIONAL } : {}),
               section: dial.sections,
               area: dial.areas,
               thresholdVisible: false,
