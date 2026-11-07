@@ -9350,7 +9350,7 @@ function mountTls(root, page) {
 /* Einstellungen › System: its pages in four groups, a short state beside some (version, health, update) */
 
 const SYS_GROUPS = [
-  ['Die Box', ['ueber', 'zustand', 'updates', 'backup']],
+  ['Die Box', ['ueber', 'zustand', 'updates', 'erweiterungen', 'backup']],
   ['Betrieb', ['neustart', 'protokolle', 'systemopt']],
   ['Für Fortgeschrittene', ['browser', 'experten']],
   ['Allgemein', ['sprache', 'rechtliches']],
