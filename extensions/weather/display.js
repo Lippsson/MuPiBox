@@ -156,6 +156,9 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
   ]
 }
 
+const GAP = 24 // between two dials
+const MARGIN = 16 // the least room at the sides of the row
+
 const PROVIDERS = { openmeteo: 'Open-Meteo', metno: 'MET Norway' }
 
 export function activate(api) {
@@ -180,10 +183,10 @@ export function activate(api) {
       mount(content) {
         const box = document.createElement('div')
         box.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column'
-        // (the dials in a row you swipe through, as the artists' round covers on the start page: one dial is centred, the next
-        // ones look in from the sides; the row snaps to a dial when you let go)
+        // (the dials in a row you swipe through, as the artists' round covers on the start page: always two dials are shown,
+        // side by side in the middle; when you let go, the row snaps so that the two dials nearest to the middle stand there)
         const row = document.createElement('div')
-        row.style.cssText = 'flex:1;min-height:0;display:flex;align-items:center;gap:20px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;touch-action:pan-x;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent;cursor:grab'
+        row.style.cssText = `flex:1;min-height:0;display:flex;align-items:center;gap:${GAP}px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;touch-action:pan-x;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent;cursor:grab`
         const foot = document.createElement('div')
         foot.style.cssText = 'flex:none;height:30px;display:flex;align-items:center;justify-content:center;font:500 15px/1 var(--ion-font-family,inherit);opacity:.75;padding:0 16px;text-align:center'
         foot.textContent = 'Lade …'
@@ -197,24 +200,31 @@ export function activate(api) {
         const shown = new Map()
         let lastSize = 0
 
-        // (a dial as high as the page allows, a line of text under it and the status line at the bottom; never wider than the page)
-        const dialSize = () => Math.max(120, Math.floor(Math.min(content.clientWidth - 40, content.clientHeight - 30 - 26 - 4 - 16)))
+        // (two dials side by side as large as the page allows: not wider than half of it, not higher than the page lets room for
+        // a line of text under the dial, the status line at the bottom and the scroll bar)
+        const dialSize = () => Math.max(120, Math.floor(Math.min((content.clientWidth - 2 * MARGIN - GAP) / 2, content.clientHeight - 30 - 26 - 4 - 16)))
 
         // Every dial is drawn again from the last answer: when the values come (`moving`: the pointers swing to them) and when the
         // page changes its size (a dial has a fixed size; the pointers stand at once).
         const draw = (moving) => {
           if (!ss || !data) return
           const size = dialSize()
-          // (the dial in the middle stays there when the row is drawn again)
-          const before = Array.from(row.children)
-          const middle = before.findIndex((c) => c.offsetLeft + c.offsetWidth / 2 >= row.scrollLeft + row.clientWidth / 2)
+          // (the pair shown stays when the row is drawn again: the number of the dial on the left)
+          const first = lastSize ? Math.round(row.scrollLeft / (lastSize + GAP)) : 0
           lastSize = size
           row.textContent = ''
-          // (room on both sides: the first and the last dial can stand in the middle too)
-          row.style.paddingInline = `max(20px, calc(50% - ${Math.round(size / 2)}px))`
+          // (room on both sides: the first two dials stand in the middle at the start, the last two at the end; a dial snaps
+          // to this place on the left)
+          const side = Math.max(MARGIN, Math.floor((row.clientWidth - 2 * size - GAP) / 2))
+          row.style.paddingInline = `${side}px`
+          row.style.scrollPaddingLeft = `${side}px`
+          // (only the two dials are seen: the next one does not look in from the side. A mask, not a clip: the whole row still takes the swipe)
+          const mask = `linear-gradient(to right, transparent ${side - 8}px, #000 ${side}px, #000 calc(100% - ${side}px), transparent calc(100% - ${side - 8}px))`
+          row.style.maskImage = mask
+          row.style.webkitMaskImage = mask
           for (const dial of dialsFor(data, unitsOf(settings))) {
             const cell = document.createElement('div')
-            cell.style.cssText = 'flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;scroll-snap-align:center'
+            cell.style.cssText = 'flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;scroll-snap-align:start'
             const canvas = document.createElement('canvas')
             const caption = document.createElement('div')
             caption.style.cssText = 'height:26px;display:flex;align-items:center;gap:14px;font:500 15px/1 var(--ion-font-family,inherit);opacity:.85;white-space:nowrap'
@@ -292,8 +302,9 @@ export function activate(api) {
             shown.set(dial.id, value)
             caption.textContent = dial.caption
           }
-          const cell = row.children[Math.max(0, middle)]
-          if (cell) row.scrollLeft = cell.offsetLeft + cell.offsetWidth / 2 - row.clientWidth / 2
+          // (the last dial cannot be the left one of a pair)
+          if (row.lastElementChild) row.lastElementChild.style.scrollSnapAlign = 'none'
+          row.scrollLeft = Math.min(first, Math.max(0, row.children.length - 2)) * (size + GAP)
         }
 
         // A mouse drags the row too (a finger swipes it by itself)
