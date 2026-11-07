@@ -3169,7 +3169,7 @@
  "Datei hochladen": "Upload file",
  "Keine Erweiterungen verfügbar.": "No extensions available.",
  "Wird geprüft …": "Checking …",
- "Die Datei ist zu groß (höchstens 4 MB)": "The file is too large (4 MB at most)",
+ "Die Datei ist zu groß (höchstens 16 MB)": "The file is too large (16 MB at most)",
  "Das ist keine passende Erweiterung: {}": "That is not a suitable extension: {}",
  "Eine Erweiterung läuft auf der Box ohne Schutz: Installiere nur Dateien aus Quellen, denen du vertraust.": "An extension runs on the box without protection: only install files from sources you trust.",
  "Prüfsumme (SHA-256): {}": "Checksum (SHA-256): {}",

@@ -12157,7 +12157,7 @@ const CONTROLLERS = {
         const file = picker.files?.[0]
         picker.value = ''
         if (!file) return
-        if (file.size > 4 * 1024 * 1024) return toast('Die Datei ist zu groß (höchstens 4 MB)', 'info')
+        if (file.size > 16 * 1024 * 1024) return toast('Die Datei ist zu groß (höchstens 16 MB)', 'info')
         toast('Wird geprüft …')
         const r = await fetch(`${API}/extensions/upload`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream', 'x-mupibox-csrf': state.csrf }, body: file }).catch(() => null)
         const body = await r?.json().catch(() => null)

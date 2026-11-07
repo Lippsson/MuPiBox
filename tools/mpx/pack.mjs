@@ -19,7 +19,7 @@ if (!id) {
 }
 const branch = flag('branch', 'dev5.1')
 const repo = flag('repo', 'Lippsson/MuPiBox')
-const MAX_MPX = 4 * 1024 * 1024
+const MAX_MPX = 16 * 1024 * 1024
 
 const dir = path.join(root, 'extensions', id)
 const manifest = JSON.parse(readFileSync(path.join(dir, 'manifest.json'), 'utf8'))
@@ -102,7 +102,7 @@ end.writeUInt16LE(files.length, 10)
 end.writeUInt32LE(centralBuf.length, 12)
 end.writeUInt32LE(offset, 16)
 const zip = Buffer.concat([...parts, centralBuf, end])
-if (zip.length > MAX_MPX) throw new Error(`the package is ${zip.length} bytes - more than 4 MB`)
+if (zip.length > MAX_MPX) throw new Error(`the package is ${zip.length} bytes - more than 16 MB`)
 
 const outName = `${id}-${manifest.version}.mpx`
 mkdirSync(path.join(root, 'extensions', 'dist'), { recursive: true })

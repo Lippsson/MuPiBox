@@ -39,7 +39,18 @@ export interface ZipEntry {
 }
 
 /** The files of a zip (stored or deflated); throws on anything that is not a plain zip. */
-export function readZip(buf: Buffer): ZipEntry[] {
+export interface ZipLimits {
+  /** the largest file, unpacked (default: for a skin) */
+  maxFile?: number
+  /** all files together, unpacked */
+  maxTotal?: number
+  /** a file over maxFile is an error (default: it is left out, as a skin may carry things the display does not use) */
+  strict?: boolean
+}
+
+export function readZip(buf: Buffer, limits: ZipLimits = {}): ZipEntry[] {
+  const maxFile = limits.maxFile ?? MAX_FILE
+  const maxTotal = limits.maxTotal ?? MAX_TOTAL
   let eocd = -1
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 65535); i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) {
@@ -65,14 +76,17 @@ export function readZip(buf: Buffer): ZipEntry[] {
     const name = buf.toString('utf8', pos + 46, pos + 46 + nameLen)
     pos += 46 + nameLen + extraLen + commentLen
     if (name.endsWith('/')) continue
-    if (size > MAX_FILE) continue
+    if (size > maxFile) {
+      if (limits.strict) throw new Error(`${name.slice(0, 40)} is too large`)
+      continue
+    }
     total += size
-    if (total > MAX_TOTAL) throw new Error('too large')
+    if (total > maxTotal) throw new Error('too large')
     if (local + 30 > buf.length || buf.readUInt32LE(local) !== 0x04034b50) throw new Error('broken zip')
     const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28)
     const raw = buf.subarray(start, start + compressed)
     if (method === 0) entries.push({ name, data: Buffer.from(raw) })
-    else if (method === 8) entries.push({ name, data: inflateRawSync(raw, { maxOutputLength: MAX_FILE }) })
+    else if (method === 8) entries.push({ name, data: inflateRawSync(raw, { maxOutputLength: maxFile }) })
   }
   return entries
 }

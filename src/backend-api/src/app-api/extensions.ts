@@ -34,7 +34,8 @@ if (!process.env.MUPIBOX_EXT_DIR && process.env.NODE_ENV !== 'test' && process.e
 }
 export const HOST_API = 2
 const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/catalog.json'
-const MAX_MPX = 4 * 1024 * 1024
+// the largest package (the file as it is sent and downloaded; what is in it may be three times that, unpacked)
+const MAX_MPX = 16 * 1024 * 1024
 const ID = /^[a-z][a-z0-9-]{1,30}$/
 const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/
 const FILE = /^[A-Za-z0-9_][A-Za-z0-9_./-]{0,100}$/
@@ -434,7 +435,7 @@ export function verifyPackage(bytes: Buffer): { ok: true; pkg: Package } | { ok:
   if (bytes.length > MAX_MPX || bytes.length === 0) return { ok: false, error: 'the file is too large or empty' }
   let files: Map<string, Buffer> | string
   try {
-    files = packageFiles(readZip(bytes))
+    files = packageFiles(readZip(bytes, { maxFile: MAX_MPX, maxTotal: 3 * MAX_MPX, strict: true }))
   } catch (error) {
     return { ok: false, error: `not an extension file: ${(error as Error).message}` }
   }
@@ -476,7 +477,7 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
       const entry = (await fetchCatalog(deps)).find((e) => e.id === id)
       if (!entry) return fail('not in the catalog')
       job.step = 'download'
-      const response = await fetch(entry.url, { signal: AbortSignal.timeout(60000), redirect: 'follow' })
+      const response = await fetch(entry.url, { signal: AbortSignal.timeout(120000), redirect: 'follow' })
       if (!response.ok) return fail(`download: HTTP ${response.status}`)
       const bytes = Buffer.from(await response.arrayBuffer())
       if (bytes.length > MAX_MPX || bytes.length === 0) return fail('the file is too large or empty')
@@ -725,7 +726,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     }
     const m = checked.pkg.manifest
     for (const [token, u] of uploads) if (u.until < Date.now()) uploads.delete(token)
-    if (uploads.size >= 3) uploads.delete(uploads.keys().next().value as string)
+    if (uploads.size >= 2) uploads.delete(uploads.keys().next().value as string)
     const token = randomBytes(16).toString('hex')
     uploads.set(token, { pkg: checked.pkg, until: Date.now() + 10 * 60 * 1000 })
     const state = await readState()

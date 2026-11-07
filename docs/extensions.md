@@ -116,14 +116,14 @@ nie den Kern.
    "sha256": "…", "size": 12345, "system": { "udev": 1, "units": [], "groups": ["cdrom"], "packages": [] }, "resources": {} }]
 ```
 
-Die Box lädt die Datei, prüft die Größe (höchstens 4 MB) und die SHA-256, prüft Dateinamen und Manifest, vergleicht es mit dem
+Die Box lädt die Datei, prüft die Größe (höchstens 16 MB) und die SHA-256, prüft Dateinamen und Manifest, vergleicht es mit dem
 Katalogeintrag (Id, Version, Systemschritte, `resources`) und testet die Ressourcen gegen die Box und installiert erst dann (Dateien, Regeln, Units, Gruppen, Pakete; danach starten
 `server` und `spotify-control` neu, das Display lädt neu). Gebaut wird mit `node tools/mpx/pack.mjs <id>`:
 das macht aus `extensions/<id>/` die `.mpx` in `extensions/dist/` und trägt Größe und Prüfsumme in den Katalog ein.
 
 ## Eigene Datei hochladen
 
-Neben dem Katalog gibt es auf der Seite „Erweiterungen“ **„Datei hochladen“** für eine `.mpx` vom eigenen Rechner (höchstens 4 MB).
+Neben dem Katalog gibt es auf der Seite „Erweiterungen“ **„Datei hochladen“** für eine `.mpx` vom eigenen Rechner (höchstens 16 MB).
 Die Box liest und prüft die Datei (`POST /api/app/extensions/upload`: Dateinamen, Manifest, Regeln – dieselben Prüfungen wie beim Katalog,
 nur ohne Prüfsumme aus dem Katalog), installiert aber noch nichts: die App zeigt Name, Version, die Systemschritte und die SHA-256 und warnt,
 dass eine Erweiterung ohne Schutz läuft. Erst nach dem „Installieren“ läuft die Installation (`POST …/install` mit dem Token der Prüfung,

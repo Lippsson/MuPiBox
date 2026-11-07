@@ -30,7 +30,7 @@ This page is the guideline for people who write extensions. The reference for th
 | `*.rules` | udev | access rights for a device, see section 5 |
 
 Every part is optional: bring only what you need. Allowed file types are `js`, `mjs`, `json`, `svg`, `png`, `jpg`, `css`, `txt`,
-`md`, `html`, `rules`, `service` and `timer`. A package is at most **4 MB**. The web app never runs code of an extension: it draws the
+`md`, `html`, `rules`, `service` and `timer`. A package is at most **16 MB**, and what is in it may be up to three times that unpacked. The whole file is held in memory while the box reads it, so keep it as small as you can. The web app never runs code of an extension: it draws the
 settings card from what the manifest declares.
 
 ## 3. `manifest.json`
@@ -141,7 +141,7 @@ Installed with `apt-get install` (no recommended extras). Names look like `libus
 
 ### What there is no field for
 - **Downloading code at install time** (from GitHub or anywhere else). The package is fixed by its checksum; what it would fetch is
-  not. If you need a program, put it into the package (4 MB) or use a Debian package.
+  not. If you need a program, put it into the package (16 MB) or use a Debian package.
 - Running your own script as root, `pip`, `npm`, changing system files, other users, firewall rules.
 
 If you need one of these, open an issue first: the answer is to add a new checked kind of step, not to work around the checks.
@@ -165,7 +165,7 @@ If you need one of these, open an issue first: the answer is to add a new checke
 
 **Be small**
 - Prefer the simplest part: a header item needs only `display.js`. Add `api.js` only if you need the network or a background job.
-- Keep the package well below the 4 MB limit.
+- Keep the package well below the 16 MB limit: it is downloaded and unpacked on a small computer, and every extra megabyte is memory the player could use.
 
 ## 7. Publishing and updates
 
