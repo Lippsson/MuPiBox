@@ -10,6 +10,7 @@
 //   POST /api/ext/users/switch   { id }                                                              (the display; setting "displaySwitch")
 //   GET  /api/ext/users/list     -> { current: id, users: [{ id, name, color }], busy }              (the app; parents' login)
 //   POST /api/ext/users/add      { name }  /  POST .../remove { id }  /  POST .../select { id }      (the app; parents' login)
+//   POST /api/ext/users/color    { id, color }   (one of the colours of the list that nobody else has)
 
 const fs = require('node:fs')
 const path = require('node:path')
@@ -227,6 +228,18 @@ function createStore({ dataDir, libraryDir, boxDataDir, logsDir, settingsDir, co
       return { id }
     },
 
+    /** Gives a user another colour of the palette that nobody else has. */
+    setColor(id, color) {
+      const state = read()
+      const user = state.users.find((u) => u.id === id)
+      if (!user) return { error: 'id' }
+      if (!COLORS.includes(color)) return { error: 'color' }
+      if (state.users.some((u) => u.id !== id && u.color === color)) return { error: 'taken' }
+      user.color = color
+      write(state)
+      return { ok: true }
+    },
+
     /** Deletes a user - not the current one, not the last one. */
     remove(id) {
       const state = read()
@@ -282,7 +295,7 @@ exports.activate = (host) => {
 
   const view = () => {
     const s = store.state()
-    return { current: s.current, users: s.users.map(({ id, name, color }) => ({ id, name, color })), busy: working || restarting }
+    return { current: s.current, colors: COLORS, users: s.users.map(({ id, name, color }) => ({ id, name, color })), busy: working || restarting }
   }
 
   const refuse = (res, error) => res.status(error === 'busy' ? 409 : 400).json({ ok: false, error })
@@ -340,6 +353,15 @@ exports.activate = (host) => {
     (req, res) => {
       if (working || restarting) return refuse(res, 'busy')
       const result = store.remove(String(req.body?.id ?? ''))
+      return result.error ? refuse(res, result.error) : res.json({ ok: true })
+    },
+    { session: true },
+  )
+  host.route(
+    'post',
+    '/color',
+    (req, res) => {
+      const result = store.setColor(String(req.body?.id ?? ''), String(req.body?.color ?? ''))
       return result.error ? refuse(res, result.error) : res.json({ ok: true })
     },
     { session: true },

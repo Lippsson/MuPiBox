@@ -11538,11 +11538,40 @@ function extensionDetails(e, installed) {
           list.textContent = ''
           for (const u of r.body.users) {
             const li = document.createElement('li')
-            // (the colour the user has on the display)
+            // (the colour the user has on the display; a tap on it offers the colours nobody has)
             if (/^#[0-9a-fA-F]{6}$/.test(String(u.color ?? ''))) {
-              const dot = document.createElement('span')
+              const dot = document.createElement(item.color ? 'button' : 'span')
               dot.className = 'ext-roster-dot'
               dot.style.background = u.color
+              if (item.color) {
+                dot.type = 'button'
+                dot.setAttribute('aria-label', `${u.name}: Farbe wählen`)
+                dot.onclick = () => {
+                  const open = li.nextElementSibling?.classList.contains('ext-roster-palette')
+                  for (const old of list.querySelectorAll('.ext-roster-palette')) old.remove()
+                  if (open) return
+                  const free = (r.body.colors ?? []).filter((c) => !r.body.users.some((o) => o.id !== u.id && o.color === c))
+                  const palette = document.createElement('li')
+                  palette.className = 'ext-roster-palette'
+                  for (const c of free) {
+                    const swatch = document.createElement('button')
+                    swatch.type = 'button'
+                    swatch.className = 'ext-roster-dot'
+                    swatch.style.background = c
+                    swatch.setAttribute('aria-pressed', String(c === u.color))
+                    swatch.setAttribute('aria-label', c)
+                    swatch.onclick = async () => {
+                      if (c !== u.color) {
+                        const done = await post(item.color, { id: u.id, color: c })
+                        if (!done.ok) toast('Hat nicht geklappt', 'info')
+                      }
+                      draw()
+                    }
+                    palette.append(swatch)
+                  }
+                  li.after(palette)
+                }
+              }
               li.append(dot)
             }
             const name = document.createElement('span')
@@ -11615,6 +11644,12 @@ function extensionDetails(e, installed) {
           input.value = ''
           toast('Angelegt')
           draw()
+        }
+        if (item.color) {
+          const hint = document.createElement('small')
+          hint.className = 'help'
+          hint.textContent = 'Tippe auf einen Farbpunkt, um die Farbe zu ändern.'
+          list.after(hint)
         }
         sheet.querySelector(`[data-xraddgo="${index}"]`).onclick = add
         input.onkeydown = (ev) => {

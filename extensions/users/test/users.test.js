@@ -138,6 +138,20 @@ test('a key the user does not have is removed, so the box falls back to its defa
   assert.equal('startVolume' in cfg.mupibox, false)
 })
 
+test('a user can take a colour of the palette that nobody else has', () => {
+  const { store } = box()
+  const mia = store.add('Mia').id
+  assert.deepEqual(store.setColor(mia, '#0000FF'), { ok: true })
+  assert.equal(store.state().users.find((u) => u.id === mia).color, '#0000FF')
+  assert.equal(store.setColor(mia, '#FFFFFF').error, 'taken')
+  assert.equal(store.setColor('main', '#0000FF').error, 'taken')
+  assert.equal(store.setColor(mia, '#123456').error, 'color')
+  assert.equal(store.setColor(mia, 'red').error, 'color')
+  assert.equal(store.setColor('nope', '#0000FF').error, 'id')
+  // (the same colour again is fine: it is their own)
+  assert.deepEqual(store.setColor(mia, '#0000FF'), { ok: true })
+})
+
 test('the current user and the last user cannot be deleted; a deleted one is gone', () => {
   const { store, has } = box()
   assert.equal(store.remove('main').error, 'current')

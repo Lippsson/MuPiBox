@@ -150,6 +150,8 @@ describe('the weather extension of this repository', () => {
     assert.ok(checkManifest(manifest({ ...roster, add: 'https://example.com/x' }), files()), 'a route of another place')
     assert.ok(checkManifest(manifest({ ...roster, remove: '/api/ext/other/remove' }), files()), 'a route of another extension')
     assert.ok(checkManifest(manifest({ ...roster, select: undefined }), files()), 'a route missing')
+    assert.strictEqual(checkManifest(manifest({ ...roster, color: '/api/ext/xy/color' }), files()), null, 'the colour route may be there')
+    assert.ok(checkManifest(manifest({ ...roster, color: '/api/ext/other/color' }), files()), 'but only one of its own')
   })
   it('an order field: a text that names every choice once', () => {
     const choices = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }, { value: 'c', label: 'C' }]

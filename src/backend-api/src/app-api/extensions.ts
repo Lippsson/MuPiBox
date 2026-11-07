@@ -58,7 +58,7 @@ export interface Manifest {
   display?: string
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
-  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster'; search?: string; list?: string; add?: string; remove?: string; select?: string }[] }
+  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster'; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -302,7 +302,9 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
       if (item.type === 'roster') {
         // a list to look at, to add to, to take from and to choose from (hostApi 4): four routes of the extension's own API part
         if (x.hostApi < 4 || item.choices !== undefined) return `ui: a roster needs hostApi 4: ${item.label}`
-        for (const part of ['list', 'add', 'remove', 'select'] as const) {
+        for (const part of ['list', 'add', 'remove', 'select', 'color'] as const) {
+          // (`color` is the one that may be left out: the entries have a colour the user can change)
+          if (part === 'color' && item.color === undefined) continue
           if (typeof item[part] !== 'string' || !new RegExp(`^/api/ext/${x.id}/[a-z]{1,30}$`).test(item[part] as string)) return `ui: bad roster address (${part}): ${item.label}`
         }
       } else if (item.type === 'order') {

@@ -70,7 +70,7 @@ settings card from what the manifest declares.
   A `ui` item can also be a list the user puts in order by dragging (`hostApi` 3): `"type": "order"` with `choices` (the names and
   labels), for a `string` setting whose value is the names, comma separated, in the chosen order (the default must name every choice once).
   A `ui` item can also be a `roster` (`hostApi` 4): a list the extension keeps itself, such as the users of the box. It has no setting and no `key`, but four
-  addresses of the extension's own API part, `list` (GET, `{ current, users: [{ id, name }], busy }`), `add` (`{ name }`), `remove` (`{ id }`) and `select` (`{ id }`);
+  addresses of the extension's own API part, `list` (GET, `{ current, users: [{ id, name }], busy }`), `add` (`{ name }`), `remove` (`{ id }`) and `select` (`{ id }`), and optionally `color` (`{ id, color }`: the entries have a colour, `#RRGGBB`, that can be changed from a list of `colors` that `list` gives);
   the app shows the entries with buttons to switch and delete, and a field to add one. With `hostApi` 4 the API part also gets `host.updateConfig(mutate)`,
   `host.paths` (`{ library, data, extensions }`) and `host.restartServices()`.
 - **`system`**: what the box sets up as root, see section 5.

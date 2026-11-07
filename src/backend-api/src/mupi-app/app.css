@@ -1257,6 +1257,10 @@ textarea[hidden] { display: none; }
 .ext-roster li.current { border-color: var(--mp-primary); }
 .ext-roster .ext-roster-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ext-roster .ext-roster-dot { flex: none; width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(128, 128, 128, .6); }
+.ext-roster button.ext-roster-dot { padding: 0; border: 0; cursor: pointer; width: 28px; height: 28px; background-clip: content-box; border: 6px solid transparent; box-sizing: border-box; box-shadow: none; }
+.ext-roster li.ext-roster-palette { flex-wrap: wrap; gap: 6px; padding: 4px 8px; border-style: dashed; }
+.ext-roster .ext-roster-palette button.ext-roster-dot { width: 34px; height: 34px; border-width: 4px; border-radius: 50%; }
+.ext-roster .ext-roster-palette button.ext-roster-dot[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--mp-primary); }
 .ext-roster .ext-roster-mark { font-size: 13px; color: var(--mp-primary); padding: 0 8px; }
 .ext-roster .btn { min-height: 36px; padding: 0 12px; }
 .ext-roster .btn:disabled { opacity: .4; }
