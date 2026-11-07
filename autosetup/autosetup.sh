@@ -828,8 +828,12 @@ STEP=0
 	/usr/local/bin/mupibox/bootscreen_update.sh >&3 2>&3
 	# by path: on a fresh box pm2 knows neither process yet ("pm2 start server" looked for a file "server"). By the names
 	# of before (links to server/ and player/), as the update: an update to a version before 5.1 puts its program there
-	sudo -H -u dietpi bash -c "cd /home/dietpi/.mupibox/Sonos-Kids-Controller-master && if pm2 describe server >/dev/null 2>&1; then pm2 restart server; else pm2 start server.js --name server; fi" >&3 2>&3
-	sudo -H -u dietpi bash -c "cd /home/dietpi/.mupibox/spotifycontroller-main && if pm2 describe spotify-control >/dev/null 2>&1; then pm2 restart spotify-control; else pm2 start spotify-control.js --name spotify-control; fi" >&3 2>&3
+	# (registered anew every time, script and --cwd given by these names: pm2 keeps the path it started from, and
+	# "cd" through the link gave it the real one - server/ - so a later "pm2 restart" ran the program left there after a
+	# way back to a version before 5.1, not the one installed under the old name. A box with the real path saved gets
+	# the right one here too.)
+	sudo -H -u dietpi bash -c "pm2 delete server >/dev/null 2>&1; pm2 start /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server.js --name server --cwd /home/dietpi/.mupibox/Sonos-Kids-Controller-master" >&3 2>&3
+	sudo -H -u dietpi bash -c "pm2 delete spotify-control >/dev/null 2>&1; pm2 start /home/dietpi/.mupibox/spotifycontroller-main/spotify-control.js --name spotify-control --cwd /home/dietpi/.mupibox/spotifycontroller-main" >&3 2>&3
 	sudo -H -u dietpi bash -c "pm2 save" >&3 2>&3
 	chown -R dietpi:dietpi /home/dietpi/.mupibox /home/dietpi/MuPiBox >&3 2>&3
 	chown dietpi:dietpi ${CONFIG} >&3 2>&3
