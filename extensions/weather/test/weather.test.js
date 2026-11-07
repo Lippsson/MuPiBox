@@ -79,3 +79,11 @@ test('lists a place with its name and position', () => {
   assert.deepEqual(p.values, { placeName: 'Wien, Österreich', lat: 48.2085, lon: 16.3721 })
   assert.match(p.label, /Wien, Österreich/)
 })
+
+test('reads the refresh interval of the settings', () => {
+  assert.equal(_test.intervalMs({}), 600000)
+  assert.equal(_test.intervalMs({ refreshEvery: 20, refreshUnit: 'seconds' }), 20000)
+  assert.equal(_test.intervalMs({ refreshEvery: 3, refreshUnit: 'minutes' }), 180000)
+  assert.equal(_test.intervalMs({ refreshEvery: 0, refreshUnit: 'seconds' }), 600000)
+  assert.equal(_test.intervalMs({ refreshEvery: 2, refreshUnit: 'seconds' }), 10000)
+})

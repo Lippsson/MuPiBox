@@ -5,7 +5,16 @@
 //                                            pressMax, trend: { temp, hum, press } (-1, 0, 1) }
 //   GET /api/ext/weather/places?q=name  -> [{ label, values: { placeName, lat, lon } }]
 
-const CACHE_MS = 10 * 60 * 1000
+// (what the box keeps of an answer at least: a display that asks every few seconds does not become a request to the weather server each time)
+const MIN_CACHE_MS = 60 * 1000
+const UNIT_MS = { seconds: 1000, minutes: 60 * 1000 }
+
+/** How often the user lets the display ask (every N seconds or minutes): from 10 seconds to a day, 10 minutes when nothing is set. */
+function intervalMs(s) {
+  const every = Number(s?.refreshEvery)
+  const ms = Number.isFinite(every) && every > 0 ? every * (UNIT_MS[s?.refreshUnit] ?? UNIT_MS.minutes) : 10 * UNIT_MS.minutes
+  return Math.min(Math.max(Math.round(ms), 10 * 1000), 24 * 60 * 60 * 1000)
+}
 const TIMEOUT_MS = 15000
 // (met.no asks every program to name itself: https://api.met.no/doc/TermsOfService)
 const USER_AGENT = 'MuPiBox-weather-extension/1.0 github.com/Lippsson/MuPiBox'
@@ -125,10 +134,10 @@ const SOURCES = {
 exports.activate = (host) => {
   const cache = new Map() // provider:lat:lon -> { at, data, pending }
 
-  async function current(provider, lat, lon) {
+  async function current(provider, lat, lon, ttl) {
     const key = `${provider}:${lat}:${lon}`
     const entry = cache.get(key)
-    if (entry?.data && Date.now() - entry.at < CACHE_MS) return entry.data
+    if (entry?.data && Date.now() - entry.at < ttl) return entry.data
     // (several displays or a quick second tap: one request)
     if (entry?.pending) return entry.pending
     const pending = SOURCES[provider](lat, lon).then(
@@ -158,7 +167,7 @@ exports.activate = (host) => {
       return
     }
     try {
-      const data = await current(provider, s.lat, s.lon)
+      const data = await current(provider, s.lat, s.lon, Math.max(intervalMs(s), MIN_CACHE_MS))
       res.set('Cache-Control', 'no-store').json({ configured: true, provider, place: s.placeName || '', ...data })
     } catch (error) {
       host.log.warn(`[Extension weather] ${provider}: ${error}`)
@@ -182,4 +191,4 @@ exports.activate = (host) => {
   })
 }
 
-exports._test = { parseOpenMeteo, parseMetNo, circularMean, placeOf, trendOf }
+exports._test = { parseOpenMeteo, parseMetNo, circularMean, placeOf, trendOf, intervalMs }
