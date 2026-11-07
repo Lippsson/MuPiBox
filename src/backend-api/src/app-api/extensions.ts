@@ -463,7 +463,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     const installed = []
     for (const [id, s] of Object.entries(state)) {
       const m = await readManifest(id)
-      if (m) installed.push({ id, name: m.name, version: m.version, description: m.description ?? '', icon: m.icon ? `/ext/${id}/${m.icon}` : null, enabled: s.enabled !== false, system: m.system ?? {}, ui: m.ui ?? null, settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])), settings: await publicSettings(m), job: jobs.get(id) ?? null })
+      if (m) installed.push({ id, name: m.name, version: m.version, description: m.description ?? '', icon: m.icon ? `/api/ext-files/${id}/${m.icon}` : null, enabled: s.enabled !== false, system: m.system ?? {}, ui: m.ui ?? null, settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])), settings: await publicSettings(m), job: jobs.get(id) ?? null })
     }
     let catalog: unknown[] = []
     let catalogError: string | null = null
@@ -600,8 +600,9 @@ export function mountExtensions(app: express.Express, deps: ExtensionDeps): void
     res.json(out)
   })
 
-  // the files of an extension (not its server-side code): the display and the app load their parts and pictures from here
-  app.get(/^\/ext\/([a-z][a-z0-9-]{1,30})\/(.+)$/, localNetworkOnly, async (req, res) => {
+  // the files of an extension (not its server-side code): the display and the app load their parts and pictures from here. Twice: /ext/
+  // for the display (port 8200), /api/ext-files/ for the app (port 80: the web server hands only /api, /app ... on to the box)
+  app.get(/^\/(?:ext|api\/ext-files)\/([a-z][a-z0-9-]{1,30})\/(.+)$/, localNetworkOnly, async (req, res) => {
     const id = req.params[0]
     const rel = req.params[1]
     let manifest = (await enabledManifests()).find((m) => m.id === id)
