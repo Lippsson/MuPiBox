@@ -73,7 +73,7 @@ export function dialsFor(data) {
       areas: range(data.humMin, data.humMax, 0, 100), minMeasured: data.humMin, maxMeasured: data.humMax, trend: data.trend?.hum ?? 0, caption: '',
     },
     // (the red band: from the wind to the gust)
-    { id: 'wind', kind: 'radial', title: 'Windstärke', unit: 'km/h', min: 0, max: windMax, value: data.windSpeed, decimals: 1, sections: [], areas: range(data.windSpeed, data.windGust, 0, windMax), trend: 0, caption: Number.isFinite(data.windGust) ? `Böen bis ${fmt(data.windGust)} km/h` : '' },
+    { id: 'wind', kind: 'radial', title: 'Windstärke', unit: 'km/h', min: 0, max: windMax, value: data.windSpeed, decimals: 1, sections: [], areas: range(data.windSpeed, data.windGust, 0, windMax), trend: null, caption: Number.isFinite(data.windGust) ? `Böen bis ${fmt(data.windGust)} km/h` : '' },
     { id: 'dir', kind: 'direction', title: 'Windrichtung', latest: data.windDir, average: data.windDirAvg, caption: 'legend' },
     // (a low and a high pressure are the red ends of the scale)
     { id: 'baro', kind: 'radial', title: 'Luftdruck', unit: 'hPa', min: p.min, max: p.max, value: data.pressure, decimals: 1, sections: [], areas: [{ start: p.min, stop: 975, color: 'rgba(225,30,0,0.55)' }, { start: 1045, stop: p.max, color: 'rgba(225,30,0,0.55)' }], minMeasured: data.pressMin, maxMeasured: data.pressMax, trend: data.trend?.press ?? 0, caption: '' },
@@ -84,7 +84,7 @@ export function dialsFor(data) {
         { start: rainMax * 0.5, stop: rainMax * 0.8, color: WARM },
         { start: rainMax * 0.8, stop: rainMax, color: RED },
       ],
-      areas: [], trend: 0, caption: '',
+      areas: [], trend: null, caption: '',
     },
   ]
 }
@@ -200,11 +200,12 @@ export function activate(api) {
               thresholdVisible: false,
               minMeasuredValueVisible: Number.isFinite(dial.minMeasured),
               maxMeasuredValueVisible: Number.isFinite(dial.maxMeasured),
-              trendVisible: dial.trend !== 0,
+              // (the arrows are always there, as on the club's page: the one of the trend lights up, steady included)
+              trendVisible: Number.isFinite(dial.trend),
             })
             if (Number.isFinite(dial.minMeasured)) gauge.setMinMeasuredValue(clamp(dial.minMeasured, dial.min, dial.max))
             if (Number.isFinite(dial.maxMeasured)) gauge.setMaxMeasuredValue(clamp(dial.maxMeasured, dial.min, dial.max))
-            if (dial.trend !== 0) gauge.setTrend(ss.TrendState[trendName(dial.trend)])
+            if (Number.isFinite(dial.trend)) gauge.setTrend(ss.TrendState[trendName(dial.trend)])
             const value = Number.isFinite(dial.value) ? clamp(dial.value, dial.min, dial.max) : dial.min
             if (moving) {
               // (the first time from the start of the scale, later from the value shown before)
