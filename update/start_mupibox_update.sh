@@ -1534,6 +1534,18 @@ rm -f /tmp/mupibox-update-failed
 		[ "${FINISH_OK}" = 1 ] && mark_update done legacy-admin || FINISH_OK=0
 		if [ "${FINISH_OK}" = 1 ]; then
 			[ -n "${THEME_KEPT_AT}" ] && echo "## theme-data of the old program kept in ${THEME_KEPT_AT}: what was added to it could not all be taken over" >&3 2>&3
+			# The podcasts' pictures in an old program folder (a way back to a version before 5.1 put them there, see
+			# migrate_layout.sh --for-older) into the cache of 5.1 first - what is not there yet; the copy in the old
+			# folder goes only when that worked. Else that folder counted as one with data of its own and stayed, after
+			# every way back and forth one more.
+			if [ -d "${MUPI_CACHE}/rss-covers" ] && [ ! -L "${MUPI_CACHE}/rss-covers" ]; then
+				for old in "${BAK_DIR}" "${MUPI_HOME}"/server.before-*; do
+					if [ -d "${old}/www/rss-covers" ] && [ ! -L "${old}/www/rss-covers" ]; then
+						cp -an "${old}/www/rss-covers/." "${MUPI_CACHE}/rss-covers/" >&3 2>&3 && rm -rf "${old}/www/rss-covers" >&3 2>&3
+					fi
+				done
+				chown -R dietpi:dietpi "${MUPI_CACHE}/rss-covers" >&3 2>&3
+			fi
 			if [ -d "${BAK_DIR}" ] && ! program_only "${BAK_DIR}"; then
 				mv "${BAK_DIR}" "${MUPI_HOME}/server.kept-${KEEP_STAMP}" >&3 2>&3 \
 					&& echo "## ${BAK_DIR} kept as ${MUPI_HOME}/server.kept-${KEEP_STAMP}: it holds data of its own" >&3 2>&3
