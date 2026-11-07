@@ -1,7 +1,7 @@
 {
   "id": "users",
   "name": "Benutzer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.",
   "hostApi": 4,
   "resources": {},

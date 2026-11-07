@@ -90,11 +90,16 @@ export function activate(api) {
       if (canSwitch) {
         badge.type = 'button'
         badge.setAttribute('aria-label', 'Benutzer wechseln')
-        badge.onclick = open
+        // (the status bar ignores the pointer, and a tap on it opens its own page: the badge takes the pointer back and keeps the tap to itself)
+        badge.onclick = (ev) => {
+          ev.stopPropagation()
+          open()
+        }
+        for (const type of ['pointerdown', 'pointerup', 'touchstart', 'mousedown']) badge.addEventListener(type, (ev) => ev.stopPropagation())
       }
       badge.hidden = true
       badge.style.cssText =
-        'display:flex;align-items:center;justify-content:center;width:26px;height:26px;flex:none;border-radius:50%;border:2px solid currentColor;background:transparent;color:inherit;font:700 15px/1 var(--ion-font-family,inherit);padding:0;margin-right:6px'
+        'display:flex;align-items:center;justify-content:center;width:26px;height:26px;flex:none;border-radius:50%;border:2px solid currentColor;background:transparent;color:inherit;font:700 15px/1 var(--ion-font-family,inherit);padding:0;margin-right:6px;pointer-events:auto;cursor:pointer'
       host.append(badge)
       badges.add(badge)
       paint()
