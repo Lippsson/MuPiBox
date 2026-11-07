@@ -46,6 +46,9 @@ LOCK_TOKEN="layout-${STAMP}"
 # "mkdir<TAB>folder", "rmdir<TAB>folder"
 DONE=()
 IDENTICAL=()
+# set while something of the cache is placed (home lists, feeds, pictures, thumbnails): of two different copies the
+# older one is not kept aside - it is made again when needed, and every way back and forth left one more of it
+PLACING_CACHE=0
 STOPPED=0
 CRON_STOPPED=0
 LOCKED=0
@@ -155,11 +158,20 @@ place() {
 	elif [ "${src}" -nt "${dst}" ]; then
 		log "${src#"${H}"/} is newer than ${dst#"${H}"/} - taken over, the other one kept"
 		move "${dst}" "${KEPT}/${dst#"${H}"/}"
+		[ "${PLACING_CACHE}" = 1 ] && IDENTICAL+=("${KEPT}/${dst#"${H}"/}")
 		move "${src}" "${dst}"
 	else
 		log "${dst#"${H}"/} is newer than ${src#"${H}"/} - stays, the other one kept"
 		move "${src}" "${kept}"
+		[ "${PLACING_CACHE}" = 1 ] && IDENTICAL+=("${kept}")
 	fi
+}
+
+# place for something of the cache (see PLACING_CACHE)
+place_cache() {
+	PLACING_CACHE=1
+	place "$1" "$2"
+	PLACING_CACHE=0
 }
 
 # $1 a file of before - its place now $2, a link at the old place
@@ -289,7 +301,7 @@ if [ -d "${CONF_BEFORE}" ] && [ ! -L "${CONF_BEFORE}" ]; then
 					place "${item}" "${MUPI_LIBRARY}/${name}"
 				fi
 				;;
-			home-lists.json | rss-cache) place "${item}" "${MUPI_CACHE}/${name}" ;;
+			home-lists.json | rss-cache) place_cache "${item}" "${MUPI_CACHE}/${name}" ;;
 			*) place "${item}" "${MUPI_LIBRARY}/${name}" ;;
 		esac
 	done
@@ -309,11 +321,11 @@ fi
 STEP="covers and cache"
 if [ -d "${MUPI_SERVER}" ]; then
 	place "${MUPI_SERVER}/www/cover" "${MUPI_COVERS}"
-	place "${MUPI_SERVER}/www/rss-covers" "${MUPI_CACHE}/rss-covers"
-	place "${MUPI_SERVER}/cache" "${MUPI_CACHE}"
+	place_cache "${MUPI_SERVER}/www/rss-covers" "${MUPI_CACHE}/rss-covers"
+	place_cache "${MUPI_SERVER}/cache" "${MUPI_CACHE}"
 	# (put into the library's folder for a version before 5.1: see --for-older)
 	for name in rss-cache home-lists.json; do
-		place "${MUPI_LIBRARY}/${name}" "${MUPI_CACHE}/${name}"
+		place_cache "${MUPI_LIBRARY}/${name}" "${MUPI_CACHE}/${name}"
 	done
 	if [ -d "${MUPI_WWW}" ]; then
 		link "${MUPI_COVERS}" "${MUPI_WWW}/cover"
@@ -329,7 +341,9 @@ place_linked "${H}/battery_log.jsonl" "${MUPI_LOGS}/battery_log.jsonl"
 place_linked "${H}/.app_sessions.json" "${MUPI_DATA}/.app_sessions.json"
 place_linked "${H}/hidden-covers.json" "${MUPI_DATA}/hidden-covers.json"
 place_linked "${H}/nas-folder-index.json" "${MUPI_DATA}/nas-folder-index.json"
+PLACING_CACHE=1
 place_linked "${H}/thumbs" "${MUPI_CACHE}/thumbs"
+PLACING_CACHE=0
 [ -d "${MUPI_PLAYER}/config" ] && place_linked "${MUPI_PLAYER}/config/playtime-checkpoint.json" "${MUPI_DATA}/playtime-checkpoint.json"
 
 STEP="owner"
