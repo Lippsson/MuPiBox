@@ -1,9 +1,10 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
   "hostApi": 2,
+  "resources": {},
   "api": "api.js",
   "display": "display.js",
   "icon": "icon.svg",

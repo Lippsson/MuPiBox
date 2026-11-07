@@ -9,7 +9,7 @@ import { readZip } from './app-api/winamp-skin'
 import { verifyPackage, checkManifest, checkSettings, checkUdevRules, type Manifest } from './app-api/extensions'
 
 const files = (...names: string[]) => new Set(['manifest.json', ...names])
-const base = (extra: Record<string, unknown> = {}) => ({ id: 'cd', name: 'CD', version: '1.0.0', hostApi: 1, ...extra })
+const base = (extra: Record<string, unknown> = {}) => ({ id: 'cd', name: 'CD', version: '1.0.0', hostApi: 1, resources: {}, ...extra })
 
 describe('udev rules of an extension', () => {
   it('accepts the rule of the CD extension', () => {
@@ -152,7 +152,9 @@ describe('the weather extension of this repository', () => {
 
 describe('an uploaded extension file', () => {
   it('is read and checked without installing anything', () => {
-    const bytes = readFileSync(path.join(process.cwd(), '..', '..', 'extensions', 'dist', 'cd-1.0.0.mpx'))
+    const extDir = path.join(process.cwd(), '..', '..', 'extensions')
+    const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'cd')
+    const bytes = readFileSync(path.join(extDir, 'dist', `cd-${entry.version}.mpx`))
     const checked = verifyPackage(bytes)
     assert.strictEqual(checked.ok, true)
     if (checked.ok) assert.strictEqual(checked.pkg.manifest.id, 'cd')

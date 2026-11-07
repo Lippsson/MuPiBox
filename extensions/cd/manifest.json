@@ -1,7 +1,7 @@
 {
   "id": "cd",
   "name": "USB-CD-Laufwerk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Audio-CDs vom USB-Laufwerk abspielen, mit Titelnamen und Cover aus dem Internet.",
   "hostApi": 1,
   "player": "player.js",
@@ -20,6 +20,7 @@
       "legacy": "discogs.token"
     }
   },
+  "resources": {},
   "system": {
     "udev": [
       {

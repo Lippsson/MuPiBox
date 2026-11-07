@@ -11148,6 +11148,48 @@ function extSystemNote(system) {
   return parts.length ? parts.join(' ') : 'Richtet nichts am System ein.'
 }
 
+// What an extension needs from the box (ports, GPIO pins, services - as it declares them), in words
+function extResourceNote(resources) {
+  const parts = []
+  if (resources?.ports?.length) parts.push(`Ports: ${resources.ports.join(', ')}.`)
+  if (resources?.gpio?.length) parts.push(`GPIO-Pins: ${resources.gpio.join(', ')}.`)
+  if (resources?.services?.length) parts.push(`Dienste: ${resources.services.join(', ')}.`)
+  return parts.length ? `Braucht: ${parts.join(' ')}` : 'Braucht keine Ports, GPIO-Pins oder Dienste.'
+}
+
+// The result of the test against the box (what is taken already): the errors stop the install, the warnings only say something
+function extConflictNote(conflicts) {
+  const word = (what) => String(what).replace(/^port /, 'Port ').replace(/^service /, 'Dienst ')
+  const errors = (conflicts ?? []).filter((c) => c.severity === 'error')
+  const warns = (conflicts ?? []).filter((c) => c.severity !== 'error')
+  const text = (c) =>
+    c.kind === 'service' && c.severity === 'error'
+      ? `${word(c.what)} gibt es schon (${c.by}).`
+      : c.kind === 'service'
+        ? `${word(c.what)} ist (noch) nicht auf der Box.`
+        : c.severity === 'error'
+          ? `${word(c.what)} ist schon belegt: ${c.by}.`
+          : 'Nicht alles ließ sich prüfen, der Test ist weniger sicher.'
+  return { errors: errors.map(text), warns: warns.map(text) }
+}
+
+// The test before an install: asks the box whether what the extension needs is free. Shows what it needs and - when something is
+// taken - why it cannot be installed. Returns the text to show in the question, or null when the install must not go on.
+async function extensionPreflight(request, name) {
+  const r = await api(`${API}/extensions/check`, { method: 'POST', body: request })
+  if (!r.ok) {
+    toast('Die Prüfung auf Konflikte hat nicht geklappt', 'info')
+    return null
+  }
+  const { errors, warns } = extConflictNote(r.body.conflicts)
+  const needs = extResourceNote(r.body.resources)
+  if (errors.length) {
+    await ask(`${name} kann nicht installiert werden`, `${needs} Das kollidiert mit der Box: ${errors.join(' ')} Entferne oder ändere zuerst, was das belegt.`, 'Verstanden')
+    return null
+  }
+  return `${needs}${warns.length ? ` Hinweis: ${warns.join(' ')}` : ' Die Prüfung auf Konflikte ist bestanden.'}`
+}
+
 // The install or removal runs on the box (a download, the setup, then the services start again): watched until it is over
 async function watchExtensionJob(id, doneText) {
   for (let i = 0; i < 400; i++) {
@@ -11176,6 +11218,12 @@ async function watchExtensionJob(id, doneText) {
 }
 
 async function extensionAction(path, id, askTitle, askText, askOk, doneText) {
+  if (path === 'install') {
+    // (the test first: nothing is installed when something it needs is taken)
+    const note = await extensionPreflight({ id }, askTitle.replace(/ installieren$/, ''))
+    if (note === null) return
+    askText = `${askText} ${note}`
+  }
   if (!(await ask(askTitle, askText, askOk))) return
   const r = await api(`${API}/extensions/${path}`, { method: 'POST', body: { id } })
   if (!r.ok) return toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
@@ -11213,6 +11261,7 @@ function extensionDetails(e, installed) {
     `<h2>${esc(e.name)} <small>${esc(e.version)}</small></h2>
      <p class="help" style="margin:0">${esc(e.description)}</p>
      <p class="help" style="margin:0">${esc(extSystemNote(e.system))}</p>
+     <p class="help" style="margin:0">${esc(extResourceNote(e.resources))}</p>
      ${e.ui ? `<h3>${esc(e.ui.title)}</h3><p class="help" style="margin:0">${esc(e.ui.help ?? '')}</p>` : ''}
      ${installed && !e.enabled && e.ui ? '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>' : ''}
      ${form}
@@ -12050,6 +12099,7 @@ const CONTROLLERS = {
           const r = await api(`${API}/extensions/enable`, { method: 'POST', body: { id: e.id, enabled } })
           if (!r.ok) {
             input.checked = !enabled
+            if (r.body?.error === 'conflict') return ask(`${e.name} kann nicht eingeschaltet werden`, `Das kollidiert mit der Box: ${extConflictNote(r.body.conflicts).errors.join(' ')}`, 'Verstanden')
             return toast('Hat nicht geklappt', 'info')
           }
           toast('Die Dienste starten neu …')
@@ -12069,7 +12119,13 @@ const CONTROLLERS = {
         const body = await r?.json().catch(() => null)
         if (!r || !r.ok) return toast(`Das ist keine passende Erweiterung: ${body?.error ?? ''}`.trim(), 'info')
         const what = `${body.name} ${body.version}${body.installedVersion ? ` (ersetzt ${body.installedVersion})` : ''}`
-        if (!(await ask(`${what} installieren`, `${extSystemNote(body.system)} Eine Erweiterung läuft auf der Box ohne Schutz: Installiere nur Dateien aus Quellen, denen du vertraust. Prüfsumme (SHA-256): ${body.sha256.slice(0, 16)}… Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, 'Installieren'))) return
+        const found = extConflictNote(body.conflicts)
+        if (found.errors.length) {
+          await ask(`${what} kann nicht installiert werden`, `${extResourceNote(body.resources)} Das kollidiert mit der Box: ${found.errors.join(' ')} Entferne oder ändere zuerst, was das belegt.`, 'Verstanden')
+          return
+        }
+        const preflight = `${extResourceNote(body.resources)}${found.warns.length ? ` Hinweis: ${found.warns.join(' ')}` : ' Die Prüfung auf Konflikte ist bestanden.'}`
+        if (!(await ask(`${what} installieren`, `${extSystemNote(body.system)} ${preflight} Eine Erweiterung läuft auf der Box ohne Schutz: Installiere nur Dateien aus Quellen, denen du vertraust. Prüfsumme (SHA-256): ${body.sha256.slice(0, 16)}… Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, 'Installieren'))) return
         const go = await api(`${API}/extensions/install`, { method: 'POST', body: { token: body.token } })
         if (!go.ok) return toast(go.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
         toast('Wird erledigt …')

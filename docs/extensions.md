@@ -37,6 +37,7 @@ nie den Kern.
   "api": "api.js",
   "display": "display.js",
   "icon": "icon.svg",
+  "resources": {},
   "settings": {
     "cdLookup": { "type": "boolean", "default": true, "legacy": "mupibox.cdLookup" },
     "discogsToken": { "type": "secret", "pattern": "^[A-Za-z0-9]{0,80}$", "legacy": "discogs.token" }
@@ -76,6 +77,25 @@ nie den Kern.
     der Installation.
   Beim Entfernen nimmt der Kern genau das wieder weg, was er angelegt hat (Regel-Dateien; Gruppen und Pakete bleiben, weil
   andere sie brauchen können).
+- `resources` (**Pflicht**, `{}` heißt „braucht nichts“): was die Extension von der Box braucht. Sie sagt es **vorher**, die Box
+  prüft es **vor** der Installation gegen das, was schon belegt ist.
+  - `ports`: `[{ "port": 9000, "proto": "tcp", "purpose": "…" }]` – Ports, auf denen sie lauscht (ab 1024, `proto` tcp oder udp).
+  - `gpio`: `[{ "pin": 17, "purpose": "…" }]` – GPIO-Pins (BCM-Nummer 2–27).
+  - `services`: `[{ "name": "foo.service", "provides": true, "purpose": "…" }]` – systemd-Dienste (`.service`, `.socket`, `.timer`).
+    `provides: true`: die Extension bringt den Dienst mit (z. B. über ein Paket), er darf noch nicht existieren; sonst (Standard)
+    braucht sie ihn nur, er sollte da sein (fehlt er, ist es eine Warnung).
+
+  **Der Test** (`app-api/extension-resources.ts`) vergleicht mit: dem Kern (seine Ports und die Pins der Konfiguration: Netzschalter/
+  Shim, LED, Lüfter, Drehgeber und HAT, wenn eingeschaltet), der Boot-Konfiguration (`dtoverlay`/`dtparam`: Pins, I²C, SPI, Soundkarten),
+  den anderen Extensions (auch ausgeschalteten), und – soweit die Box hineinsehen kann – dem, was jetzt läuft (`ss`: lauschende Ports,
+  `gpioinfo`: belegte Pins, `systemctl`: vorhandene Dienste). Eine Kollision ist ein **Fehler**: die Webapp zeigt sie mit dem
+  Verursacher an und installiert nichts (auch nicht beim Einschalten einer ausgeschalteten Extension). Ließ sich ein Teil nicht
+  ansehen, steht eine **Warnung** da. Der Test läuft in der Webapp vor der Frage (`POST /api/app/extensions/check`) und
+  noch einmal in der Installation selbst, mit dem Manifest des heruntergeladenen Pakets; das muss dasselbe sagen wie der Katalog.
+  Bei einer neuen Version zählt, was die alte schon belegt, nicht als Kollision.
+
+  Wichtig: Die Angabe wird gegen die Box **geprüft, nicht erzwungen** – eine Extension ist ein Programm des Benutzers `dietpi`
+  (deshalb nur aus dem Katalog oder von Quellen, denen man vertraut).
 
 ## Katalog
 
@@ -84,11 +104,11 @@ nie den Kern.
 ```json
 [{ "id": "cd", "name": "USB-CD-Laufwerk", "version": "1.0.0", "description": "…", "hostApi": 1,
    "url": "https://raw.githubusercontent.com/<repo>/<branch>/extensions/dist/cd-1.0.0.mpx",
-   "sha256": "…", "size": 12345, "system": { "udev": 1, "groups": ["cdrom"], "packages": [] } }]
+   "sha256": "…", "size": 12345, "system": { "udev": 1, "groups": ["cdrom"], "packages": [] }, "resources": {} }]
 ```
 
 Die Box lädt die Datei, prüft die Größe (höchstens 4 MB) und die SHA-256, prüft Dateinamen und Manifest, vergleicht es mit dem
-Katalogeintrag (Id, Version, Systemschritte) und installiert erst dann (Dateien, Regeln, Gruppen, Pakete; danach starten
+Katalogeintrag (Id, Version, Systemschritte, `resources`) und testet die Ressourcen gegen die Box und installiert erst dann (Dateien, Regeln, Gruppen, Pakete; danach starten
 `server` und `spotify-control` neu, das Display lädt neu). Gebaut wird mit `node tools/mpx/pack.mjs <id>`:
 das macht aus `extensions/<id>/` die `.mpx` in `extensions/dist/` und trägt Größe und Prüfsumme in den Katalog ein.
 

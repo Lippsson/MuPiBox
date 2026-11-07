@@ -13,6 +13,7 @@ import path from 'node:path'
 import express, { type NextFunction, type Request, type RequestHandler, type Response, type Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { EXTENSIONS_DIR, EXTENSIONS_DIR_BEFORE } from '../paths'
+import { checkResources, type Conflict, describeResources, findConflicts, gatherTaken, realProbe, type Resources, sameResources } from './extension-resources'
 import { localNetworkOnly, requireCsrf, requireSession } from './middleware'
 import { readZip } from './winamp-skin'
 
@@ -56,6 +57,8 @@ export interface Manifest {
   ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup'; search?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
+  /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
+  resources?: Resources
 }
 
 export interface CatalogEntry {
@@ -70,6 +73,7 @@ export interface CatalogEntry {
   sha256: string
   size: number
   system?: { udev?: number; groups?: string[]; packages?: string[] }
+  resources?: Resources
 }
 
 export interface ExtensionDeps {
@@ -114,6 +118,32 @@ async function enabledManifests(): Promise<Manifest[]> {
     if (manifest) out.push(manifest)
   }
   return out
+}
+
+async function installedManifests(): Promise<Manifest[]> {
+  const out: Manifest[] = []
+  for (const id of Object.keys(await readState())) {
+    const manifest = await readManifest(id)
+    if (manifest) out.push(manifest)
+  }
+  return out
+}
+
+/**
+ * The test before an install (or before an extension is switched on): what the extension declares it needs, compared with what is
+ * taken on the box - the core, the boot configuration, the other extensions, what runs now. Nothing is changed.
+ */
+async function testResources(manifest: Manifest, deps: ExtensionDeps): Promise<Conflict[]> {
+  const installed = await installedManifests()
+  const self = installed.find((m) => m.id === manifest.id)
+  const taken = await gatherTaken({
+    self: manifest.id,
+    selfDeclared: self?.resources,
+    config: deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined,
+    others: installed.map((m) => ({ id: m.id, resources: m.resources })),
+    probe: realProbe((cmd, args) => run(cmd, args, 15000)),
+  })
+  return findConflicts(manifest.resources, taken)
 }
 
 const settingsFile = (id: string) => path.join(EXT_DIR, 'settings', `${id}.json`)
@@ -207,6 +237,8 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
     if (!new RegExp(`^99-mpx-${x.id}[a-z0-9-]*\\.rules$`).test(String(rule?.name))) return `bad rule name: ${rule?.name}`
     if (!FILE.test(String(rule.file)) || !files.has(rule.file)) return `rule file missing: ${rule?.file}`
   }
+  const badResources = checkResources(x.resources)
+  if (badResources) return badResources
   for (const g of system.groups ?? []) if (!GROUPS.has(g)) return `group not allowed: ${g}`
   for (const p of system.packages ?? []) if (!PACKAGE.test(p)) return `bad package name: ${p}`
   return null
@@ -377,6 +409,15 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
     if (manifest.id !== id) return fail('the package is not the extension asked for')
     const sys = manifest.system ?? {}
 
+    // what the package says it needs must be what was shown before (the catalog's entry), and it must not collide with anything
+    if (!uploaded) {
+      const entry = (await fetchCatalog(deps)).find((e) => e.id === id)
+      if (!sameResources(entry?.resources, manifest.resources)) return fail('the package needs other resources than the catalog says')
+    }
+    job.step = 'test'
+    const conflicts = (await testResources(manifest, deps)).filter((c) => c.severity === 'error')
+    if (conflicts.length > 0) return fail(`conflict: ${conflicts.map((c) => c.message).join(' ')}`)
+
     job.step = 'files'
     const target = path.join(EXT_DIR, id)
     const staging = path.join(EXT_DIR, `.install-${id}`)
@@ -463,12 +504,12 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     const installed = []
     for (const [id, s] of Object.entries(state)) {
       const m = await readManifest(id)
-      if (m) installed.push({ id, name: m.name, version: m.version, description: m.description ?? '', icon: m.icon ? `/api/ext-files/${id}/${m.icon}` : null, enabled: s.enabled !== false, system: m.system ?? {}, ui: m.ui ?? null, settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])), settings: await publicSettings(m), job: jobs.get(id) ?? null })
+      if (m) installed.push({ id, name: m.name, version: m.version, description: m.description ?? '', icon: m.icon ? `/api/ext-files/${id}/${m.icon}` : null, enabled: s.enabled !== false, system: m.system ?? {}, resources: describeResources(m.resources), ui: m.ui ?? null, settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])), settings: await publicSettings(m), job: jobs.get(id) ?? null })
     }
     let catalog: unknown[] = []
     let catalogError: string | null = null
     try {
-      catalog = (await fetchCatalog(deps)).map((e) => ({ ...e, installedVersion: state[e.id]?.version ?? null, job: jobs.get(e.id) ?? null }))
+      catalog = (await fetchCatalog(deps)).map((e) => ({ ...e, resources: describeResources(e.resources), installedVersion: state[e.id]?.version ?? null, job: jobs.get(e.id) ?? null }))
     } catch (error) {
       catalogError = (error as Error).message
     }
@@ -503,6 +544,29 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     return installExtension(id, deps, upload && upload.until > Date.now() ? upload.pkg : undefined)
   }))
 
+  // The test before an install: what the extension needs and whether it collides with anything on the box. For one of the catalog
+  // ({id}: the catalog says what it needs; the install tests the package itself again) or one that was uploaded ({token}). Changes nothing.
+  router.post('/extensions/check', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as { id?: unknown; token?: unknown }
+    let manifest: Manifest | undefined
+    if (typeof body.token === 'string') manifest = uploads.get(body.token)?.pkg.manifest
+    else if (typeof body.id === 'string' && ID.test(body.id)) {
+      try {
+        const entry = (await fetchCatalog(deps)).find((e) => e.id === body.id)
+        if (entry) manifest = { id: entry.id, name: entry.name, version: entry.version, hostApi: entry.hostApi, resources: entry.resources }
+      } catch (error) {
+        res.status(502).json({ error: `catalog: ${(error as Error).message}` })
+        return
+      }
+    }
+    if (!manifest) {
+      res.status(404).json({ error: 'unknown extension' })
+      return
+    }
+    const conflicts = await testResources(manifest, deps)
+    res.json({ ok: true, id: manifest.id, resources: describeResources(manifest.resources), conflicts, canInstall: !conflicts.some((c) => c.severity === 'error') })
+  })
+
   // An extension file from the user (not from the catalog): read and checked here, nothing installed yet. The answer says what it is
   // and what it would set up, the app asks, and the install then names the token.
   router.post('/extensions/upload', requireSession, requireCsrf, express.raw({ type: () => true, limit: MAX_MPX }), async (req, res) => {
@@ -526,6 +590,8 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
       version: m.version,
       description: m.description ?? '',
       system: { udev: (m.system?.udev ?? []).length, groups: m.system?.groups ?? [], packages: m.system?.packages ?? [] },
+      resources: describeResources(m.resources),
+      conflicts: await testResources(m, deps),
       installedVersion: state[m.id]?.version ?? null,
       sha256: createHash('sha256').update(bytes).digest('hex'),
     })
@@ -538,6 +604,15 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     if (typeof id !== 'string' || !state[id] || typeof enabled !== 'boolean') {
       res.status(400).json({ error: 'invalid request' })
       return
+    }
+    if (enabled) {
+      // (switched on: the same test as before an install - another extension or the box may hold what it needs by now)
+      const manifest = await readManifest(id)
+      const errors = manifest ? (await testResources(manifest, deps)).filter((c) => c.severity === 'error') : []
+      if (errors.length > 0) {
+        res.status(409).json({ error: 'conflict', conflicts: errors })
+        return
+      }
     }
     state[id].enabled = enabled
     await writeState(state)

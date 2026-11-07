@@ -1,9 +1,10 @@
 {
   "id": "clock",
   "name": "Uhrzeit in der Kopfzeile",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Zeigt die Uhrzeit oben im Display, rechts neben der Akkuanzeige – als Ziffern oder als Zifferblatt.",
   "hostApi": 1,
+  "resources": {},
   "display": "display.js",
   "icon": "icon.svg",
   "settings": {

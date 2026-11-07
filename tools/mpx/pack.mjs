@@ -24,6 +24,7 @@ const MAX_MPX = 4 * 1024 * 1024
 const dir = path.join(root, 'extensions', id)
 const manifest = JSON.parse(readFileSync(path.join(dir, 'manifest.json'), 'utf8'))
 if (manifest.id !== id) throw new Error(`manifest id "${manifest.id}" is not "${id}"`)
+if (manifest.resources === undefined) throw new Error('manifest has no "resources" (ports, GPIO pins, services it needs; {} for nothing)')
 
 // the files of the extension: everything except tests and notes
 const files = []
@@ -132,6 +133,8 @@ const entry = {
   url: `https://raw.githubusercontent.com/${repo}/${branch}/extensions/dist/${outName}`,
   sha256,
   size: zip.length,
+  // what it needs from the box (ports, GPIO pins, services): shown in the app before the install, tested against the box
+  resources: manifest.resources,
   system: {
     udev: (manifest.system?.udev ?? []).length,
     groups: manifest.system?.groups ?? [],
