@@ -152,16 +152,19 @@ place() {
 		return
 	fi
 	kept="${KEPT}/${src#"${H}"/}"
+	# (what becomes of the older one, for the log: of the cache it goes at the end, see PLACING_CACHE)
+	local other="the other one kept"
+	[ "${PLACING_CACHE}" = 1 ] && other="the older one goes (cache)"
 	if [ -f "${src}" ] && [ -f "${dst}" ] && cmp -s "${src}" "${dst}"; then
 		move "${src}" "${kept}"
 		IDENTICAL+=("${kept}")
 	elif [ "${src}" -nt "${dst}" ]; then
-		log "${src#"${H}"/} is newer than ${dst#"${H}"/} - taken over, the other one kept"
+		log "${src#"${H}"/} is newer than ${dst#"${H}"/} - taken over, ${other}"
 		move "${dst}" "${KEPT}/${dst#"${H}"/}"
 		[ "${PLACING_CACHE}" = 1 ] && IDENTICAL+=("${KEPT}/${dst#"${H}"/}")
 		move "${src}" "${dst}"
 	else
-		log "${dst#"${H}"/} is newer than ${src#"${H}"/} - stays, the other one kept"
+		log "${dst#"${H}"/} is newer than ${src#"${H}"/} - stays, ${other}"
 		move "${src}" "${kept}"
 		[ "${PLACING_CACHE}" = 1 ] && IDENTICAL+=("${kept}")
 	fi
