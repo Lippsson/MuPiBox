@@ -312,6 +312,14 @@ if [ -z "$BRANCH" ]; then
           exit 1
         fi
       fi
+      # (pm2 by the old names before that update runs: a 5.1 box set up before this script may have the real paths
+      # saved - server/, player/ - and the older update only restarts by name, so it would start the program of 5.1 it
+      # leaves beside its own. Registered as at the end of an update, see there.)
+      if [ -n "${BOX_5_1}" ]; then
+        sudo -H -u dietpi bash -c "pm2 delete server >/dev/null 2>&1; pm2 start /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server.js --name server --cwd /home/dietpi/.mupibox/Sonos-Kids-Controller-master" > /dev/null 2>&1
+        sudo -H -u dietpi bash -c "pm2 delete spotify-control >/dev/null 2>&1; pm2 start /home/dietpi/.mupibox/spotifycontroller-main/spotify-control.js --name spotify-control --cwd /home/dietpi/.mupibox/spotifycontroller-main" > /dev/null 2>&1
+        sudo -H -u dietpi bash -c "pm2 save" > /dev/null 2>&1
+      fi
       echo "MuPiBox ${TARGET_TAG} is installed by its own update script"
       # (run by this one, not in its place: when it stopped before its version was in place - its download, a check,
       # its own way back - the box is still 5.1, and what was made ready for it goes again (PHP on, its switch). 5.1 is
