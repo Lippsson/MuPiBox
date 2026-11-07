@@ -39,8 +39,8 @@ export interface Manifest {
   display?: string
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
-  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string }[] }
-  settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; legacy?: string }>
+  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[] }[] }
+  settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; options?: (string | number)[]; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
 }
 
@@ -157,6 +157,7 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
   }
   for (const [key, spec] of Object.entries(x.settings ?? {})) {
     if (!/^[A-Za-z][A-Za-z0-9]{0,40}$/.test(key) || !['boolean', 'string', 'number', 'secret'].includes(spec?.type)) return `bad setting: ${key}`
+    if (spec.options !== undefined && (!Array.isArray(spec.options) || spec.options.length < 2 || spec.options.length > 20 || spec.type === 'boolean' || spec.options.some((o) => (spec.type === 'number' ? typeof o !== 'number' : typeof o !== 'string')))) return `bad options: ${key}`
     if (spec.pattern !== undefined) {
       try {
         new RegExp(spec.pattern)
@@ -172,6 +173,11 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
       if (!x.settings?.[item?.key]) return `ui: no such setting: ${item?.key}`
       if (typeof item.label !== 'string' || item.label.length > 100 || (item.help !== undefined && (typeof item.help !== 'string' || item.help.length > 800))) return `ui: bad text: ${item.key}`
       if (item.dep !== undefined && x.settings?.[item.dep]?.type !== 'boolean') return `ui: dep must be a switch: ${item.key}`
+      if (item.choices !== undefined) {
+        const options = x.settings[item.key].options
+        if (!options || !Array.isArray(item.choices) || item.choices.length !== options.length) return `ui: choices must name every option: ${item.key}`
+        if (item.choices.some((c) => !options.includes(c?.value as never) || typeof c.label !== 'string' || c.label.length > 60)) return `ui: bad choices: ${item.key}`
+      }
     }
   }
   const system = x.system ?? {}
@@ -194,9 +200,11 @@ export function checkSettings(manifest: Manifest, values: Record<string, unknown
       if (typeof value !== 'boolean') return { ok: false, error: `${key}: true or false` }
     } else if (spec.type === 'number') {
       if (typeof value !== 'number' || !Number.isFinite(value)) return { ok: false, error: `${key}: a number` }
+      if (spec.options && !spec.options.includes(value)) return { ok: false, error: `${key}: not one of the options` }
     } else {
       if (typeof value !== 'string' || value.length > 300) return { ok: false, error: `${key}: a text` }
       if (spec.pattern && !new RegExp(spec.pattern).test(value.trim())) return { ok: false, error: `${key}: does not fit` }
+      if (spec.options && !spec.options.includes(value.trim())) return { ok: false, error: `${key}: not one of the options` }
     }
     clean[key] = typeof value === 'string' ? value.trim() : value
   }
@@ -244,6 +252,13 @@ function restartServices(): void {
   const work = 'sleep 1; PM2=$(command -v pm2 || echo /usr/local/bin/pm2); "$PM2" restart spotify-control >/dev/null 2>&1; "$PM2" restart server >/dev/null 2>&1; sleep 10; curl -s -m 5 -X POST http://127.0.0.1:5005/display/reload-page >/dev/null 2>&1'
   const script = `( ${work} ) >/dev/null 2>&1 &`
   const child = spawn('sh', ['-c', script], { detached: true, stdio: 'ignore' })
+  child.on('error', () => undefined)
+  child.unref()
+}
+
+/** The display loads its page again (the player does it: POST /display/reload-page). */
+function reloadDisplay(): void {
+  const child = spawn('curl', ['-s', '-m', '5', '-X', 'POST', 'http://127.0.0.1:5005/display/reload-page'], { detached: true, stdio: 'ignore' })
   child.on('error', () => undefined)
   child.unref()
 }
@@ -355,7 +370,7 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
     for (const [key, spec] of Object.entries(manifest.settings ?? {})) {
       if (!spec.legacy || key in have) continue
       const value = spec.legacy.split('.').reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined), config)
-      if (value !== undefined && value !== null && value !== '') {
+      if (value !== undefined && value !== null && value !== '' && (!spec.options || spec.options.includes(value as never))) {
         have[key] = value
         imported = true
       }
@@ -527,6 +542,8 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     }
     await fsp.mkdir(path.dirname(settingsFile(manifest.id)), { recursive: true })
     await fsp.writeFile(settingsFile(manifest.id), JSON.stringify({ ...(await readJson(settingsFile(manifest.id), {})), ...checked.clean }))
+    // (the display reads the settings of its part when its page loads)
+    if (manifest.display) reloadDisplay()
     res.json({ ok: true, ...(await publicSettings(manifest)) })
   })
 }

@@ -93,6 +93,35 @@ describe('the CD extension of this repository', () => {
   })
 })
 
+describe('settings with a choice', () => {
+  const clock = JSON.parse(readFileSync(path.join(process.cwd(), '..', '..', 'extensions', 'clock', 'manifest.json'), 'utf8')) as Manifest
+  it('is packed as the catalog says', () => {
+    const extDir = path.join(process.cwd(), '..', '..', 'extensions')
+    const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'clock')
+    const bytes = readFileSync(path.join(extDir, 'dist', `clock-${entry.version}.mpx`))
+    assert.strictEqual(createHash('sha256').update(bytes).digest('hex'), entry.sha256)
+    const checked = verifyPackage(bytes)
+    assert.strictEqual(checked.ok, true)
+  })
+  it('accepts the manifest of the clock extension', () => {
+    assert.strictEqual(checkManifest(clock, files('display.js', 'icon.svg')), null)
+  })
+  it('takes only a value from the options', () => {
+    assert.strictEqual(checkSettings(clock, { style: 'analog', hours: 12 }).ok, true)
+    assert.strictEqual(checkSettings(clock, { style: 'roman' }).ok, false)
+    assert.strictEqual(checkSettings(clock, { hours: 7 }).ok, false)
+  })
+  it('refuses options of the wrong kind and choices that do not name every option', () => {
+    const bad = (settings: unknown, ui?: unknown) => checkManifest({ ...base({ settings, ui }) }, files())
+    assert.ok(bad({ a: { type: 'boolean', options: [true, false] } }))
+    assert.ok(bad({ a: { type: 'string', options: ['x'] } }))
+    assert.ok(bad({ a: { type: 'number', options: ['x', 'y'] } }))
+    assert.ok(bad({ a: { type: 'string', options: ['x', 'y'] } }, { title: 'T', items: [{ key: 'a', label: 'A', choices: [{ value: 'x', label: 'X' }] }] }))
+    assert.ok(bad({ a: { type: 'string', options: ['x', 'y'] } }, { title: 'T', items: [{ key: 'a', label: 'A', choices: [{ value: 'x', label: 'X' }, { value: 'z', label: 'Z' }] }] }))
+    assert.strictEqual(bad({ a: { type: 'string', options: ['x', 'y'] } }, { title: 'T', items: [{ key: 'a', label: 'A', choices: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }] }] }), null)
+  })
+})
+
 describe('an uploaded extension file', () => {
   it('is read and checked without installing anything', () => {
     const bytes = readFileSync(path.join(process.cwd(), '..', '..', 'extensions', 'dist', 'cd-1.0.0.mpx'))

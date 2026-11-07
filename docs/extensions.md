@@ -58,11 +58,13 @@ nie den Kern.
 
 - `hostApi`: die Nummer der Schnittstelle, für die die Extension geschrieben ist. Der Kern lädt keine Extension mit einer
   höheren Nummer als seiner eigenen.
-- `settings`: was die Extension speichert (Typen `boolean`, `string`, `number`, `secret`, optional `pattern`). Der Kern prüft und
+- `settings`: was die Extension speichert (Typen `boolean`, `string`, `number`, `secret`; optional `pattern`, und `options`: die erlaubten Werte eines `string` oder `number`). Der Kern prüft und
   speichert die Werte (`~/.mupibox/extensions/settings/<id>.json`); `secret`-Werte gibt er nie zurück, nur ob es einen gibt
   (`<key>Set`). `legacy`: ein Wert der Konfiguration (`mupibox.cdLookup`), der bei der Installation einmal übernommen wird.
 - `ui`: die Karte der Extension auf der Seite „Erweiterungen“ der Webapp: Titel, Hilfetext und die Felder (je ein Eintrag aus
-  `settings`; `dep` = ein Schalter, von dem das Feld abhängt). Secrets haben einen eigenen „Speichern“-Knopf.
+  `settings`; `dep` = ein Schalter, von dem das Feld abhängt; `choices`: `[{ value, label }]` für eine Einstellung mit `options`, sie
+  erscheint als Auswahl und wird sofort gespeichert). Secrets haben einen eigenen „Speichern“-Knopf. Hat die Extension einen
+  Display-Teil, lädt das Display nach dem Speichern der Einstellungen neu.
 - `system`: was bei der Installation als root eingerichtet wird. **Nur diese drei Arten, jede geprüft:**
   - `udev`: `{ name, file }` – die Regel-Datei aus dem Paket kommt als `99-mpx-<id>….rules` nach `/etc/udev/rules.d/`. Erlaubt
     sind nur Vergleiche (`KERNEL`, `SUBSYSTEM`, `ATTRS{…}` …) und die Zuweisungen `MODE`, `GROUP`, `OWNER`, `TAG`, `SYMLINK`;
@@ -138,6 +140,9 @@ Dazu liefert der Kern selbst: `GET /api/app/extensions` (Katalog und Installiert
 - `api.every(ms, fn)` – ruft `fn` regelmäßig auf; Fehler werden gefangen
 - `api.settings()` – die Einstellungen der Extension (ohne Geheimnisse)
 - `api.tabs.set({ id, src, visible, onSelect })` / `api.tabs.remove(id)` – ein Reiter nach den Kategorien (`src`: SVG der Extension)
+- `api.header.add({ mount(host) })` – etwas in die Kopfzeile, rechts neben der Akkuanzeige. Die Statusanzeige gibt es auf mehreren
+  Seiten (Startseite, Sperrbildschirm …): `mount` wird für jeden Platz mit einem leeren Element aufgerufen und gibt zurück, was den
+  Platz wieder aufräumt (Zeitgeber, Beobachter). Farben erbt das Element (`currentColor`).
 - `api.winamp.onEject(fn)` – der Auswurf-Knopf im Winamp-Fenster: gibt `fn()` `true` zurück, ist er erledigt, sonst öffnet er die Bibliothek
 - `api.player.open(media)` – öffnet den Player mit diesem Album; `api.player.noResumeFolder(folder)` hält Alben dieses Ordners aus „Fortsetzen“ heraus
 
@@ -152,8 +157,8 @@ kommen sie nur aus dem Katalog, dessen Einträge Prüfsumme und Systemschritte a
 
 Fertig: Player (`src/backend-player/src/extensions.js`: Laden, `albums`-Quelle, Ereignisse), API (`eltern/extensions.ts`: Laden,
 Einstellungen, Dateien, Installieren/Entfernen, Katalog), Display (`extension-host.service.ts`: Reiter, Auswurf, Player), Webapp (Seite
-„Erweiterungen“), `tools/mpx/pack.mjs`, die CD-Anbindung als erste Extension (`extensions/cd/`). Noch offen: die Uhr als zweite
-Extension (`api.header` im Display).
+„Erweiterungen“), `tools/mpx/pack.mjs`, die CD-Anbindung als erste Extension (`extensions/cd/`). Die Uhr in der Kopfzeile ist die zweite
+Extension (`extensions/clock/`, `api.header` im Display); sie ist nicht mehr im Kern.
 
 ## Eine Extension bauen
 

@@ -22,6 +22,15 @@ interface ActiveExtension {
   settings: Record<string, unknown>
 }
 
+/**
+ * Something an extension puts into the header, right of the battery (the clock, for one). The status is on several pages (the start
+ * page, the lock screen …), so `mount` is called for each place with an empty element to fill; what it returns is called when the
+ * place goes away.
+ */
+export interface HeaderItem {
+  mount(host: HTMLElement): (() => void) | void
+}
+
 /** What an extension's display.js gets (docs/extensions.md, "Display"). */
 export interface DisplayExtensionApi {
   id: string
@@ -35,6 +44,8 @@ export interface DisplayExtensionApi {
   every(ms: number, fn: () => void | Promise<void>): void
   settings(): Record<string, unknown>
   tabs: { set(tab: ExtensionTab): void; remove(id: string): void }
+  /** Something right of the battery in the header (see HeaderItem). */
+  header: { add(item: HeaderItem): void }
   winamp: { onEject(fn: () => boolean): void }
   player: {
     open(media: Media): void
@@ -52,6 +63,8 @@ export interface DisplayExtensionApi {
 export class ExtensionHostService {
   /** The tabs the extensions have added (in the order of the extensions). */
   readonly tabs = signal<ExtensionTab[]>([])
+  /** What the extensions put into the header (in the order of the extensions). */
+  readonly headerItems = signal<{ id: string; item: HeaderItem }[]>([])
   private readonly ejectHandlers: { id: string; fn: () => boolean }[] = []
   private readonly navController = inject(NavController)
   private readonly coverFlip = inject(CoverFlipService)
@@ -79,6 +92,14 @@ export class ExtensionHostService {
       if (this.guard(handler.id, 'eject', handler.fn) === true) return true
     }
     return false
+  }
+
+  /** Fills a place in the header with an item of an extension; returns what undoes it. An error in the item ends only that item. */
+  mountHeader(entry: { id: string; item: HeaderItem }, host: HTMLElement): () => void {
+    const cleanup = this.guard(entry.id, 'header', () => entry.item.mount(host))
+    return () => {
+      if (typeof cleanup === 'function') this.guard(entry.id, 'header', cleanup)
+    }
   }
 
   private guard<T>(id: string, where: string, fn: () => T): T | undefined {
@@ -150,6 +171,7 @@ export class ExtensionHostService {
         },
         remove: (tabId) => this.tabs.set(this.tabs().filter((t) => t.id !== `${id}:${tabId}`)),
       },
+      header: { add: (item) => this.headerItems.set([...this.headerItems(), { id, item }]) },
       winamp: { onEject: (fn) => void this.ejectHandlers.push({ id, fn }) },
       player: {
         open: (media) => {

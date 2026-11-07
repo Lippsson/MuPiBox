@@ -7882,9 +7882,6 @@ async function loadDisplaySettings() {
   state.values.set('resX', String(o.resX))
   state.values.set('resY', String(o.resY))
   state.values.set('resLimit', o.limitWindow === true)
-  state.values.set('clockOn', o.clockShow !== false)
-  state.values.set('clockStyle', o.clockStyle === 'analog' ? 'Analog' : 'Digital')
-  state.values.set('clockHours', o.clockHours === 12 ? '12 Stunden' : '24 Stunden')
   const nd = o.nightDim ?? {}
   state.values.set('ndOn', nd.enabled === true)
   state.values.set('ndFrom', nd.from ?? '19:00')
@@ -11252,12 +11249,16 @@ function extensionDetails(e, installed) {
       if (type(it) === 'boolean') {
         return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
       }
+      if (it.choices) {
+        const now = e.settings?.[it.key]
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><div class="seg" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')}</div>${help}</div>`
+      }
       const secret = type(it) === 'secret'
       const kind = secret ? 'password' : type(it) === 'number' ? 'number' : 'text'
       return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xk-${k}">${esc(it.label)}</label><input class="input" id="xk-${k}" type="${kind}" data-xk="${k}" data-secret="${secret}" value="${secret ? '' : esc(e.settings?.[it.key] ?? '')}" placeholder="${secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : ''}" ${NO_PW_MANAGER}>${help}</div>`
     })
     .join('')
-  const hasText = fields.some((it) => type(it) !== 'boolean')
+  const hasText = fields.some((it) => type(it) !== 'boolean' && !it.choices)
   openSheet(
     `<h2>${esc(e.name)} <small>${esc(e.version)}</small></h2>
      <p class="help" style="margin:0">${esc(e.description)}</p>
@@ -11291,6 +11292,19 @@ function extensionDetails(e, installed) {
           const ok = await save({ [input.dataset.xk]: input.checked }, false)
           if (ok) e.settings[input.dataset.xk] = input.checked
           else input.checked = !input.checked
+        }
+      }
+      // (a choice from a few: saved at once, as a switch is)
+      for (const group of sheet.querySelectorAll('[data-xseg]')) {
+        const key = group.dataset.xseg
+        for (const b of group.querySelectorAll('button')) {
+          b.onclick = async () => {
+            const value = type({ key }) === 'number' ? Number(b.dataset.v) : b.dataset.v
+            const ok = await save({ [key]: value }, false)
+            if (!ok) return
+            e.settings[key] = value
+            for (const o of group.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b))
+          }
         }
       }
       const saveButton = sheet.querySelector('[data-xsave]')
@@ -11894,15 +11908,6 @@ const CONTROLLERS = {
           ],
         },
             ]),
-        {
-          title: 'Uhrzeit',
-          help: 'Die Uhrzeit steht in der Kopfzeile des Displays, rechts neben der Akkuanzeige. Gilt sofort, das Display lädt dafür kurz neu.',
-          items: [
-            { type: 'toggle', key: 'clockOn', label: 'Uhrzeit anzeigen' },
-            { type: 'seg', key: 'clockStyle', label: 'Anzeige', options: ['Digital', 'Analog'], dep: 'clockOn' },
-            { type: 'seg', key: 'clockHours', label: 'Format', options: ['24 Stunden', '12 Stunden'], dep: 'clockOn', help: 'Bei der analogen Uhr ändert sich nichts: Das Zifferblatt hat immer 12 Stunden.' },
-          ],
-        },
       ]
     },
     mount(root, page) {
@@ -11930,9 +11935,6 @@ const CONTROLLERS = {
         const rl = await api(`${API}/display/reload-page`, { method: 'POST', body: {} })
         return toast(`${Number(v) === 0 ? 'Display bleibt an' : `Display aus nach ${v} min`}. ${rl.body?.ok ? 'Das Display lädt neu.' : ''}`.trim())
       }
-      if (key === 'clockOn') return saveDisplayOptions({ clockShow: !!v }, v ? 'Uhrzeit wird angezeigt' : 'Uhrzeit ist ausgeblendet')
-      if (key === 'clockStyle') return saveDisplayOptions({ clockStyle: v === 'Analog' ? 'analog' : 'digital' }, v === 'Analog' ? 'Analoge Uhr' : 'Digitale Uhr')
-      if (key === 'clockHours') return saveDisplayOptions({ clockHours: v === '12 Stunden' ? 12 : 24 }, v === '12 Stunden' ? '12-Stunden-Anzeige' : '24-Stunden-Anzeige')
       if (key === 'dsiRot') return saveDisplayOptions({ dsiRotation: rotValue(HDMI_ROT, v) }, 'Drehung gespeichert')
       const rot = { hdmiRot: ['display_hdmi_rotate', HDMI_ROT], lcdRot: ['lcd_rotate', LCD_ROT], dlcdRot: ['display_lcd_rotate', LCD_ROT] }[key]
       if (rot) return saveDisplayOptions({ rotation: { [rot[0]]: rotValue(rot[1], v) } }, 'Drehung gespeichert – gilt nach einem Neustart')
