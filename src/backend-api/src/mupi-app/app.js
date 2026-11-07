@@ -11252,7 +11252,7 @@ function extensionDetails(e, installed) {
       if (it.type === 'lookup') {
         // a search of the extension's own API part: a few words, then the places that fit to choose from
         const now = e.settings?.[it.key]
-        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xl-${k}">${esc(it.label)}</label><p style="margin:0 0 6px"><b data-xcurrent="${k}">${esc(now || '–')}</b></p><div class="row" style="gap:8px"><input class="input" id="xl-${k}" type="search" placeholder="Suchen …" autocomplete="off" ${NO_PW_MANAGER}><button type="button" class="btn" data-xlookup="${k}">Suchen</button></div><div class="ext-results" data-xresults="${k}" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>${help}</div>`
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xl-${k}">${esc(it.label)}</label><p style="margin:0 0 6px"><b data-xcurrent="${k}">${esc(now || '–')}</b></p><div class="ext-results" data-xresults="${k}" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div><div class="row" style="gap:8px"><input class="input" id="xl-${k}" type="search" placeholder="Suchen …" autocomplete="off" ${NO_PW_MANAGER}><button type="button" class="btn" data-xlookup="${k}">Suchen</button></div>${help}</div>`
       }
       if (it.choices) {
         const now = e.settings?.[it.key]
