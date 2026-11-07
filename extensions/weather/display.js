@@ -117,15 +117,19 @@ export function activate(api) {
         let ss = null
         let data = null
         let closed = false
-        let animate = true
+        // (what each dial showed last: a new answer moves the pointers from there to the new value, as on the club's page)
+        const shown = new Map()
+        let lastSize = 0
 
-        // Every dial is drawn again from the last answer: when the values come, and when the page changes its size (a dial has a fixed size).
-        const draw = () => {
+        // (six dials in a row, a line of text under each and the status line at the bottom)
+        const dialSize = () => Math.max(120, Math.floor(Math.min(content.clientWidth / 6 - 4, content.clientHeight - 30 - 30)))
+
+        // Every dial is drawn again from the last answer: when the values come (`moving`: the pointers swing to them) and when the
+        // page changes its size (a dial has a fixed size; the pointers stand at once).
+        const draw = (moving) => {
           if (!ss || !data) return
-          const w = content.clientWidth
-          const h = content.clientHeight
-          // (six dials in a row, a line of text under each and the status line at the bottom)
-          const size = Math.max(120, Math.floor(Math.min(w / 6 - 4, h - 30 - 30)))
+          const size = dialSize()
+          lastSize = size
           row.textContent = ''
           for (const dial of dialsFor(data)) {
             const cell = document.createElement('div')
@@ -145,18 +149,26 @@ export function activate(api) {
               knobType: ss.KnobType.METAL_KNOB,
               knobStyle: ss.KnobStyle.SILVER,
               ledVisible: false,
+              // (seconds of a swing over the whole scale: 5 as on the club's page, the library's own 2.5 is too quick)
+              fullScaleDeflectionTime: 5,
             }
             if (dial.kind === 'direction') {
               const gauge = new ss.WindDirection(canvas, { ...look, lcdTitleStrings: ['Aktuell', 'Mittelwert'], pointSymbols: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'], pointerColorAverage: ss.ColorDef.BLUE })
               const latest = Number.isFinite(dial.latest) ? dial.latest : 0
               const average = Number.isFinite(dial.average) ? dial.average : 0
-              if (animate) {
+              if (moving) {
+                const from = shown.get(dial.id)
+                if (from) {
+                  gauge.setValueLatest(from.latest)
+                  gauge.setValueAverage(from.average)
+                }
                 gauge.setValueAnimatedLatest(latest)
                 gauge.setValueAnimatedAverage(average)
               } else {
                 gauge.setValueLatest(latest)
                 gauge.setValueAverage(average)
               }
+              shown.set(dial.id, { latest, average })
               // (the colours of the two pointers)
               for (const [text, color] of [['Aktuell', 'rgb(225,30,40)'], ['Mittelwert', 'rgb(0,150,220)']]) {
                 const item = document.createElement('span')
@@ -187,12 +199,14 @@ export function activate(api) {
             if (Number.isFinite(dial.maxMeasured)) gauge.setMaxMeasuredValue(clamp(dial.maxMeasured, dial.min, dial.max))
             if (dial.trend !== 0) gauge.setTrend(ss.TrendState[trendName(dial.trend)])
             const value = Number.isFinite(dial.value) ? clamp(dial.value, dial.min, dial.max) : dial.min
-            if (animate) gauge.setValueAnimated(value)
-            else gauge.setValue(value)
+            if (moving) {
+              // (the first time from the start of the scale, later from the value shown before)
+              if (shown.has(dial.id)) gauge.setValue(shown.get(dial.id))
+              gauge.setValueAnimated(value)
+            } else gauge.setValue(value)
+            shown.set(dial.id, value)
             caption.textContent = dial.caption
           }
-          // (the first drawing moves the pointers in; a new drawing at a change of the size does not)
-          animate = false
         }
 
         const refresh = async () => {
@@ -211,7 +225,7 @@ export function activate(api) {
             return
           }
           data = answer
-          draw()
+          draw(true)
           foot.textContent = [answer.place, `Stand ${answer.timeText}`, PROVIDERS[answer.provider], answer.stale ? 'Server antwortet nicht – letzte Werte' : ''].filter(Boolean).join('  ·  ')
         }
 
@@ -221,7 +235,10 @@ export function activate(api) {
             ? null
             : new ResizeObserver(() => {
                 clearTimeout(resizeTimer)
-                resizeTimer = setTimeout(draw, 200)
+                // (the first call of the observer comes at once, with the size the dials already have: it must not cut the swing short)
+                resizeTimer = setTimeout(() => {
+                  if (dialSize() !== lastSize) draw(false)
+                }, 200)
               })
         observer?.observe(content)
         loadLibrary().then(
