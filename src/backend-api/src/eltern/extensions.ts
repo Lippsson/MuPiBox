@@ -612,7 +612,21 @@ export function mountExtensions(app: express.Express, deps: ExtensionDeps): void
     }
   })
 
-  // the API parts: api.js of each extension that is on, started when the server starts
+  // The API parts: api.js of each extension that is on, started when the server starts. They are loaded after the routes of the server
+  // stand (the manifests are read asynchronously) - a route added to the app then would come after the catch-all that sends the start
+  // page. So one handler is mounted here, at once, and finds the router of the extension when a request comes.
+  const routers = new Map<string, express.Router>()
+  app.use('/api/ext', (req, res, next) => {
+    const hit = /^\/([a-z][a-z0-9-]{1,30})(?=\/|$)/.exec(req.url)
+    const router = hit ? routers.get(hit[1]) : undefined
+    if (!hit || !router) return next()
+    const original = req.url
+    req.url = req.url.slice(hit[0].length) || '/'
+    router(req, res, (error?: unknown) => {
+      req.url = original
+      next(error)
+    })
+  })
   void (async () => {
     for (const manifest of await enabledManifests()) {
       if (!manifest.api) continue
@@ -653,7 +667,7 @@ export function mountExtensions(app: express.Express, deps: ExtensionDeps): void
             router[method](sub, ...chain)
           },
         })
-        app.use(`/api/ext/${manifest.id}`, router)
+        routers.set(manifest.id, router)
         console.log(`${new Date().toLocaleString()}: [Extension ${manifest.id}] ${manifest.version} API part started`)
       } catch (error) {
         console.warn(`${new Date().toLocaleString()}: [Extension ${manifest.id}] API part not started: ${error}`)
