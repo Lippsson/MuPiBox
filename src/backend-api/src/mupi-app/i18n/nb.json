@@ -3249,8 +3249,6 @@
  "Luftdruck": "Lufttrykk",
  "Windstärke": "Vindstyrke",
  "Knoten": "Knop",
- "Eine Demo für eine Erweiterung mit eigenem systemd-Dienst: ein kleines Hintergrundprogramm, das einen Herzschlag schreibt. Zu sehen unter /api/ext/unit-demo/status. Zum Ausprobieren des Installationstests: installieren und wieder entfernen.": "En demo av en utvidelse med egen systemd-tjeneste: et lite bakgrunnsprogram som skriver et hjerteslag. Kan sees på /api/ext/unit-demo/status. For å prøve installasjonstesten: installer og fjern den igjen.",
- "schreibt alle 10 Sekunden einen Herzschlag": "skriver et hjerteslag hvert 10. sekund",
  "MuPiBox unterstützen": "Støtt MuPiBox",
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox er et fritt prosjekt som utvikles på fritiden. Hvis du liker boksen, setter prosjektet pris på en liten donasjon.",
  "Zur Spendenseite": "Til donasjonssiden",

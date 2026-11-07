@@ -36,34 +36,6 @@
     }
   },
   {
-    "id": "unit-demo",
-    "name": "Unit-Demo",
-    "version": "1.0.1",
-    "description": "Eine Demo für eine Erweiterung mit eigenem systemd-Dienst: ein kleines Hintergrundprogramm, das einen Herzschlag schreibt. Zu sehen unter /api/ext/unit-demo/status. Zum Ausprobieren des Installationstests: installieren und wieder entfernen.",
-    "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBkPSJNMzIgMjcyaDExMmw0OC0xMjggODAgMjQwIDY0LTE3NiAzMiA2NGgxMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iY3VycmVudENvbG9yIiBzdHJva2Utd2lkdGg9IjMyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4K",
-    "hostApi": 2,
-    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/unit-demo-1.0.1.mpx",
-    "sha256": "096f7788e03e0d6a13ebbd778a5aee38abd37f1ee166ff7a4a129103385b00f3",
-    "size": 2515,
-    "resources": {
-      "services": [
-        {
-          "name": "mpx-unit-demo.service",
-          "provides": true,
-          "purpose": "schreibt alle 10 Sekunden einen Herzschlag"
-        }
-      ]
-    },
-    "system": {
-      "udev": 0,
-      "units": [
-        "mpx-unit-demo.service"
-      ],
-      "groups": [],
-      "packages": []
-    }
-  },
-  {
     "id": "weather",
     "name": "Wetter",
     "version": "1.5.0",
