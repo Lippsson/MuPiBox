@@ -31,6 +31,13 @@ export interface HeaderItem {
   mount(host: HTMLElement): (() => void) | void
 }
 
+/** A full-screen page an extension opens over the display (a title bar with a back button, and the content area for the extension). */
+export interface OverlayPage {
+  title: string
+  /** Fills the content area; what it returns is called when the page is closed. */
+  mount(content: HTMLElement): (() => void) | void
+}
+
 /** What an extension's display.js gets (docs/extensions.md, "Display"). */
 export interface DisplayExtensionApi {
   id: string
@@ -40,6 +47,10 @@ export interface DisplayExtensionApi {
   apiUrl: string
   /** GET on the player (a route from `/…`); the JSON answer, or null when it does not answer. */
   fetch(path: string): Promise<unknown>
+  /** GET on the extension's own API part (a route from `/…`, see api.js); the JSON answer, or null when it does not answer. */
+  fetchApi(path: string): Promise<unknown>
+  /** A full-screen page over the display; one at a time (a new one replaces the one that is open). */
+  overlay: { open(page: OverlayPage): void; close(): void }
   /** Calls `fn` every `ms` while the page is open; an error in it is logged, never thrown. */
   every(ms: number, fn: () => void | Promise<void>): void
   settings(): Record<string, unknown>
@@ -100,6 +111,43 @@ export class ExtensionHostService {
     return () => {
       if (typeof cleanup === 'function') this.guard(entry.id, 'header', cleanup)
     }
+  }
+
+  private overlayClose: (() => void) | null = null
+
+  /** Opens an extension's full-screen page; the back button (or `close`) takes it away again. */
+  openOverlay(id: string, page: OverlayPage): void {
+    this.closeOverlay()
+    const root = document.createElement('div')
+    root.dataset['extOverlay'] = id
+    root.style.cssText =
+      'position:fixed;inset:0;z-index:100000;display:flex;flex-direction:column;box-sizing:border-box;background:var(--ion-background-color,#121212);color:var(--ion-text-color,#fff);font-family:var(--ion-font-family,inherit)'
+    const bar = document.createElement('div')
+    bar.style.cssText = 'flex:none;display:flex;align-items:center;gap:12px;height:64px;padding:0 16px'
+    const back = document.createElement('button')
+    back.type = 'button'
+    back.setAttribute('aria-label', 'Zurück')
+    back.style.cssText = 'flex:none;width:48px;height:48px;border:0;border-radius:50%;display:grid;place-items:center;background:rgba(127,127,127,.22);color:inherit;cursor:pointer'
+    back.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'
+    const title = document.createElement('div')
+    title.textContent = page.title
+    title.style.cssText = 'font:700 22px/1.1 var(--ion-font-family,inherit);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+    bar.append(back, title)
+    const content = document.createElement('div')
+    content.style.cssText = 'flex:1;min-height:0;position:relative;overflow:hidden'
+    root.append(bar, content)
+    document.body.append(root)
+    const cleanup = this.guard(id, 'overlay', () => page.mount(content))
+    this.overlayClose = () => {
+      this.overlayClose = null
+      if (typeof cleanup === 'function') this.guard(id, 'overlay', cleanup)
+      root.remove()
+    }
+    back.onclick = () => this.closeOverlay()
+  }
+
+  closeOverlay(): void {
+    this.overlayClose?.()
   }
 
   private guard<T>(id: string, where: string, fn: () => T): T | undefined {
@@ -171,6 +219,15 @@ export class ExtensionHostService {
         },
         remove: (tabId) => this.tabs.set(this.tabs().filter((t) => t.id !== `${id}:${tabId}`)),
       },
+      fetchApi: async (path) => {
+        try {
+          const response = await fetch(`${environment.backend.apiUrl}/ext/${id}${path}`)
+          return response.ok ? await response.json() : null
+        } catch {
+          return null
+        }
+      },
+      overlay: { open: (page) => this.openOverlay(id, page), close: () => this.closeOverlay() },
       header: { add: (item) => this.headerItems.set([...this.headerItems(), { id, item }]) },
       winamp: { onEject: (fn) => void this.ejectHandlers.push({ id, fn }) },
       player: {

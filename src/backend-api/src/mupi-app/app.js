@@ -11249,6 +11249,11 @@ function extensionDetails(e, installed) {
       if (type(it) === 'boolean') {
         return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
       }
+      if (it.type === 'lookup') {
+        // a search of the extension's own API part: a few words, then the places that fit to choose from
+        const now = e.settings?.[it.key]
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xl-${k}">${esc(it.label)}</label><p style="margin:0 0 6px"><b data-xcurrent="${k}">${esc(now || '–')}</b></p><div class="row" style="gap:8px"><input class="input" id="xl-${k}" type="search" placeholder="Suchen …" autocomplete="off" ${NO_PW_MANAGER}><button type="button" class="btn" data-xlookup="${k}">Suchen</button></div><div class="ext-results" data-xresults="${k}" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>${help}</div>`
+      }
       if (it.choices) {
         const now = e.settings?.[it.key]
         return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><div class="seg" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')}</div>${help}</div>`
@@ -11258,7 +11263,7 @@ function extensionDetails(e, installed) {
       return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xk-${k}">${esc(it.label)}</label><input class="input" id="xk-${k}" type="${kind}" data-xk="${k}" data-secret="${secret}" value="${secret ? '' : esc(e.settings?.[it.key] ?? '')}" placeholder="${secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : ''}" ${NO_PW_MANAGER}>${help}</div>`
     })
     .join('')
-  const hasText = fields.some((it) => type(it) !== 'boolean' && !it.choices)
+  const hasText = fields.some((it) => type(it) !== 'boolean' && !it.choices && it.type !== 'lookup')
   openSheet(
     `<h2>${esc(e.name)} <small>${esc(e.version)}</small></h2>
      <p class="help" style="margin:0">${esc(e.description)}</p>
@@ -11293,6 +11298,41 @@ function extensionDetails(e, installed) {
           if (ok) e.settings[input.dataset.xk] = input.checked
           else input.checked = !input.checked
         }
+      }
+      // (a search: the places that fit, one tap takes one - its values are saved at once)
+      for (const item of fields.filter((it) => it.type === 'lookup')) {
+        const input = sheet.querySelector(`#xl-${CSS.escape(item.key)}`)
+        const list = sheet.querySelector(`[data-xresults="${CSS.escape(item.key)}"]`)
+        const search = async () => {
+          const q = input.value.trim()
+          if (q.length < 2) return toast('Bitte mindestens zwei Buchstaben', 'info')
+          list.textContent = 'Suche …'
+          const r = await api(`${item.search}?q=${encodeURIComponent(q)}`, { timeoutMs: 20000 })
+          list.textContent = ''
+          if (!r.ok || !Array.isArray(r.body)) {
+            list.textContent = 'Die Suche hat nicht geklappt. Die Box braucht dafür das Internet.'
+            return
+          }
+          if (r.body.length === 0) list.textContent = 'Nichts gefunden.'
+          for (const hit of r.body.slice(0, 10)) {
+            const b = document.createElement('button')
+            b.type = 'button'
+            b.className = 'btn'
+            b.style.textAlign = 'left'
+            b.textContent = String(hit.label)
+            b.onclick = async () => {
+              const ok = await save(hit.values, false)
+              if (!ok) return
+              Object.assign(e.settings, hit.values)
+              sheet.querySelector(`[data-xcurrent="${CSS.escape(item.key)}"]`).textContent = String(e.settings[item.key] ?? '–')
+              list.textContent = ''
+              input.value = ''
+            }
+            list.append(b)
+          }
+        }
+        sheet.querySelector(`[data-xlookup="${CSS.escape(item.key)}"]`).onclick = search
+        input.onkeydown = (ev) => ev.key === 'Enter' && search()
       }
       // (a choice from a few: saved at once, as a switch is)
       for (const group of sheet.querySelectorAll('[data-xseg]')) {

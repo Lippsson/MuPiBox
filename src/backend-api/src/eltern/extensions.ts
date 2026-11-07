@@ -16,7 +16,7 @@ import { localNetworkOnly, requireCsrf, requireSession } from './middleware'
 import { readZip } from './winamp-skin'
 
 export const EXT_DIR = process.env.MUPIBOX_EXT_DIR ?? '/home/dietpi/.mupibox/extensions'
-export const HOST_API = 1
+export const HOST_API = 2
 const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/catalog.json'
 const MAX_MPX = 4 * 1024 * 1024
 const ID = /^[a-z][a-z0-9-]{1,30}$/
@@ -39,8 +39,8 @@ export interface Manifest {
   display?: string
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
-  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[] }[] }
-  settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; options?: (string | number)[]; legacy?: string }>
+  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup'; search?: string }[] }
+  settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
 }
 
@@ -160,6 +160,7 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
   for (const [key, spec] of Object.entries(x.settings ?? {})) {
     if (!/^[A-Za-z][A-Za-z0-9]{0,40}$/.test(key) || !['boolean', 'string', 'number', 'secret'].includes(spec?.type)) return `bad setting: ${key}`
     if (spec.options !== undefined && (!Array.isArray(spec.options) || spec.options.length < 2 || spec.options.length > 20 || spec.type === 'boolean' || spec.options.some((o) => (spec.type === 'number' ? typeof o !== 'number' : typeof o !== 'string')))) return `bad options: ${key}`
+    if ((spec.min !== undefined || spec.max !== undefined) && (spec.type !== 'number' || (spec.min !== undefined && !Number.isFinite(spec.min)) || (spec.max !== undefined && !Number.isFinite(spec.max)))) return `bad range: ${key}`
     if (spec.pattern !== undefined) {
       try {
         new RegExp(spec.pattern)
@@ -175,6 +176,11 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
       if (!x.settings?.[item?.key]) return `ui: no such setting: ${item?.key}`
       if (typeof item.label !== 'string' || item.label.length > 100 || (item.help !== undefined && (typeof item.help !== 'string' || item.help.length > 800))) return `ui: bad text: ${item.key}`
       if (item.dep !== undefined && x.settings?.[item.dep]?.type !== 'boolean') return `ui: dep must be a switch: ${item.key}`
+      if (item.type !== undefined) {
+        // a search: a text field with a button; the extension's own API part answers with the places to choose from (see the app)
+        if (item.type !== 'lookup' || x.settings[item.key].type !== 'string' || item.choices !== undefined) return `ui: bad type: ${item.key}`
+        if (typeof item.search !== 'string' || !new RegExp(`^/api/ext/${x.id}/[a-z]{1,30}$`).test(item.search)) return `ui: bad search address: ${item.key}`
+      }
       if (item.choices !== undefined) {
         const options = x.settings[item.key].options
         if (!options || !Array.isArray(item.choices) || item.choices.length !== options.length) return `ui: choices must name every option: ${item.key}`
@@ -202,6 +208,7 @@ export function checkSettings(manifest: Manifest, values: Record<string, unknown
       if (typeof value !== 'boolean') return { ok: false, error: `${key}: true or false` }
     } else if (spec.type === 'number') {
       if (typeof value !== 'number' || !Number.isFinite(value)) return { ok: false, error: `${key}: a number` }
+      if ((spec.min !== undefined && value < spec.min) || (spec.max !== undefined && value > spec.max)) return { ok: false, error: `${key}: out of range` }
       if (spec.options && !spec.options.includes(value)) return { ok: false, error: `${key}: not one of the options` }
     } else {
       if (typeof value !== 'string' || value.length > 300) return { ok: false, error: `${key}: a text` }

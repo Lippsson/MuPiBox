@@ -46,7 +46,7 @@ describe('manifest of an extension', () => {
   it('refuses a bad id, a missing part and a newer host', () => {
     assert.ok(checkManifest(base({ id: '../x' }), files()))
     assert.ok(checkManifest(base({ player: 'player.js' }), files()))
-    assert.ok(checkManifest(base({ hostApi: 2 }), files()))
+    assert.ok(checkManifest(base({ hostApi: 3 }), files()))
     assert.ok(checkManifest(base({ version: '1.0' }), files()))
   })
   it('refuses file names that leave the folder', () => {
@@ -119,6 +119,34 @@ describe('settings with a choice', () => {
     assert.ok(bad({ a: { type: 'string', options: ['x', 'y'] } }, { title: 'T', items: [{ key: 'a', label: 'A', choices: [{ value: 'x', label: 'X' }] }] }))
     assert.ok(bad({ a: { type: 'string', options: ['x', 'y'] } }, { title: 'T', items: [{ key: 'a', label: 'A', choices: [{ value: 'x', label: 'X' }, { value: 'z', label: 'Z' }] }] }))
     assert.strictEqual(bad({ a: { type: 'string', options: ['x', 'y'] } }, { title: 'T', items: [{ key: 'a', label: 'A', choices: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }] }] }), null)
+  })
+})
+
+describe('the weather extension of this repository', () => {
+  const extDir = path.join(process.cwd(), '..', '..', 'extensions')
+  const weather = JSON.parse(readFileSync(path.join(extDir, 'weather', 'manifest.json'), 'utf8')) as Manifest
+  it('has a manifest the installer accepts', () => {
+    assert.strictEqual(checkManifest(weather, files('api.js', 'display.js', 'icon.svg')), null)
+  })
+  it('takes a place only inside the globe and a server from the list', () => {
+    assert.strictEqual(checkSettings(weather, { provider: 'metno', placeName: 'Wien', lat: 48.2085, lon: 16.3721 }).ok, true)
+    assert.strictEqual(checkSettings(weather, { lat: 91 }).ok, false)
+    assert.strictEqual(checkSettings(weather, { lon: -181 }).ok, false)
+    assert.strictEqual(checkSettings(weather, { provider: 'wetter.com' }).ok, false)
+  })
+  it('refuses a search address of another extension, and a lookup on a switch', () => {
+    const lookup = (settings: unknown, item: unknown) => checkManifest(base({ id: 'xy', settings, ui: { title: 'T', items: [item] } }), files())
+    const str = { a: { type: 'string' } }
+    assert.strictEqual(lookup(str, { key: 'a', label: 'A', type: 'lookup', search: '/api/ext/cd/places' }) === null, false)
+    assert.ok(lookup(str, { key: 'a', label: 'A', type: 'lookup', search: 'https://example.com/x' }))
+    assert.ok(lookup({ a: { type: 'boolean' } }, { key: 'a', label: 'A', type: 'lookup', search: '/api/ext/xy/places' }))
+    assert.strictEqual(lookup(str, { key: 'a', label: 'A', type: 'lookup', search: '/api/ext/xy/places' }), null)
+  })
+  it('is packed as the catalog says', () => {
+    const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'weather')
+    const bytes = readFileSync(path.join(extDir, 'dist', `weather-${entry.version}.mpx`))
+    assert.strictEqual(createHash('sha256').update(bytes).digest('hex'), entry.sha256)
+    assert.strictEqual(verifyPackage(bytes).ok, true)
   })
 })
 
