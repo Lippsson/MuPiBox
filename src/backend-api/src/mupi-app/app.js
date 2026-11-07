@@ -11356,7 +11356,7 @@ function extensionDetails(e, installed) {
         const have = String(e.settings?.[it.key] ?? '').split(',').filter((v, i, all) => names.includes(v) && all.indexOf(v) === i)
         const sorted = [...have, ...names.filter((v) => !have.includes(v))]
         const label = (v) => it.choices.find((c) => c.value === v).label
-        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><ol class="ext-order" data-xorder="${k}">${sorted.map((v) => `<li data-v="${esc(v)}"><button type="button" class="grip" aria-label="Verschieben"></button><span>${esc(label(v))}</span></li>`).join('')}</ol>${help}</div>`
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><ol class="ext-order" data-xorder="${k}">${sorted.map((v) => `<li data-v="${esc(v)}"><button type="button" class="ext-grip" aria-label="Verschieben"></button><span>${esc(label(v))}</span></li>`).join('')}</ol>${help}</div>`
       }
       if (it.choices) {
         const now = e.settings?.[it.key]
@@ -11480,7 +11480,7 @@ function extensionDetails(e, installed) {
         }
         let drag = null
         list.addEventListener('pointerdown', (ev) => {
-          const grip = ev.target.closest?.('.grip')
+          const grip = ev.target.closest?.('.ext-grip')
           if (!grip || (ev.pointerType === 'mouse' && ev.button !== 0)) return
           const li = grip.closest('li')
           drag = { li, grab: ev.clientY - li.getBoundingClientRect().top }
@@ -11513,7 +11513,7 @@ function extensionDetails(e, installed) {
           if (ev.key === 'ArrowUp' && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling)
           else if (ev.key === 'ArrowDown' && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li)
           else return
-          li.querySelector('.grip').focus()
+          li.querySelector('.ext-grip').focus()
           keep()
         })
       }
