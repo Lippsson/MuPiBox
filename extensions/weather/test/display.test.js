@@ -69,3 +69,61 @@ test('the refresh interval: seconds or minutes as set, 10 seconds at the least, 
   assert.equal(intervalMs({ refreshEvery: 99999, refreshUnit: 'minutes' }), 86400000)
   assert.equal(intervalMs({ refreshEvery: 'x', refreshUnit: 'seconds' }), 600000)
 })
+
+test('the units come from the settings; an unknown one is the default', async () => {
+  const { unitsOf } = await load()
+  assert.deepEqual(unitsOf({}), { temp: 'c', rain: 'mm', press: 'hpa', wind: 'kmh' })
+  assert.deepEqual(unitsOf({ tempUnit: 'f', rainUnit: 'inch', pressUnit: 'inhg', windUnit: 'kn' }), { temp: 'f', rain: 'inch', press: 'inhg', wind: 'kn' })
+  assert.deepEqual(unitsOf({ tempUnit: 'k', windUnit: 'constructor' }), { temp: 'c', rain: 'mm', press: 'hpa', wind: 'kmh' })
+})
+
+test('counts the values over to the chosen units and fits the scales', async () => {
+  const { dialsFor, unitsOf } = await load()
+  const dials = dialsFor(data, unitsOf({ tempUnit: 'f', rainUnit: 'inch', pressUnit: 'inhg', windUnit: 'mph' }))
+  const by = (id) => dials.find((d) => d.id === id)
+  // 3.3 °C = 37.94 °F; the scale -20 - 100 °F
+  assert.ok(Math.abs(by('temp').value - 37.94) < 0.01)
+  assert.equal(by('temp').unit, '°F')
+  assert.deepEqual([by('temp').min, by('temp').max], [-20, 100])
+  assert.ok(Math.abs(by('temp').minMeasured - 32.18) < 0.01)
+  // 1027.2 hPa = 30.33 inHg, the scale 28 - 31.5; the red ends at 975 and 1045 hPa
+  assert.ok(Math.abs(by('baro').value - 30.33) < 0.01)
+  assert.deepEqual([by('baro').min, by('baro').max], [28, 31.5])
+  assert.ok(Math.abs(by('baro').areas[0].stop - 28.79) < 0.01)
+  assert.equal(by('baro').decimals, 2)
+  // 8.3 km/h = 5.16 mph, the gust 15.5 km/h = 9.63 mph, the scale 0 - 20
+  assert.ok(Math.abs(by('wind').value - 5.16) < 0.01)
+  assert.equal(by('wind').max, 20)
+  assert.match(by('wind').caption, /9,6 mph/)
+  assert.match(by('rain').unit, /^inch \/ 24 h$/)
+  assert.equal(by('rain').max, 0.5)
+})
+
+test('pressure in kPa and mb, wind in m/s and knots', async () => {
+  const { dialsFor, unitsOf } = await load()
+  const kpa = dialsFor(data, unitsOf({ pressUnit: 'kpa' })).find((d) => d.id === 'baro')
+  assert.ok(Math.abs(kpa.value - 102.72) < 0.001)
+  assert.deepEqual([kpa.min, kpa.max], [96, 106])
+  const mb = dialsFor(data, unitsOf({ pressUnit: 'mb' })).find((d) => d.id === 'baro')
+  assert.equal(mb.value, 1027.2)
+  assert.equal(mb.unit, 'mb')
+  const ms = dialsFor(data, unitsOf({ windUnit: 'ms' })).find((d) => d.id === 'wind')
+  assert.ok(Math.abs(ms.value - 2.306) < 0.001)
+  assert.equal(ms.max, 10)
+  const kn = dialsFor(data, unitsOf({ windUnit: 'kn' })).find((d) => d.id === 'wind')
+  assert.equal(kn.unit, 'knots')
+})
+
+test('the scale of a pressure outside of the usual one grows in the steps of its unit', async () => {
+  const { pressureScale, temperatureScale, temperatureSections } = await load()
+  assert.deepEqual(pressureScale(940, 'hpa'), { min: 930, max: 1060 })
+  assert.deepEqual(pressureScale(27.5, 'inhg'), { min: 27, max: 31.5 })
+  assert.deepEqual(pressureScale(101, 'kpa'), { min: 96, max: 106 })
+  assert.deepEqual(temperatureScale(110, 'f'), { min: -20, max: 120 })
+  assert.deepEqual(temperatureScale(-30, 'f'), { min: -40, max: 100 })
+  // (the colours follow the temperature in °C: 50 °F is 10 °C)
+  const f = temperatureSections(-20, 100, 'f')
+  assert.equal(f.length, 12)
+  assert.equal(f[0].start, -20)
+  assert.equal(f.at(-1).stop, 100)
+})

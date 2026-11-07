@@ -1,7 +1,7 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
   "hostApi": 2,
   "api": "api.js",
@@ -11,7 +11,10 @@
     "provider": {
       "type": "string",
       "default": "openmeteo",
-      "options": ["openmeteo", "metno"]
+      "options": [
+        "openmeteo",
+        "metno"
+      ]
     },
     "placeName": {
       "type": "string",
@@ -37,7 +40,46 @@
     "refreshUnit": {
       "type": "string",
       "default": "minutes",
-      "options": ["seconds", "minutes"]
+      "options": [
+        "seconds",
+        "minutes"
+      ]
+    },
+    "tempUnit": {
+      "type": "string",
+      "default": "c",
+      "options": [
+        "c",
+        "f"
+      ]
+    },
+    "rainUnit": {
+      "type": "string",
+      "default": "mm",
+      "options": [
+        "mm",
+        "inch"
+      ]
+    },
+    "pressUnit": {
+      "type": "string",
+      "default": "hpa",
+      "options": [
+        "hpa",
+        "inhg",
+        "mb",
+        "kpa"
+      ]
+    },
+    "windUnit": {
+      "type": "string",
+      "default": "kmh",
+      "options": [
+        "kmh",
+        "ms",
+        "mph",
+        "kn"
+      ]
     }
   },
   "ui": {
@@ -49,8 +91,14 @@
         "label": "Wetterserver",
         "help": "Open-Meteo liefert Messwerte der letzten 24 Stunden und Böen. Bei MET Norway (yr.no) sind es Werte des Wettermodells; der Regen ist dort die Vorhersage für die nächsten 24 Stunden.",
         "choices": [
-          { "value": "openmeteo", "label": "Open-Meteo" },
-          { "value": "metno", "label": "MET Norway (yr.no)" }
+          {
+            "value": "openmeteo",
+            "label": "Open-Meteo"
+          },
+          {
+            "value": "metno",
+            "label": "MET Norway (yr.no)"
+          }
         ]
       },
       {
@@ -69,8 +117,86 @@
         "key": "refreshUnit",
         "label": "Einheit",
         "choices": [
-          { "value": "seconds", "label": "Sekunden" },
-          { "value": "minutes", "label": "Minuten" }
+          {
+            "value": "seconds",
+            "label": "Sekunden"
+          },
+          {
+            "value": "minutes",
+            "label": "Minuten"
+          }
+        ]
+      },
+      {
+        "key": "tempUnit",
+        "label": "Temperatur",
+        "choices": [
+          {
+            "value": "c",
+            "label": "°C"
+          },
+          {
+            "value": "f",
+            "label": "°F"
+          }
+        ]
+      },
+      {
+        "key": "rainUnit",
+        "label": "Regen",
+        "choices": [
+          {
+            "value": "mm",
+            "label": "mm"
+          },
+          {
+            "value": "inch",
+            "label": "Inch"
+          }
+        ]
+      },
+      {
+        "key": "pressUnit",
+        "label": "Luftdruck",
+        "choices": [
+          {
+            "value": "hpa",
+            "label": "hPa"
+          },
+          {
+            "value": "inhg",
+            "label": "inHg"
+          },
+          {
+            "value": "mb",
+            "label": "mb"
+          },
+          {
+            "value": "kpa",
+            "label": "kPa"
+          }
+        ]
+      },
+      {
+        "key": "windUnit",
+        "label": "Windstärke",
+        "choices": [
+          {
+            "value": "kmh",
+            "label": "km/h"
+          },
+          {
+            "value": "ms",
+            "label": "m/s"
+          },
+          {
+            "value": "mph",
+            "label": "mph"
+          },
+          {
+            "value": "kn",
+            "label": "knots"
+          }
         ]
       }
     ]

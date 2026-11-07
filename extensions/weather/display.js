@@ -17,16 +17,57 @@ export function pickMax(value, steps) {
   return steps.find((s) => value <= s) ?? steps[steps.length - 1]
 }
 
-/** The scale of the temperature dial: -20 - 40 °C, wider (in steps of ten) when it is colder or warmer. */
-export function temperatureScale(value) {
-  if (!Number.isFinite(value)) return { min: -20, max: 40 }
-  return { min: Math.min(-20, Math.floor((value - 5) / 10) * 10), max: Math.max(40, Math.ceil((value + 5) / 10) * 10) }
+// The units to choose (the API part always answers in °C, mm, hPa and km/h): how to count over from those, the text on the dial, the
+// decimals of the display and the steps of the scale that fits.
+export const UNITS = {
+  temp: {
+    c: { label: '°C', from: (v) => v, decimals: 1 },
+    f: { label: '°F', from: (v) => (v * 9) / 5 + 32, decimals: 1 },
+  },
+  rain: {
+    mm: { label: 'mm', from: (v) => v, decimals: 1, steps: [10, 25, 50, 100, 200, 400] },
+    inch: { label: 'inch', from: (v) => v / 25.4, decimals: 2, steps: [0.5, 1, 2, 4, 8, 16] },
+  },
+  press: {
+    hpa: { label: 'hPa', from: (v) => v, decimals: 1, base: { min: 960, max: 1060, step: 10 } },
+    mb: { label: 'mb', from: (v) => v, decimals: 1, base: { min: 960, max: 1060, step: 10 } },
+    inhg: { label: 'inHg', from: (v) => v * 0.02953, decimals: 2, base: { min: 28, max: 31.5, step: 0.5 } },
+    kpa: { label: 'kPa', from: (v) => v / 10, decimals: 2, base: { min: 96, max: 106, step: 1 } },
+  },
+  wind: {
+    kmh: { label: 'km/h', from: (v) => v, decimals: 1, steps: [30, 60, 120, 200] },
+    ms: { label: 'm/s', from: (v) => v / 3.6, decimals: 1, steps: [10, 20, 30, 60] },
+    mph: { label: 'mph', from: (v) => v * 0.621371, decimals: 1, steps: [20, 40, 80, 120] },
+    kn: { label: 'knots', from: (v) => v * 0.539957, decimals: 1, steps: [20, 40, 60, 100] },
+  },
+}
+const UNIT_DEFAULTS = { temp: 'c', rain: 'mm', press: 'hpa', wind: 'kmh' }
+const UNIT_KEYS = { temp: 'tempUnit', rain: 'rainUnit', press: 'pressUnit', wind: 'windUnit' }
+
+/** The chosen units of the settings (an unknown or missing one is the default: °C, mm, hPa, km/h). */
+export function unitsOf(settings) {
+  const out = {}
+  for (const kind of Object.keys(UNIT_KEYS)) {
+    const wanted = settings?.[UNIT_KEYS[kind]]
+    out[kind] = Object.hasOwn(UNITS[kind], wanted) ? wanted : UNIT_DEFAULTS[kind]
+  }
+  return out
 }
 
-/** The scale of the pressure dial: 960 - 1060 hPa, wider when the pressure is outside of it. */
-export function pressureScale(value) {
-  if (!Number.isFinite(value)) return { min: 960, max: 1060 }
-  return { min: Math.min(960, Math.floor((value - 10) / 10) * 10), max: Math.max(1060, Math.ceil((value + 10) / 10) * 10) }
+/** The scale of the temperature dial: -20 - 40 °C (-20 - 100 °F), wider (in steps of ten, in °F of twenty) when it is colder or warmer. */
+export function temperatureScale(value, unit = 'c') {
+  const step = unit === 'f' ? 20 : 10
+  const base = unit === 'f' ? { min: -20, max: 100 } : { min: -20, max: 40 }
+  if (!Number.isFinite(value)) return base
+  const pad = step / 2
+  return { min: Math.min(base.min, Math.floor((value - pad) / step) * step), max: Math.max(base.max, Math.ceil((value + pad) / step) * step) }
+}
+
+/** The scale of the pressure dial: 960 - 1060 hPa (28 - 31.5 inHg, 96 - 106 kPa), wider when the pressure is outside of it. */
+export function pressureScale(value, unit = 'hpa') {
+  const { min, max, step } = UNITS.press[unit].base
+  if (!Number.isFinite(value)) return { min, max }
+  return { min: Math.min(min, Math.floor((value - step) / step) * step), max: Math.max(max, Math.ceil((value + step) / step) * step) }
 }
 
 const COLD = 'rgb(0,60,200)'
@@ -40,10 +81,14 @@ const RANGE = 'rgba(225,30,0,0.28)'
 
 const tempColor = (t) => (t < -10 ? COLD : t < 0 ? COOL : t < 10 ? MILD : t < 20 ? FRESH : t < 25 ? WARM : t < 30 ? HOT : RED)
 
-/** A coloured scale in steps of five degrees: blue when it is cold, over green and yellow to red when it is hot. */
-export function temperatureSections(min, max) {
+/** A coloured scale in steps of five degrees (ten in °F): blue when it is cold, over green and yellow to red when it is hot. */
+export function temperatureSections(min, max, unit = 'c') {
+  const step = unit === 'f' ? 10 : 5
   const out = []
-  for (let from = min; from < max; from += 5) out.push({ start: from, stop: Math.min(max, from + 5), color: tempColor(from + 2.5) })
+  for (let from = min; from < max; from += step) {
+    const middle = from + step / 2
+    out.push({ start: from, stop: Math.min(max, from + step), color: tempColor(unit === 'f' ? ((middle - 32) * 5) / 9 : middle) })
+  }
   return out
 }
 
@@ -53,14 +98,37 @@ const fmt = (value, digits = 1) => (Number.isFinite(value) ? value.toFixed(digit
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 const trendName = (n) => (n > 0 ? 'UP' : n < 0 ? 'DOWN' : 'STEADY')
 
-/** The dials with their scales, coloured sections, areas and texts for an answer of the API part. */
-export function dialsFor(data) {
-  const t = temperatureScale(data.temperature)
-  const p = pressureScale(data.pressure)
-  const windMax = pickMax(Math.max(data.windSpeed || 0, data.windGust || 0), [30, 60, 120, 200])
-  const rainMax = pickMax(data.rain24 || 0, [10, 25, 50, 100, 200, 400])
+/** The dials with their scales, coloured sections, areas and texts for an answer of the API part, in the chosen units. */
+export function dialsFor(data, units = UNIT_DEFAULTS) {
+  const U = {
+    temp: UNITS.temp[units.temp] ?? UNITS.temp.c,
+    rain: UNITS.rain[units.rain] ?? UNITS.rain.mm,
+    press: UNITS.press[units.press] ?? UNITS.press.hpa,
+    wind: UNITS.wind[units.wind] ?? UNITS.wind.kmh,
+  }
+  // (a missing value stays missing)
+  const to = (unit) => (v) => (Number.isFinite(v) ? unit.from(v) : v)
+  const temp = to(U.temp)
+  const press = to(U.press)
+  const wind = to(U.wind)
+  const rain = to(U.rain)
+  const tUnit = U.temp === UNITS.temp.f ? 'f' : 'c'
+  const pUnit = Object.keys(UNITS.press).find((k) => UNITS.press[k] === U.press)
+  const temperature = temp(data.temperature)
+  const t = temperatureScale(temperature, tUnit)
+  const pressure = press(data.pressure)
+  const p = pressureScale(pressure, pUnit)
+  const windSpeed = wind(data.windSpeed)
+  const windGust = wind(data.windGust)
+  const windMax = pickMax(Math.max(windSpeed || 0, windGust || 0), U.wind.steps)
+  const rain24 = rain(data.rain24)
+  const rainMax = pickMax(rain24 || 0, U.rain.steps)
+  // (a low and a high pressure are the red ends of the scale)
+  const warn = 'rgba(225,30,0,0.55)'
+  const pLow = press(975)
+  const pHigh = press(1045)
   return [
-    { id: 'temp', kind: 'radial', title: 'Temperatur', unit: '°C', min: t.min, max: t.max, value: data.temperature, decimals: 1, sections: temperatureSections(t.min, t.max), areas: range(data.tempMin, data.tempMax, t.min, t.max), minMeasured: data.tempMin, maxMeasured: data.tempMax, trend: data.trend?.temp ?? 0, caption: '' },
+    { id: 'temp', kind: 'radial', title: 'Temperatur', unit: U.temp.label, min: t.min, max: t.max, value: temperature, decimals: U.temp.decimals, sections: temperatureSections(t.min, t.max, tUnit), areas: range(temp(data.tempMin), temp(data.tempMax), t.min, t.max), minMeasured: temp(data.tempMin), maxMeasured: temp(data.tempMax), trend: data.trend?.temp ?? 0, caption: '' },
     {
       id: 'hum', kind: 'radial', title: 'Luftfeuchte', unit: '%', min: 0, max: 100, value: data.humidity, decimals: 1,
       sections: [
@@ -73,12 +141,11 @@ export function dialsFor(data) {
       areas: range(data.humMin, data.humMax, 0, 100), minMeasured: data.humMin, maxMeasured: data.humMax, trend: data.trend?.hum ?? 0, caption: '',
     },
     // (the red band: from the wind to the gust)
-    { id: 'wind', kind: 'radial', title: 'Windstärke', unit: 'km/h', min: 0, max: windMax, value: data.windSpeed, decimals: 1, sections: [], areas: range(data.windSpeed, data.windGust, 0, windMax), trend: null, caption: Number.isFinite(data.windGust) ? `Böen bis ${fmt(data.windGust)} km/h` : '' },
+    { id: 'wind', kind: 'radial', title: 'Windstärke', unit: U.wind.label, min: 0, max: windMax, value: windSpeed, decimals: U.wind.decimals, sections: [], areas: range(windSpeed, windGust, 0, windMax), trend: null, caption: Number.isFinite(windGust) ? `Böen bis ${fmt(windGust, U.wind.decimals)} ${U.wind.label}` : '' },
     { id: 'dir', kind: 'direction', title: 'Windrichtung', latest: data.windDir, average: data.windDirAvg, caption: 'legend' },
-    // (a low and a high pressure are the red ends of the scale)
-    { id: 'baro', kind: 'radial', title: 'Luftdruck', unit: 'hPa', min: p.min, max: p.max, value: data.pressure, decimals: 1, sections: [], areas: [{ start: p.min, stop: 975, color: 'rgba(225,30,0,0.55)' }, { start: 1045, stop: p.max, color: 'rgba(225,30,0,0.55)' }], minMeasured: data.pressMin, maxMeasured: data.pressMax, trend: data.trend?.press ?? 0, caption: '' },
+    { id: 'baro', kind: 'radial', title: 'Luftdruck', unit: U.press.label, min: p.min, max: p.max, value: pressure, decimals: U.press.decimals, sections: [], areas: [{ start: p.min, stop: pLow, color: warn }, { start: pHigh, stop: p.max, color: warn }], minMeasured: press(data.pressMin), maxMeasured: press(data.pressMax), trend: data.trend?.press ?? 0, caption: '' },
     {
-      id: 'rain', kind: 'radial', title: 'Regenmenge', unit: data.rainKind === 'forecast' ? 'mm / nächste 24 h' : 'mm / 24 h', min: 0, max: rainMax, value: data.rain24, decimals: 1,
+      id: 'rain', kind: 'radial', title: 'Regenmenge', unit: `${U.rain.label} / ${data.rainKind === 'forecast' ? 'nächste 24 h' : '24 h'}`, min: 0, max: rainMax, value: rain24, decimals: U.rain.decimals,
       sections: [
         { start: 0, stop: rainMax * 0.5, color: 'rgb(0,170,60)' },
         { start: rainMax * 0.5, stop: rainMax * 0.8, color: WARM },
@@ -138,7 +205,7 @@ export function activate(api) {
           const size = dialSize()
           lastSize = size
           row.textContent = ''
-          for (const dial of dialsFor(data)) {
+          for (const dial of dialsFor(data, unitsOf(settings))) {
             const cell = document.createElement('div')
             cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px'
             const canvas = document.createElement('canvas')
