@@ -1237,5 +1237,14 @@ textarea[hidden] { display: none; }
 .ext-update { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 8px 10px; border-left: 3px solid var(--mp-primary); border-radius: 6px; background: var(--mp-primary-soft); font-size: 13px; line-height: 1.4; }
 .ext-update svg { flex: none; margin-top: 1px; color: var(--mp-primary-text); }
 .linkbtn { padding: 0; border: 0; background: none; font: inherit; color: var(--mp-primary-text); text-decoration: underline; cursor: pointer; }
+/* the report of an extension's resources (ports, GPIO pins, services; what it sets up; what collides): plain lists */
+.ext-review { display: contents; }
+.ext-review h3 { margin: 6px 0 0; font-size: 15px; font-weight: 600; }
+.ext-sub { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--mp-muted); }
+.ext-list { margin: 2px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.45; }
+.ext-list li { margin: 2px 0; overflow-wrap: anywhere; }
+.ext-verdict { margin: 4px 0 0; font-weight: 600; font-size: 14px; }
+.ext-verdict.ok { color: var(--mp-success); }
+.ext-verdict.bad { color: var(--mp-danger); }
 .ext-bar { display: flex; gap: 10px; align-items: center; }
 .ext-bar .search { flex: 1; }

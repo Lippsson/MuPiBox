@@ -11154,57 +11154,81 @@ function newerInCatalog(installedExt) {
   return c && versionNewer(c.version, installedExt.version) ? c : null
 }
 
-// What an extension sets up on the box, in words (shown before it is installed)
-function extSystemNote(system) {
-  const parts = []
+/* The report about what an extension needs, sets up and collides with is in English on purpose and is not translated piece by
+   piece (translate="no"): it lists what the extension declares and what the box answers - ports, pins, services - and a list that
+   is half in one language and half in another is worse than a plain English one. */
+
+// What an extension sets up on the system, as list items
+function extSystemItems(system) {
+  const items = []
   const rules = Array.isArray(system?.udev) ? system.udev.length : Number(system?.udev ?? 0)
-  if (rules === 1) parts.push('Legt eine Geräteregel an (Zugriffsrechte für ein Gerät).')
-  else if (rules > 1) parts.push('Legt Geräteregeln an (Zugriffsrechte für Geräte).')
-  if (system?.groups?.length) parts.push(`Nimmt den Benutzer der Box in die Gruppe ${system.groups.join(', ')} auf.`)
-  if (system?.packages?.length) parts.push(`Installiert Pakete: ${system.packages.join(', ')}.`)
-  return parts.length ? parts.join(' ') : 'Richtet nichts am System ein.'
+  if (rules === 1) items.push('Adds a device rule (access rights for a device)')
+  else if (rules > 1) items.push('Adds device rules (access rights for devices)')
+  if (system?.groups?.length) items.push(`Adds the box's user to the group: ${system.groups.join(', ')}`)
+  if (system?.packages?.length) items.push(`Installs packages: ${system.packages.join(', ')}`)
+  return items
 }
 
-// What an extension needs from the box (ports, GPIO pins, services - as it declares them), in words
-function extResourceNote(resources) {
-  const parts = []
-  if (resources?.ports?.length) parts.push(`Ports: ${resources.ports.join(', ')}.`)
-  if (resources?.gpio?.length) parts.push(`GPIO-Pins: ${resources.gpio.join(', ')}.`)
-  if (resources?.services?.length) parts.push(`Dienste: ${resources.services.join(', ')}.`)
-  return parts.length ? `Braucht: ${parts.join(' ')}` : 'Braucht keine Ports, GPIO-Pins oder Dienste.'
-}
-
-// The result of the test against the box (what is taken already): the errors stop the install, the warnings only say something
-function extConflictNote(conflicts) {
-  const word = (what) => String(what).replace(/^port /, 'Port ').replace(/^service /, 'Dienst ')
+// The report as HTML: what it needs (ports, GPIO pins, services), what it sets up and - with a test result - what is taken already
+function extReportHtml({ resources, system, conflicts }) {
+  const list = (items) => `<ul class="ext-list">${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`
+  const group = (head, items) => (items?.length ? `<p class="ext-sub">${esc(head)}</p>${list(items)}` : '')
+  const needs = [group('Ports', resources?.ports), group('GPIO pins', resources?.gpio), group('Services', resources?.services)].join('')
+  const setup = extSystemItems(system)
   const errors = (conflicts ?? []).filter((c) => c.severity === 'error')
   const warns = (conflicts ?? []).filter((c) => c.severity !== 'error')
-  const text = (c) =>
-    c.kind === 'service' && c.severity === 'error'
-      ? `${word(c.what)} gibt es schon (${c.by}).`
-      : c.kind === 'service'
-        ? `${word(c.what)} ist (noch) nicht auf der Box.`
-        : c.severity === 'error'
-          ? `${word(c.what)} ist schon belegt: ${c.by}.`
-          : 'Nicht alles ließ sich prüfen, der Test ist weniger sicher.'
-  return { errors: errors.map(text), warns: warns.map(text) }
+  return [
+    `<h3>Needs</h3>${needs || '<p class="help" style="margin:0">No ports, GPIO pins or services.</p>'}`,
+    system ? `<h3>Sets up</h3>${setup.length ? list(setup) : '<p class="help" style="margin:0">Nothing on the system.</p>'}` : '',
+    errors.length ? `<h3>Conflicts with this box</h3>${list(errors.map((c) => c.message))}` : '',
+    warns.length ? `<h3>Notes</h3>${list(warns.map((c) => c.message))}` : '',
+    conflicts ? `<p class="ext-verdict ${errors.length ? 'bad' : 'ok'}">${errors.length ? 'Remove or change what uses these first.' : 'No conflicts found.'}</p>` : '',
+  ].join('')
 }
 
-// The test before an install: asks the box whether what the extension needs is free. Shows what it needs and - when something is
-// taken - why it cannot be installed. Returns the text to show in the question, or null when the install must not go on.
-async function extensionPreflight(request, name) {
-  const r = await api(`${API}/extensions/check`, { method: 'POST', body: request })
-  if (!r.ok) {
-    toast('Die Prüfung auf Konflikte hat nicht geklappt', 'info')
-    return null
-  }
-  const { errors, warns } = extConflictNote(r.body.conflicts)
-  const needs = extResourceNote(r.body.resources)
-  if (errors.length) {
-    await ask(`${name} kann nicht installiert werden`, `${needs} Das kollidiert mit der Box: ${errors.join(' ')} Entferne oder ändere zuerst, was das belegt.`, 'Verstanden')
-    return null
-  }
-  return `${needs}${warns.length ? ` Hinweis: ${warns.join(' ')}` : ' Die Prüfung auf Konflikte ist bestanden.'}`
+// The question before an install (or the reason why it cannot be): the report, then "Cancel" and the button - or only "Got it" when
+// something it needs is taken. Resolves true when the user goes on.
+function extReview({ title, resources, system, conflicts, okLabel, extra }) {
+  const blocked = (conflicts ?? []).some((c) => c.severity === 'error')
+  return new Promise((resolve) => {
+    let answer = false
+    openSheet(
+      `<div class="ext-review" translate="no"><h2>${esc(title)}</h2>${extReportHtml({ resources, system, conflicts })}${extra ? `<p class="help" style="margin:0">${esc(extra)}</p>` : ''}
+       <div class="btns">${blocked ? '<button class="btn primary" data-close>Got it</button>' : `<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>${esc(okLabel)}</button>`}</div></div>`,
+      (sheet, close) => {
+        sheet.querySelector('[data-close]').onclick = close
+        const ok = sheet.querySelector('[data-ok]')
+        if (ok)
+          ok.onclick = () => {
+            answer = true
+            close()
+          }
+      },
+      () => setTimeout(() => resolve(answer)),
+    )
+  })
+}
+
+const EXT_RESTART_NOTE = 'Afterwards the box restarts its services; playback is interrupted.'
+
+// Installs (or updates) an extension of the catalog: the test against the box first, then the report and the question
+async function installExtension(e, kind, doneText) {
+  const check = await api(`${API}/extensions/check`, { method: 'POST', body: { id: e.id } })
+  if (!check.ok) return toast('Die Prüfung auf Konflikte hat nicht geklappt', 'info')
+  const update = kind === 'Update'
+  const go = await extReview({
+    title: update ? `Update ${e.name} to ${e.version}?` : `Install ${e.name} ${e.version}?`,
+    resources: check.body.resources,
+    system: e.system ?? {},
+    conflicts: check.body.conflicts ?? [],
+    okLabel: kind,
+    extra: EXT_RESTART_NOTE,
+  })
+  if (!go) return
+  const r = await api(`${API}/extensions/install`, { method: 'POST', body: { id: e.id } })
+  if (!r.ok) return toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+  toast('Wird erledigt …')
+  watchExtensionJob(e.id, doneText)
 }
 
 // The install or removal runs on the box (a download, the setup, then the services start again): watched until it is over
@@ -11235,12 +11259,6 @@ async function watchExtensionJob(id, doneText) {
 }
 
 async function extensionAction(path, id, askTitle, askText, askOk, doneText) {
-  if (path === 'install') {
-    // (the test first: nothing is installed when something it needs is taken)
-    const note = await extensionPreflight({ id }, askTitle.replace(/ installieren$/, ''))
-    if (note === null) return
-    askText = `${askText} ${note}`
-  }
   if (!(await ask(askTitle, askText, askOk))) return
   const r = await api(`${API}/extensions/${path}`, { method: 'POST', body: { id } })
   if (!r.ok) return toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
@@ -11277,8 +11295,7 @@ function extensionDetails(e, installed) {
   openSheet(
     `<h2>${esc(e.name)} <small>${esc(e.version)}</small></h2>
      <p class="help" style="margin:0">${esc(e.description)}</p>
-     <p class="help" style="margin:0">${esc(extSystemNote(e.system))}</p>
-     <p class="help" style="margin:0">${esc(extResourceNote(e.resources))}</p>
+     <div class="ext-review" translate="no">${extReportHtml({ resources: e.resources, system: e.system ?? {} })}</div>
      ${e.ui ? `<h3>${esc(e.ui.title)}</h3><p class="help" style="margin:0">${esc(e.ui.help ?? '')}</p>` : ''}
      ${installed && !e.enabled && e.ui ? '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>' : ''}
      ${form}
@@ -12096,14 +12113,14 @@ const CONTROLLERS = {
       for (const b of root.querySelectorAll('[data-ext-install]')) {
         const e = entry(b.dataset.extInstall)
         b.onclick = () =>
-          extensionAction('install', e.id, `${e.name} installieren`, `${extSystemNote(e.system)} Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, e.installedVersion ? 'Neue Version installieren' : 'Installieren', `${e.name} ist installiert.`)
+          installExtension(e, 'Install', `${e.name} ist installiert.`)
       }
       for (const input of root.querySelectorAll('[data-ext-install-toggle]')) {
         const e = entry(input.dataset.extInstallToggle)
         input.onchange = async () => {
           // (the switch stays off until the box has installed it: the page is drawn again afterwards)
           input.checked = false
-          await extensionAction('install', e.id, `${e.name} installieren`, `${extSystemNote(e.system)} Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, 'Installieren', `${e.name} ist installiert.`)
+          await installExtension(e, 'Install', `${e.name} ist installiert.`)
         }
       }
       for (const b of root.querySelectorAll('[data-ext-remove]')) {
@@ -12121,7 +12138,7 @@ const CONTROLLERS = {
           const r = await api(`${API}/extensions/enable`, { method: 'POST', body: { id: e.id, enabled } })
           if (!r.ok) {
             input.checked = !enabled
-            if (r.body?.error === 'conflict') return ask(`${e.name} kann nicht eingeschaltet werden`, `Das kollidiert mit der Box: ${extConflictNote(r.body.conflicts).errors.join(' ')}`, 'Verstanden')
+            if (r.body?.error === 'conflict') return extReview({ title: `${e.name} can't be switched on`, resources: e.resources, conflicts: r.body.conflicts })
             return toast('Hat nicht geklappt', 'info')
           }
           toast('Die Dienste starten neu …')
@@ -12140,14 +12157,17 @@ const CONTROLLERS = {
         const r = await fetch(`${API}/extensions/upload`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream', 'x-mupibox-csrf': state.csrf }, body: file }).catch(() => null)
         const body = await r?.json().catch(() => null)
         if (!r || !r.ok) return toast(`Das ist keine passende Erweiterung: ${body?.error ?? ''}`.trim(), 'info')
-        const what = `${body.name} ${body.version}${body.installedVersion ? ` (ersetzt ${body.installedVersion})` : ''}`
-        const found = extConflictNote(body.conflicts)
-        if (found.errors.length) {
-          await ask(`${what} kann nicht installiert werden`, `${extResourceNote(body.resources)} Das kollidiert mit der Box: ${found.errors.join(' ')} Entferne oder ändere zuerst, was das belegt.`, 'Verstanden')
-          return
-        }
-        const preflight = `${extResourceNote(body.resources)}${found.warns.length ? ` Hinweis: ${found.warns.join(' ')}` : ' Die Prüfung auf Konflikte ist bestanden.'}`
-        if (!(await ask(`${what} installieren`, `${extSystemNote(body.system)} ${preflight} Eine Erweiterung läuft auf der Box ohne Schutz: Installiere nur Dateien aus Quellen, denen du vertraust. Prüfsumme (SHA-256): ${body.sha256.slice(0, 16)}… Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, 'Installieren'))) return
+        const what = `${body.name} ${body.version}${body.installedVersion ? ` (replaces ${body.installedVersion})` : ''}`
+        const blocked = (body.conflicts ?? []).some((c) => c.severity === 'error')
+        const go1 = await extReview({
+          title: blocked ? `${what} can't be installed` : `Install ${what}?`,
+          resources: body.resources,
+          system: body.system ?? {},
+          conflicts: body.conflicts ?? [],
+          okLabel: 'Install',
+          extra: `An extension runs on the box without protection: install only files from sources you trust. Checksum (SHA-256): ${body.sha256.slice(0, 16)}… ${EXT_RESTART_NOTE}`,
+        })
+        if (!go1) return
         const go = await api(`${API}/extensions/install`, { method: 'POST', body: { token: body.token } })
         if (!go.ok) return toast(go.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
         toast('Wird erledigt …')
@@ -12160,7 +12180,7 @@ const CONTROLLERS = {
       for (const b of root.querySelectorAll('[data-ext-update]')) {
         const c = exts.catalog.find((x) => x.id === b.dataset.extUpdate)
         b.onclick = () =>
-          extensionAction('install', c.id, `${c.name} installieren`, `Neue Version ${c.version} (jetzt ${c.installedVersion ?? 'älter'}). ${extSystemNote(c.system)} Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, 'Aktualisieren', `${c.name} ist aktualisiert.`)
+          installExtension(c, 'Update', `${c.name} ist aktualisiert.`)
       }
     },
   },
