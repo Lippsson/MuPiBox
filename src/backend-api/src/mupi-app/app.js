@@ -10304,7 +10304,78 @@ async function extensionAction(path, id, askTitle, askText, askOk, doneText) {
   watchExtensionJob(id, doneText)
 }
 
-const extControlKey = (key) => /^ext\.([a-z][a-z0-9-]*)\.(.+)$/.exec(key)
+// The "Details" of an extension: what it is and sets up, and - when it is installed and on - its settings (declared in its manifest)
+function extensionDetails(e, installed) {
+  const fields = installed && e.enabled && e.ui ? e.ui.items : []
+  const type = (it) => e.settingTypes?.[it.key]
+  const form = fields
+    .map((it) => {
+      const k = esc(it.key)
+      const help = it.help ? `<small class="help">${esc(it.help)}</small>` : ''
+      if (type(it) === 'boolean') {
+        return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
+      }
+      const secret = type(it) === 'secret'
+      const kind = secret ? 'password' : type(it) === 'number' ? 'number' : 'text'
+      return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xk-${k}">${esc(it.label)}</label><input class="input" id="xk-${k}" type="${kind}" data-xk="${k}" data-secret="${secret}" value="${secret ? '' : esc(e.settings?.[it.key] ?? '')}" placeholder="${secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : ''}" ${NO_PW_MANAGER}>${help}</div>`
+    })
+    .join('')
+  const hasText = fields.some((it) => type(it) !== 'boolean')
+  openSheet(
+    `<h2>${esc(e.name)} <small>${esc(e.version)}</small></h2>
+     <p class="help" style="margin:0">${esc(e.description)}</p>
+     <p class="help" style="margin:0">${esc(extSystemNote(e.system))}</p>
+     ${e.ui ? `<h3>${esc(e.ui.title)}</h3><p class="help" style="margin:0">${esc(e.ui.help ?? '')}</p>` : ''}
+     ${installed && !e.enabled && e.ui ? '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>' : ''}
+     ${form}
+     <div class="btns">${hasText ? '<button class="btn primary" data-xsave>Speichern</button>' : ''}<button class="btn" data-close>Schließen</button></div>`,
+    (sheet, close) => {
+      sheet.querySelector('[data-close]').onclick = close
+      // (a field that depends on a switch is shown while the switch is on)
+      const dep = () => {
+        for (const d of sheet.querySelectorAll('[data-ext-dep]')) {
+          const on = d.dataset.extDep ? sheet.querySelector(`[data-xk="${CSS.escape(d.dataset.extDep)}"]`)?.checked !== false : true
+          d.hidden = !on
+        }
+      }
+      dep()
+      const save = async (values, quiet) => {
+        const r = await api(`${API}/ext/${e.id}/settings`, { method: 'POST', body: { values } })
+        if (!r.ok) {
+          toast(r.body?.error ? 'Das sieht nicht richtig aus' : 'Nicht gespeichert', 'info')
+          return false
+        }
+        if (!quiet) toast('Gespeichert')
+        return r.body
+      }
+      for (const input of sheet.querySelectorAll('input[type="checkbox"][data-xk]')) {
+        input.onchange = async () => {
+          dep()
+          const ok = await save({ [input.dataset.xk]: input.checked }, false)
+          if (ok) e.settings[input.dataset.xk] = input.checked
+          else input.checked = !input.checked
+        }
+      }
+      const saveButton = sheet.querySelector('[data-xsave]')
+      if (saveButton) {
+        saveButton.onclick = async () => {
+          const values = {}
+          for (const input of sheet.querySelectorAll('input.input[data-xk]')) {
+            // (a secret that was not typed stays as it is)
+            if (input.dataset.secret === 'true' && !input.value.trim()) continue
+            values[input.dataset.xk] = input.type === 'number' ? Number(input.value) : input.value.trim()
+          }
+          if (!Object.keys(values).length) return toast('Bitte etwas eintragen', 'info')
+          const ok = await save(values, false)
+          if (!ok) return
+          await loadExtensions()
+          close()
+          renderPage(currentPage(), false)
+        }
+      }
+    },
+  )
+}
 
 const CONTROLLERS = {
   spielzeit: {
@@ -10928,58 +10999,49 @@ const CONTROLLERS = {
   },
   erweiterungen: {
     load: loadExtensions,
+    // like the extensions page of a browser: a search field and a grid of cards - icon, name, description, Details, Entfernen and
+    // the switch; the ones the catalog offers stand behind the installed ones with an Installieren button
     sections: () => {
-      const out = []
-      const name = (e) => `<b>${esc(e.name)}</b> <small>${esc(e.version)}</small>`
-      if (exts.installed.length) {
-        out.push({
-          title: 'Installiert',
-          help: 'Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.',
-          items: exts.installed.map((e) => ({
-            type: 'html',
-            html: `<div class="field"><label>${name(e)}${e.enabled ? '' : ' – aus'}</label><small>${esc(e.description)}</small>
-              <div class="btns"><button type="button" class="btn sm" data-ext-toggle="${esc(e.id)}" data-on="${e.enabled}">${e.enabled ? 'Ausschalten' : 'Einschalten'}</button><button type="button" class="btn sm danger" data-ext-remove="${esc(e.id)}">Entfernen</button></div></div>`,
-          })),
-        })
-        // the settings each installed extension declares (a card of its own)
-        for (const e of exts.installed.filter((x) => x.enabled && x.ui)) {
-          out.push({
-            title: e.ui.title,
-            help: e.ui.help ?? '',
-            items: [
-              ...e.ui.items.map((it) => {
-                const key = `ext.${e.id}.${it.key}`
-                const type = e.settingTypes?.[it.key]
-                const dep = it.dep ? `ext.${e.id}.${it.dep}` : undefined
-                if (type === 'boolean') return { type: 'toggle', key, label: it.label, help: it.help, dep }
-                const secret = type === 'secret'
-                return { type: 'text', kind: secret ? 'password' : type === 'number' ? 'number' : 'text', key, label: it.label, help: it.help, placeholder: secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : '', dep }
-              }),
-              ...(Object.values(e.settingTypes ?? {}).includes('secret')
-                ? [{ type: 'html', html: `<div class="btns"><button type="button" class="btn primary" data-ext-save="${esc(e.id)}">Speichern</button></div>` }]
-                : []),
-            ],
-          })
-        }
+      const card = (e, installed) => {
+        const q = `${e.name} ${e.description}`.toLowerCase()
+        const ico = e.icon
+          ? `<span class="ext-ico" style="--ext-icon:url('${esc(e.icon)}')" aria-hidden="true"></span>`
+          : `<span class="ext-ico letter" aria-hidden="true">${esc(String(e.name).slice(0, 1).toUpperCase())}</span>`
+        const action = installed
+          ? `<button type="button" class="btn sm danger" data-ext-remove="${esc(e.id)}">Entfernen</button>`
+          : `<button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">${e.installedVersion ? 'Neue Version installieren' : 'Installieren'}</button>`
+        const sw = installed
+          ? `<label class="switch"><input type="checkbox" data-ext-toggle="${esc(e.id)}" ${e.enabled ? 'checked' : ''} aria-label="${esc(e.name)}"><span></span></label>`
+          : ''
+        return `<div class="ext-card${installed ? '' : ' offer'}" data-q="${esc(q)}">
+          <div class="ext-head">${ico}<div class="ext-text"><b>${esc(e.name)}</b> <small>${esc(e.version)}</small><p>${esc(e.description)}</p></div></div>
+          <div class="ext-foot"><button type="button" class="btn sm" data-ext-details="${esc(e.id)}" data-installed="${installed}">Details</button>${action}<span class="grow"></span>${sw}</div>
+        </div>`
       }
       const offered = exts.catalog.filter((e) => e.installedVersion !== e.version)
-      out.push({
-        title: 'Verfügbar',
-        help: 'Aus dem Katalog auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert.',
-        items: exts.catalogError
-          ? [{ type: 'note', text: 'Der Katalog ist gerade nicht erreichbar. Die Box braucht dafür das Internet.' }]
-          : offered.length
-            ? offered.map((e) => ({
-                type: 'html',
-                html: `<div class="field"><label>${name(e)}</label><small>${esc(e.description)}</small><small>${esc(extSystemNote(e.system))}</small>
-                  <div class="btns"><button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">${e.installedVersion ? 'Neue Version installieren' : 'Installieren'}</button></div></div>`,
-              }))
-            : [{ type: 'note', text: 'Alles Verfügbare ist installiert.' }],
-      })
-      return out
+      const note = exts.catalogError ? '<p class="help">Der Katalog ist gerade nicht erreichbar. Die Box braucht dafür das Internet.</p>' : ''
+      const cards = [...exts.installed.map((e) => card(e, true)), ...offered.map((e) => card(e, false))]
+      return [
+        {
+          title: '',
+          items: [
+            {
+              type: 'html',
+              html: `<div class="ext-bar"><div class="search">${icon('search')}<input class="input" id="ext-q" type="search" placeholder="Erweiterungen suchen" autocomplete="off"></div>
+                <button type="button" class="btn" data-ext-upload>Datei hochladen</button><input type="file" id="ext-file" accept=".mpx,.zip,application/zip" hidden></div>`,
+            },
+            { type: 'html', html: `<h2 class="ext-title">Alle Erweiterungen</h2>${note}<div class="ext-grid">${cards.join('') || '<p class="help">Keine Erweiterungen verfügbar.</p>'}</div>` },
+            { type: 'note', text: 'Aus dem Katalog auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.' },
+          ],
+        },
+      ]
     },
     mount(root) {
       const entry = (id) => exts.installed.find((e) => e.id === id) ?? exts.catalog.find((e) => e.id === id)
+      $('#ext-q', root)?.addEventListener('input', (ev) => {
+        const q = ev.target.value.trim().toLowerCase()
+        for (const c of root.querySelectorAll('.ext-card')) c.hidden = !!q && !c.dataset.q.includes(q)
+      })
       for (const b of root.querySelectorAll('[data-ext-install]')) {
         const e = entry(b.dataset.extInstall)
         b.onclick = () =>
@@ -10989,48 +11051,43 @@ const CONTROLLERS = {
         const e = entry(b.dataset.extRemove)
         b.onclick = () => extensionAction('remove', e.id, `${e.name} entfernen`, 'Die Erweiterung und ihre Geräteregeln werden entfernt. Ihre Einstellungen bleiben, falls du sie wieder installierst. Danach starten die Dienste der Box neu.', 'Entfernen', `${e.name} ist entfernt.`)
       }
-      for (const b of root.querySelectorAll('[data-ext-toggle]')) {
-        const e = entry(b.dataset.extToggle)
-        b.onclick = async () => {
-          const enabled = b.dataset.on !== 'true'
-          if (!(await ask(`${e.name} ${enabled ? 'einschalten' : 'ausschalten'}`, 'Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.', enabled ? 'Einschalten' : 'Ausschalten'))) return
+      for (const input of root.querySelectorAll('[data-ext-toggle]')) {
+        const e = entry(input.dataset.extToggle)
+        input.onchange = async () => {
+          const enabled = input.checked
+          if (!(await ask(`${e.name} ${enabled ? 'einschalten' : 'ausschalten'}`, 'Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.', enabled ? 'Einschalten' : 'Ausschalten'))) {
+            input.checked = !enabled
+            return
+          }
           const r = await api(`${API}/extensions/enable`, { method: 'POST', body: { id: e.id, enabled } })
-          if (!r.ok) return toast('Hat nicht geklappt', 'info')
+          if (!r.ok) {
+            input.checked = !enabled
+            return toast('Hat nicht geklappt', 'info')
+          }
           toast('Die Dienste starten neu …')
           setTimeout(() => currentPage()?.id === 'erweiterungen' && renderPage(currentPage(), true), 13000)
         }
       }
-      for (const b of root.querySelectorAll('[data-ext-save]')) {
-        b.onclick = async () => {
-          const e = entry(b.dataset.extSave)
-          // only the secrets here (typed and not saved yet); the other settings are saved as they change
-          const values = {}
-          for (const [k, t] of Object.entries(e.settingTypes ?? {})) {
-            const v = String(state.values.get(`ext.${e.id}.${k}`) ?? '').trim()
-            if (t === 'secret' && v) values[k] = v
-          }
-          if (!Object.keys(values).length) return toast('Bitte etwas eintragen', 'info')
-          const r = await api(`${API}/ext/${e.id}/settings`, { method: 'POST', body: { values } })
-          if (!r.ok) return toast(r.body?.error ? 'Das sieht nicht richtig aus' : 'Nicht gespeichert', 'info')
-          toast('Gespeichert')
-          for (const k of Object.keys(values)) state.values.set(`ext.${e.id}.${k}`, '')
-          await loadExtensions()
-          renderPage(currentPage(), false)
-        }
-      }
-    },
-    async change(key, v) {
-      const m = extControlKey(key)
-      if (!m) return
-      const e = exts.installed.find((x) => x.id === m[1])
-      // (a secret is saved with its button, not on every key)
-      if (!e || e.settingTypes?.[m[2]] === 'secret') return
-      const r = await api(`${API}/ext/${e.id}/settings`, { method: 'POST', body: { values: { [m[2]]: v } } })
-      if (!r.ok) {
-        toast('Nicht gespeichert', 'info')
-        return false
-      }
-      toast('Gespeichert')
+      // an extension file from the user's own computer: read and checked by the box first, installed only after the question
+      const picker = $('#ext-file', root)
+      $('[data-ext-upload]', root)?.addEventListener('click', () => picker.click())
+      picker?.addEventListener('change', async () => {
+        const file = picker.files?.[0]
+        picker.value = ''
+        if (!file) return
+        if (file.size > 4 * 1024 * 1024) return toast('Die Datei ist zu groß (höchstens 4 MB)', 'info')
+        toast('Wird geprüft …')
+        const r = await fetch(`${API}/extensions/upload`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream', 'x-mupibox-csrf': state.csrf }, body: file }).catch(() => null)
+        const body = await r?.json().catch(() => null)
+        if (!r || !r.ok) return toast(`Das ist keine passende Erweiterung: ${body?.error ?? ''}`.trim(), 'info')
+        const what = `${body.name} ${body.version}${body.installedVersion ? ` (ersetzt ${body.installedVersion})` : ''}`
+        if (!(await ask(`${what} installieren`, `${extSystemNote(body.system)} Eine Erweiterung läuft auf der Box ohne Schutz: Installiere nur Dateien aus Quellen, denen du vertraust. Prüfsumme (SHA-256): ${body.sha256.slice(0, 16)}… Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, 'Installieren'))) return
+        const go = await api(`${API}/extensions/install`, { method: 'POST', body: { token: body.token } })
+        if (!go.ok) return toast(go.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+        toast('Wird erledigt …')
+        watchExtensionJob(go.body.id, `${body.name} ist installiert.`)
+      })
+      for (const b of root.querySelectorAll('[data-ext-details]')) b.onclick = () => extensionDetails(entry(b.dataset.extDetails), b.dataset.installed === 'true')
     },
   },
   bedienung: {

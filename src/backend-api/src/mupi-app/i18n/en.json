@@ -3013,5 +3013,16 @@
  "Nimmt den Benutzer der Box in die Gruppe {} auf.": "Adds the box's user to the group {}.",
  "Installiert Pakete: {}.": "Installs packages: {}.",
  "Richtet nichts am System ein.": "Does not change anything on the system.",
- "Audio-CDs vom USB-Laufwerk abspielen, mit Titelnamen und Cover aus dem Internet.": "Play audio CDs from the USB drive, with track names and cover from the internet."
+ "Audio-CDs vom USB-Laufwerk abspielen, mit Titelnamen und Cover aus dem Internet.": "Play audio CDs from the USB drive, with track names and cover from the internet.",
+ "Erweiterungen suchen": "Search extensions",
+ "Alle Erweiterungen": "All extensions",
+ "Datei hochladen": "Upload file",
+ "Keine Erweiterungen verfügbar.": "No extensions available.",
+ "Wird geprüft …": "Checking …",
+ "Die Datei ist zu groß (höchstens 4 MB)": "The file is too large (4 MB at most)",
+ "Das ist keine passende Erweiterung: {}": "That is not a suitable extension: {}",
+ "Eine Erweiterung läuft auf der Box ohne Schutz: Installiere nur Dateien aus Quellen, denen du vertraust.": "An extension runs on the box without protection: only install files from sources you trust.",
+ "Prüfsumme (SHA-256): {}": "Checksum (SHA-256): {}",
+ "Die Einstellungen gibt es, solange die Erweiterung an ist.": "The settings are available while the extension is on.",
+ "Aus dem Katalog auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.": "From the catalog on GitHub. An extension is a single file; the box checks its checksum before it installs it. A change restarts the box's services; playback stops while it does."
 }

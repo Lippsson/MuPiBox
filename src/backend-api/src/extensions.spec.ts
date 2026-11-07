@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import { readZip } from './eltern/winamp-skin'
-import { checkManifest, checkSettings, checkUdevRules, type Manifest } from './eltern/extensions'
+import { verifyPackage, checkManifest, checkSettings, checkUdevRules, type Manifest } from './eltern/extensions'
 
 const files = (...names: string[]) => new Set(['manifest.json', ...names])
 const base = (extra: Record<string, unknown> = {}) => ({ id: 'cd', name: 'CD', version: '1.0.0', hostApi: 1, ...extra })
@@ -90,5 +90,18 @@ describe('the CD extension of this repository', () => {
     assert.strictEqual(createHash('sha256').update(bytes).digest('hex'), entry.sha256)
     const names = readZip(bytes).map((e) => e.name)
     assert.ok(names.includes('manifest.json') && names.includes('player.js'))
+  })
+})
+
+describe('an uploaded extension file', () => {
+  it('is read and checked without installing anything', () => {
+    const bytes = readFileSync(path.join(process.cwd(), '..', '..', 'extensions', 'dist', 'cd-1.0.0.mpx'))
+    const checked = verifyPackage(bytes)
+    assert.strictEqual(checked.ok, true)
+    if (checked.ok) assert.strictEqual(checked.pkg.manifest.id, 'cd')
+  })
+  it('refuses a file that is no zip, and an empty one', () => {
+    assert.strictEqual(verifyPackage(Buffer.from('hello')).ok, false)
+    assert.strictEqual(verifyPackage(Buffer.alloc(0)).ok, false)
   })
 })

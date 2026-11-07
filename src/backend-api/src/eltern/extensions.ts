@@ -7,7 +7,7 @@
 // against the catalog's checksum, and what it asks to have set up as root is limited to a few checked kinds (udev rules, groups, packages).
 
 import { execFile, spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { promises as fsp, readFileSync } from 'node:fs'
 import path from 'node:path'
 import express, { type NextFunction, type Request, type RequestHandler, type Response, type Router } from 'express'
@@ -259,37 +259,73 @@ function packageFiles(entries: { name: string; data: Buffer }[]): Map<string, Bu
   return files
 }
 
-async function installExtension(id: string, deps: ExtensionDeps): Promise<void> {
+interface Package {
+  files: Map<string, Buffer>
+  manifest: Manifest
+}
+
+/** A package read and checked: file names, manifest, the rules it brings. Never installs anything. */
+export function verifyPackage(bytes: Buffer): { ok: true; pkg: Package } | { ok: false; error: string } {
+  if (bytes.length > MAX_MPX || bytes.length === 0) return { ok: false, error: 'the file is too large or empty' }
+  let files: Map<string, Buffer> | string
+  try {
+    files = packageFiles(readZip(bytes))
+  } catch (error) {
+    return { ok: false, error: `not an extension file: ${(error as Error).message}` }
+  }
+  if (typeof files === 'string') return { ok: false, error: files }
+  let manifest: Manifest
+  try {
+    manifest = JSON.parse(files.get('manifest.json')?.toString('utf8') ?? 'null') as Manifest
+  } catch {
+    return { ok: false, error: 'manifest.json is not valid' }
+  }
+  const bad = checkManifest(manifest, new Set(files.keys()))
+  if (bad) return { ok: false, error: bad }
+  for (const rule of manifest.system?.udev ?? []) {
+    const problem = checkUdevRules(files.get(rule.file)?.toString('utf8') ?? '')
+    if (problem) return { ok: false, error: `${rule.name}: ${problem}` }
+  }
+  return { ok: true, pkg: { files, manifest } }
+}
+
+// Files the user uploaded and the app has asked about (what they set up is shown first): kept for ten minutes
+const uploads = new Map<string, { pkg: Package; until: number }>()
+
+async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Package): Promise<void> {
   const job = jobs.get(id) as Job
   const fail = (error: string) => {
     Object.assign(job, { running: false, ok: false, error })
     console.warn(`${new Date().toLocaleString()}: [Extensions] install ${id} failed: ${error}`)
   }
   try {
-    job.step = 'catalog'
-    const entry = (await fetchCatalog(deps)).find((e) => e.id === id)
-    if (!entry) return fail('not in the catalog')
-    job.step = 'download'
-    const response = await fetch(entry.url, { signal: AbortSignal.timeout(60000), redirect: 'follow' })
-    if (!response.ok) return fail(`download: HTTP ${response.status}`)
-    const bytes = Buffer.from(await response.arrayBuffer())
-    if (bytes.length > MAX_MPX || bytes.length === 0) return fail('the file is too large or empty')
-    if (createHash('sha256').update(bytes).digest('hex') !== entry.sha256) return fail('the checksum does not match the catalog')
-    job.step = 'check'
-    const files = packageFiles(readZip(bytes))
-    if (typeof files === 'string') return fail(files)
-    const manifest = JSON.parse(files.get('manifest.json')?.toString('utf8') ?? 'null') as Manifest
-    const bad = checkManifest(manifest, new Set(files.keys()))
-    if (bad) return fail(bad)
-    if (manifest.id !== entry.id || manifest.version !== entry.version) return fail('the package is not the one the catalog names')
-    // what it asks to have set up must be what the catalog said (the app showed that before the install)
-    const sys = manifest.system ?? {}
-    const said = entry.system ?? {}
-    if ((sys.udev ?? []).length !== (said.udev ?? 0) || JSON.stringify(sys.groups ?? []) !== JSON.stringify(said.groups ?? []) || JSON.stringify(sys.packages ?? []) !== JSON.stringify(said.packages ?? [])) return fail('the package asks for more than the catalog says')
-    for (const rule of sys.udev ?? []) {
-      const bad = checkUdevRules(files.get(rule.file)?.toString('utf8') ?? '')
-      if (bad) return fail(`${rule.name}: ${bad}`)
+    let pkg: Package
+    if (uploaded) {
+      pkg = uploaded
+    } else {
+      job.step = 'catalog'
+      const entry = (await fetchCatalog(deps)).find((e) => e.id === id)
+      if (!entry) return fail('not in the catalog')
+      job.step = 'download'
+      const response = await fetch(entry.url, { signal: AbortSignal.timeout(60000), redirect: 'follow' })
+      if (!response.ok) return fail(`download: HTTP ${response.status}`)
+      const bytes = Buffer.from(await response.arrayBuffer())
+      if (bytes.length > MAX_MPX || bytes.length === 0) return fail('the file is too large or empty')
+      if (createHash('sha256').update(bytes).digest('hex') !== entry.sha256) return fail('the checksum does not match the catalog')
+      job.step = 'check'
+      const checked = verifyPackage(bytes)
+      if (!checked.ok) return fail(checked.error)
+      pkg = checked.pkg
+      const m = pkg.manifest
+      if (m.id !== entry.id || m.version !== entry.version) return fail('the package is not the one the catalog names')
+      // what it asks to have set up must be what the catalog said (the app showed that before the install)
+      const said = entry.system ?? {}
+      const asked = m.system ?? {}
+      if ((asked.udev ?? []).length !== (said.udev ?? 0) || JSON.stringify(asked.groups ?? []) !== JSON.stringify(said.groups ?? []) || JSON.stringify(asked.packages ?? []) !== JSON.stringify(said.packages ?? [])) return fail('the package asks for more than the catalog says')
     }
+    const { files, manifest } = pkg
+    if (manifest.id !== id) return fail('the package is not the extension asked for')
+    const sys = manifest.system ?? {}
 
     job.step = 'files'
     const target = path.join(EXT_DIR, id)
@@ -377,7 +413,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     const installed = []
     for (const [id, s] of Object.entries(state)) {
       const m = await readManifest(id)
-      if (m) installed.push({ id, name: m.name, version: m.version, description: m.description ?? '', enabled: s.enabled !== false, system: m.system ?? {}, ui: m.ui ?? null, settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])), settings: await publicSettings(m), job: jobs.get(id) ?? null })
+      if (m) installed.push({ id, name: m.name, version: m.version, description: m.description ?? '', icon: m.icon && s.enabled !== false ? `/ext/${id}/${m.icon}` : null, enabled: s.enabled !== false, system: m.system ?? {}, ui: m.ui ?? null, settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])), settings: await publicSettings(m), job: jobs.get(id) ?? null })
     }
     let catalog: unknown[] = []
     let catalogError: string | null = null
@@ -389,11 +425,14 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     res.json({ installed, catalog, catalogError, hostApi: HOST_API })
   })
 
-  const start = (action: Job['action'], work: (id: string) => Promise<void>): RequestHandler[] => [
+  const start = (action: Job['action'], work: (id: string, body?: Record<string, unknown>) => Promise<void>): RequestHandler[] => [
     requireSession,
     requireCsrf,
     async (req, res) => {
-      const id = String((req.body as { id?: unknown } | undefined)?.id ?? '')
+      const body = (req.body ?? {}) as Record<string, unknown>
+      // (an uploaded file names itself: its id is the one in its manifest)
+      const upload = typeof body.token === 'string' ? uploads.get(body.token) : undefined
+      const id = upload ? upload.pkg.manifest.id : String(body.id ?? '')
       if (!ID.test(id)) {
         res.status(400).json({ error: 'invalid id' })
         return
@@ -403,11 +442,44 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
         return
       }
       jobs.set(id, { running: true, action, step: 'start' })
-      void work(id)
-      res.json({ ok: true })
+      void work(id, body)
+      res.json({ ok: true, id })
     },
   ]
-  router.post('/extensions/install', ...start('install', (id) => installExtension(id, deps)))
+  router.post('/extensions/install', ...start('install', (id, body) => {
+    const token = typeof body?.token === 'string' ? body.token : ''
+    const upload = token ? uploads.get(token) : undefined
+    if (token) uploads.delete(token)
+    return installExtension(id, deps, upload && upload.until > Date.now() ? upload.pkg : undefined)
+  }))
+
+  // An extension file from the user (not from the catalog): read and checked here, nothing installed yet. The answer says what it is
+  // and what it would set up, the app asks, and the install then names the token.
+  router.post('/extensions/upload', requireSession, requireCsrf, express.raw({ type: () => true, limit: MAX_MPX }), async (req, res) => {
+    const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
+    const checked = verifyPackage(bytes)
+    if (!checked.ok) {
+      res.status(400).json({ error: checked.error })
+      return
+    }
+    const m = checked.pkg.manifest
+    for (const [token, u] of uploads) if (u.until < Date.now()) uploads.delete(token)
+    if (uploads.size >= 3) uploads.delete(uploads.keys().next().value as string)
+    const token = randomBytes(16).toString('hex')
+    uploads.set(token, { pkg: checked.pkg, until: Date.now() + 10 * 60 * 1000 })
+    const state = await readState()
+    res.json({
+      ok: true,
+      token,
+      id: m.id,
+      name: m.name,
+      version: m.version,
+      description: m.description ?? '',
+      system: { udev: (m.system?.udev ?? []).length, groups: m.system?.groups ?? [], packages: m.system?.packages ?? [] },
+      installedVersion: state[m.id]?.version ?? null,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    })
+  })
   router.post('/extensions/remove', ...start('remove', removeExtension))
 
   router.post('/extensions/enable', requireSession, requireCsrf, async (req, res) => {

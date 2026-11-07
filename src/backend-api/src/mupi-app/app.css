@@ -1156,3 +1156,21 @@ textarea[hidden] { display: none; }
   align-items: center;
   margin-inline-start: 6px;
 }
+
+/* extensions page: a grid of cards like a browser's extensions page */
+.ext-title { margin: 8px 0 12px; font-size: 20px; font-weight: 600; }
+.ext-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.ext-card { display: flex; flex-direction: column; justify-content: space-between; gap: 14px; padding: 16px; min-height: 170px; border: 1px solid var(--mp-border); border-radius: 14px; background: var(--mp-surface); }
+.ext-card[hidden] { display: none; }
+.ext-card.offer { border-style: dashed; }
+.ext-head { display: flex; gap: 14px; align-items: flex-start; }
+.ext-text { min-width: 0; }
+.ext-text p { margin: 4px 0 0; font-size: 14px; color: var(--mp-muted); }
+.ext-text small { color: var(--mp-muted); }
+.ext-ico { flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--mp-primary-soft); color: var(--mp-primary-text); position: relative; }
+.ext-ico:not(.letter)::after { content: ""; position: absolute; inset: 9px; background: currentColor; -webkit-mask: var(--ext-icon) center / contain no-repeat; mask: var(--ext-icon) center / contain no-repeat; }
+.ext-ico.letter { display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; }
+.ext-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ext-foot .grow { flex: 1; }
+.ext-bar { display: flex; gap: 10px; align-items: center; }
+.ext-bar .search { flex: 1; }

@@ -379,6 +379,15 @@ const KM = JSON.parse(readFileSync(path.join(root, 'themes/km-themes.json'), 'ut
 async function parentsApi(req, res, url, api) {
   const csrfOk = () => req.headers['x-mupibox-csrf'] === 'sandbox'
   if (api === '/session') return json(res, { csrf_token: 'sandbox', open: true })
+  // extensions page: the CD one installed, the clock one on offer (a pretend catalog)
+  if (api === '/extensions') {
+    return json(res, {
+      installed: [{ id: 'cd', name: 'USB-CD-Laufwerk', version: '1.0.0', description: 'Audio-CDs vom USB-Laufwerk abspielen, mit Titelnamen und Cover aus dem Internet.', icon: '/ext/cd/icon.svg', enabled: true, system: { udev: [1], groups: ['cdrom'] }, settingTypes: { cdLookup: 'boolean', discogsToken: 'secret' }, settings: { cdLookup: true, discogsTokenSet: false }, ui: { title: 'Audio-CD', help: 'Liegt eine Audio-CD im USB-Laufwerk, zeigt das Display oben den Reiter „CD“.', items: [{ key: 'cdLookup', label: 'Titel und Cover im Internet suchen' }, { key: 'discogsToken', label: 'Discogs-Token', dep: 'cdLookup', help: 'Den Token erzeugst du auf discogs.com.' }] } }],
+      catalog: [{ id: 'clock', name: 'Uhr in der Kopfleiste', version: '1.0.0', description: 'Zeigt die Uhrzeit in der Kopfleiste des Displays.', system: { udev: 0, groups: [], packages: [] }, installedVersion: null }],
+      catalogError: null,
+      hostApi: 1,
+    })
+  }
   if (api === '/theme') {
     if (req.method === 'POST') {
       const b = await readBody(req)

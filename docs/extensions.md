@@ -88,10 +88,18 @@ Katalogeintrag (Id, Version, Systemschritte) und installiert erst dann (Dateien,
 `server` und `spotify-control` neu, das Display lädt neu). Gebaut wird mit `node tools/mpx/pack.mjs <id>`:
 das macht aus `extensions/<id>/` die `.mpx` in `extensions/dist/` und trägt Größe und Prüfsumme in den Katalog ein.
 
+## Eigene Datei hochladen
+
+Neben dem Katalog gibt es auf der Seite „Erweiterungen“ **„Datei hochladen“** für eine `.mpx` vom eigenen Rechner (höchstens 4 MB).
+Die Box liest und prüft die Datei (`POST /api/app/extensions/upload`: Dateinamen, Manifest, Regeln – dieselben Prüfungen wie beim Katalog,
+nur ohne Prüfsumme aus dem Katalog), installiert aber noch nichts: die App zeigt Name, Version, die Systemschritte und die SHA-256 und warnt,
+dass eine Erweiterung ohne Schutz läuft. Erst nach dem „Installieren“ läuft die Installation (`POST …/install` mit dem Token der Prüfung,
+zehn Minuten gültig).
+
 ## Installieren und entfernen
 
-Webapp › Einstellungen › **Erweiterungen**: der Katalog mit „Installieren“, darunter das Installierte mit Schalter
-(an/aus) und „Entfernen“. Nur mit Anmeldung (Eltern). Nach einer Änderung starten Player, API und Display neu (eine Wiedergabe
+Webapp › Einstellungen › System › **Erweiterungen**: Karten wie auf der Erweiterungen-Seite eines Browsers (Suche, Details, Entfernen, Schalter an/aus);
+was der Katalog bietet, steht mit „Installieren“ dahinter. Nur mit Anmeldung (Eltern). Nach einer Änderung starten Player, API und Display neu (eine Wiedergabe
 bricht dabei ab; die Webapp sagt es vorher).
 
 ## Die Schnittstellen (`hostApi` 1)
