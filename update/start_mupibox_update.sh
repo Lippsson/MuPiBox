@@ -1543,6 +1543,9 @@ rm -f /tmp/mupibox-update-failed
 			rss_into_cache() {
 				local src="$1/www/rss-covers" dst="${MUPI_CACHE}/rss-covers" f t ok=0
 				[ -d "${src}" ] && [ ! -L "${src}" ] || return 0
+				# (anything but files and folders in it - a link, to a picture or a folder: not taken over, so the old
+				# folder stays)
+				[ -z "$(find "${src}" -mindepth 1 ! -type f ! -type d -print -quit)" ] || ok=1
 				while IFS= read -r -d '' f; do
 					t="${dst}/${f#"${src}"/}"
 					if [ ! -e "${t}" ]; then
