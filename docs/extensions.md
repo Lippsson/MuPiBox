@@ -106,7 +106,9 @@ Webapp › Einstellungen › System › **Erweiterungen**: Karten wie auf der Er
 was der Katalog bietet, steht mit „Installieren“ dahinter. Nur mit Anmeldung (Eltern). Nach einer Änderung starten Player, API und Display neu (eine Wiedergabe
 bricht dabei ab; die Webapp sagt es vorher).
 
-## Die Schnittstellen (`hostApi` 1)
+## Die Schnittstellen (`hostApi` 1 und 2)
+
+Die Nummer 2 (Wetter) bringt zum Display `api.overlay`, `api.fetchApi` und im Manifest `lookup`, `options`, `min`/`max`. Ein Paket mit `hostApi: 1` läuft unverändert.
 
 ### Player: `activate(host)`
 
@@ -166,6 +168,12 @@ Einstellungen, Dateien, Installieren/Entfernen, Katalog), Display (`extension-ho
 Extension (`extensions/clock/`, `api.header` im Display); sie ist nicht mehr im Kern. Die dritte ist das Wetter (`extensions/weather/`,
 `hostApi` 2: `api.overlay`, `api.fetchApi`, `lookup`): Open-Meteo oder MET Norway, die Anzeigen sind die SteelSeries-Messuhren
 (BSD-2, im Paket mitgeliefert).
+
+## Offen (für Foto/Immich, Taster/NFC)
+
+Was eine Foto- oder Immich-Extension noch bräuchte (Ruhezustand im Display, eigene Nutzungsdauer, ein `lookup` ohne Suchwort) und was Taster/NFC
+bräuchten (`gpio`/`spi`/`i2c`, Pause/Weiter im Player), steht mit dem Abgleich zu Waldemars Zweig `layout` in `docs/5.1-abstimmung.md`.
+Dort steht auch, dass `EXT_DIR` (API und Player) beim Umzug auf die vier Ordner von 5.1 über `paths.ts` gehen soll.
 
 ## Eine Extension bauen
 
