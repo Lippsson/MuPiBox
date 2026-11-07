@@ -11998,7 +11998,10 @@ const CONTROLLERS = {
                 <button type="button" class="btn" data-ext-upload>Datei hochladen</button><input type="file" id="ext-file" accept=".mpx,.zip,application/zip" hidden></div>`,
             },
             { type: 'html', html: `<h2 class="ext-title">Alle Erweiterungen</h2>${note}<div class="ext-grid">${cards.join('') || '<p class="help">Keine Erweiterungen verfügbar.</p>'}</div>` },
-            { type: 'note', text: 'Aus dem Katalog auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.' },
+            {
+              type: 'html',
+              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/Lippsson/MuPiBox/tree/dev5.1/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.</span></div>`,
+            },
           ],
         },
       ]

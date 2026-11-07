@@ -3188,5 +3188,8 @@
  "Eine Erweiterung läuft auf der Box ohne Schutz: Installiere nur Dateien aus Quellen, denen du vertraust.": "An extension runs on the box without protection: only install files from sources you trust.",
  "Prüfsumme (SHA-256): {}": "Checksum (SHA-256): {}",
  "Die Einstellungen gibt es, solange die Erweiterung an ist.": "The settings are available while the extension is on.",
- "Aus dem Katalog auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.": "From the catalog on GitHub. An extension is a single file; the box checks its checksum before it installs it. A change restarts the box's services; playback stops while it does."
+ "Aus dem Katalog auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.": "From the catalog on GitHub. An extension is a single file; the box checks its checksum before it installs it. A change restarts the box's services; playback stops while it does.",
+ "Aus dem": "From the",
+ "Katalog": "catalog",
+ "auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab.": "on GitHub. An extension is a single file; the box checks its checksum before it installs it. A change restarts the box's services; playback stops while it does."
 }

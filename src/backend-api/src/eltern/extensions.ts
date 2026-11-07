@@ -212,6 +212,13 @@ function catalogUrl(deps: ExtensionDeps): string {
   return typeof set === 'string' && /^https:\/\//.test(set) ? set : DEFAULT_CATALOG
 }
 
+/** The page of the catalog to read in a browser: the extensions folder on GitHub for the default catalog, else the address that was set. */
+function catalogPage(deps: ExtensionDeps): string {
+  const url = catalogUrl(deps)
+  const m = /^https:\/\/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/([^/]+)\/(.+)\/[^/]+$/.exec(url)
+  return m ? `https://github.com/${m[1]}/tree/${m[2]}/${m[3]}` : url
+}
+
 async function fetchCatalog(deps: ExtensionDeps): Promise<CatalogEntry[]> {
   if (catalogCache && Date.now() - catalogCache.at < 10 * 60 * 1000) return catalogCache.list
   const response = await fetch(catalogUrl(deps), { signal: AbortSignal.timeout(15000) })
@@ -422,7 +429,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     } catch (error) {
       catalogError = (error as Error).message
     }
-    res.json({ installed, catalog, catalogError, hostApi: HOST_API })
+    res.json({ installed, catalog, catalogError, catalogPage: catalogPage(deps), hostApi: HOST_API })
   })
 
   const start = (action: Job['action'], work: (id: string, body?: Record<string, unknown>) => Promise<void>): RequestHandler[] => [
