@@ -11303,11 +11303,21 @@ function extensionDetails(e, installed) {
       for (const item of fields.filter((it) => it.type === 'lookup')) {
         const input = sheet.querySelector(`#xl-${CSS.escape(item.key)}`)
         const list = sheet.querySelector(`[data-xresults="${CSS.escape(item.key)}"]`)
+        let latest = 0
+        let timer = 0
         const search = async () => {
+          clearTimeout(timer)
           const q = input.value.trim()
-          if (q.length < 2) return toast('Bitte mindestens zwei Buchstaben', 'info')
+          const mine = ++latest
+          // (the hint stands under the field, where it is seen; a toast is gone before it is read)
+          if (q.length < 2) {
+            list.textContent = 'Bitte mindestens zwei Buchstaben eingeben.'
+            return
+          }
           list.textContent = 'Suche …'
           const r = await api(`${item.search}?q=${encodeURIComponent(q)}`, { timeoutMs: 20000 })
+          // (a newer search was started while this one ran: its answer counts)
+          if (mine !== latest) return
           list.textContent = ''
           if (!r.ok || !Array.isArray(r.body)) {
             list.textContent = 'Die Suche hat nicht geklappt. Die Box braucht dafür das Internet.'
@@ -11333,6 +11343,16 @@ function extensionDetails(e, installed) {
         }
         sheet.querySelector(`[data-xlookup="${CSS.escape(item.key)}"]`).onclick = search
         input.onkeydown = (ev) => ev.key === 'Enter' && search()
+        // (it searches while one types, a moment after the last letter)
+        input.oninput = () => {
+          clearTimeout(timer)
+          if (input.value.trim().length < 2) {
+            latest++
+            list.textContent = ''
+            return
+          }
+          timer = setTimeout(search, 400)
+        }
       }
       // (a choice from a few: saved at once, as a switch is)
       for (const group of sheet.querySelectorAll('[data-xseg]')) {

@@ -376,13 +376,24 @@ const APP_DIR = path.join(root, 'src/backend-api/src/mupi-app')
 // The parents' app against the sandbox: a login-free session, the theme page with the skin upload working for real
 // (the backend's own unpacking), everything else empty.
 const KM = JSON.parse(readFileSync(path.join(root, 'themes/km-themes.json'), 'utf8')).themes
+// the weather extension as the app lists it (its manifest from extensions/weather), to try the details sheet with the place search
+const weatherSettings = { provider: 'openmeteo', placeName: '' }
+function weatherMock() {
+  const m = JSON.parse(readFileSync(path.join(root, 'extensions/weather/manifest.json'), 'utf8'))
+  return { id: m.id, name: m.name, version: m.version, description: m.description, icon: null, enabled: true, system: {}, ui: m.ui, settingTypes: Object.fromEntries(Object.entries(m.settings).map(([k, d]) => [k, d.type])), settings: { ...weatherSettings }, job: null }
+}
 async function parentsApi(req, res, url, api) {
+  if (api === '/ext/weather/settings' && req.method === 'POST') {
+    const b = await readBody(req)
+    Object.assign(weatherSettings, b.values ?? {})
+    return json(res, { ok: true, ...weatherSettings })
+  }
   const csrfOk = () => req.headers['x-mupibox-csrf'] === 'sandbox'
   if (api === '/session') return json(res, { csrf_token: 'sandbox', open: true })
   // extensions page: the CD one installed, the clock one on offer (a pretend catalog)
   if (api === '/extensions') {
     return json(res, {
-      installed: [{ id: 'cd', name: 'USB-CD-Laufwerk', version: '1.0.0', description: 'Audio-CDs vom USB-Laufwerk abspielen, mit Titelnamen und Cover aus dem Internet.', icon: '/ext/cd/icon.svg', enabled: true, system: { udev: [1], groups: ['cdrom'] }, settingTypes: { cdLookup: 'boolean', discogsToken: 'secret' }, settings: { cdLookup: true, discogsTokenSet: false }, ui: { title: 'Audio-CD', help: 'Liegt eine Audio-CD im USB-Laufwerk, zeigt das Display oben den Reiter „CD“.', items: [{ key: 'cdLookup', label: 'Titel und Cover im Internet suchen' }, { key: 'discogsToken', label: 'Discogs-Token', dep: 'cdLookup', help: 'Den Token erzeugst du auf discogs.com.' }] } }],
+      installed: [weatherMock(), { id: 'cd', name: 'USB-CD-Laufwerk', version: '1.0.0', description: 'Audio-CDs vom USB-Laufwerk abspielen, mit Titelnamen und Cover aus dem Internet.', icon: '/ext/cd/icon.svg', enabled: true, system: { udev: [1], groups: ['cdrom'] }, settingTypes: { cdLookup: 'boolean', discogsToken: 'secret' }, settings: { cdLookup: true, discogsTokenSet: false }, ui: { title: 'Audio-CD', help: 'Liegt eine Audio-CD im USB-Laufwerk, zeigt das Display oben den Reiter „CD“.', items: [{ key: 'cdLookup', label: 'Titel und Cover im Internet suchen' }, { key: 'discogsToken', label: 'Discogs-Token', dep: 'cdLookup', help: 'Den Token erzeugst du auf discogs.com.' }] } }],
       catalog: [{ id: 'clock', name: 'Uhr in der Kopfleiste', version: '1.0.0', description: 'Zeigt die Uhrzeit in der Kopfleiste des Displays.', system: { udev: 0, groups: [], packages: [] }, installedVersion: null }],
       catalogError: null,
       hostApi: 1,
@@ -469,6 +480,11 @@ createServer((req, res) => {
   if (req.method === 'OPTIONS') return res.writeHead(204).end()
   const url = new URL(req.url, 'http://localhost:8200')
   const p = decodeURIComponent(url.pathname)
+  // (the place search of the weather extension, answered with a few pretend places)
+  if (p === '/api/ext/weather/places') {
+    const q = String(url.searchParams.get('q') ?? '')
+    return json(res, q.length < 2 ? [] : [{ label: `${q}, Niederösterreich, Österreich (48.26, 16.01)`, values: { placeName: `${q}, Niederösterreich, Österreich`, lat: 48.2553, lon: 16.0122 } }, { label: `${q}, Bayern, Deutschland (48.1, 11.5)`, values: { placeName: `${q}, Bayern, Deutschland`, lat: 48.1, lon: 11.5 } }])
+  }
   if (p.startsWith('/api/app/')) return parentsApi(req, res, url, p.slice('/api/app'.length))
   if (p.startsWith('/app')) {
     // the parents' app: its files as they are in the source (nothing to build)
