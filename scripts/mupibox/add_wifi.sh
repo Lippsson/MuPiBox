@@ -18,6 +18,12 @@ restart_network() {
 	sudo wpa_cli -i $(/usr/local/bin/mupibox/mupi_wifi_iface.sh) reconfigure
 }
 
+# The configuration holds the key of every network. A file left readable by everyone by an earlier save_config goes back
+# to root only; the folder keeps others out while save_config writes it (its temporary file is readable by everyone, and
+# chmod afterwards does not help whoever has opened it). wpa_supplicant and its scripts run as root.
+sudo chmod 600 "${WPACONF}" 2>/dev/null
+sudo chmod 700 "$(dirname "${WPACONF}")" 2>/dev/null
+
 while true
 do
 	if test -f "${MUPIWIFI}"
@@ -64,10 +70,11 @@ do
 			if [[ "${SSID}" == *$'\n'* ]]; then
 				echo "add_wifi.sh: SSID rejected (newline in name)" >&2
 			else
-				_ESCAPED_SSID="${SSID//\\/\\\\}"
-				_ESCAPED_SSID="${_ESCAPED_SSID//\"/\\\"}"
+				# Not escaped: wpa_supplicant reads a quoted ssid up to the LAST quote of its line (wpa_config_parse_string)
+				# and knows no escapes there - a \" put in became part of the name, and the box never found the network.
+				# One line can hold any name without a line break, as wpa_passphrase writes it for the other networks.
 				# key_mgmt=NONE: without it wpa_supplicant takes the network for WPA and never connects to it
-				printf 'network={\n\tssid="%s"\n\tscan_ssid=1\n\tkey_mgmt=NONE\n}\n' "${_ESCAPED_SSID}" | sudo tee -a ${WPACONF} >/dev/null
+				printf 'network={\n\tssid="%s"\n\tscan_ssid=1\n\tkey_mgmt=NONE\n}\n' "${SSID}" | sudo tee -a ${WPACONF} >/dev/null
 				restart_network
 			fi
 		else
@@ -77,7 +84,8 @@ do
 			# by hand. So: check the length first, then the exit code and the shape of the output.
 			if [ ${#PSK} -lt 8 ] || [ ${#PSK} -gt 63 ]; then
 				echo "add_wifi.sh: password for '${SSID}' rejected (must be 8..63 characters)" >&2
-			elif ! WIFI_RESULT=$(sudo wpa_passphrase "${SSID}" "${PSK}") || ! grep -q '^network={' <<< "${WIFI_RESULT}"; then
+			# (the password over stdin: sudo writes its command line to the system log)
+			elif ! WIFI_RESULT=$(sudo wpa_passphrase "${SSID}" <<< "${PSK}") || ! grep -q '^network={' <<< "${WIFI_RESULT}"; then
 				echo "add_wifi.sh: wpa_passphrase failed for '${SSID}', nothing written" >&2
 			else
 				# drop the plain-text "#psk=" comment, add scan_ssid=1 after the ssid line

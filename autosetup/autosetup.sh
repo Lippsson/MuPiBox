@@ -80,7 +80,7 @@ STEP=0
 	#   autoconf - only needed to compile fbv (dev/compile_scripts/fbv.sh); fbv ships prebuilt in bin/fbv
 	#   automake - only needed to compile fbv (dev/compile_scripts/fbv.sh); fbv ships prebuilt in bin/fbv
 	# libwidevinecdm0 stays: the display plays Spotify through the Web Playback SDK in Chromium, which needs Widevine
-	packages2install="lighttpd-mod-openssl gpiod git mpv pulseaudio-module-bluetooth python3-pip bluez zip unzip rrdtool scrot net-tools wireless-tools bc build-essential python3-rpi.gpio python3-lgpio python3-serial python3-requests python3-paho-mqtt python3-smbus2 pigpio libjson-c-dev python3-alsaaudio python3-netifaces libwidevinecdm0 python3-flask python3-pil librsvg2-bin feh rfkill xdotool"
+	packages2install="lighttpd-mod-openssl gpiod git mpv pulseaudio-module-bluetooth python3-pip bluez zip unzip rrdtool scrot net-tools wireless-tools bc build-essential python3-rpi.gpio python3-lgpio python3-serial python3-requests python3-paho-mqtt python3-smbus2 python3-alsaaudio python3-netifaces libwidevinecdm0 python3-flask python3-pil librsvg2-bin feh rfkill xdotool x11-utils x11-xserver-utils"
 
 	###############################################################################################
 
@@ -124,7 +124,7 @@ STEP=0
 	# What a part of the box needs (the list of scripts/mupibox/install_missing.sh: mpv, the start pictures, the goodbye
 	# picture): asked once more with fresh package lists when the loop could not install it
 	MISSING_NOW=""
-	for p in mpv librsvg2-bin python3-pil xdotool feh; do
+	for p in mpv librsvg2-bin python3-pil xdotool feh x11-utils; do
 		dpkg-query -W -f='${Status}' "${p}" 2>/dev/null | grep -q "install ok installed" || MISSING_NOW="${MISSING_NOW} ${p}"
 	done
 	if [ -n "${MISSING_NOW}" ]; then
@@ -495,7 +495,8 @@ STEP=0
 	mv ${MUPI_SRC}/scripts/mqtt/* /usr/local/bin/mupibox/ >&3 2>&3
 	# (the app's backup restore runs it from here, as the admin interface does)
 	cp ${MUPI_SRC}/update/conf_update.sh /usr/local/bin/mupibox/conf_update.sh >&3 2>&3
-	mv ${MUPI_SRC}/config/templates/add_wifi.json /boot/add_wifi.json >&3 2>&3
+	# (on the partition a PC sees - /boot/firmware on DietPi 10; startup.sh reads it there)
+	mv ${MUPI_SRC}/config/templates/add_wifi.json "${BOOT_DIR}/add_wifi.json" >&3 2>&3
 	mv ${MUPI_SRC}/config/templates/.bashrc /home/dietpi/.bashrc >&3 2>&3
 	chown -R dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/ /home/dietpi/MuPiBox /home/dietpi/.bashrc >&3 2>&3
 	chmod 755 /usr/local/bin/mupibox/* >&3 2>&3
@@ -554,10 +555,8 @@ STEP=0
 
 	echo -e "XXX\n${STEP}\nInstall LED Control... \nXXX"
 	before=$(date +%s)
+	# (led_control.py drives the LED; the C program of old is no longer built)
 	rm -f /usr/local/bin/mupibox/led_control >&3 2>&3
-	gcc -o ${MUPI_SRC}/scripts/led/led_control ${MUPI_SRC}/scripts/led/led_control.c -lpigpio -ljson-c >&3 2>&3
-	mv -f ${MUPI_SRC}/scripts/led/led_control /usr/local/bin/mupibox/led_control >&3 2>&3
-	chmod 755 /usr/local/bin/mupibox/led_control >&3 2>&3
 	after=$(date +%s)
 	echo -e "## LED-Control ## finished after $((after - before)) seconds" >&3 2>&3
 	STEP=$((STEP + 1))
@@ -641,6 +640,18 @@ STEP=0
 	# Installing Chromium writes DietPi's own kiosk script, which opens SOFTWARE_CHROMIUM_AUTOSTART_URL (dietpi.com):
 	# the MuPiBox script goes in again after it (a fresh install showed the DietPi website until the first update)
 	cp -f ${MUPI_SRC}/scripts/chromium-autostart.sh /var/lib/dietpi/dietpi-software/installed/chromium-autostart.sh >&3 2>&3
+	# The display logs in as dietpi (dietpi.txt AUTO_SETUP_AUTOSTART_LOGIN_USER, read by dietpi-autostart): a fresh DietPi
+	# card has root there - the kiosk then ran as root, Chromium without its sandbox, its profile and log under /root (not
+	# in the support zip), and the login line below did not apply. In every dietpi.txt there is: dietpi-autostart reads
+	# /boot/dietpi.txt, on newer systems there can be one under /boot/firmware as well.
+	for txt in /boot/dietpi.txt /boot/firmware/dietpi.txt; do
+		[ -f "${txt}" ] || continue
+		if grep -qE '^[[:space:]]*AUTO_SETUP_AUTOSTART_LOGIN_USER=' "${txt}"; then
+			sed -i --follow-symlinks -E 's/^[[:space:]]*AUTO_SETUP_AUTOSTART_LOGIN_USER=.*/AUTO_SETUP_AUTOSTART_LOGIN_USER=dietpi/' "${txt}" >&3 2>&3
+		else
+			echo 'AUTO_SETUP_AUTOSTART_LOGIN_USER=dietpi' >> "${txt}"
+		fi
+	done
 	/boot/dietpi/dietpi-autostart 11 >&3 2>&3
 	chmod 755 /var/lib/dietpi/dietpi-software/installed/chromium-autostart.sh >&3 2>&3
 	# full colours in the display on a Pi with 2 GB or more: takes DietPi's "low-end device mode" out again (see the file)
@@ -654,7 +665,14 @@ STEP=0
 	sed -i 's/ExecStart\=-\/sbin\/agetty -a dietpi -J \%I \$TERM/ExecStart\=-\/sbin\/agetty --skip-login --noclear --noissue --login-options "-f dietpi" \%I \$TERM/g' /etc/systemd/system/getty@tty1.service.d/dietpi-autologin.conf >&3 2>&3
 	/boot/dietpi/func/dietpi-set_hardware gpumemsplit 128 >&3 2>&3
 	/boot/dietpi/func/dietpi-set_hardware headless 0 >&3 2>&3
-	/boot/dietpi/func/dietpi-set_hardware rpi-opengl disable >&3 2>&3
+	# The display of the firmware (the official 7" of the 1st generation, HDMI) needs no KMS - a display with KMS on the
+	# ribbon cable (Touch Display 2, Waveshare, EDATEC: its overlay in config.txt before the installation) needs it: there
+	# it stays (switched off, that display stayed dark). The model is chosen later in the app (Display-Modell).
+	if grep -qE '^[[:space:]]*dtoverlay=vc4-kms-dsi-' "${BOOT_CONFIG}"; then
+		/boot/dietpi/func/dietpi-set_hardware rpi-opengl vc4-kms-v3d >&3 2>&3
+	else
+		/boot/dietpi/func/dietpi-set_hardware rpi-opengl disable >&3 2>&3
+	fi
 	su - -c ". /boot/dietpi/func/dietpi-globals && G_CHECK_ROOT_USER && G_CHECK_ROOTFS_RW && G_INIT && G_CONFIG_INJECT 'framebuffer_width=' \"framebuffer_width=800\" ${BOOT_CONFIG}" >&3 2>&3
 	su - -c ". /boot/dietpi/func/dietpi-globals && G_CHECK_ROOT_USER && G_CHECK_ROOTFS_RW && G_INIT && G_CONFIG_INJECT 'framebuffer_height=' \"framebuffer_height=480\" ${BOOT_CONFIG}" >&3 2>&3
 	after=$(date +%s)
@@ -677,6 +695,9 @@ STEP=0
 	# Tolerant replacement for DietPi's WiFi monitor (see scripts/mupibox/wifi_monitor.sh)
 	mkdir -p /etc/systemd/system/dietpi-wifi-monitor.service.d >&3 2>&3
 	cp -f ${MUPI_SRC}/config/services/dietpi-wifi-monitor-override.conf /etc/systemd/system/dietpi-wifi-monitor.service.d/override.conf >&3 2>&3
+	# On from the start: a child cannot repair a WiFi that hangs (a USB stick whose driver stops sending, seen on Kernel 6.18).
+	# An update leaves the choice of the box as it is; the app switches it off.
+	systemctl enable dietpi-wifi-monitor.service >&3 2>&3
 	# USB WiFi adapter preferred, onboard WiFi as fallback (see scripts/mupibox/mupi_wifi_select.sh)
 	cp -f ${MUPI_SRC}/config/udev/99-mupibox-wifi.rules /etc/udev/rules.d/99-mupibox-wifi.rules >&3 2>&3
 	# LAN takes over from WiFi again on carrier loss/return of the ethernet cable (same script)
@@ -694,6 +715,17 @@ STEP=0
 	bash /usr/local/bin/mupibox/install_start_order.sh >&3 2>&3
 	# initial_turbo for a faster start, and zram swap on a Pi with 1 GB (see scripts/mupibox/boot_tuning.sh)
 	bash /usr/local/bin/mupibox/boot_tuning.sh >&3 2>&3
+	# A display on the ribbon cable that stands upright of itself (the Touch Display 2: 720 x 1280) lies as the MuPiBox
+	# needs it turned by 90 degrees - picture and touch, as the app's Drehung does it (and as the app's Display-Modell
+	# sets it for that display); one that lies already stays as it is
+	for c in /sys/class/drm/card*-DSI-*; do
+		[ "$(cat "${c}/status" 2>/dev/null)" = "connected" ] || continue
+		MODE=$(head -n 1 "${c}/modes" 2>/dev/null)
+		if [[ "${MODE}" =~ ^([0-9]+)x([0-9]+) ]] && [ "${BASH_REMATCH[2]}" -gt "${BASH_REMATCH[1]}" ]; then
+			bash /usr/local/bin/mupibox/display_rotation.sh 90 >&3 2>&3
+		fi
+		break
+	done
 	systemctl daemon-reload >&3 2>&3
 	
 	# (not the Samba share: off until the app switches it on, see "Preconfigure Samba")

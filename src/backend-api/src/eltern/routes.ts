@@ -49,12 +49,13 @@ import { ipRateLimit, localNetworkOnly, parseCookie, requireCsrf, requireSession
 import { registerCustomCoverRoutes } from './covers'
 import { registerDisplayRoutes } from './display'
 import { registerExtensionRoutes } from './extensions'
+import { registerDisplayProfileRoutes } from './display-profile'
 import { registerSpeechRoutes } from './speech-routes'
 import { registerCustomBootRoutes } from './bootscreen-custom'
 import { registerFeedHostRoutes } from './feed-hosts'
 import { registerPinnedCardRoutes } from './pinned-cards'
 import { dropStatic, registerWifiStaticRoutes, startWifiStaticWatch } from './wifi-static'
-import { decodeWpaSsid, parseWpaCliScanResults } from '../wpa-ssid'
+import { decodeWpaSsid, parseWpaCliScanResults, wifiConfigPrivate } from '../wpa-ssid'
 import { fanSpeedNow, registerHardwareRoutes } from './hardware'
 import { registerDietpiDashboardRoutes, startDietpiDashboard } from './dietpi-dashboard'
 import { legacyAdminOn, registerLegacyAdminRoutes } from './legacy-admin'
@@ -423,6 +424,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   registerDisplayRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   // (extensions: the catalog, install, switch on and off, remove, the settings of an extension)
   registerExtensionRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
+  registerDisplayProfileRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig })
   registerSpeechRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerCustomBootRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerFeedHostRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
@@ -1667,6 +1669,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       res.status(500).json({ error: 'not_set' })
       return
     }
+    await wifiConfigPrivate()
     res.json({ ok: true })
   })
 
@@ -1718,6 +1721,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
             res.status(500).json({ error: `save_config failed: ${saveErr?.message ?? saveOut.trim()}` })
             return
           }
+          void wifiConfigPrivate()
           // (its fixed address, if it had one, goes with it)
           void dropStatic(wifiIface(), ssid).catch(() => undefined)
           res.json({ ok: true })

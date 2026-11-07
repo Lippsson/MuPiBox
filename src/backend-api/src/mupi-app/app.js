@@ -91,11 +91,14 @@ async function boot() {
     setTimeout(() => toast(back.has('spotify_connected') ? 'Mit Spotify verbunden' : `Spotify-Anmeldung fehlgeschlagen (${back.get('spotify_error')})`, back.has('spotify_connected') ? 'ok' : 'info'), 300)
   }
   loadBoxName()
+  loadVersion()
   // (back and forward: popstate; an address typed or a link with #/…: hashchange)
   window.addEventListener('popstate', routeIfMoved)
   window.addEventListener('hashchange', routeIfMoved)
   refreshOnReturn()
   route()
+  // (a new display model waiting for its answer: its sheet at once, on whatever page)
+  checkDisplayTest()
   window.mupiBootStep = ''
 }
 
@@ -298,6 +301,32 @@ async function changeAppLanguage(code) {
   toast(`Sprache: ${code === 'auto' ? 'Automatisch' : LANGS[code]}`)
 }
 
+// The installed version for the badge under the MuPiBox logo (side bar, settings on the phone): CLASSIC, its number
+// and whether a newer one is there - asked once at the start (GitHub may take a moment: the badge fills in then)
+async function loadVersion() {
+  const r = await api(`${API}/updates`)
+  if (!r.ok) return
+  state.ver = { installed: r.body.installed ?? '', channel: r.body.channel ?? 'stable', update: r.body.update ?? null }
+  for (const el of document.querySelectorAll('[data-ver-badge]')) {
+    el.outerHTML = versionBadge()
+  }
+  for (const el of document.querySelectorAll('[data-ver-badge]')) el.onclick = () => go('updates')
+}
+
+// "CLASSIC · v5.0.13" and under it: Aktuell / Entwicklerversion / Beta - or, lit, "Update: 5.0.14"; opens the updates
+function versionBadge() {
+  const v = state.ver
+  const num = /\d+(?:\.\d+)+/.exec(v?.installed ?? '')?.[0]
+  // (a branch installed directly has no number: "DEV <branch> <date>")
+  const dev = !num && v?.installed?.startsWith('DEV')
+  const sub = !v ? '' : v.update ? `Update: ${v.update.version}` : v.channel === 'dev' ? 'Entwicklerversion' : v.channel === 'beta' ? 'Beta' : 'Aktuell'
+  const kind = v?.update ? ' new' : v?.channel === 'dev' ? ' dev' : ''
+  return `<button type="button" class="ver-badge${kind}" data-ver-badge data-go="updates" aria-label="${esc(`MuPiBox Classic ${num ?? ''} – Updates`)}"><span class="ed" translate="no">CLASSIC</span><span class="num"><b translate="no">${num ? `v${esc(num)}` : dev ? 'DEV' : '…'}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><span class="go">${icon('chevron', 16)}</span></button>`
+}
+
+// The MuPiBox lettering (the same in Classic and NG)
+const LOGO = '<img class="mupi-logo" src="mupibox-logo.webp" alt="MuPiBox" width="560" height="99">'
+
 // MuPi: with an outline on the light design (white on light blue is too weak), the plain one on the dark
 function mupiImg(attrs = '') {
   return `<img class="mupi-d" src="mupi.svg" alt="" ${attrs}><img class="mupi-l" src="mupi-hell.svg" alt="" ${attrs}>`
@@ -334,7 +363,7 @@ function renderChrome(page) {
     return p?.id?.startsWith('g-') ? p.id : p?.parent
   })()
   $('#sidebar').innerHTML = `
-    <div class="brand"><span class="brand-dot">${mupiImg()}</span><span>${esc(state.boxName)}</span></div>
+    <div class="brand-block">${LOGO}${versionBadge()}</div>
     ${AREAS.map(
       (a) => `<button class="side-link" data-go="${a.id}" ${a.id === area && !(area === 'einstellungen' && page.id !== 'einstellungen') ? 'aria-current="page"' : ''}>${icon(a.icon)}${a.title}</button>
       ${a.id === 'einstellungen' ? groups.map((g) => `<button class="side-link sub" data-go="${g.id}" ${g.id === groupOf ? 'aria-current="page"' : ''}>${icon(g.icon, 18)}${esc(g.title)}</button>`).join('') : ''}`,
@@ -645,6 +674,8 @@ function childNav(page) {
   // the settings: a card per group (as the design; two columns on the PC)
   if (page.id === 'einstellungen') {
     return [
+      // (on the phone, which has no side bar: the logo and the version on top of the settings)
+      `<div class="card brand-card">${LOGO}${versionBadge()}</div>`,
       `<div class="group-grid wide">${kids
         .map(
           (k) =>
@@ -998,14 +1029,18 @@ function action(act, label, page) {
 /* ---------- talking to the box ---------- */
 
 // JSON request with the session's CSRF token on everything that changes something. Never throws.
-async function api(path, { method = 'GET', body } = {}) {
+// (timeoutMs: given up after it - a box that went away while restarting may leave a request open for minutes)
+async function api(path, { method = 'GET', body, timeoutMs } = {}) {
   const headers = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   // (also on reading: some routes of the box take the app's session only with its token, see localOrElternSession)
   if (state.csrf) headers['x-mupibox-csrf'] = state.csrf
-  const r = await fetch(path, { method, credentials: 'same-origin', headers, body: body === undefined ? undefined : JSON.stringify(body) }).catch(() => null)
+  const signal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
+  const r = await fetch(path, { method, credentials: 'same-origin', headers, body: body === undefined ? undefined : JSON.stringify(body), signal }).catch(() => null)
   if (!r) return { ok: false, status: 0, body: null, text: '' }
-  const text = await r.text().catch(() => '')
+  // (cut off while its body came - given up, or the box went away: no answer, not an empty one)
+  const text = await r.text().catch(() => null)
+  if (text === null) return { ok: false, status: 0, body: null, text: '' }
   let data = null
   try {
     data = JSON.parse(text)
@@ -1419,6 +1454,12 @@ async function loadNotices(root) {
   if (legacy.ok && legacy.body?.phpUpdateFailed) {
     notes.push(['lock', 'PHP-Sicherheitsupdate fehlgeschlagen', 'Das Admin-Interface ist an und nutzt noch eine angreifbare PHP-Version. Antippen, um es auszuschalten – oder das Update später noch einmal starten.', 'experten'])
   }
+  // a new display model waiting for its answer (Display & Bedienung): from the start page too, first of all - without
+  // an answer the box goes back to the display before
+  const dm = await api(`${API}/display-profile`)
+  if (dm.ok && dm.body?.test?.running) {
+    notes.unshift(['display', 'Neues Display testen', 'Siehst du ein Bild auf dem Display? Antippen, um es zu bestätigen – ohne Antwort geht die Box nach 3 Minuten zum bisherigen Display zurück.', 'displaysettings'])
+  }
   // no password, or the login off: everyone in the home network can set up the box - said every time, it is not closed
   // for good (the parents decide on the page Passwort); with the login on but the well-known default password, that
   if (auth.ok && (auth.body?.passwordSet === false || auth.body?.loginRequired === false)) {
@@ -1455,6 +1496,7 @@ async function loadNotices(root) {
   }
   const pct = hat.body?.Bat_Percent
   const battery = hat.ok && !noBattery(hat.body)
+  if (hat.ok && batteryProfileMissing(hat.body)) notes.push(['bat', 'Akku-Profil fehlt', 'Der MuPiHAT ist an, aber es ist kein Akku-Profil gewählt.', 'akku'])
   if (battery && hat.body?.ChargeProblemSince) notes.push(['plug', 'Akku lädt nicht', NOT_CHARGING, 'akku'])
   if (hat.body?.BatteryStaleSince) notes.push(['bat', 'Akku-Werte veraltet', BATTERY_STALE, 'akku'])
   if (battery && Number.isFinite(pct) && pct <= 15 && !batteryCharging(hat.body)) {
@@ -2043,6 +2085,10 @@ async function loadHear() {
   ;['audiobook', 'music', 'other'].forEach((c, i) => (hear.local[c] = Array.isArray(local[i].body) ? local[i].body : []))
 }
 
+// As on the box: a playlist or a radio station without an artist is a tile of its own - never in a folder that has
+// its name (neither on the top level nor when that folder is opened)
+const isStandaloneEntry = (it) => !itemArtist(it) && (isPlaylistEntry(it) || it.type === 'radio')
+
 // The tiles of the top level: library entries grouped by artist (like the box), local folders and NAS folders
 function topTiles() {
   const cat = hear.cat
@@ -2060,6 +2106,10 @@ function topTiles() {
     } else {
       const groups = new Map()
       for (const it of items) {
+        if (isStandaloneEntry(it)) {
+          tiles.push(entryTile(it))
+          continue
+        }
         const a = itemArtist(it) || itemTitle(it)
         if (!groups.has(a)) groups.set(a, [])
         groups.get(a).push(it)
@@ -2098,7 +2148,7 @@ function levelTiles() {
   const match = (t) => !q || norm(t).includes(q)
   if (top.kind === 'artist') {
     return hear.items
-      .filter((it) => playable(it) && (hear.cat === 'all' || catOf(it) === hear.cat) && (itemArtist(it) || itemTitle(it)) === top.path)
+      .filter((it) => playable(it) && (hear.cat === 'all' || catOf(it) === hear.cat) && !isStandaloneEntry(it) && (itemArtist(it) || itemTitle(it)) === top.path)
       .filter((it) => match(itemTitle(it)))
       .map(entryTile)
       .sort((a, b) => a.title.localeCompare(b.title, 'de', { numeric: true }))
@@ -2808,25 +2858,34 @@ function openEntrySheet(item, back = null) {
   // a radio station or a podcast: its address (stream / feed) can be changed too
   // (not for a show of ARD Sounds: its "address" is the ARD's id of the show)
   const addressLabel = !isSync && !isArdEntry(item) && { radio: 'Stream-Adresse (URL)', rss: 'Feed-Adresse (URL)' }[item.type]
+  // a playlist: "Auf der Startseite" (a tile of its own or a folder - the artist) in place of the artist
+  const place = !isSync && isPlaylistEntry(item)
   const fields = [
-    ['artist', 'Interpret'],
-    ['title', 'Titel'],
+    ...(place ? [] : [['artist', 'Interpret']]),
+    ['title', place ? 'Name der Kachel' : 'Titel'],
     ...(addressLabel ? [['id', addressLabel]] : []),
     ['cover', 'Cover (Bild-URL)'],
-    ['artistcover', 'Interpret-Cover (Bild-URL)'],
+    ['artistcover', place ? 'Ordner-Cover (Bild-URL)' : 'Interpret-Cover (Bild-URL)'],
   ]
   const val = (k) => item[`${k}_override`] ?? (isSync ? '' : item[k] ?? '')
+  const folder = place ? String(item.artist ?? '').trim() : ''
+  // (alone in its folder - as the app added playlists before, in one of their own name: a tile spares a tap)
+  const aloneInFolder = !!folder && (lib.items ?? []).filter((it) => it && !it.isResume && it.category === item.category && String(it.artist ?? '').trim() === folder).length === 1
   openSheet(
     `${back ? `<button class="sheet-back" data-back>${icon('back', 18)}<span translate="no">${esc(back.title)}</span></button>` : ''}
      <h2 translate="no">${esc(item.title_override ?? item.title ?? item.artist_override ?? item.artist ?? 'Eintrag')}</h2>
      <p class="help" style="margin:0">${isSync ? 'Kommt vom Spotify-Sync. Was du hier einträgst, gilt statt der Werte von Spotify; leer = der Wert von Spotify.' : 'Von Hand hinzugefügt.'}</p>
      ${fields
        .map(([k, l]) => {
-         const input = `<input class="input" id="e-${k}"${k === 'id' ? ' type="url" inputmode="url" spellcheck="false" translate="no"' : ''} value="${esc(val(k))}" placeholder="${esc(isSync ? item[k] ?? '' : '')}" autocomplete="off">`
+         const input = `<input class="input" id="e-${k}"${k === 'id' ? ' type="url" inputmode="url" spellcheck="false" translate="no"' : ''} value="${esc(val(k))}" placeholder="${esc(isSync ? item[k] ?? '' : place && k === 'title' && item.type === 'spotify' ? 'leer = Name der Playlist' : '')}" autocomplete="off">`
          // the picture fields: also chosen from a search or the device (see openCoverPicker)
          return k.endsWith('cover')
            ? `<div class="field"><label for="e-${k}">${l}</label><div class="field-pick">${input}<button type="button" class="icon-btn soft" data-pick="${k}" aria-label="Bild suchen oder hochladen">${icon('image', 18)}</button></div></div>`
-           : `<div class="field"><label for="e-${k}">${l}</label>${input}</div>`
+           : `<div class="field"><label for="e-${k}">${l}</label>${input}</div>${
+               k === 'title' && place
+                 ? `${placeField('e', folder)}${aloneInFolder ? `<p class="help" style="margin:0">${esc('Sie steht heute allein in einem Ordner. Als eigene Kachel spielt sie auf der Box mit einem Tipp.')}</p>` : ''}`
+                 : ''
+             }`
        })
        .join('')}
      <div class="field"><label for="e-cat">Kategorie</label>${catSelect('e-cat', item.category_override ?? (isSync ? '' : item.category === 'radio' ? 'other' : item.category), isSync)}</div>
@@ -2839,6 +2898,8 @@ function openEntrySheet(item, back = null) {
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = back ? back.open : close
       sheet.querySelector('[data-back]')?.addEventListener('click', back?.open)
+      const placer = place ? wirePlace(sheet, 'e', () => sheet.querySelector('#e-cat').value) : null
+      if (placer) sheet.querySelector('#e-cat').addEventListener('change', () => void placer.reload())
       if (wholeArtist) loadArtistAlbums(item, sheet.querySelector('#e-albums'))
       if (tidalArtist) wireTidalRange(item, sheet)
       if (item.type === 'rss') loadOfflineStatus(item.id, sheet.querySelector('#e-offline-status'))
@@ -2884,6 +2945,17 @@ function openEntrySheet(item, back = null) {
           const key = isSync ? `${k}_override` : k
           if (v) updated[key] = v
           else delete updated[key]
+        }
+        if (placer) {
+          const to = placer.value()
+          if (to === null) {
+            sheet.querySelector('#e-folder').focus()
+            return toast('Bitte einen Namen für den Ordner eintragen', 'info')
+          }
+          if (to) updated.artist = to
+          else delete updated.artist
+          // (a TIDAL playlist has its name only from here - the box asks Spotify for a playlist's, TIDAL's not)
+          if (item.type === 'tidal' && !updated.title && item.title) updated.title = item.title
         }
         if (playOptions) {
           const sorting = sheet.querySelector('#e-sort').value
@@ -3530,7 +3602,8 @@ async function loadSubAlbums(a, box) {
 
 // (cat: the category chosen last - the next sheet starts with it; artist: one opened from the search, its albums with
 // the way back to the search; have: what is in the library already, see libraryHave)
-const search = { q: '', type: 'Alle', cat: 'audiobook', result: null, busy: false, artist: null, have: new Set() }
+// (mine: the account's own and followed playlists - the search finds public ones only)
+const search = { q: '', type: 'Alle', cat: 'audiobook', result: null, busy: false, artist: null, have: new Set(), mine: null, mineAll: false }
 
 function searchTop() {
   return [
@@ -3541,7 +3614,83 @@ function searchTop() {
       <div class="btns"><button class="btn primary" id="s-go">Suchen</button></div>
     </section>`,
     `<div id="s-results" class="wide-stack"></div>`,
+    `<section class="card wide">
+      <h2>${esc('Meine Playlists')}</h2>
+      <p class="help" style="margin:0">${esc('Deine eigenen Playlists und die, denen du bei Spotify folgst – auch private, die die Suche nicht findet.')}</p>
+      <div class="rows" id="s-mine"></div>
+    </section>`,
   ]
+}
+
+// "Meine Playlists": the account's own first, then the followed ones (the server keeps the list 5 minutes - opening
+// the page again asks Spotify nothing)
+async function loadSpotifyMine() {
+  const el = $('#s-mine')
+  if (!el) return
+  if (!search.mine) el.innerHTML = `<div class="loading"><p>${esc('Lade …')}</p></div>`
+  const [r, have] = await Promise.all([api(`${SYNC_API}/my-playlists`), libraryHave('spotify')])
+  if (!el.isConnected) return
+  search.have = have
+  if (!r.ok) {
+    // (no connection any more - disconnected, or the sign-in refused: the list of before goes, it was that account's)
+    const gone = r.status === 409 || r.status === 401
+    if (gone) search.mine = null
+    const why = gone
+      ? 'Die Liste braucht eine eingerichtete Spotify-Verbindung (Bibliothek › Spotify).'
+      : r.status === 429
+        ? 'Spotify sperrt die Box gerade – bitte später noch einmal.'
+        : 'Spotify ist gerade nicht erreichbar.'
+    // (for a moment unreachable or blocked: the list of before stays)
+    if (!search.mine) el.innerHTML = `<p class="help" style="margin:0">${esc(why)}</p>`
+    return
+  }
+  search.mine = r.body?.playlists ?? []
+  drawSpotifyMine()
+}
+
+const spMineSub = (p) =>
+  [
+    p.own ? 'Eigene Playlist' : p.by_spotify ? 'von Spotify' : p.owner ? `von ${p.owner}` : '',
+    p.tracks ? `${p.tracks} Titel` : '',
+    p.via_sync ? 'kommt über Smart-Sync' : p.by_spotify ? 'spielt evtl. nicht' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+function drawSpotifyMine() {
+  const el = $('#s-mine')
+  if (!el || !search.mine) return
+  if (!search.mine.length) {
+    el.innerHTML = `<p class="help" style="margin:0">${esc('In deinem Spotify-Konto sind noch keine Playlists.')}</p>`
+    return
+  }
+  // (an account can have dozens: the first few, the rest on a tap)
+  const shown = search.mineAll ? search.mine : search.mine.slice(0, 8)
+  el.innerHTML =
+    shown.map((p, i) => resultRow({ kind: 'playlist', id: p.id, t: p.name, s: spMineSub(p), img: p.thumb || p.cover }, i, 'mine', search.have)).join('') +
+    (shown.length < search.mine.length ? `<div class="btns"><button class="btn" id="s-mine-all">${esc(`Alle ${search.mine.length} zeigen`)}</button></div>` : '')
+  for (const img of el.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
+  for (const b of el.querySelectorAll('[data-list]')) {
+    const p = search.mine[Number(b.dataset.i)]
+    b.onclick = () =>
+      openSpotifyPlaylist({
+        id: p.id,
+        name: p.name,
+        s: spMineSub(p),
+        img: p.cover || p.thumb,
+        note: p.via_sync
+          ? 'Diese Playlist bringt Smart-Sync schon auf die Box. Zusätzlich hinzugefügt stünde sie dort zweimal.'
+          : p.by_spotify
+            ? 'Eine Playlist von Spotify selbst (z. B. ein Mix): Spotify gibt sie Apps wie der Box oft nicht heraus – sie spielt dann nicht.'
+            : '',
+      })
+  }
+  const all = $('#s-mine-all', el)
+  if (all)
+    all.onclick = () => {
+      search.mineAll = true
+      drawSpotifyMine()
+    }
 }
 
 // What of a source is in the library already, as "kind:id" (album, playlist, artist): the search marks it. Spotify:
@@ -3733,9 +3882,83 @@ async function openSpotifyArtist(r) {
   drawSearch()
 }
 
+// A playlist of Spotify or TIDAL: on the box's start page a tile of its own (no artist) or in a folder (its artist)
+const isPlaylistEntry = (it) => !!it && !it.isResume && ((it.type === 'spotify' && !!it.playlistid) || (it.type === 'tidal' && it.tidalKind === 'playlist'))
+
+// The folders of the start page in a category: the artists of the library's entries, as the box groups them (the
+// folders of the SD card and the NAS are tiles of their own) - the most used first
+async function placeFolders(category) {
+  const items = lib.items ?? (await api('/api/data')).body
+  const count = new Map()
+  for (const it of Array.isArray(items) ? items : []) {
+    if (!it || it.isResume === true || it.category === 'resume' || it.type === 'library') continue
+    const cat = it.category_override ?? (it.category === 'radio' ? 'other' : it.category)
+    const artist = String(it.artist_override ?? it.artist ?? '').trim()
+    if (cat !== category || !artist) continue
+    count.set(artist, (count.get(artist) ?? 0) + 1)
+  }
+  return [...count].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'de', { numeric: true })).slice(0, 12).map(([name]) => name)
+}
+
+// "Auf der Startseite" of a playlist (see isPlaylistEntry): p is the prefix of the ids, folder the folder now ('' = a
+// tile of its own)
+function placeField(p, folder) {
+  const opt = (v, label, help) => {
+    const on = (v === 'folder') === !!folder
+    return `<button type="button" class="choice${on ? ' on' : ''}" data-place="${v}" aria-pressed="${on}"><span class="radio"></span><span class="lbl"><b>${esc(label)}</b><small>${esc(help)}</small></span></button>`
+  }
+  return `<div class="field"><label>Auf der Startseite</label><div class="choices">
+      ${opt('own', 'Eigene Kachel', 'Ein Tipp auf der Box spielt sie sofort')}
+      ${opt('folder', 'In einem Ordner', 'Zusammen mit anderen Einträgen unter einem Namen')}
+      <div class="place-folder" id="${p}-folderbox"${folder ? '' : ' hidden'}>
+        <input class="input" id="${p}-folder" value="${esc(folder)}" placeholder="Name des Ordners" aria-label="Name des Ordners" autocomplete="off" translate="no">
+        <div class="place-chips" id="${p}-folders"></div>
+        <p class="help" style="margin:0">Vorhandenen Ordner antippen oder einen neuen Namen eintragen.</p>
+      </div></div></div>`
+}
+
+// catOf: the category chosen in the sheet (its folders as suggestions). value(): '' a tile of its own, the folder's
+// name, null a folder without a name
+function wirePlace(sheet, p, catOf) {
+  const box = sheet.querySelector(`#${p}-folderbox`)
+  const input = sheet.querySelector(`#${p}-folder`)
+  const chips = sheet.querySelector(`#${p}-folders`)
+  let folders = []
+  let seq = 0
+  const drawChips = () => {
+    const v = input.value.trim()
+    chips.innerHTML = folders.map((f) => `<button type="button" class="chip${f === v ? ' on' : ''}" translate="no">${esc(f)}</button>`).join('')
+    for (const c of chips.children)
+      c.onclick = () => {
+        input.value = c.textContent
+        drawChips()
+      }
+  }
+  const load = async () => {
+    const mine = ++seq
+    const found = await placeFolders(catOf())
+    if (mine !== seq) return
+    folders = found
+    drawChips()
+  }
+  for (const b of sheet.querySelectorAll('[data-place]'))
+    b.onclick = () => {
+      for (const o of sheet.querySelectorAll('[data-place]')) {
+        o.classList.toggle('on', o === b)
+        o.setAttribute('aria-pressed', String(o === b))
+      }
+      box.hidden = b.dataset.place !== 'folder'
+      if (!box.hidden) input.focus()
+    }
+  input.addEventListener('input', drawChips)
+  void load()
+  return { reload: load, value: () => (box.hidden ? '' : input.value.trim() || null) }
+}
+
 // The sheet to add something from a search to the box: picture, what it is, the category - chosen here, not before the
-// search - and the button. have: already in the library (only closing then). onAdd(category) returns true when done.
-function addSheet({ title, sub, img, have, haveText, cat, text, okLabel }, onAdd) {
+// search - and the button. have: already in the library (only closing then). place: a playlist, "Auf der Startseite"
+// (a tile of its own first). onAdd(category, folder) returns true when done ('' = a tile of its own).
+function addSheet({ title, sub, img, have, haveText, cat, text, okLabel, place }, onAdd) {
   openSheet(
     `<div class="ard-head">${img ? `<img src="${esc(img)}" alt="">` : ''}<span class="lbl"><h2 translate="no" style="margin:0">${esc(title)}</h2><small translate="no">${esc(sub ?? '')}</small></span></div>
      ${text ? `<p class="help" style="margin:0">${esc(text)}</p>` : ''}
@@ -3743,14 +3966,22 @@ function addSheet({ title, sub, img, have, haveText, cat, text, okLabel }, onAdd
        have
          ? `<p class="help" style="margin:0">${esc(haveText ?? 'Schon in der Bibliothek.')}</p><div class="btns"><button class="btn" data-close>Schließen</button></div>`
          : `<div class="field"><label for="add-cat">Hinzufügen als</label>${catSelect('add-cat', cat, false)}</div>
+            ${place ? placeField('add', '') : ''}
             <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-add>${icon('plus', 18)}${esc(okLabel ?? 'Hinzufügen')}</button></div>`
      }`,
     (sheet, close) => {
       for (const b of sheet.querySelectorAll('[data-close]')) b.onclick = close
+      const placer = place && !have ? wirePlace(sheet, 'add', () => sheet.querySelector('#add-cat').value) : null
+      if (placer) sheet.querySelector('#add-cat').addEventListener('change', () => void placer.reload())
       sheet.querySelector('[data-add]')?.addEventListener('click', async (e) => {
         const btn = e.currentTarget
+        const folder = placer ? placer.value() : ''
+        if (folder === null) {
+          sheet.querySelector('#add-folder').focus()
+          return toast('Bitte einen Namen für den Ordner eintragen', 'info')
+        }
         btn.disabled = true
-        const done = await onAdd(sheet.querySelector('#add-cat').value)
+        const done = await onAdd(sheet.querySelector('#add-cat').value, folder)
         btn.disabled = false
         if (done) close()
       })
@@ -3762,6 +3993,7 @@ function addSheet({ title, sub, img, have, haveText, cat, text, okLabel }, onAdd
 function markHave(key) {
   search.have.add(key)
   drawSearch()
+  drawSpotifyMine()
 }
 
 async function openSpotifyAlbum(r) {
@@ -3782,8 +4014,10 @@ async function openSpotifyAlbum(r) {
 
 // A playlist: an entry of the library as a pasted link makes it (the box fetches its tracks when it plays)
 async function openSpotifyPlaylist(r) {
-  addSheet({ title: r.name, sub: r.s, img: r.img, have: search.have.has(`playlist:${r.id}`), cat: search.cat === 'audiobook' ? 'music' : search.cat }, async (category) => {
-    const body = { type: 'spotify', playlistid: r.id, spotify_url: `https://open.spotify.com/playlist/${r.id}`, artist: r.name, category, source: 'manual' }
+  // (note: a hint of "Meine Playlists" - Smart-Sync brings it already, or Spotify's own)
+  addSheet({ title: r.name, sub: r.s, img: r.img, text: r.note, have: search.have.has(`playlist:${r.id}`), cat: search.cat === 'audiobook' ? 'music' : search.cat, place: true }, async (category, folder) => {
+    // (no artist: a tile of its own on the box, named as the playlist)
+    const body = { type: 'spotify', playlistid: r.id, spotify_url: `https://open.spotify.com/playlist/${r.id}`, title: r.name, ...(folder ? { artist: folder } : {}), category, source: 'manual' }
     const res = await api('/api/add', { method: 'POST', body })
     if (!libWriteOk(res)) return false
     search.cat = category
@@ -4149,7 +4383,8 @@ async function openRadioStation(s) {
 
 // the last search (type: what of it is shown), and an artist opened from it (its albums, with the way back); the
 // category is chosen when adding (addSheet) - the one chosen last starts the next sheet, as on Spotify (search.cat)
-const tds = { q: '', type: 'Alle', result: null, artist: null, busy: false, have: new Set() }
+// (mine: the account's own and kept playlists - TIDAL's search does not find playlists made by users)
+const tds = { q: '', type: 'Alle', result: null, artist: null, busy: false, have: new Set(), mine: null, link: '', linkGen: 0 }
 
 function tidalSearchTop() {
   if (!svc.tidal) {
@@ -4166,7 +4401,82 @@ function tidalSearchTop() {
       <div class="btns"><button class="btn primary" id="tds-go">Suchen</button></div>
     </section>`,
     `<div id="tds-results" class="wide-stack"></div>`,
+    `<section class="card wide">
+      <h2>${esc('Meine Playlists')}</h2>
+      <p class="help" style="margin:0">${esc('Deine eigenen Playlists und die, die du dir bei TIDAL gemerkt hast – die Suche findet sie nicht.')}</p>
+      <div class="rows" id="tds-mine"></div>
+    </section>`,
+    `<section class="card wide">
+      <h2>${esc('TIDAL-Link')}</h2>
+      <p class="help" style="margin:0">${esc('Eine Playlist oder ein Album, das dir jemand geschickt hat: den Link einfügen (in TIDAL unter Teilen › Link kopieren).')}</p>
+      <div class="search">${icon('link')}<input class="input" id="tds-link" type="url" inputmode="url" placeholder="https://tidal.com/playlist/…" autocomplete="off" value="${esc(tds.link)}"></div>
+      <div class="btns"><button class="btn" id="tds-link-go">${esc('Link öffnen')}</button></div>
+    </section>`,
   ]
+}
+
+// A TIDAL link (tidal.com, listen.tidal.com, also …/browse/…) to a playlist (its uuid) or an album (digits)
+function tidalLinkOf(text) {
+  const m = /(?:^|\/\/|\.)tidal\.com\/(?:browse\/)?(playlist|album)\/([0-9a-fA-F-]{36}|\d{1,15})(?=[/?#]|$)/.exec(String(text).trim())
+  if (!m) return null
+  const kind = m[1]
+  const id = m[2]
+  if (kind === 'album' ? !/^\d+$/.test(id) : !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null
+  return { kind, id }
+}
+
+async function openTidalLink() {
+  const link = tidalLinkOf(tds.link)
+  if (!link) return toast('Das ist kein Link zu einer TIDAL-Playlist oder einem Album', 'info')
+  const btn = $('#tds-link-go')
+  if (btn) btn.disabled = true
+  // (an answer that comes late - another link opened meanwhile, or the page left: dropped, no sheet over another page)
+  const gen = ++tds.linkGen
+  const [r, have] = await Promise.all([api(`${API}/tidal/item/${link.kind}/${encodeURIComponent(link.id)}`), libraryHave('tidal')])
+  if (btn) btn.disabled = false
+  if (gen !== tds.linkGen || !btn?.isConnected) return
+  tds.have = have
+  if (!r.ok) return toast(r.status === 404 ? 'TIDAL kennt diesen Link nicht – ist die Playlist privat oder gelöscht?' : tidalFailText(r), 'info')
+  openTidalItem({ ...r.body, kind: link.kind })
+}
+
+// "Meine Playlists": the account's own first, then the ones it keeps
+async function loadTidalMine() {
+  const el = $('#tds-mine')
+  if (!el) return
+  if (!tds.mine) el.innerHTML = `<div class="loading"><p>${esc('Lade …')}</p></div>`
+  const [r, have] = await Promise.all([api(`${API}/tidal/mine`), libraryHave('tidal')])
+  tds.have = have
+  if (!el.isConnected) return
+  if (!r.ok) {
+    el.innerHTML = `<p class="help" style="margin:0">${esc(tidalFailText(r))}</p>`
+    return
+  }
+  tds.mine = r.body?.playlists ?? []
+  drawTidalMine()
+}
+
+function drawTidalMine() {
+  const el = $('#tds-mine')
+  if (!el || !tds.mine) return
+  if (!tds.mine.length) {
+    el.innerHTML = `<p class="help" style="margin:0">${esc('In deinem TIDAL-Konto sind noch keine Playlists.')}</p>`
+    return
+  }
+  // (an account can have dozens: the first few, the rest on a tap)
+  const shown = tds.mineAll ? tds.mine : tds.mine.slice(0, 8)
+  el.innerHTML =
+    shown
+      .map((x, i) => resultRow({ ...tidalRow(x), s: [x.own ? 'Eigene Playlist' : 'Gemerkt', x.tracks ? `${x.tracks} Titel` : ''].filter(Boolean).join(' · ') }, i, 'mine', tds.have))
+      .join('') + (shown.length < tds.mine.length ? `<div class="btns"><button class="btn" id="tds-mine-all">${esc(`Alle ${tds.mine.length} zeigen`)}</button></div>` : '')
+  for (const img of el.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
+  for (const b of el.querySelectorAll('[data-list]')) b.onclick = () => openTidalItem(tds.mine[Number(b.dataset.i)])
+  const all = $('#tds-mine-all', el)
+  if (all)
+    all.onclick = () => {
+      tds.mineAll = true
+      drawTidalMine()
+    }
 }
 
 // Why the box's TIDAL service could not answer
@@ -4288,16 +4598,18 @@ async function openTidalItem(x) {
       have,
       cat: x.kind === 'playlist' ? 'music' : search.cat,
       text: kind === 'artist' ? 'Die Box zeigt alle Alben des Künstlers als einen Eintrag, auch Alben, die später dazukommen. Einen Bereich (Folge von–bis) und einzelne Alben stellst du danach in der Bibliothek ein.' : '',
+      place: kind === 'playlist',
     },
-    async (category) => {
-      // (a playlist under its own name: it has no artist of its own)
-      const artist = kind === 'playlist' ? x.name : x.artist || x.name
-      const body = { type: 'tidal', tidalKind: kind, id: x.id, artist, title: x.name, category, source: 'manual', ...(x.cover ? { cover: x.cover } : {}) }
+    async (category, folder) => {
+      // (a playlist has no artist of its own: a tile of its own, or in the folder chosen)
+      const artist = kind === 'playlist' ? folder : x.artist || x.name
+      const body = { type: 'tidal', tidalKind: kind, id: x.id, ...(artist ? { artist } : {}), title: x.name, category, source: 'manual', ...(x.cover ? { cover: x.cover } : {}) }
       const r = await api('/api/add', { method: 'POST', body })
       if (!libWriteOk(r)) return false
       search.cat = category
       tds.have.add(`${kind}:${x.id}`)
       drawTidal()
+      drawTidalMine()
       toast(`Hinzugefügt: ${x.name}`)
       libChanged()
       lib.items = null
@@ -4476,6 +4788,9 @@ async function addLink(page) {
           'info',
         )
       Object.assign(body, { type: 'spotify', query: url, artist: label })
+    } else if (/(^|\/\/|\.)tidal\.com\//i.test(url)) {
+      // (a TIDAL link has its own place: the search page lists its playlists and opens links)
+      return toast(svc.tidal ? 'TIDAL-Links fügst du unter Auf TIDAL suchen › TIDAL-Link ein' : 'TIDAL ist ausgeschaltet – einschalten unter Einstellungen › Dienste › TIDAL', 'info')
     } else if (type === 'Spotify-Link') {
       if (!url.startsWith('https://open.spotify.com/')) return toast('Spotify-Links beginnen mit https://open.spotify.com/', 'info')
       const kinds = [['playlist', 'playlistid', 'playlist'], ['artist', 'artistid', 'artist'], ['album', 'id', 'album'], ['show', 'showid', 'show'], ['audiobook', 'audiobookid', 'audiobook']]
@@ -5078,6 +5393,9 @@ function mountSpotify(root, page) {
       confirmSheet('Trennen', 'Die Spotify-Anmeldung löschen? Smart-Sync hört auf, und der Player verliert beim nächsten Neustart den Zugang zu Spotify.', async () => {
         const r = await api(`${API}/spotify-oauth/disconnect`, { method: 'POST' })
         if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+        // (the playlists of "Meine Playlists" were that account's)
+        search.mine = null
+        search.mineAll = false
         again('Getrennt')
       }),
     cache: () =>
@@ -7061,6 +7379,482 @@ const RES_PRESETS = [
 const DISPLAY_OFF_STOPS = [0, 1, 2, 5, 10, 15, 20, 30, 45, 60, 90, 120]
 
 // A rotation as tiles: a small screen turned as the display will be (its top marked), the mirrorings flipped
+// The display models (Display & Bedienung › Display-Modell; the ids are the server's and display_profile.sh's): a
+// group, and for some of them the exact model below it
+const DISPLAY_MODELS = [
+  { id: 'official7', label: 'Offizielles 7″ (1. Generation)', sub: '800 × 480 · auch HDMI und ohne Display' },
+  {
+    id: 'td2',
+    label: 'Touch Display 2',
+    sub: '5″ · 7″ · 10″ von Raspberry Pi',
+    tested: true,
+    pick: 'Größe',
+    variants: [
+      ['td2-7', '7″ (720 × 1280)'],
+      ['td2-5', '5″ (720 × 1280)'],
+      ['td2-10', '10,1″ (1200 × 1920)'],
+    ],
+  },
+  { id: 'ws-5', label: 'Waveshare 5″ DSI', sub: '800 × 480' },
+  { id: 'ws-43', label: 'Waveshare 4,3″ DSI', sub: '800 × 480' },
+  {
+    id: 'ws-panel',
+    label: 'Waveshare DSI 7″ bis 12,3″',
+    sub: 'Modell auf der Rückseite oder der Packung',
+    pick: 'Modell',
+    variants: [
+      ['ws-v2-7_0_inch_a', '7,0″ DSI-TOUCH-A (720 × 1280)'],
+      ['ws-v2-7_0_inch_b', '7,0″ DSI-TOUCH-B (720 × 1280)'],
+      ['ws-v2-7_0_inch_c', '7,0″ DSI-TOUCH-C (1024 × 600)'],
+      ['ws-v1-7_0_inchC', '7,0″ DSI LCD (C) (1024 × 600)'],
+      ['ws-v1-7_0_inchH', '7,0″ DSI LCD (H) (1280 × 720)'],
+      ['ws-v1-7_9_inch', '7,9″ DSI LCD (400 × 1280)'],
+      ['ws-v1-8_0_inch', '8,0″ DSI LCD (1280 × 800)'],
+      ['ws-v2-8_0_inch_a', '8,0″ DSI-TOUCH-A (800 × 1280)'],
+      ['ws-v1-8_8_inch', '8,8″ DSI LCD (480 × 1920)'],
+      ['ws-v2-8_8_inch_a', '8,8″ DSI-TOUCH-A (480 × 1920)'],
+      ['ws-v2-9_0_inch_b', '9,0″ DSI-TOUCH-B (720 × 1280)'],
+      ['ws-v1-10_1_inch', '10,1″ DSI LCD (1280 × 800)'],
+      ['ws-v2-10_1_inch_a', '10,1″ DSI-TOUCH-A (800 × 1280)'],
+      ['ws-v2-10_1_inch_b', '10,1″ DSI-TOUCH-B (720 × 1280)'],
+      ['ws-v1-11_9_inch', '11,9″ DSI LCD (320 × 1480)'],
+      ['ws-v2-12_3_inch_a_4lane', '12,3″ DSI-TOUCH-A (720 × 1920, nur Pi 5)'],
+    ],
+  },
+  {
+    id: 'edatec',
+    label: 'EDATEC DSI 7″ oder 10″',
+    sub: '',
+    pick: 'Größe',
+    variants: [
+      ['edatec-7', '7″'],
+      ['edatec-10', '10,1″'],
+    ],
+  },
+  { id: 'custom', label: 'Eigene Einstellung', sub: 'Die App lässt die config.txt so, wie sie ist' },
+]
+const dmGroupOf = (id) => DISPLAY_MODELS.find((g) => g.id === id || g.variants?.some(([v]) => v === id)) ?? DISPLAY_MODELS.at(-1)
+// short, for the badge in the card's head: the model without its resolution
+const dmShort = (id) => dmLabel(id).replace(/ \([^)]*\)$/, '')
+const dmLabel = (id) => {
+  const g = dmGroupOf(id)
+  const v = g.variants?.find(([x]) => x === id)
+  return v ? `${g.label} · ${v[1]}` : g.label
+}
+
+// The card Display-Modell: the model now (preselected from config.txt), or the running test with its countdown
+function displayModelHtml() {
+  const d = disp.dp
+  if (!d) return ''
+  if (d.test?.running) {
+    const before = dmLabel(d.test.previous)
+    return `<div class="dm-test" data-dm-test>
+      <p class="help" style="margin:0">${esc(`${dmLabel(d.test.profile)} ist eingestellt. Siehst du auf dem Display ein Bild?`)}</p>
+      ${d.test.endsAt ? `<div class="dm-count" data-dm-count>…</div><div class="dm-bar"><i data-dm-bar></i></div>` : `<div class="note">${icon('info', 18)}<span>${esc('Die Box startet gerade neu – danach läuft die Zeit.')}</span></div>`}
+      <p class="help" style="margin:0;text-align:center">${esc(`Ohne Antwort kommt danach das bisherige Display (${before}) zurück.`)}</p>
+      <div class="btns"><button class="btn" data-dm-revert>Nein, zurück</button><button class="btn primary" data-dm-keep ${d.test.endsAt ? '' : 'disabled'}>Ja, behalten</button></div>
+    </div>`
+  }
+  const sel = disp.dmSel ?? d.current
+  const group = dmGroupOf(sel)
+  const rows = DISPLAY_MODELS.map((g) => {
+    const on = g.id === group.id
+    const sub = g.sub ? `<small>${esc(g.sub)}</small>` : ''
+    const variantSel =
+      on && g.variants
+        ? `<div class="field dm-variant"><label>${esc(g.pick)}</label><select class="input" data-dm-variant>${g.variants.map(([v, l]) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`
+        : ''
+    return `<button type="button" class="dm-opt" role="radio" aria-checked="${on}" data-dm-group="${esc(g.id)}"><span class="r"></span><span class="lbl"><b>${esc(g.label)}${g.tested ? `<span class="dm-tag">${esc('Getestet')}</span>` : ''}</b>${sub}</span></button>${variantSel}`
+  }).join('')
+  const untested = sel !== d.current && !group.tested && !['official7', 'custom'].includes(group.id)
+  return `<p class="help" style="margin:0 0 6px">${esc('Welches Display am Flachbandkabel (DSI) hängt. Ein falsches Modell lässt das Display dunkel – die Box nimmt es dann nach 3 Minuten selbst zurück.')}</p>
+    <div class="dm-list" role="radiogroup" aria-label="${esc('Display-Modell')}">${rows}</div>
+    ${untested ? `<div class="note warn">${icon('info', 18)}<span>${esc('Noch nicht auf einer MuPiBox getestet – nutzt die Treiber aus dem Raspberry-Pi-Kernel.')}</span></div>` : ''}
+    <div class="btns"><button class="btn primary" data-dm-apply ${sel === d.current || group.id === 'custom' ? 'disabled' : ''}>Übernehmen und neu starten</button></div>`
+}
+
+// The four tiles of a display with KMS: picture and touch turned together (QUER: where it lies as the MuPiBox needs it)
+function kmsRotTiles() {
+  const d = disp.dp
+  const [w, h] = (d.native ?? '').split('x').map(Number)
+  const upright = h > w
+  return `<div class="rot-tiles">${[0, 90, 180, 270]
+    .map((deg) => {
+      const lies = upright ? deg % 180 !== 0 : deg % 180 === 0
+      // (the screen as it then stands: lying or upright, the picture's top up - or down for 180 and 270 degrees)
+      const shape = lies ? '' : 'width:26px;height:40px;'
+      return `<button type="button" class="rot-tile" data-krot="${deg}" aria-pressed="${deg === d.rotation && !d.mirror}"><span class="scr" style="${shape}transform:rotate(${deg >= 180 ? 180 : 0}deg)"><i></i><b>F</b></span><small>${deg}°</small>${lies ? `<span class="dm-tag">${esc('Quer')}</span>` : ''}</button>`
+    })
+    .join('')}${[
+    ['x', 'Spiegeln ↔', 'scaleX(-1)'],
+    ['y', 'Spiegeln ↕', 'scaleY(-1)'],
+  ]
+    // (mirrored in the display's own way up - as 0°: upright when the panel is built upright)
+    .map(([m, text, tf]) => {
+      const shape = upright ? 'width:26px;height:40px;' : ''
+      return `<button type="button" class="rot-tile" data-kmirror="${m}" aria-pressed="${d.mirror === m}"><span class="scr" style="${shape}transform:${tf}"><i></i><b>F</b></span><small>${esc(text)}</small></button>`
+    })
+    .join('')}</div>`
+}
+
+// The countdown of the test (until the box goes back by itself)
+function startDmCountdown(root, page) {
+  clearInterval(disp.dmTimer)
+  const ends = disp.dp?.test?.endsAt
+  if (!ends) return
+  const tick = () => {
+    const el = $('[data-dm-count]', root)
+    if (!el || !el.isConnected) return clearInterval(disp.dmTimer)
+    const left = Math.max(0, Math.round((ends - Date.now()) / 1000))
+    el.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
+    const bar = $('[data-dm-bar]', root)
+    if (bar) bar.style.width = `${Math.min(100, (left / 180) * 100)}%`
+    if (left === 0) {
+      clearInterval(disp.dmTimer)
+      toast('Keine Antwort – die Box nimmt das Display zurück und startet neu', 'info')
+    }
+  }
+  tick()
+  disp.dmTimer = setInterval(tick, 1000)
+}
+
+function mountDisplayModel(root, page) {
+  for (const b of root.querySelectorAll('[data-dm-group]')) {
+    b.onclick = () => {
+      const g = DISPLAY_MODELS.find((x) => x.id === b.dataset.dmGroup)
+      disp.dmSel = g.variants ? (g.variants.some(([v]) => v === disp.dp.current) ? disp.dp.current : g.variants[0][0]) : g.id
+      renderPage(page, false)
+    }
+  }
+  const variant = $('[data-dm-variant]', root)
+  if (variant)
+    variant.onchange = () => {
+      disp.dmSel = variant.value
+      renderPage(page, false)
+    }
+  const apply = $('[data-dm-apply]', root)
+  if (apply)
+    apply.onclick = async () => {
+      const to = disp.dmSel
+      const from = disp.dp.current
+      if (!(await askDisplayChange(to, from))) return
+      const r = await api(`${API}/display-profile`, { method: 'POST', body: { profile: to } })
+      if (!r.ok) return toast(r.body?.error === 'test_running' ? 'Ein Test läuft schon – bitte erst beantworten' : 'Das hat nicht geklappt', 'info')
+      disp.dmSel = undefined
+      openDisplayTest({ phase: 'restart', id: r.body?.id, profile: to, previous: r.body?.previous ?? from })
+    }
+  const keep = $('[data-dm-keep]', root)
+  if (keep)
+    keep.onclick = async () => {
+      const r = await api(`${API}/display-profile/confirm`, { method: 'POST', body: { id: disp.dp.test.id || undefined } })
+      if (!r.ok || r.body?.ok === false) {
+        toast('Das hat nicht geklappt', 'info')
+        await loadDisplayModel()
+        return renderPage(page, false)
+      }
+      toast(`${dmLabel(disp.dp.test.profile)} bleibt eingestellt`)
+      await loadDisplayModel()
+      renderPage(page, false)
+    }
+  const revert = $('[data-dm-revert]', root)
+  if (revert)
+    revert.onclick = async () => {
+      const r = await api(`${API}/display-profile/revert`, { method: 'POST', body: { id: disp.dp.test.id || undefined } })
+      if (!r.ok) {
+        toast('Das hat nicht geklappt', 'info')
+        await loadDisplayModel()
+        return renderPage(page, false)
+      }
+      toast('Das bisherige Display kommt zurück – die Box startet neu')
+    }
+  for (const b of root.querySelectorAll('[data-krot]')) {
+    b.onclick = async () => {
+      const degrees = Number(b.dataset.krot)
+      if (degrees === disp.dp.rotation && !disp.dp.mirror) return
+      const r = await api(`${API}/display-rotation`, { method: 'POST', body: { degrees } })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      disp.dp.rotation = degrees
+      disp.dp.mirror = null
+      toast(`Gedreht um ${degrees}° – die Anzeige startet kurz neu`)
+      renderPage(page, false)
+    }
+  }
+  for (const b of root.querySelectorAll('[data-kmirror]')) {
+    b.onclick = async () => {
+      const mirror = b.dataset.kmirror
+      if (mirror === disp.dp.mirror) return
+      const r = await api(`${API}/display-rotation`, { method: 'POST', body: { mirror } })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      disp.dp.rotation = 0
+      disp.dp.mirror = mirror
+      toast('Gespiegelt – die Anzeige startet kurz neu')
+      renderPage(page, false)
+    }
+  }
+  startDmCountdown(root, page)
+}
+
+async function loadDisplayModel() {
+  const r = await api(`${API}/display-profile`)
+  disp.dp = r.ok ? r.body : null
+  dmLocal(disp.dp?.test)
+}
+
+// The end of a test by this device's clock - from the seconds the box has left: its own clock may be minutes off
+// this one's (after its start, before the network set it), and the end would lie in the past here
+function dmLocal(test) {
+  if (test?.running && typeof test.left === 'number') test.endsAt = Date.now() + test.left * 1000
+  return test
+}
+
+// The way up a new model starts with (display_profile.sh upright_rotation): the Touch Display 2 lying, turned by 90°
+const dmStartRotation = (id) => (/^td2-/.test(id) ? 90 : 0)
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
+// Before a new display model: what changes, and the three steps in front of it
+function askDisplayChange(to, from) {
+  const rot = to === 'official7' ? '' : `${dmStartRotation(to)}°${dmStartRotation(to) ? ' (quer)' : ''}`
+  return new Promise((resolve) => {
+    let answer = false
+    openSheet(
+      `<h2>Display umstellen?</h2>
+       <dl class="dmt-rows"><dt>Neu</dt><dd>${esc(dmShort(to))}</dd><dt>Bisher</dt><dd>${esc(dmShort(from))}</dd>${rot ? `<dt>Drehung</dt><dd>${esc(rot)}</dd>` : ''}</dl>
+       <ol class="dmt-plan"><li>Die Box startet neu, gut eine Minute.</li><li>Danach fragt diese App: Siehst du ein Bild?</li><li>Ohne Antwort nach 3 Minuten: zurück zum bisherigen Display.</li></ol>
+       <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Umstellen</button></div>`,
+      (sheet, close) => {
+        sheet.querySelector('[data-close]').onclick = close
+        sheet.querySelector('[data-ok]').onclick = () => {
+          answer = true
+          close()
+        }
+      },
+      () => setTimeout(() => resolve(answer)),
+    )
+  })
+}
+
+// The test of a new display model in one sheet: it waits for the restart, asks whether there is a picture (with the
+// countdown) and says how it ended - without loading the page again. Opened by the change and, while a test waits for
+// its answer, at the start of the app (on another device, or later). The card Display-Modell keeps its countdown for
+// whoever closes the sheet.
+//   restart    the box restarts with the new model (asked every 2 s until it answers with the test's time)
+//   question   "Siehst du ein Bild?" - keep, or back
+//   reverting  no answer in time, or "Nein": the box goes back and restarts once more
+//   kept / back how it ended - by the model the box runs with then, not by the time (another device may have answered)
+// Answers name their test (id): one ended on another device and the next begun meanwhile is not answered by this
+// sheet - it follows the new one from its start. The page is loaded anew while the box restarts (a box without login
+// hands out a new session after it, see sessionGone): the test this browser follows is kept for that tab
+// (sessionStorage), so the sheet comes back - with how it ended, when the test is over by then.
+const dmt = { open: false }
+const DMT_KEY = 'mupi-display-test'
+function dmtRemembered() {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(DMT_KEY) ?? 'null')
+    return v && Date.now() - v.at < 15 * 60_000 ? v : null
+  } catch {
+    return null
+  }
+}
+function dmtRemember(t) {
+  try {
+    if (t) sessionStorage.setItem(DMT_KEY, JSON.stringify({ id: t.id, profile: t.profile, previous: t.previous, phase: t.phase, asked: t.asked, at: Date.now() }))
+    else sessionStorage.removeItem(DMT_KEY)
+  } catch {
+    // no storage: the sheet is not brought back after a reload
+  }
+}
+function openDisplayTest(start) {
+  if (dmt.open) return
+  dmt.open = true
+  // (asked: "Nein" was tapped here - the box goes back, whatever time it still has)
+  const t = { phase: start.phase, id: start.id ?? '', profile: start.profile, previous: start.previous, rotation: start.rotation ?? 0, endsAt: start.endsAt ?? null, since: Date.now(), down: false, asked: start.asked ?? false, busy: false, asking: false, gone: false }
+  let poll = 0
+  let tick = 0
+  openSheet(
+    '<div class="dmt" data-dmt aria-live="polite"></div>',
+    (sheet, close) => {
+      const root = $('[data-dmt]', sheet)
+      // (not closed by a tap beside it while the box restarts - "Fertig" or Escape does)
+      $('#sheet-scrim').onclick = null
+      const goBack = () => {
+        t.phase = 'reverting'
+        t.since = Date.now()
+        t.down = false
+      }
+      const draw = () => {
+        root.innerHTML = displayTestHtml(t)
+        dmtRemember(t)
+        $('[data-dmt-done]', root)?.addEventListener('click', close)
+        $('[data-dmt-keep]', root)?.addEventListener('click', async () => {
+          if (t.busy) return
+          t.busy = true
+          const asked = t.id
+          const r = await api(`${API}/display-profile/confirm`, { method: 'POST', body: { id: asked || undefined } })
+          t.busy = false
+          // (an answer that came late: the sheet closed meanwhile, or follows another test now - not for that one)
+          if (t.gone || t.id !== asked) return
+          if (!r.ok || r.body?.ok === false) {
+            // (answered meanwhile, or another test runs now: as the box has it)
+            toast('Das hat nicht geklappt', 'info')
+            return step()
+          }
+          t.phase = 'kept'
+          draw()
+        })
+        $('[data-dmt-revert]', root)?.addEventListener('click', async () => {
+          if (t.busy) return
+          t.busy = true
+          const asked = t.id
+          const r = await api(`${API}/display-profile/revert`, { method: 'POST', body: { id: asked || undefined } })
+          t.busy = false
+          if (t.gone || t.id !== asked) return
+          if (!r.ok) {
+            toast('Das hat nicht geklappt', 'info')
+            return step()
+          }
+          t.asked = true
+          goBack()
+          draw()
+        })
+        update()
+      }
+      const update = () => {
+        const count = $('[data-dmt-count]', root)
+        if (count && t.endsAt) {
+          const left = Math.max(0, Math.round((t.endsAt - Date.now()) / 1000))
+          count.textContent = mmss(left)
+          const bar = $('[data-dmt-bar]', root)
+          if (bar) bar.style.width = `${Math.min(100, (left / 180) * 100)}%`
+          if (left === 0 && t.phase === 'question') {
+            goBack()
+            draw()
+            return
+          }
+        }
+        const elapsed = $('[data-dmt-elapsed]', root)
+        if (elapsed) elapsed.textContent = mmss(Math.round((Date.now() - t.since) / 1000))
+      }
+      // The box as it answers: the test with its time after the restart with the new model, no test once it ended
+      const step = async () => {
+        if (!dmt.open || t.phase === 'kept' || t.phase === 'back') return
+        // (one question at a time: an answer that came late would show a test of before - and with a slow network
+        // every answer would come late)
+        if (t.asking) return
+        t.asking = true
+        const r = await api(`${API}/display-profile`, { timeoutMs: 10_000 }).finally(() => {
+          t.asking = false
+        })
+        if (!dmt.open || t.gone) return
+        // (only a whole answer of the box counts - the state is read from it)
+        if (!r.ok || typeof r.body?.test?.running !== 'boolean') {
+          t.down = true
+          return
+        }
+        const before = `${t.phase} ${t.id} ${t.profile}`
+        const test = dmLocal(r.body?.test)
+        if (test?.running) {
+          if (t.id && test.id && test.id !== t.id) {
+            // (another test: this one ended on another device and the next began - followed from its start)
+            Object.assign(t, { phase: 'restart', endsAt: null, since: Date.now(), down: false, asked: false })
+          }
+          if (test.id) t.id = test.id
+          if (test.profile) t.profile = test.profile
+          if (test.previous) t.previous = test.previous
+          if (test.reverting || t.asked) {
+            // (the time ran out on the box, or "Nein" - here, on another device or on the display: it goes back)
+            if (t.phase !== 'reverting') goBack()
+          } else if (test.endsAt) {
+            t.endsAt = test.endsAt
+            t.rotation = Number(r.body?.rotation) || 0
+            // (also back from 'reverting' when it was only this device's countdown: the box still waits for the answer)
+            if (test.left > 0) t.phase = 'question'
+            else if (t.phase === 'question') goBack()
+          }
+        } else if (r.body?.current === t.profile) {
+          // (kept - here, on another device or on the display; the way back puts the model of before first)
+          t.phase = 'kept'
+        } else if (t.down || Date.now() - t.since > 120_000) {
+          // back at the model of before, after the restart of the way back (or the box came up without the test)
+          t.phase = 'back'
+        }
+        if (`${t.phase} ${t.id} ${t.profile}` !== before) draw()
+      }
+      draw()
+      tick = setInterval(update, 1000)
+      poll = setInterval(step, 2000)
+      step()
+    },
+    async () => {
+      t.gone = true
+      clearInterval(poll)
+      clearInterval(tick)
+      dmt.open = false
+      dmtRemember(null)
+      if (currentPage()?.id === 'displaysettings') {
+        await loadDisplayModel()
+        renderPage(currentPage(), false)
+      }
+    },
+  )
+}
+
+function displayTestHtml(t) {
+  const plan = (n) =>
+    `<ol class="dmt-plan steps">${['Neustart', 'Bild prüfen', 'Fertig']
+      .map((s, i) => `<li class="${i < n ? 'done' : i === n ? 'now' : ''}"><span>${esc(s)}${i === n && n === 0 ? ` (<span data-dmt-elapsed>0:00</span>)` : ''}</span></li>`)
+      .join('')}</ol>`
+  const turned = t.rotation ? `, gedreht auf ${t.rotation}°` : ''
+  switch (t.phase) {
+    case 'restart':
+      return `<span class="chip warn">Test läuft</span><h2>Die Box startet neu …</h2><div class="dmt-wait"><span class="spin"></span></div>${plan(0)}
+        <div class="note">${icon('info', 18)}<span>${esc('Lass dieses Fenster offen. Die App fragt gleich von selbst nach dem Bild.')}</span></div>`
+    case 'question':
+      return `<span class="chip warn">Test läuft</span><h2>Siehst du auf dem Display ein Bild?</h2>
+        <p class="help" style="margin:0">${esc(`${dmShort(t.profile)} ist eingestellt${turned}.`)}</p>
+        <div class="dm-count" data-dmt-count>…</div><div class="dm-bar"><i data-dmt-bar></i></div>
+        <p class="help" style="margin:0;text-align:center">${esc(`Ohne Antwort kommt danach ${dmShort(t.previous)} zurück.`)}</p>
+        <div class="btns"><button class="btn" data-dmt-revert>Nein, zurück</button><button class="btn primary" data-dmt-keep>Ja, behalten</button></div>
+        <div class="note">${icon('info', 18)}<span>${esc('Am Display kannst du auch selbst auf „Behalten“ tippen.')}</span></div>`
+    case 'kept':
+      return `<div class="dmt-big ok">${icon('check', 28)}</div><h2 class="dmt-center">${esc(`${dmShort(t.profile)} bleibt`)}</h2>${plan(3)}
+        <div class="note">${icon('info', 18)}<span>${esc('Steht das Bild falsch herum? Unter Drehung lässt es sich jederzeit drehen.')}</span></div>
+        <div class="btns"><button class="btn primary" data-dmt-done>Fertig</button></div>`
+    case 'reverting':
+      return `<div class="dmt-big back">${icon('sync', 28)}</div><h2 class="dmt-center">${esc(`Zurück zu ${dmShort(t.previous)}`)}</h2>
+        <p class="help dmt-center" style="margin:0">${esc('Die Box startet noch einmal neu und nimmt das bisherige Display mit seiner Drehung.')}</p>
+        <div class="dmt-wait"><span class="spin"></span></div>
+        <div class="note warn">${icon('info', 18)}<span>${esc('Bleibt das Display dunkel, ist vielleicht eine andere Größe oder ein anderes Modell richtig.')}</span></div>`
+    default:
+      return `<div class="dmt-big back">${icon('sync', 28)}</div><h2 class="dmt-center">${esc(`Wieder bei ${dmShort(t.previous)}`)}</h2>
+        <p class="help dmt-center" style="margin:0">${esc('Die Box läuft wieder mit dem bisherigen Display.')}</p>
+        <div class="btns"><button class="btn primary" data-dmt-done>Fertig</button></div>`
+  }
+}
+
+// At the start of the app: a test that waits for its answer opens its sheet at once - and the one this tab followed
+// when the page was loaded anew meanwhile, with how it ended (or where it is now: the way back may still restart)
+async function checkDisplayTest() {
+  const r = await api(`${API}/display-profile`)
+  if (!r.ok || typeof r.body?.test?.running !== 'boolean') return
+  const test = dmLocal(r.body?.test)
+  const followed = dmtRemembered()
+  if (test?.running) {
+    // ("Nein" tapped here before the page was loaded anew: for this test only)
+    const asked = Boolean(followed?.asked && followed.id === test.id)
+    const phase = test.reverting || asked ? 'reverting' : test.left > 0 ? 'question' : test.endsAt ? 'reverting' : 'restart'
+    openDisplayTest({ phase, id: test.id, profile: test.profile, previous: test.previous, rotation: Number(r.body?.rotation) || 0, endsAt: test.endsAt, asked })
+    return
+  }
+  if (!followed) return
+  if (['kept', 'back'].includes(followed.phase) || r.body?.current === followed.profile || r.body?.current === followed.previous) {
+    // (by the model the box runs with now: the way back puts the one of before first)
+    const phase = r.body?.current === followed.profile || (followed.phase === 'kept' && r.body?.current !== followed.previous) ? 'kept' : 'back'
+    openDisplayTest({ phase, id: followed.id, profile: followed.profile, previous: followed.previous, rotation: Number(r.body?.rotation) || 0 })
+  } else {
+    dmtRemember(null)
+  }
+}
+
 function rotTiles(key, list) {
   const now = state.values.get(key)
   const look = { 'Aus (Standard)': ['0°', 'rotate(0)'], '90°': ['90°', 'rotate(90deg)'], '180°': ['180°', 'rotate(180deg)'], '270°': ['270°', 'rotate(270deg)'], 'Horizontal spiegeln': ['Spiegeln ↔', 'scaleX(-1)'], 'Vertikal spiegeln': ['Spiegeln ↕', 'scaleY(-1)'] }
@@ -7076,7 +7870,7 @@ const rotLabel = (list, v) => list.find(([, x]) => x === String(v))?.[0] ?? list
 const rotValue = (list, label) => list.find(([l]) => l === label)?.[1] ?? '0'
 
 async function loadDisplaySettings() {
-  const [, power] = await Promise.all([loadDisplayOptions(), api(`${API}/power-config`)])
+  const [, power] = await Promise.all([loadDisplayOptions(), api(`${API}/power-config`), loadDisplayModel()])
   const o = disp.opts
   disp.power = power.body ?? {}
   if (o.brightness != null) state.values.set('bright', o.brightness)
@@ -7419,6 +8213,15 @@ const batteryCharging = (h) => Number.isFinite(h?.Ibat) && h.Ibat > 50
 // The charge goes on but no current flows just now: the chip reports "Done" now and then on a weak input, far below its
 // limit, and the estimate does not take it (Charge_Phase stays the one of the charge) - "vollständig geladen" was wrong
 const batteryChargePaused = (h) => !batteryCharging(h) && ['precharge', 'cc', 'cv', 'topoff'].includes(h?.Charge_Phase) && Number.isFinite(h?.Vbus) && h.Vbus > 4000
+// The power supply's USB-PD contract (mupihat.py, tps25730.py): what the MuPiHAT agreed on with it - only with a
+// supply plugged in and the contract read twice the same; else no row at all (a bare "USB 12 V" read as odd)
+function pdRow(h) {
+  const mv = h?.PD_Voltage_mV
+  const ma = h?.PD_Current_mA
+  if (!Number.isFinite(mv) || !Number.isFinite(ma) || mv <= 0 || ma <= 0) return ''
+  const num = (x, d) => x.toLocaleString(LOCALE, { maximumFractionDigits: d })
+  return `<div><dt>Netzteil (USB-PD)</dt><dd>${esc(`${num(mv / 1000, 1)} V · bis ${num(ma / 1000, 2)} A (${num((mv * ma) / 1e6, 0)} W)`)}</dd></div>`
+}
 // full: as the estimate says, when the HAT service has one (Charge_Phase), else as the chip says
 const batteryFull = (h) => (h?.Charge_Phase ? h.Charge_Phase === 'done' : /termination|done/i.test(h?.Charger_Status ?? ''))
 // (the box saw it for 10 minutes: /api/mupihat ChargeProblemSince, see checkCharging in server.ts)
@@ -7441,7 +8244,7 @@ function batteryTop() {
   if (noBattery(h)) {
     return [
       `<section class="card"><h2>Akku-Stand</h2><div class="bat-now"><div class="bat-pct">Netzbetrieb</div><small>${esc(NO_BATTERY_TEXT)}</small></div>
-      <dl class="kv"><div><dt>USB-Spannung</dt><dd>${volt(h.Vbus)}</dd></div><div><dt>Temperatur Lade-Chip</dt><dd>${Number.isFinite(h.Temp) ? `${h.Temp.toLocaleString(LOCALE)} °C` : '–'}</dd></div></dl></section>`,
+      <dl class="kv"><div><dt>USB-Spannung</dt><dd>${volt(h.Vbus)}</dd></div>${pdRow(h)}<div><dt>Temperatur Lade-Chip</dt><dd>${Number.isFinite(h.Temp) ? `${h.Temp.toLocaleString(LOCALE)} °C` : '–'}</dd></div></dl></section>`,
     ]
   }
   let pct = h.Bat_Percent
@@ -7500,7 +8303,7 @@ function batteryTop() {
            <div class="btns"><button class="btn" id="hat-reboot">Box neu starten</button></div>`
         : ''
     }<div class="bat-now"><div class="bat-pct">${Number.isFinite(pct) ? `${pct} %` : '–'}</div><small>${esc([health, state, charging && etaText ? (etaMin < 5 ? etaText : `voll in etwa ${etaText}`) : ''].filter(Boolean).join(' · '))}</small>${chargeNote ? `<small class="help">${esc(chargeNote)}</small>` : ''}${startNote ? `<div class="note warn">${icon('info', 18)}<span>${esc(startNote)}</span></div>` : ''}</div>
-      <dl class="kv"><div><dt>Akku-Spannung</dt><dd>${v(h.Vbat)}</dd></div><div><dt>USB-Spannung</dt><dd>${v(h.Vbus)}</dd></div>
+      <dl class="kv"><div><dt>Akku-Spannung</dt><dd>${v(h.Vbat)}</dd></div><div><dt>USB-Spannung</dt><dd>${v(h.Vbus)}</dd></div>${pdRow(h)}
         <div><dt>Akku-Strom</dt><dd>${Number.isFinite(h.Ibat) ? `${h.Ibat.toLocaleString(LOCALE)} mA` : '–'}</dd></div><div><dt>Temperatur Lade-Chip</dt><dd>${Number.isFinite(h.Temp) ? `${h.Temp.toLocaleString(LOCALE)} °C` : '–'}</dd></div>
         <div><dt>Ladegerät</dt><dd>${esc(status)}</dd></div>${charging ? `<div><dt>Voll in etwa</dt><dd>${esc(etaText || (Number.isFinite(h.Bat_Capacity_mAh) ? 'lässt sich gerade nicht schätzen' : 'Kapazität des Akkus unbekannt'))}</dd></div>` : ''}</dl></section>`,
     `<section class="card"><h2>Verlauf (24 h)</h2>${
@@ -7520,6 +8323,9 @@ const batteryLabel = (n) => BATTERY_NAMES[n] ?? n
 // with the placeholder profile, which read as an empty battery before.
 const USB_C_PROFILE = Object.keys(BATTERY_NAMES).find((n) => /^USB-C/.test(n))
 // (Bat_PercentSource "none": the HAT runs with the placeholder profile, see v_100 <= 10 in mupihat_bq25792.py)
+// A battery on the MuPiHAT and no profile for it: the service then runs with its defaults ("Default"), the charger with
+// its own standard. "USB-C mode" in a new configuration is no profile of the list either.
+const batteryProfileMissing = (h) => h?.Bat_Type === 'Default' && h?.BatteryConnected !== 0
 const noBattery = (h) => h?.BatteryConnected === 0 || h?.Bat_PercentSource === 'none' || hw.data?.mupihat?.battery === USB_C_PROFILE
 const NO_BATTERY_TEXT = 'Kein Akku – die Box läuft über USB-C (Netzteil oder Powerbank).'
 // The profiles as offered: the batteries in the order of the config, the two special ones (no battery, own
@@ -7545,6 +8351,12 @@ async function loadHat() {
   state.values.set('battery', batteryLabel(hw.data.mupihat.battery))
   const p = hw.power.battery?.profile ?? {}
   for (const [key, field] of PROFILE_KEYS) state.values.set(key, p[field] != null ? String(p[field]) : '')
+}
+
+// The battery's size in the profile's name, as the box reads it (mupihat_bq25792.py): "ENERpower 2S3P 15.000mAh" = 15000
+function capacityOfName(name) {
+  const m = /(\d+)[.,]?(\d{3})\s*mAh/.exec(String(name ?? ''))
+  return m ? `${m[1]}${m[2]}` : ''
 }
 
 // What the battery reads now, under the choice of the profile: "7,85 V · 82 % · lädt"
@@ -7645,8 +8457,10 @@ const net = { status: null, scan: null, scanning: false, saved: null, shares: nu
 /* WLAN */
 
 async function loadWlan() {
-  const [st, saved, fixed] = await Promise.all([api('/api/network'), api(`${API}/wifi/saved`), api(`${API}/wifi/static`)])
+  const [st, saved, fixed, wifi] = await Promise.all([api('/api/network'), api(`${API}/wifi/saved`), api(`${API}/wifi/static`), api('/api/wifi/status')])
   net.status = st.ok ? st.body : null
+  // (the WiFi as it is now: the address in network.json is the box's first one, with a cable that of the cable)
+  net.wifi = wifi.ok ? wifi.body : null
   net.saved = saved.ok ? saved.body?.networks ?? [] : null
   // (the networks with a fixed address, by name - see eltern/wifi-static.ts; reverted: one the box took back to DHCP)
   net.fixed = fixed.ok ? fixed.body?.networks ?? {} : {}
@@ -7775,19 +8589,33 @@ const signalBars = (dbm) => {
 function wlanTop() {
   const n = net.status ?? {}
   const row = (k, v) => (v ? `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>` : '')
-  const dbm = Number.parseInt(String(n.wifisignal ?? ''), 10)
-  const online = n.onlinestate === 'online'
-  const name = n.wifi || (n.interface?.startsWith('eth') ? 'LAN-Kabel' : '')
+  const live = net.wifi
+  const name = live ? live.ssid : n.wifi
+  // every adapter by what it is - wlan0 and wlan1 change between starts - the one in use first; an older answer without
+  // the list: what the box knows of the one
+  const adapters = live?.adapters?.length
+    ? [...live.adapters].sort((a, b) => (b.interface === live.interface) - (a.interface === live.interface))
+    : [{ interface: live?.interface ?? n.interface, usb: null, ssid: name, ip: live?.ip, signalDbm: live ? live.signalDbm : Number.parseInt(String(n.wifisignal ?? ''), 10), mac: n.mac }]
+  const connectedCount = adapters.filter((a) => a.ssid).length
+  const adapterBlock = (a) => {
+    const used = a.interface === (live?.interface ?? n.interface)
+    const kind = a.usb === true ? 'USB-WLAN' : a.usb === false ? 'Onboard-WLAN' : ''
+    const state = a.ssid ? (Number.isFinite(a.signalDbm) ? `${signalBars(a.signalDbm)} Empfang ${signalWord(a.signalDbm)}` : '') : a.state === 'INTERFACE_DISABLED' ? 'ausgeschaltet' : 'sucht ein Netz'
+    const ipv6 = used && a.ssid && Array.isArray(n.ipv6) ? n.ipv6 : []
+    return `<div class="wifi-link"><div class="wifi-now"><span class="avatar" translate="no">${a.usb === null ? icon('wifi', 18) : a.usb ? 'USB' : 'Pi'}</span><span class="lbl"><b translate="no">${esc(a.ssid || kind || 'Nicht verbunden')}</b>
+        <small>${a.ssid && kind ? `${kind} · ` : ''}${state}</small></span><span class="chip ${a.ssid ? 'ok' : connectedCount ? '' : 'warn'}">${!a.ssid ? 'nicht verbunden' : used && connectedCount > 1 ? 'in Benutzung' : 'verbunden'}</span></div>
+      ${a.ssid ? `<dl class="kv">${row('IP-Adresse', a.ip)}${ipv6.map((v6) => row('IPv6-Adresse', v6)).join('')}</dl>
+      <details class="more"><summary>Details</summary><dl class="kv">${row('Signal', Number.isFinite(a.signalDbm) ? `${a.signalDbm} dBm` : '')}${used ? row('Gateway', live ? live.gateway : n.gateway) + row('DNS', n.dns) : ''}${row('MAC', a.mac)}${row('Schnittstelle', a.interface)}</dl></details>` : ''}</div>`
+  }
+  const connectedNames = new Set(adapters.map((a) => a.ssid).filter(Boolean))
   const scan = net.scan ?? []
   const inRange = new Map(scan.map((w) => [w.ssid, w.signal_dbm]))
   const saved = new Set((net.saved ?? []).map((w) => w.ssid))
   const pick = net.pick
   return [
     `<section class="card" data-col="1"><div class="card-head"><h2>Verbindung</h2><button class="icon-btn soft" id="w-refresh" aria-label="Aktualisieren">${icon('sync', 18)}</button></div>
-      <div class="wifi-now"><span class="avatar">${icon('wifi', 18)}</span><span class="lbl"><b translate="no">${esc(name || 'Nicht verbunden')}</b>
-        <small>${Number.isFinite(dbm) ? `${signalBars(dbm)} Empfang ${signalWord(dbm)}` : ''}</small></span><span class="chip ${online ? 'ok' : 'warn'}">${online ? 'online' : 'offline'}</span></div>
-      <dl class="kv">${row('IP-Adresse', n.ip)}${(Array.isArray(n.ipv6) ? n.ipv6 : []).map((a) => row('IPv6-Adresse', a)).join('')}</dl>
-      <details class="more"><summary>Details</summary><dl class="kv">${row('Signal', n.wifisignal)}${row('Gateway', n.gateway)}${row('DNS', n.dns)}${row('MAC', n.mac)}</dl></details></section>`,
+      ${adapters.map(adapterBlock).join('')}
+      ${n.onlinestate === 'offline' ? '<p class="help" style="margin:0">Die Box ist gerade ohne Internet.</p>' : ''}</section>`,
     `<section class="card" data-col="1"><h2>Gespeicherte Netze</h2>${
       net.reverted
         ? `<div class="note warn">${icon('info', 18)}<span>${esc(`Mit der festen Adresse hat die Box im Netz „${net.reverted.ssid}“ ihren Router nicht erreicht. Dort holt sie sich ihre Adresse jetzt wieder vom Router (DHCP).`)}</span><button class="btn sm" id="w-rev-ok">OK</button></div>`
@@ -7798,7 +8626,8 @@ function wlanTop() {
           ? `<div class="rows">${net.saved
               .map((w, i) => {
                 const sig = inRange.get(w.ssid)
-                const where = w.active ? 'verbunden' : sig !== undefined ? `in Reichweite · ${signalWord(sig)}` : net.scan ? 'nicht in Reichweite' : ''
+                // (a hidden network is never in the scan: "not found", not "out of reach")
+                const where = w.active ? 'verbunden' : sig !== undefined ? `in Reichweite · ${signalWord(sig)}` : net.scan ? 'nicht gefunden' : ''
                 const fixed = net.fixed?.[w.ssid]
                 // (the buttons in a group of their own: on a phone it goes below the name, see .wifi-net)
                 return `<div class="entry wifi-net"><span class="avatar">${icon('wifi', 16)}</span><span class="lbl"><b translate="no">${esc(w.ssid)}</b>${where ? `<small>${sig !== undefined && !w.active ? signalBars(sig) : ''} ${esc(where)}</small>` : ''}${fixed ? `<small>${esc(fixed.paused ? `feste Adresse ${fixed.ip} pausiert` : `feste Adresse ${fixed.ip}`)}</small>` : ''}</span>
@@ -7815,8 +8644,12 @@ function wlanTop() {
           ? net.scan.length
             ? `<div class="rows">${net.scan
                 .map(
-                  (w, i) =>
-                    `<button class="entry lib-row${pick === w.ssid ? ' picked' : ''}" data-w="${i}"><span class="avatar">${signalBars(w.signal_dbm)}</span><span class="lbl"><b translate="no">${esc(w.ssid)}</b><small>${esc(signalWord(w.signal_dbm))}${w.encrypted ? '' : ' · offen'}</small></span>${n.wifi === w.ssid ? '<span class="chip ok">verbunden</span>' : saved.has(w.ssid) ? '<span class="chip">gespeichert</span>' : ''}${w.encrypted ? `<span class="chev">${icon('lock', 16)}</span>` : ''}</button>`,
+                  (w, i) => {
+                    const inner = `<span class="avatar">${signalBars(w.signal_dbm)}</span><span class="lbl"><b translate="no">${esc(w.ssid)}</b><small>${esc(signalWord(w.signal_dbm))}${w.encrypted ? '' : ' · offen'}</small></span>`
+                    // (the connected network is nothing to add: no button, no password field)
+                    if (connectedNames.has(w.ssid)) return `<div class="entry lib-row wifi-row">${inner}<span class="chip ok">verbunden</span></div>`
+                    return `<button class="entry lib-row wifi-row${pick === w.ssid ? ' picked' : ''}" data-w="${i}">${inner}${saved.has(w.ssid) ? '<span class="chip">gespeichert</span>' : ''}${w.encrypted ? `<span class="chev">${icon('lock', 16)}</span>` : ''}<span class="wifi-check">${icon('check', 14)}</span></button>`
+                  },
                 )
                 .join('')}</div>`
             : `<p class="help" style="margin:0">${net.scanFailed ? 'Die Suche hat nicht geklappt – bitte noch einmal.' : 'Keine Netze gefunden.'}</p>`
@@ -7830,7 +8663,7 @@ function wlanTop() {
         <div class="field"><label for="w-ssid">Netzname (SSID)</label><input class="input" id="w-ssid" maxlength="32" ${NO_PW_MANAGER}></div>
         <div class="field"><label for="w-pw2">Passwort</label><div class="input-wrap"><input class="input has-eye" id="w-pw2" type="password" maxlength="63" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore="true"><button class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div><small>8–63 Zeichen, leer bei einem offenen Netz.</small></div>
         <div class="btns"><button class="btn primary" id="w-add2">Hinzufügen</button></div></details>
-      <p class="help" style="margin:0">Die Box bleibt im aktuellen Netz und nimmt das neue, wenn es in Reichweite und besser ist.</p></section>`,
+      <p class="help" style="margin:0">Nach dem Hinzufügen wählt die Box ihr Netz neu und kann dabei kurz die Verbindung verlieren.</p></section>`,
   ]
 }
 
@@ -8564,6 +9397,12 @@ const SPEECH_LEVELS = [
   [0.7, 'mittel'],
   [1, 'wie die Musik'],
 ]
+// names read out while something plays: what the music does meanwhile (speech.ts playName)
+const NAMES_MUSIC_HELP = {
+  duck: 'Die Musik wird kurz leiser, damit man den Namen versteht.',
+  pause: 'Die Musik hält für den Namen an und läuft danach weiter. Beim schnellen Wischen stockt sie dann öfter.',
+  over: 'Der Name läuft über die Musik, die bleibt, wie sie ist.',
+}
 const fmtMB = (bytes) => `${Math.max(1, Math.round(bytes / 1e6)).toLocaleString(LOCALE)} MB`
 
 async function loadSpeech() {
@@ -8672,6 +9511,16 @@ function speechTop() {
       <div class="field-pick"><input class="input" id="sp-tpl-new" maxlength="300" dir="auto" placeholder="${esc('Neue Vorlage, z. B. „Oma ist da!“')}" ${NO_PW_MANAGER}><button type="button" class="btn" id="sp-tpl-add">${icon('plus', 16)}Hinzufügen</button></div>
       ${sw('sp-gong', 'Gong vorher', 'Ein kurzer Ton, damit das Kind aufhorcht.', c.parents.gong)}
       ${sw('sp-pause', 'Wiedergabe anhalten und danach weiter', 'Sonst wird die Musik während der Durchsage nur leiser.', c.parents.pause)}</section>`,
+    `<section class="card" data-col="2" data-card="namen-vorlesen"><div class="card-head"><h2>Vorgelesene Namen</h2></div>
+      ${sw('sp-autoread', 'Namen vorlesen, wenn das Cover stehen bleibt', disp.theme?.stage === false ? 'Nur mit der Cover-Flow-Ansicht – die ist gerade aus (Aussehen › Ansicht).' : 'Beim Wischen, sobald ein Cover in der Mitte stehen bleibt.', disp.theme?.stageAutoRead === true)}
+      <div class="field"><label>Musik währenddessen</label><div class="seg" id="sp-names-music">${[
+        ['duck', 'Leiser'],
+        ['pause', 'Anhalten'],
+        ['over', 'Unverändert'],
+      ]
+        .map(([v, l]) => `<button aria-pressed="${(c.names?.music ?? 'duck') === v}" data-v="${v}">${esc(l)}</button>`)
+        .join('')}</div>
+        <small>${esc(NAMES_MUSIC_HELP[c.names?.music ?? 'duck'])}</small></div></section>`,
   ]
 }
 
@@ -8716,6 +9565,25 @@ function mountSpeech(root, page) {
   seg('sp-fallback', (v) => speechSave({ fallback: v }).then(again))
   seg('sp-rest-min', (v) => speechSave({ rest: { minutes: Number(v) } }))
   seg('sp-level', (v) => speechSave({ level: Number(v) }))
+  // names read out: the music meanwhile (the line under it follows the choice)
+  seg('sp-names-music', async (v) => {
+    if (!(await speechSave({ names: { music: v } }))) return again()
+    d.config.names = { ...(d.config.names ?? {}), music: v }
+    const small = $('#sp-names-music', root)?.parentElement?.querySelector('small')
+    if (small) small.textContent = tr(NAMES_MUSIC_HELP[v] ?? '')
+  })
+  // (reading names out when a cover stops: a setting of the cover flow stage, saved where it was before - theme-stage)
+  const autoRead = $('#sp-autoread', root)
+  if (autoRead)
+    autoRead.onchange = async () => {
+      const r = await api(`${API}/theme-stage`, { method: 'POST', body: { autoRead: autoRead.checked } })
+      if (!r.ok) {
+        autoRead.checked = !autoRead.checked
+        return toast('Nicht gespeichert', 'info')
+      }
+      if (disp.theme) disp.theme.stageAutoRead = autoRead.checked
+      toast(autoRead.checked ? 'Vorlesen an' : 'Vorlesen aus')
+    }
   // switches (and what belongs to them)
   for (const [id, body] of [
     ['sp-rest', (on) => ({ rest: { on } })],
@@ -8975,7 +9843,10 @@ function aboutTop() {
     `<section class="card"><h2>Name der Box</h2><p class="help">Steht auf dem Startbild und oben in der App.</p>
       <div class="field"><label for="ab-name">Name der Box (höchstens ${max} Zeichen)</label><input class="input" id="ab-name" maxlength="${max}" value="${esc(sys.bs?.current?.boxName ?? '')}" placeholder="${esc(sys.bs?.screens?.defaultName ?? 'MuPiBox')}"></div>
       <div class="btns"><button class="btn primary" id="ab-save">Speichern</button></div></section>`,
-    `<section class="card"><h2>Support</h2><p class="help">Für Hilfe im Discord: ein Zip mit Bibliothek, Einstellungen (ohne Passwörter, Tokens und Konten), Netz- und Systemstand und den Protokollen der Box.</p>
+    // (the profile for a report in the Discord first; the zip when more is asked for)
+    `<section class="card"><h2>Support</h2><p class="help">Für eine Rückmeldung im Discord: ein kurzer Steckbrief der Box zum Einfügen. Ohne IP, WLAN-Namen, Boxnamen und Konten.</p>
+      <div class="btns"><button class="btn primary" id="ab-summary">${icon('copy', 18)}Für Discord kopieren</button></div>
+      <p class="help">Wenn etwas klemmt und nach mehr gefragt wird: das Zip mit Bibliothek, Einstellungen (ohne Passwörter, Tokens und Konten), Netz- und Systemstand und den Protokollen der Box.</p>
       <div class="btns"><a class="btn" href="${API}/support-info" download>${icon('save', 18)}Support-Infos herunterladen</a></div></section>`,
     `<section class="card wide"><div class="hist-head"><h2>Verlauf</h2><div class="pills small" id="ab-range">${[1, 6, 24].map((h) => `<button aria-selected="${sys.range === h}" data-h="${h}">${h} h</button>`).join('')}</div></div>
       <div class="hist-grid" id="ab-charts"><div class="loading"><p>Lade …</p></div></div>
@@ -9062,6 +9933,32 @@ function mountAbout(root) {
     sys.range = Number(b.dataset.h)
     for (const x of b.parentElement.children) x.setAttribute('aria-selected', String(x === b))
     drawSystemHistory(root)
+  }
+  // The profile is fetched with the page and copied right at the tap: the browser lets the old way of copying (the app
+  // on http) work only in the tap itself, not after waiting for the box
+  sys.summary = null
+  api(`${API}/support-summary`).then((r) => {
+    if (r.ok && typeof r.body?.text === 'string') sys.summary = r.body.text
+  })
+  $('#ab-summary', root).onclick = async () => {
+    if (sys.summary == null) {
+      const r = await api(`${API}/support-summary`)
+      if (!(r.ok && typeof r.body?.text === 'string')) return toast('Der Steckbrief ließ sich nicht erstellen', 'info')
+      sys.summary = r.body.text
+    }
+    // (as a code block: the Discord shows it in a fixed font, the same on every box)
+    const fence = '```'
+    const text = `${fence}\n${sys.summary}\n${fence}`
+    openSheet(
+      `<h2>Steckbrief der Box</h2><p class="help">Im Discord einfügen und darunter beschreiben, was passiert ist.</p>
+      <pre class="summary" id="ab-summary-text">${esc(text)}</pre>
+      <div class="btns"><button class="btn" data-close>Schließen</button><button class="btn primary" id="ab-summary-copy">${icon('copy', 18)}Nochmal kopieren</button></div>`,
+      (sheet, close) => {
+        $('[data-close]', sheet).onclick = close
+        $('#ab-summary-copy', sheet).onclick = () => copyText(text, $('#ab-summary-text', sheet))
+      },
+    )
+    copyText(text, $('#ab-summary-text'))
   }
   $('#ab-save', root).onclick = async () => {
     const name = $('#ab-name', root).value.trim()
@@ -9507,11 +10404,15 @@ function wlanNetSections() {
       : 'Nicht installiert'
   const hardware = [
     { type: 'toggle', label: 'Onboard-WLAN an', key: 'wOnboard', help: onboardHelp },
-    { type: 'select', label: 'USB-WLAN-Treiber', key: 'usbDrv', options: (o.drivers ?? []).map((x) => x.id), help: driverState },
   ]
+  // Debian 13 and later: no driver can be built (see network.ts); one that is there can still be removed
+  const canBuild = o.driversBuildable !== false
+  if (canBuild || (o.drivers ?? []).some((x) => x.installed)) {
+    hardware.push({ type: 'select', label: 'USB-WLAN-Treiber', key: 'usbDrv', options: (o.drivers ?? []).map((x) => x.id), help: driverState })
+  }
   if (job.headersMissing) hardware.push({ type: 'warn', text: 'Die Kernel-Header fehlen, der Treiber ließ sich nicht bauen. In /boot/config.txt muss arm_64bit zum System passen.' })
   else if (job.ok === false && !job.running) hardware.push({ type: 'warn', text: 'Das hat nicht geklappt – Details unter System › Protokolle.' })
-  if (!job.running) hardware.push({ type: 'buttons', buttons: [[d?.installed ? 'Treiber entfernen' : 'Treiber installieren', d?.installed ? 'danger' : 'ghost', 'driver']] })
+  if (!job.running && (canBuild || d?.installed)) hardware.push({ type: 'buttons', buttons: [[d?.installed ? 'Treiber entfernen' : 'Treiber installieren', d?.installed ? 'danger' : 'ghost', 'driver']] })
   if (d?.installed) {
     hardware.push({ type: 'select', label: 'Stromsparen des USB-Adapters', key: 'usbPm', options: ['Aus', 'Minimal', 'Maximal'], help: 'Aus = stabilere Verbindung bei manchen Adaptern. Gilt nach einem Neustart.' })
   }
@@ -9540,15 +10441,34 @@ function dhcpItems(which) {
   ]
 }
 
-// Netzwerk › LAN: the cable
+// Netzwerk › LAN: the connection as on the WLAN page (wlanTop). The internet goes where the default route is.
+function lanTop() {
+  const l = nopt.lan
+  if (!l) return []
+  const n = net.status ?? {}
+  const row = (k, v) => (v ? `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>` : '')
+  const connected = !l.off && l.carrier === true
+  const note = l.off ? 'Anschluss ausgeschaltet' : l.carrier === false ? 'kein Kabel' : connected && l.currentGateway && n.onlinestate === 'online' ? 'Internet läuft hierüber' : ''
+  return [
+    `<section class="card" data-col="1"><div class="card-head"><h2>Verbindung</h2><button class="icon-btn soft" id="lan-refresh" aria-label="Aktualisieren">${icon('sync', 18)}</button></div>
+      <div class="wifi-link"><div class="wifi-now"><span class="avatar">${icon('plug', 18)}</span><span class="lbl"><b>LAN-Kabel</b>
+        <small>${esc(note)}</small></span><span class="chip ${connected ? 'ok' : 'warn'}">${connected ? 'verbunden' : 'nicht verbunden'}</span></div>
+      <dl class="kv">${row('IP-Adresse', l.currentIp)}${(l.currentIpv6 ?? []).map((a) => row('IPv6-Adresse', a)).join('')}</dl>
+      <details class="more"><summary>Details</summary><dl class="kv">${row('Gateway', l.currentGateway)}${connected ? row('DNS', n.dns) : ''}${row('MAC', l.mac)}</dl></details></div></section>`,
+  ]
+}
+
+// (also the box's state: internet, DNS)
+async function loadLan() {
+  const [st] = await Promise.all([api('/api/network'), loadNetOptions()])
+  net.status = st.ok ? st.body : null
+}
+
 function lanSections() {
   const l = nopt.lan
   if (!l) return [{ title: 'LAN', items: [{ type: 'note', text: 'Diese Box hat keinen LAN-Anschluss, oder er ließ sich nicht lesen.' }] }]
-  const cable = l.off ? 'Anschluss ausgeschaltet' : l.carrier === true ? 'verbunden' : l.carrier === false ? 'kein Kabel' : '–'
-  const now = [['Kabel', cable], ['Adresse', l.currentIp ?? '–'], ...(l.currentIpv6 ?? []).map((a) => ['IPv6-Adresse', a]), ['Router', l.currentGateway ?? '–']]
   const lan = [
     { type: 'toggle', label: 'LAN an', key: 'lanOn', help: l.off ? 'Ausgeschaltet – bleibt aus, bis es hier wieder eingeschaltet wird.' : 'Mit Kabel hat LAN Vorrang vor dem WLAN.' },
-    { type: 'kv', rows: now },
     { type: 'seg', label: 'Adresse beziehen', key: 'lanMode', options: ['DHCP', 'Statisch'] },
   ]
   if (state.values.get('lanMode') === 'Statisch') {
@@ -9705,7 +10625,22 @@ const wlanCtrl = {
 }
 
 // Netzwerk › LAN: the cable - on, its address now, DHCP or a fixed one
-const lanCtrl = { load: loadNetOptions, sections: lanSections, change: changeNetOption, act: netOptionsCtrl.act }
+const lanCtrl = {
+  load: loadLan,
+  top: lanTop,
+  sections: lanSections,
+  mount(root, page) {
+    const refresh = $('#lan-refresh', root)
+    if (!refresh) return
+    refresh.onclick = async () => {
+      await loadLan().catch(() => undefined)
+      toast('Aktualisiert')
+      if (currentPage()?.id === page.id) renderPage(page, false)
+    }
+  },
+  change: changeNetOption,
+  act: netOptionsCtrl.act,
+}
 
 /* Experten */
 
@@ -9928,10 +10863,12 @@ function updJobCard() {
   const head = {
     running: 'Läuft …',
     rebooting: 'Fertig – die Box startet neu',
-    ok: `Fertig${j.finished ? ` am ${when(j.finished)}` : ''}`,
+    ok: `Fertig${j.finished ? ` am ${when(j.finished)}` : ''}${j.restarted ? ' – die Box wurde danach neu gestartet' : ''}`,
     failed: `Nicht geklappt${j.finished ? ` (${when(j.finished)})` : ''}`,
   }[j.phase] ?? j.phase
   const pct = j.phase === 'running' ? j.percent : 100
+  // (restarted since: the script's "please reboot" at its end is done - left out, it read as still to do)
+  const output = j.restarted ? String(j.output ?? '').split('\n').filter((l) => !/please reboot|reboot (the|your) system/i.test(l)).join('\n') : j.output
   const note = upd.offline
     ? `<div class="note">${icon('info', 18)}<span>Die Box antwortet gerade nicht. Beim MuPiBox-Update ist das normal, der Server wird ausgetauscht. Die Seite fragt weiter nach.</span></div>`
     : j.phase === 'failed'
@@ -9941,8 +10878,8 @@ function updJobCard() {
     <div class="bar"><div class="slider-head"><b>${esc(head)}</b><span class="value-pill">${pct} %</span></div>
       <div class="track"><i style="--w:${pct}%"></i></div>${j.step && j.phase === 'running' ? `<small>${esc(j.step)}</small>` : ''}</div>
     ${note}
-    ${j.phase === 'ok' && j.kind === 'os' ? `<div class="btns"><button class="btn primary" id="upd-reboot">Box neu starten</button></div>` : ''}
-    ${j.output ? `<details id="upd-out"${upd.showOut ? ' open' : ''}><summary class="help">Ausgabe</summary><pre class="logview" style="height:240px">${esc(j.output)}</pre></details>` : ''}</section>`
+    ${j.phase === 'ok' && j.kind === 'os' && !j.restarted ? `<div class="btns"><button class="btn primary" id="upd-reboot">Box neu starten</button></div>` : ''}
+    ${output ? `<details id="upd-out"${upd.showOut ? ' open' : ''}><summary class="help">Ausgabe</summary><pre class="logview" style="height:240px">${esc(output)}</pre></details>` : ''}</section>`
 }
 
 function updatesTop() {
@@ -10566,6 +11503,9 @@ const CONTROLLERS = {
       }
       $('#s-go', root).onclick = doSpotifySearch
       drawSearch()
+      // (shown at once from the last time, then asked anew)
+      drawSpotifyMine()
+      loadSpotifyMine()
     },
   },
   podsuche: {
@@ -10625,6 +11565,13 @@ const CONTROLLERS = {
         drawTidal()
       }
       if (tds.artist || tds.result) drawTidal()
+      const link = $('#tds-link', root)
+      link.addEventListener('input', () => (tds.link = link.value))
+      link.addEventListener('keydown', (e) => e.key === 'Enter' && openTidalLink())
+      $('#tds-link-go', root).onclick = openTidalLink
+      // (shown at once from the last time, then asked anew: a playlist made since comes in)
+      drawTidalMine()
+      loadTidalMine()
     },
   },
   radiosuche: {
@@ -10823,7 +11770,6 @@ const CONTROLLERS = {
     async load() {
       await Promise.all([loadTheme(), loadDisplayOptions()])
       state.values.set('stage', disp.theme.stage === true)
-      state.values.set('tts', disp.theme.stageAutoRead === true)
       state.values.set('names', disp.opts.coverflowShowNames)
       state.values.set('scrollbar', disp.opts.hideScrollbar ? 'Ausblenden' : disp.opts.scrollbarStyle === 'full' ? 'Durchgehend' : 'Standard')
       state.values.set('headerBand', disp.theme.headerBand !== false)
@@ -10843,8 +11789,6 @@ const CONTROLLERS = {
           .map((it) => {
           const cur = themeLabel(disp.theme?.current ?? '')
           if (it.key === 'stage') return { ...it, help: `Große Cover in der Mitte, für die Kinder-Themes${isKidsTheme(disp.theme?.current) ? '' : ` – das aktive Theme (${cur}) nutzt sie nicht`}.` }
-          // (reading names out works only with the cover flow: shown under it while it is on)
-          if (it.key === 'tts') return { ...it, dep: 'stage' }
           // (the scroll bar is below the covers in every view - the stage's, the cover flow's and the three side by side)
           if (it.key === 'scrollbar') return { ...it, helpId: 'sb-help', help: SCROLLBAR_HELP[state.values.get('scrollbar')] ?? SCROLLBAR_HELP.Standard }
           if (it.key === 'names') return { ...it, help: disp.theme?.current === 'coverflow' ? 'Nur beim Theme „coverflow“.' : `Nur beim Theme „coverflow“ – aktiv ist gerade „${cur}“.` }
@@ -10858,10 +11802,6 @@ const CONTROLLERS = {
       if (key === 'stage') {
         const r = await api(`${API}/theme-stage`, { method: 'POST', body: { stage: v } })
         return toast(r.ok ? (v ? 'Cover-Flow-Ansicht an' : 'Cover-Flow-Ansicht aus') : 'Nicht gespeichert', r.ok ? 'ok' : 'info')
-      }
-      if (key === 'tts') {
-        const r = await api(`${API}/theme-stage`, { method: 'POST', body: { autoRead: v } })
-        return toast(r.ok ? (v ? 'Vorlesen an' : 'Vorlesen aus') : 'Nicht gespeichert', r.ok ? 'ok' : 'info')
       }
       if (key === 'headerBand' || key === 'playerPanel' || key === 'fullscreenGestures') {
         const r = await api(`${API}/theme-stage`, { method: 'POST', body: { [key]: v } })
@@ -10886,7 +11826,17 @@ const CONTROLLERS = {
       const custom = !RES_PRESETS.some(([, x, y]) => x === Number(state.values.get('resX')) && y === Number(state.values.get('resY')))
       state.values.set('resCustom', custom)
       state.values.set('resPreset', custom ? 'Eigene …' : `${state.values.get('resX')} × ${state.values.get('resY')}`)
+      const dp = disp.dp
       return [
+        ...(dp
+          ? [
+              {
+                title: dp.test?.running ? 'Neues Display testen' : 'Display-Modell',
+                badge: dp.test?.running ? { text: 'Test läuft', kind: 'warn' } : { text: dmShort(dp.current), kind: dp.current === 'custom' ? '' : 'ok' },
+                items: [{ type: 'html', html: displayModelHtml() }],
+              },
+            ]
+          : []),
         {
           title: 'Helligkeit & Ausschalten',
           help: 'Gilt sofort.',
@@ -10906,7 +11856,13 @@ const CONTROLLERS = {
             { type: 'toggle', key: 'ndQuiet', label: 'Auch während der Ruhezeiten', help: 'Zum Beispiel zur Schlafenszeit, auch wenn sie außerhalb der Uhrzeiten liegt.', dep: 'ndOn' },
           ],
         },
-        {
+        dp?.kms
+          ? {
+              title: 'Drehung',
+              help: 'Bild und Touch drehen sich zusammen. Gilt sofort (die Anzeige startet kurz neu), auch für Start- und Ausschaltbild.',
+              items: [{ type: 'html', html: kmsRotTiles() }],
+            }
+          : {
           title: 'Drehung',
           help: 'Gilt nach einem Neustart der Box.',
           items: [
@@ -10923,6 +11879,10 @@ const CONTROLLERS = {
             },
           ],
         },
+        // (a display with KMS: the kiosk takes the panel's own size, turned - see chromium-autostart.sh)
+        ...(dp?.kms
+          ? []
+          : [
         {
           title: 'Auflösung',
           help: 'Die Auflösung deines Displays. Ist sie größer als 800 × 480, wird die Oberfläche passend vergrößert – scharf und im gleichen Aufbau. Das Display startet damit gleich neu.',
@@ -10933,6 +11893,7 @@ const CONTROLLERS = {
             { type: 'buttons', buttons: [['Auflösung übernehmen', 'primary', 'toast:Gespeichert']] },
           ],
         },
+            ]),
         {
           title: 'Uhrzeit',
           help: 'Die Uhrzeit steht in der Kopfzeile des Displays, rechts neben der Akkuanzeige. Gilt sofort, das Display lädt dafür kurz neu.',
@@ -10945,6 +11906,7 @@ const CONTROLLERS = {
       ]
     },
     mount(root, page) {
+      mountDisplayModel(root, page)
       for (const b of root.querySelectorAll('[data-rot-key]')) {
         b.onclick = () => {
           const key = b.dataset.rotKey
@@ -11428,7 +12390,8 @@ const CONTROLLERS = {
     },
   },
   bluetooth: { load: loadBluetooth, top: btTop, sections: () => [], mount: mountBluetooth },
-  sprachausgabe: { load: loadSpeech, top: speechTop, sections: () => [], mount: mountSpeech },
+  // (the theme too: reading names out depends on the cover flow stage, see "Vorgelesene Namen")
+  sprachausgabe: { load: () => Promise.all([loadSpeech(), loadTheme()]), top: speechTop, sections: () => [], mount: mountSpeech },
   akku: {
     load: loadBattery,
     top: batteryTop,
@@ -11456,6 +12419,9 @@ const CONTROLLERS = {
         items: [
           it('hatOn', { help: 'Umschalten stellt auch die Soundkarte um und startet die Box neu.' }),
           it('battery', { options: batteryOptions(hw.data.mupihat.batteries), help: usbOnly ? NO_BATTERY_TEXT : 'Die Spannungen gehören zu diesem Profil.' }),
+          ...(hw.data.mupihat.active && batteryProfileMissing(hw.hat)
+            ? [{ type: 'html', html: `<div class="note warn">${icon('info', 18)}<span><b>Bitte wähle dein Akku-Profil</b><br>Bis dahin lädt der HAT mit seiner Grundeinstellung, und Ladestand und Zeit bis voll stimmen nicht.</span></div>` }]
+            : []),
           { type: 'html', html: hatNowLine() },
         ],
       }
@@ -11486,7 +12452,14 @@ const CONTROLLERS = {
           col: 1,
           items: [
             it('vreg', { label: 'Ladeschluss', sub: 'VREG', unit: 'mV', help: 'Leer = Standard des Lade-Chips. Bei zwei Zellen in Reihe höchstens 8400 mV (4,2 V je Zelle) – höher schadet dem Akku.' }),
-            it('capacity', { label: 'Kapazität', sub: 'für die Zeit bis voll', unit: 'mAh', help: 'Die Größe des Akkus. Leer = die Größe aus dem Namen des Profils, sonst gibt es keine Zeit bis voll.' }),
+            // (empty: the size the box reads from the profile's name, shown in grey - not saved)
+            it('capacity', {
+              label: 'Kapazität',
+              sub: 'für die Zeit bis voll',
+              unit: 'mAh',
+              placeholder: capacityOfName(hw.data.mupihat.battery),
+              help: capacityOfName(hw.data.mupihat.battery) ? 'Aus dem Namen des Profils. Nur eintragen, wenn dein Akku anders ist.' : 'Die Größe des Akkus. Ohne sie gibt es keine Zeit bis voll.',
+            }),
           ],
         },
         { bar: true, items: [{ type: 'buttons', buttons: [['Profil speichern', 'primary', 'toast:Gespeichert']] }] },
@@ -12378,6 +13351,7 @@ async function renderLogin(hasSession = state.loginHasSession ?? false) {
     $('#content').innerHTML = `
     <div class="login">
       <div class="logo">${mupiImg('width="64" height="67"')}</div>
+      <div class="login-brand">${LOGO}<span class="ed-tag" translate="no">CLASSIC</span></div>
       <div class="login-head"><h1>Willkommen zurück</h1>${portals.length > 1 ? '<p class="help">Wohin möchtest du?</p>' : ''}</div>
       <form class="card" id="login-form">
         ${

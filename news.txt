@@ -1,12 +1,122 @@
+<h3>DEV 5.0.15 - changes compared to 5.0.14</h3>
+<b>WiFi and LAN</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>A WiFi network added with add_wifi.json on the boot partition broke the WiFi configuration on boxes with Debian 11 (bullseye): the network lost its name and its closing line, and the password stayed in it in plain text. The network is now taken as a whole, and nothing is written when its entry is not complete.</li>
+<li id='linews' class='linews'>DietPi 10 (Debian 13): add_wifi.json was put in /boot, which a PC does not see on the memory card, and a file put on the card by hand was not read. It is now on the boot partition (/boot/firmware) and read there; one from /boot is copied over once (the old one stays where it was). A file that is not one JSON object is left as it is, to be corrected, instead of being replaced by the template.</li>
+<li id='linews' class='linews'>An open WiFi network (without a password) whose name contains a quotation mark or a backslash was saved with an extra backslash in its name, and the box never found it. It is now saved as it is called.</li>
+<li id='linews' class='linews'>One answer from the internet missing no longer switches the display and the library to offline: the box asks again after a few seconds and goes offline only when that fails too (on a WiFi with several access points the display showed offline for a moment again and again).</li>
+<li id='linews' class='linews'>Debian 13 (trixie), old admin interface: with one USB WiFi driver installed, the choice also offered the other one with an "Install driver" button that did nothing. It now offers only the drivers that are there, to remove them.</li>
+</ul>
+<b>Support</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>"Copy for Discord": a MuPiHAT run without a battery (profile "USB-C mode") showed "Akku 0 %". It now says "ohne Akku".</li>
+</ul>
+<h3>DEV 5.0.14 - changes compared to 5.0.13</h3>
+<b>Updates</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>Update of a box without a certificate (the 4.0.4 image) to stable 4.2.4: the admin interface was gone afterwards, the web server had SSL switched on and no certificate. The update now creates the simple certificate 4.2.4 expects.</li>
+<li id='linews' class='linews'>Update from the 4.0.4 image: the display no longer stays empty. An update to 5.x shows the new maintenance picture as soon as the package is unpacked, an update to stable 4.2.4 the old installation picture.</li>
+<li id='linews' class='linews'>A version installed directly from a branch shows "DEV" in the app instead of "...".</li>
+</ul>
+<b>Telegram</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>The buttons of /help work again after "Detect chats" in the app: it had limited the bot to text messages for good. The bot sets this right at its next start.</li>
+</ul>
+<b>WiFi and LAN</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>Debian 13 (trixie): the buttons that install the USB WiFi drivers RTL88X2BU and RTL8821AU are not shown, they cannot be built there yet.</li>
+<li id='linews' class='linews'>Known limit on Debian 13 (trixie): older Realtek USB sticks (driver rtl8192cu) can drop out again and again there, and the box can then be out of reach for a while. The built-in WiFi is the better choice there.</li>
+<li id='linews' class='linews'>The WiFi page showed the address of the cable as the address of the WiFi. It now shows the WiFi's own address and details, and the LAN page has the same "Connection" card for the cable.</li>
+<li id='linews' class='linews'>Add network: the chosen network is marked clearly, and the connected network can no longer be chosen there. A hidden saved network no longer reads "out of reach" when it only is not in the scan.</li>
+<li id='linews' class='linews'>A box set up over WiFi on DietPi 10 had no definition for the LAN port: a cable got no address and the LAN page stayed empty. The port is now defined at the start.</li>
+<li id='linews' class='linews'>After a quick change of network or access point the WiFi could disconnect itself again and again. The box now keeps a connection that is already back.</li>
+<li id='linews' class='linews'>The WiFi page names each WiFi adapter by what it is (built-in or USB), with its own address and details: the names wlan0 and wlan1 can change between starts.</li>
+<li id='linews' class='linews'>The WiFi watchdog is now on after a new installation (an update leaves the choice of the box). It no longer starts the WiFi over with a cable plugged in or when the router does not answer pings, and waits longer between attempts when no network is in reach. Restarting the watchdog or switching it off no longer takes the WiFi down with it.</li>
+<li id='linews' class='linews'>Start of the box: the display could stay dark or show the console for about 2.5 minutes when the router sent the box's name in other letters (the box took it over a few seconds after the display had started, and the display lost its connection). The box now keeps its own name.</li>
+<li id='linews' class='linews'>When a WiFi network was added, its password ended up in the system log (in memory until the next restart). It no longer does.</li>
+<li id='linews' class='linews'>Removing a WiFi network or changing its password or band left the WiFi configuration, with the keys of all networks, readable by every user of the box. It now stays readable by root only, and a file left open earlier is closed at the next start.</li>
+</ul>
+<b>MuPiHAT</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>Switching the MuPiHAT on now also sets the pins of its on/off switch by its schematic (LED on GPIO 13, shutdown on 4, button on 17): a box coming from an older version kept other pins, and the LED stayed dark. A restored backup keeps its pins. With the MuPiHAT, the box no longer drives GPIO 27 at shutdown: there it is the interrupt line of the charger.</li>
+<li id='linews' class='linews'>With the MuPiHAT on and no battery profile chosen, the app now asks for one (on the battery page and the start page).</li>
+</ul>
+<b>Library</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>A tab of the display could stay empty for hours although its entries were in the library: an empty list had been kept as the current one. An empty list no longer counts as current and is made again.</li>
+<li id='linews' class='linews'>A library file that could not be read for a moment no longer counts as an empty library, and a podcast that could not be fetched keeps its episodes of the last list instead of being gone for hours.</li>
+</ul>
+<b>Support</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>New in the app under Settings › System › About the box › Support: "Copy for Discord" puts a short profile of the box on the clipboard and shows it - the version and the last three updates (and whether the last one finished), the Pi model and its memory, the system, the drive and its free space, the display model and its rotation, the MuPiHAT and its battery level, the sound card and the player, which services are on, the WiFi band and signal, the temperature and uptime. Pasted on Discord as a code block, laid out the same on every box (always in German), so a report says at once what the box is. Nothing in it names the box, the home or a person: no address, no WiFi name, no box name, no accounts, nothing of the library. When the browser does not allow copying (the app over http), the text is selected to copy by hand. The same profile is in the support zip too (steckbrief.txt), which stays for the closer look when something is stuck.</li>
+<li id='linews' class='linews'>Support zip of a box whose display logs in as root (see Installation below): Chromium's debug log (Settings › System › Browser › Chrome debugging) was missing from it - it is written under /root then. It is taken from there too now.</li>
+</ul>
+<b>Display</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>A turned display with KMS (Touch Display 2, for example) shows the start, maintenance and goodbye pictures again: the picture program ended with an error there, and the console stayed on the screen.</li>
+<li id='linews' class='linews'>Changing the display model in the app (Settings › Display &amp; controls › Display model) is now led through in one window: first what changes (new and previous model, the rotation) and the three steps; then it waits for the restart by itself and asks "Do you see a picture?" with the countdown as soon as the box is back - before, only a short note came and the question showed after loading the page again. Then how it ended: the model stays, or the box goes back to the previous display. Opening the app during a test (on another device too) brings the window at once, also when the page loads anew while the box restarts.</li>
+<li id='linews' class='linews'>The countdown of that test (app and display) ended too early, often by minutes: it was counted from the clock at the start of the box, which a Raspberry Pi takes from the time it last saved until the network sets it. It now counts from the time since the start, as the box itself does.</li>
+<li id='linews' class='linews'>The 3 minutes of that test now run from the moment the app reaches the box after the restart, not from the start of the box: on a weak WLAN the app got there minutes later, and the question came with seconds left. At the latest 6 minutes after its start the box goes back all the same, also when the app comes later; if nobody opens the app (a display with a picture is answered on the display), it waits those 6 minutes.</li>
+<li id='linews' class='linews'>Touch Display 2: the display is built upright, the MuPiBox lies. Chosen under Settings › Display &amp; controls › Display model, it now starts turned by 90° (picture and touch) - before it came up upright and had to be turned under Rotation, during the 3 minutes of its test. An installation with this display on the box (its line in config.txt) sets 90° too. Upside down in its case: 270° under Rotation.</li>
+<li id='linews' class='linews'>Touch Display 2: now and then the touch did not work after the start, the picture did (until the next start). Its touch chip takes its power from the display and was sometimes asked before it had it. Once the display is there, the box asks a touch chip that gave up at the start once more.</li>
+<li id='linews' class='linews'>The update now brings the display's Chromium up to date every time: boxes set up from the 4.2.4 image still ran the browser of early 2024 (122), and its security updates were missing. On it, lists of covers without the "Stage" view could not be swiped any more once a folder was opened a second time - only the scrollbar moved them, until the next folder; with a current Chromium they swipe as they should. Only the browser and Widevine (which Spotify needs); when it is current nothing is loaded, the first time from 122 it takes a few minutes and about 100 MB more. Does that fail, the update goes on and the display keeps the Chromium it had.</li>
+<li id='linews' class='linews'>Boxes with 1 GB of memory (or less): the display showed bands of colour in photos and covers - Chromium's "low-end device mode", which saves memory there, also draws its pictures with 16 bits per pixel. The mode stays, the pictures now come in full colour (as on boxes with 2 GB or more, where the mode is off).</li>
+</ul>
+<b>Installation</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>Installing on a fresh DietPi card: DietPi's dietpi.txt logs in as root at the start unless it was changed before - the display (Chromium) then ran as root, without the browser's sandbox, with its profile and log under /root. The installation now sets the login of the display to dietpi itself, as on the MuPiBox image.</li>
+</ul>
 <h3>DEV 5.0.13 - changes compared to 5.0.12</h3>
+<b>Display models</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>New in the app under Settings › Display &amp; controls › Display model: which display is on the ribbon cable (DSI) - the official 7" of the 1st generation (also HDMI or no display; how the boxes so far run), the Raspberry Pi Touch Display 2 (5", 7", 10"), Waveshare 5" and 4.3" (800 × 480), Waveshare DSI 7" to 12.3" (the exact model: "DSI LCD" and "DSI-TOUCH" are different designs, also at the same size), EDATEC 7" or 10", or an own setting (the app leaves config.txt alone). A box that shows a picture has its model preselected (from config.txt). A display on the ribbon cable does not say what it is, and a wrong model leaves it dark: the box restarts with the new model, and the app (on the start page too) and the display ask "Do you see a picture?" - a tap on "Keep" keeps it; without an answer within 3 minutes the box sets the display of before again and restarts once more. Tested on a MuPiBox: the Touch Display 2 7"; the others use the drivers of the Raspberry Pi kernel.</li>
+<li id='linews' class='linews'>Rotation of these displays (all but the official 7"): four tiles 0°, 90°, 180°, 270° - picture and touch turn together, and so do the start, maintenance and goodbye pictures (they came up small and upright on a Touch Display 2); the display restarts briefly, the box does not. "Landscape" marks where the MuPiBox stands right. The display's size is taken from the display itself, turned (the resolution setting does not show there). Mirroring too (left-right or top-bottom, instead of turning, as for an HDMI display) - picture and touch together; the start, maintenance and goodbye pictures are not mirrored.</li>
+<li id='linews' class='linews'>Restarting the display from the app on a box whose system logs in as root at the start (some own installations, e.g. on a Raspberry Pi 5): the display stayed dark - X was started again as dietpi and could not take the console. The display is now always restarted as the user that starts it at the start of the box.</li>
+<li id='linews' class='linews'>Installing on a box with such a display (its line in config.txt before the installation): the installation switched off the graphics driver these displays need (KMS) - the display stayed dark. It stays on now. With KMS the dimming of the LED ring and WLED while the display is off works too (it asked the firmware, which does not know these displays).</li>
+</ul>
+<b>Update</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>Updating from 4.2.4 with the update buttons of the old admin interface: the update did nothing (after a moment the page showed an error 500) - it ran inside the admin interface's request, without the terminal its progress bar needs, and it would have stopped itself on the way (5.0.12 switches the old admin interface off, and with it the update) or been cut off by the admin interface's own restart 5 s later. Started from there, the update now runs on in the background as the app runs it: the page returns at once, the display shows the maintenance screen, and the box restarts by itself when the update is done (up to 30 minutes on older boxes). Restarts are held until then, and a second click on an update button does not start a second update (the old page may say the update is complete before it is - the box restarts by itself when it is). An update that stops - from the app, the terminal or the admin interface - starts the display again (before, it stayed off until the next restart).</li>
+<li id='linews' class='linews'>Display restarted three times after the start (on boxes that came from 4.x, with Chromium's package chromium-browser): the kiosk watchdog of 5.0.12 looked for Chromium's window under the name "chromium" only, found none and restarted the display although the start page was open. It now finds it under both names. The tool it looks with (xwininfo, package x11-utils) is installed by the installation and the update and offered on the app's start page when it is missing; without it the watchdog stays off instead of restarting the display.</li>
+<li id='linews' class='linews'>Updates page of the app after an update and the restart of the box: the card still showed the script's request to restart and, after an update of the operating system, a restart button. It now shows "Done at … – the box has restarted since" (told by the boot of the box, not by its clock: a corrected time counted as a restart).</li>
+<li id='linews' class='linews'>Update script: the themes are copied in one loop, the folders of the MuPiBox made in one go (#39).</li>
+</ul>
 <b>TIDAL</b>
 </ul>
 <ul id='ulnews' class='ulnews'>
 <li id='linews' class='linews'>After switching the box on, TIDAL showed as signed out until the next restart of the box - its service often starts a few seconds before the network, and it tried the saved sign-in only once. It now tries again until TIDAL answers - after 15 s, then less often (at most every 5 minutes), also when TIDAL is down for a moment, and never sooner than TIDAL asks (when it asks for more than 6 hours, only the next start or a sign-in tries again) - and stops as soon as someone signs in or out in the app; the sign-in itself was never lost.</li>
+<li id='linews' class='linews'>Choosing a track of a TIDAL playlist that plays (track list): when the playlist was changed on TIDAL since it started (e.g. a track added in front), the choice played the wrong track. The list shown is now the one that plays.</li>
+<li id='linews' class='linews'>Spotify, own playlists: Search on Spotify now shows "My playlists" - the account's own playlists and the ones it follows, also private ones the search does not find, own first. Marked when Smart-Sync brings one anyway, and when it is Spotify's own (its mixes often do not play for apps like the box's). Gentle with Spotify: asked when the page opens (pages of 50, through the box's pacing and its Spotify block) and kept 5 minutes.</li>
+<li id='linews' class='linews'>Own playlists: TIDAL's search does not find playlists made by users. Search on TIDAL now shows "My playlists" - the account's own playlists and the ones it saved, own first - and takes a TIDAL link (Share › Copy link in TIDAL) to a playlist or an album someone sent. They are added like any other playlist; a playlist changed on TIDAL plays in its new state.</li>
+<li id='linews' class='linews'>Playlists (Spotify and TIDAL) on the start page: a playlist added in the app went into a folder of its own with its name - two taps on the box before anything played. When a playlist is added, "On the start page" now offers a tile of its own (preselected: one tap plays it) or a folder, with the folders there are as suggestions, also an artist's with albums. Changed later on the entry in the library, where "Artist" is this choice for playlists and the title is "Tile name" (also used for a Spotify playlist on the box now; empty: Spotify's name). Playlists added before stay where they are. A TIDAL playlist without a folder gets a tile of its own on the box too, as Spotify playlists and radio stations had (it was not shown).</li>
+</ul>
+<b>Display</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>Names read out while something plays (the cover stops, or a tap on it): the name replaced the music - the mini player showed a string of letters and numbers (the sound's file name) and went away a few seconds later, nothing played any more. The name is now read next to the music, which goes on - quieter for a moment by default, so the name can be understood. New in the app under Audio › Speech output › Names read aloud: the music meanwhile quieter, paused (it goes on a little after the last name) or unchanged; the switch for reading names out when a cover stops moved there too (it was under Appearance › View).</li>
+<li id='linews' class='linews'>After an announcement of the parents (app, Telegram) the display opened the big player, away from where the child was looking for something. It stays where it is now; the music goes on as before.</li>
+</ul>
+<b>MuPiHAT</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>The battery page shows the power supply's USB-PD contract, e.g. "12 V · up to 2.25 A (27 W)" - what the MuPiHAT agreed on with the supply (read from its PD chip, TPS25730); a bare "USB voltage 12 V" left people wondering. Only with a supply plugged in (the chip is powered from USB-C), and only values read the same way twice: the Pi 3 and 4 do not always read the chip without errors.</li>
 </ul>
 <b>App</b>
 </ul>
 <ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>The MuPiBox lettering on top of the side bar (PC, tablet), on top of the settings (phone) and on the login page - the same as in the MuPiBox NG. Under it a badge with CLASSIC and the version installed: "Up to date", "Development version", or lit with a newer version ("Update: …"); a tap opens the updates.</li>
 <li id='linews' class='linews'>Default password: a new box could not get a password of its own - the app asked for the current one, and the default showed only in the admin interface, which is off since 5.0.12. While the default password applies, the app no longer asks for it when a new one is set, and sign-in can only be switched on once the box has a password of its own (before, a box with sign-in switched on asked for a password nobody saw). The manual names the default password.</li>
 <li id='linews' class='linews'>Themes: when the display's folder belonged to another user than dietpi (e.g. after files were copied in by hand as root, or unpacked from another computer), switching the theme only said 'That did not work' - and the setting changed while the display kept the old theme. The app now names the reason and leaves the setting as it was; the start of the box gives such files back to dietpi (only those, nothing is written on a box where all is right). The update also gave the themes' pictures to root - no longer.</li>
 </ul>

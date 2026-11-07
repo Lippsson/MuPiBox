@@ -2,6 +2,26 @@
 
 **Settings › Display & controls › Display**
 
+## Display model
+
+A display on the ribbon cable (DSI) does not say what it is. So you choose here which one is connected. On a box that already shows a picture, the matching model is preselected.
+
+| Model | Note |
+| --- | --- |
+| **Official 7″ (1st generation)** | 800 × 480, also for a display on the HDMI port or no display at all – this is how the boxes so far run |
+| **Touch Display 2** | by Raspberry Pi, choose the size 5″, 7″ or 10″ – tested on a MuPiBox (7″) |
+| **Waveshare 5″ DSI** / **Waveshare 4.3″ DSI** | 800 × 480 each |
+| **Waveshare DSI 7″ to 12.3″** | choose the exact model, it is on the back or the box it came in. "DSI LCD" and "DSI-TOUCH" are different designs, even at the same size |
+| **EDATEC DSI 7″ or 10″** | choose the size |
+| **Own setting** | the app leaves `config.txt` alone – for displays you set up yourself |
+
+With **Apply and restart** the app first shows what changes and, after **Switch**, restarts the box with the new model. A window in the app waits for the restart – no need to reload – and then asks by itself, as the display does: **Do you see a picture?** Opening the app during the test (on another device too) brings that question at once. Tap **Keep** on the display or **Yes, keep** in the app, and the model stays. Without an answer within **3 minutes** – for instance because the display stays dark – the box sets the previous display again and restarts once more. **No, back** does that at once. The 3 minutes run from the moment the app reaches the box after the restart – on a weak WLAN that can take a while. At the latest 6 minutes after its start the box goes back all the same, also when the app comes later, and then less than 3 minutes are left. If nobody opens the app, the box waits those 6 minutes.
+
+The **Touch Display 2** is built upright. When you choose it here, the box starts it lying right away (**90°**, picture and touch). If it is upside down in your case, take **270°** under [Rotation](#rotation).
+
+> [!NOTE]
+> If the display stays dark with the right model too, check its power: most DSI displays do not get their 5 V over the ribbon cable but over a cable of their own (on the MuPiHAT at **J2**, 5V on top, GND below). Apart from the official 7″, all models use the drivers of the Raspberry Pi kernel.
+
 ## Brightness and display off
 
 | Setting | Range |
@@ -24,11 +44,16 @@ With **Evening dimming** the display gets darker in the evening and normally bri
 
 ## Rotation
 
-If the display stands upside down or sideways, you rotate the picture. For a **Display on the HDMI port** you choose off, 90°, 180°, 270°, mirror horizontally or vertically. For a **Display on the ribbon cable (DSI/LCD)** there are (folded) **LCD rotation** and **Display LCD rotation**, each off or 180°. The rotation applies after a restart of the box.
+If the display stands upside down or sideways, you rotate the picture. What you see for it depends on the display model:
+
+- **Official 7″ (1st generation):** For a **Display on the HDMI port** you choose off, 90°, 180°, 270°, mirror horizontally or vertically. For a **Display on the ribbon cable (DSI/LCD)** there are (folded) **LCD rotation** and **Display LCD rotation**, each off or 180°. The rotation applies after a restart of the box.
+- **All other models:** tiles **0°**, **90°**, **180°** and **270°** as well as **Mirror ↔** (left-right) and **Mirror ↕** (top-bottom) – turned or mirrored, not both. Picture and touch turn or mirror together; when turned, the start, maintenance and goodbye pictures turn too (mirrored, these pictures stay as they are). The display restarts briefly, the box does not. **Landscape** marks the positions in which the MuPiBox stands right – many of these displays are built upright (such as the Touch Display 2), then it is 90° or 270°, depending on how the display is mounted. The box sets the Touch Display 2 to 90° already when its model is chosen and when it is installed with this display.
 
 If the box has a **display on the ribbon cable (DSI)** with the KMS driver (`vc4-kms-v3d`, the default on newer DietPi installations) and finds it, a field of its own appears above: **Display on the ribbon cable (DSI)**, with the same six tiles as for the HDMI display: 90°, 180°, 270°, mirror horizontally or vertically. The picture is turned and mirrored by the display server, and the **touch turns and mirrors with it**, so a tap lands where the picture is. After the change the display restarts at once; the box does not need a restart. The picture is turned relative to how the display shows it by default: a display built in upright is brought to landscape with 90° or 270°.
 
 ## Resolution
+
+With all models except the official 7″ the box takes the resolution from the display itself (after the rotation) – the **Resolution** section does not show then.
 
 The default is **800 × 480** pixels (the size of the usual 7-inch touch displays). Under **Size** you choose one of the usual sizes or **Custom …** and then enter **Width** and **Height**. With **Apply resolution** the display restarts at once.
 

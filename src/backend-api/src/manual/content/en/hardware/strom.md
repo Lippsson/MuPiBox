@@ -8,6 +8,8 @@ Under **Settings › Battery & Power** you find everything about the power suppl
 
 While charging, the voltage reads too high, because the charger lifts the battery above its rest voltage. So while charging the box counts the charge that goes in, starting from the level before the cable was plugged in, and shows **full in about …**. Shortly after charging, while the voltage is still raised, it keeps counting, and only then goes by the voltage again. The time is an estimate: if the box plays at the same time, the battery gets less current, and a weak 5 V power supply charges it much more slowly.
 
+With a **USB-PD** (Power Delivery) power supply plugged into the MuPiHAT, the page also shows **Power supply (USB-PD)**, for example “12 V · up to 2.25 A (27 W)”: the level the MuPiHAT agreed on with the supply. It takes 12 V at most. Without a power supply, or with one without USB-PD, the row is not there. The Pi 3 and 4 do not always read the chip without errors; so the box shows only values it read the same way twice.
+
 ## MuPiHAT and battery profile
 
 The **MuPiHAT** is a board with battery management that is plugged onto the Raspberry Pi. Under **MuPiHAT & battery profile** you set:
@@ -43,7 +45,7 @@ With an **OnOff SHIM** (on/off button with status LED) you switch the box on and
 | Setting | Effect |
 | --- | --- |
 | **Delay of the shutdown button** | how long you hold the button until the box goes off, 0 to 5 seconds (2 after installation). Applies after a restart |
-| **LED pin (OnOffShim)** | the GPIO pin of the LED (13 after installation). Applies after a restart |
+| **LED pin (OnOffShim)** | the GPIO pin of the LED (13 after installation; switching the MuPiHAT on sets its pins, the LED to 13). Applies after a restart |
 | **LED brightness normal** | brightness in operation, 0 to 100 % |
 | **LED brightness dimmed** | brightness when dimmed, 0 to 100 % |
 

@@ -26,6 +26,143 @@ else
 	RELEASE="stable"
 fi
 
+# Started by the admin interface of 4.x (its update buttons run "curl ... | sudo bash" inside the PHP request): there
+# is no terminal for whiptail (the update stopped at its first step), the update stops php-fpm on the way (the admin
+# interface is off by default since 5.0.12 - the update, a child of php-fpm, went down with it), and the admin
+# interface restarts the box 5 s after the call returns (footer.php: restart.sh). So the update is handed over to a
+# systemd unit of its own, as the app runs it: the request returns at once, restart.sh is held until the update is
+# done, and the unit restarts the box at its end. The display shows the maintenance screen meanwhile.
+started_by_php() {
+	local pid=$PPID comm i
+	for i in 1 2 3 4 5 6 7 8; do
+		[ -n "${pid}" ] && [ "${pid}" -gt 1 ] 2>/dev/null || return 1
+		comm=$(cat /proc/${pid}/comm 2>/dev/null)
+		case "${comm}" in php-fpm*|php-cgi*|php[0-9]*) return 0 ;; esac
+		# (the parent: the field after the ")" that ends the command's name)
+		pid=$(sed 's/.*) //' /proc/${pid}/stat 2>/dev/null | cut -d' ' -f2)
+	done
+	return 1
+}
+# The hold of restart.sh while a handed-over update runs: the admin interface of 4.x calls restart.sh 5 s after every
+# update click (footer.php, whatever the click answered) - also when it only heard "an update is running already". The
+# hold is put in at the handover and again right after the update installed its new scripts (they include restart.sh);
+# restart.sh of 5.0.13 and later also checks for the unit itself.
+HOLD_MARK='MUPIBOX-UPDATE-HOLD'
+# $1 put in as $2: written next to it, on the card, then renamed - a power cut leaves the old file or the new one,
+# never a cut one (restart.sh is what the box restarts with). Always executable: the restart.sh kept right after the
+# update moved its scripts in is not yet (the update makes them executable a step later) - put back as it was, the
+# box's restart button did nothing ("command not found").
+put_atomic() {
+	cp -p "$1" "$2.mupibox-new" && chmod 755 "$2.mupibox-new" && sync "$2.mupibox-new" && mv -f "$2.mupibox-new" "$2" && sync "$(dirname "$2")"
+}
+hold_restart() {
+	# $1: where the real restart.sh is kept meanwhile
+	local held=/usr/local/bin/mupibox/restart.sh
+	[ -f "${held}" ] || return 0
+	if ! grep -q "${HOLD_MARK}" "${held}"; then
+		put_atomic "${held}" "$1" || return 1
+	fi
+	# (holds while the handover prepares - its lock is held - and while the unit runs; left behind - the power went off
+	# during the update - it restarts as before: the lock is in /run, gone at the start)
+	# (every step checked: success only with the whole placeholder written, read back and in place as restart.sh - a cut
+	# one, put in whole, would hold nothing; the first and the last line are looked for)
+	local tmp="${held}.mupibox-hold"
+	if ! printf '#!/bin/sh\n# %s: an update runs (mupibox-update-admin) - the box restarts when it is done\nif systemctl is-active --quiet mupibox-update-admin || ! flock -n /run/lock/mupibox-update-admin.lock true 2>/dev/null; then\n\tlogger -t mupibox "restart held: an update runs (mupibox-update-admin)"\n\texit 0\nfi\nif [ -f %s ]; then\n\texec /bin/bash %s "$@"\nfi\nexec reboot\n' "${HOLD_MARK}" "$1" "$1" > "${tmp}" \
+	   || [ "$(head -n 1 "${tmp}")" != '#!/bin/sh' ] || [ "$(tail -n 1 "${tmp}")" != 'exec reboot' ] \
+	   || ! chmod 755 "${tmp}" || ! put_atomic "${tmp}" "${held}"; then
+		rm -f "${tmp}" "${held}.mupibox-new"
+		return 1
+	fi
+	rm -f "${tmp}"
+	# (in place: the one that is restart.sh now)
+	grep -q "${HOLD_MARK}" "${held}" && [ "$(tail -n 1 "${held}")" = 'exec reboot' ]
+}
+if [ -z "${MUPIBOX_UPDATE_HANDED_OVER:-}" ] && [ ! -t 1 ] && started_by_php; then
+	HD=/var/lib/mupibox-update-admin
+	HUNIT=mupibox-update-admin
+	HELD=/usr/local/bin/mupibox/restart.sh
+	# one handover at a time (two clicks, two admin sessions): checking, preparing and starting under one lock - a second
+	# one waits for it and then finds the unit running. (Waiting runs out only while the first holds the lock - and that
+	# one holds restart.sh before anything that takes long: the admin interface's restart after the second click does
+	# nothing either.)
+	exec 8> /run/lock/mupibox-update-admin.lock
+	flock -w 120 8 || { echo "Another update is being started - please wait a moment and look again."; exit 0; }
+	if systemctl is-active --quiet ${HUNIT}; then
+		# (not touching restart.sh: it is held for the running update)
+		echo "An update is running already (${HUNIT}) - the box restarts when it is done."
+		exit 0
+	fi
+	# restart.sh held at once, before the download (which may take minutes): see hold_restart
+	mkdir -p ${HD}/bin
+	HOLD_MINE=0
+	if [ -f ${HELD} ] && ! grep -q "${HOLD_MARK}" ${HELD}; then
+		if ! hold_restart ${HD}/restart.sh.held; then
+			# (the admin interface restarts the box in 5 s - nothing is started that it would cut off)
+			echo "Error: the update could not be prepared (no space left?) - nothing was changed."
+			exit 1
+		fi
+		HOLD_MINE=1
+	fi
+	# (nothing started: only the hold this call put in goes again)
+	unhold_mine() {
+		if [ "${HOLD_MINE}" = "1" ] && ! systemctl is-active --quiet ${HUNIT} && [ -f ${HD}/restart.sh.held ]; then
+			put_atomic ${HD}/restart.sh.held ${HELD}
+		fi
+	}
+	# (MUPIBOX_UPDATE_SCRIPT_URL: another copy of this script, to test one before it is on main: without it the handed-over
+	# run was always the one from main, whatever the admin interface had started)
+	if ! curl -fsSL --retry 3 --retry-delay 3 -m 120 -o ${HD}/start_mupibox_update.sh "${MUPIBOX_UPDATE_SCRIPT_URL:-https://raw.githubusercontent.com/splitti/MuPiBox/main/update/start_mupibox_update.sh}" \
+	   || ! bash -n ${HD}/start_mupibox_update.sh; then
+		unhold_mine
+		echo "Error: the update script could not be downloaded - nothing was changed. Please try again."
+		exit 1
+	fi
+	# (whiptail's progress bar has no terminal here: its input is only read away)
+	printf '#!/bin/sh\ncat > /dev/null\n' > ${HD}/bin/whiptail
+	chmod 755 ${HD}/bin/whiptail
+	cat > ${HD}/run.sh <<'HANDOVER'
+#!/bin/bash
+# The update handed over by the admin interface of 4.x (see start_mupibox_update.sh): $@ = its arguments
+HD=/var/lib/mupibox-update-admin
+HELD=/usr/local/bin/mupibox/restart.sh
+exec > ${HD}/output.txt 2>&1
+# (the admin interface saves its settings right after the call returned: they are written before the update starts)
+sleep 20
+systemctl stop mupi_idle_shutdown 2>/dev/null
+cd /home/dietpi
+MUPIBOX_UPDATE_HANDED_OVER=1 PATH="${HD}/bin:${PATH}" bash ${HD}/start_mupibox_update.sh "$@"
+RC=$?
+# restart.sh back - the one the update installed, or the one before when it stopped earlier (written next to it, on
+# the card, then renamed: see put_atomic in start_mupibox_update.sh)
+if grep -q 'MUPIBOX-UPDATE-HOLD' ${HELD} 2>/dev/null && [ -f ${HD}/restart.sh.held ]; then
+	cp -p ${HD}/restart.sh.held ${HELD}.mupibox-new && chmod 755 ${HELD}.mupibox-new && sync ${HELD}.mupibox-new && mv -f ${HELD}.mupibox-new ${HELD} && sync /usr/local/bin/mupibox
+fi
+if [ "${RC}" = "0" ] && [ ! -e /tmp/mupibox-update-nostart ]; then
+	echo "Update finished - the box restarts."
+	sleep 5
+	systemctl reboot
+elif [ -e /tmp/mupibox-update-nostart ]; then
+	# (the way back did not complete: nothing is started on that installation - the next start of the box finishes it)
+	echo "The update stopped and the way back is not complete - restart the box (see /boot/mupibox_update.log)."
+else
+	echo "The update did not finish (code ${RC}) - see /boot/mupibox_update.log; the box goes on with the version before."
+	systemctl start mupi_idle_shutdown 2>/dev/null
+	# the display back (the update ended Chromium at its start) - unless the update already started it again
+	if ! pgrep -x chromium >/dev/null && ! pgrep -x chromium-browse >/dev/null; then
+		sudo -i -u dietpi bash -c "setsid nohup /usr/local/bin/mupibox/restart_kiosk.sh >/dev/null 2>&1 < /dev/null &"
+	fi
+fi
+HANDOVER
+	chmod 755 ${HD}/run.sh
+	if ! systemd-run --unit=${HUNIT} --collect --quiet /bin/bash ${HD}/run.sh "$@"; then
+		unhold_mine
+		echo "Error: the update could not be started in the background - nothing was changed."
+		exit 1
+	fi
+	echo "The update runs in the background (${HUNIT}, log ${HD}/output.txt) - the box restarts when it is done (up to 30 minutes)."
+	exit 0
+fi
+
 # The Pi's boot files: /boot/firmware/ on newer DietPi (v10, Debian 13 "Trixie"), /boot/ before (as autosetup.sh)
 BOOT_CONFIG="/boot/config.txt"
 BOOT_CMDLINE="/boot/cmdline.txt"
@@ -91,6 +228,8 @@ fail_update() {
 	else
 		echo "## (your installation is as it was before the update)" >&3 2>&3
 		sudo -H -u dietpi bash -c "pm2 start server; pm2 start spotify-control" >&3 2>&3
+		# the display too: the update ended Chromium at its start, and it stayed off (also from the app or the terminal)
+		sudo -i -u dietpi bash -c "setsid nohup /usr/local/bin/mupibox/restart_kiosk.sh >/dev/null 2>&1 < /dev/null &" >&3 2>&3
 	fi
 	service mupi_idle_shutdown start >&3 2>&3
 	# (the exit below ends only the part in the progress bar - the script after it reads this and ends with an error
@@ -149,7 +288,7 @@ service mupi_idle_shutdown stop
 # One list for every channel (stable and beta kept the list of before until 5.0.10 - without xdotool, which the display's
 # window and the goodbye picture need, and with the packages above that nothing uses).
 # libwidevinecdm0 stays: the display plays Spotify through the Web Playback SDK in Chromium, which needs Widevine
-packages2install="lighttpd-mod-openssl gpiod git mpv pulseaudio-module-bluetooth python3-pip bluez zip rrdtool scrot net-tools wireless-tools bc build-essential python3-rpi.gpio python3-lgpio python3-serial python3-requests python3-paho-mqtt python3-smbus2 pigpio libjson-c-dev python3-alsaaudio python3-netifaces libwidevinecdm0 python3-flask python3-pil librsvg2-bin feh xdotool rfkill"
+packages2install="lighttpd-mod-openssl gpiod git mpv pulseaudio-module-bluetooth python3-pip bluez zip rrdtool scrot net-tools wireless-tools bc build-essential python3-rpi.gpio python3-lgpio python3-serial python3-requests python3-paho-mqtt python3-smbus2 python3-alsaaudio python3-netifaces libwidevinecdm0 python3-flask python3-pil librsvg2-bin feh xdotool rfkill x11-utils x11-xserver-utils"
 # packages the update removes (apt-get remove, only when installed) - none at the moment; Debian's jq goes where the
 # update puts its own jq (see "Copy binaries")
 packages2remove=""
@@ -167,8 +306,9 @@ ARCH=$(uname -m) >&3 2>&3
 # maintenance screen of the box (boot screen scene, text in the box's language); the old picture without one
 if [ -x /usr/local/bin/mupibox/maintenance_screen.sh ]; then
 	/usr/local/bin/mupibox/maintenance_screen.sh update >&3 2>&3
-else
-	/usr/bin/fbv /home/dietpi/MuPiBox/sysmedia/images/installation.jpg & >&3 2>&3
+elif [ -s /home/dietpi/MuPiBox/sysmedia/images/installation.jpg ]; then
+	# (on the display's terminal: fbv shows nothing without one, and the handed-over update has none)
+	/usr/bin/fbv /home/dietpi/MuPiBox/sysmedia/images/installation.jpg </dev/tty1 >/dev/tty1 2>&3 &
 fi
 
 if [ -z "$BRANCH" ]; then
@@ -220,20 +360,16 @@ rm -f /tmp/mupibox-update-failed
 {
 	###############################################################################################
 
-
 	echo -e "XXX\n0\nPrepare Update... \nXXX"	 >&3 2>&3
 	systemctl stop mupi_idle_shutdown.service >&3 2>&3
-	mkdir /home/dietpi/.mupibox/chromium_cache >&3 2>&3	
-	mkdir /home/dietpi/MuPiBox/media/audiobook >&3 2>&3	
-	mkdir /home/dietpi/MuPiBox/media/music >&3 2>&3
-	mkdir /home/dietpi/MuPiBox/media/other >&3 2>&3
+
+	mkdir -p /home/dietpi/.mupibox/chromium_cache >&3 2>&3	
+	mkdir -p /home/dietpi/MuPiBox/media/{audiobook,music,other,cover,youtube-dl} >&3 2>&3
 	if [ "$RELEASE" = "dev" ]; then
 		mkdir /home/dietpi/MuPiBox/media/NAS >&3 2>&3
 	fi
-	mkdir /home/dietpi/MuPiBox/media/cover >&3 2>&3
-	mkdir /home/dietpi/MuPiBox/media/youtube-dl >&3 2>&3
-	chown dietpi:dietpi /home/dietpi/MuPiBox/media/audiobook >&3 2>&3
-	chown dietpi:dietpi /home/dietpi/MuPiBox/media/music >&3 2>&3
+
+	chown dietpi:dietpi /home/dietpi/MuPiBox/media/{audiobook,music,other,cover,youtube-dl} >&3 2>&3
 
 	STEP=$(($STEP + 1))
 
@@ -244,7 +380,19 @@ rm -f /tmp/mupibox-update-failed
 	# a dpkg stopped halfway before (power gone during an installation) makes apt refuse every package until it is
 	# finished, and dependencies left broken by that as well
 	dpkg --configure -a >&3 2>&3
-	apt-get update >&3 2>&3
+	# (whether the lists are fresh: with old ones an upgrade finds nothing newer and still succeeds - see Chromium below.
+	# A list it could not fetch - a DNS error, the server away - leaves the old one with a warning, and apt-get still
+	# ends with 0: so its words are read, too.)
+	apt_lists_update() {
+		local out rc
+		# (in English: its words are read - with another language of the box they are other ones)
+		out=$(LC_ALL=C apt-get update 2>&1)
+		rc=$?
+		printf '%s\n' "${out}" >&3
+		[ ${rc} -eq 0 ] && ! printf '%s\n' "${out}" | grep -qE '^(Err:|W: (Failed to fetch|Some index files failed))'
+	}
+	APT_LISTS_FRESH=""
+	apt_lists_update && APT_LISTS_FRESH=1
 	apt-get --yes -f install >&3 2>&3
 	after=$(date +%s)
 
@@ -305,11 +453,46 @@ rm -f /tmp/mupibox-update-failed
 		fi
 	fi
 
+	# The display's Chromium up to date with every update (the box itself is rarely updated otherwise): the 4.2.4 image
+	# brought 122 (early 2024) and nothing updated it since - on it a list of covers could not be swiped any more once it
+	# was drawn anew, and its security updates were missing. Nothing is loaded when it is current. Only the browser's
+	# package (chromium-browser of Raspberry Pi OS on Debian 12, chromium on 13) and Widevine with it when it is there
+	# (Spotify plays through it). Its files in /etc/chromium.d as they are (keep the changed ones, no question - there is
+	# no terminal here). Failed twice (the second time with fresh package lists): the update goes on, the display with
+	# the Chromium it had.
+	CHROMIUM_PKG=""
+	for p in chromium-browser chromium; do
+		if dpkg-query -W -f='${Status}' "${p}" 2>/dev/null | grep -q "install ok installed"; then
+			CHROMIUM_PKG=${p}
+			break
+		fi
+	done
+	if [ -n "${CHROMIUM_PKG}" ]; then
+		CHROMIUM_BEFORE=$(dpkg-query -W -f='${Version}' "${CHROMIUM_PKG}" 2>/dev/null)
+		echo -e "XXX\n${STEP}\nUpdate Chromium\nXXX"
+		before=$(date +%s)
+		CHROMIUM_UPGRADE="${CHROMIUM_PKG}"
+		dpkg-query -W -f='${Status}' libwidevinecdm0 2>/dev/null | grep -q "install ok installed" && CHROMIUM_UPGRADE="${CHROMIUM_UPGRADE} libwidevinecdm0"
+		chromium_upgrade() {
+			DEBIAN_FRONTEND=noninteractive apt-get --yes -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+				--only-upgrade install ${CHROMIUM_UPGRADE} >&3 2>&3
+		}
+		# (the lists fetched again first when that failed at the start: with old lists the upgrade "succeeds" on the old
+		# version; a failed upgrade is tried once more with fresh ones)
+		[ -n "${APT_LISTS_FRESH}" ] || { apt_lists_update && APT_LISTS_FRESH=1; }
+		if ! chromium_upgrade; then
+			apt-get update >&3 2>&3
+			chromium_upgrade || echo "Chromium could not be updated (${CHROMIUM_PKG} ${CHROMIUM_BEFORE}) - the display goes on with it" >&3
+		fi
+		after=$(date +%s)
+		echo -e "## Chromium ${CHROMIUM_BEFORE} -> $(dpkg-query -W -f='${Version}' "${CHROMIUM_PKG}" 2>/dev/null) ##  finished after $((after - before)) seconds" >&3 2>&3
+	fi
+
 	# What a part of the box needs (the list of scripts/mupibox/install_missing.sh - mpv plays everything but Spotify,
 	# mplayer is gone; rsvg-convert and Pillow put the start pictures together; xdotool and feh the goodbye picture):
 	# asked once more with fresh package lists when the loop above could not install it
 	MISSING_NOW=""
-	for p in mpv librsvg2-bin python3-pil xdotool feh; do
+	for p in mpv librsvg2-bin python3-pil xdotool feh x11-utils; do
 		dpkg-query -W -f='${Status}' "${p}" 2>/dev/null | grep -q "install ok installed" || MISSING_NOW="${MISSING_NOW} ${p}"
 	done
 	if [ -n "${MISSING_NOW}" ]; then
@@ -469,6 +652,16 @@ rm -f /tmp/mupibox-update-failed
 	# clean abort instead of a half-installed box.
 	[ -d "${MUPI_SRC}" ] || fail_update "Expected source directory ${MUPI_SRC} not found after unzip"
 	[ -s "${MUPI_SRC}/bin/nodejs/deploy.zip" ] || fail_update "Backend deploy.zip missing or empty in update package"
+	# a box without the maintenance screen (4.x, it has at most the old picture, the 4.0.4 image not even that): the new one
+	# from the package, as soon as it is there; the old picture only from a package without it (stable 4.2.4)
+	if [ ! -x /usr/local/bin/mupibox/maintenance_screen.sh ]; then
+		if [ -s "${MUPI_SRC}/media/bootscreens/prerendered/en/maintenance-karte-update.png" ]; then
+			pkill -x fbv >&3 2>&3
+			/usr/bin/fbv "${MUPI_SRC}/media/bootscreens/prerendered/en/maintenance-karte-update.png" </dev/tty1 >/dev/tty1 2>&3 &
+		elif [ ! -s /home/dietpi/MuPiBox/sysmedia/images/installation.jpg ] && [ -s "${MUPI_SRC}/media/images/installation.jpg" ]; then
+			/usr/bin/fbv "${MUPI_SRC}/media/images/installation.jpg" </dev/tty1 >/dev/tty1 2>&3 &
+		fi
+	fi
 	# a version with the app (its source in the package) must have it in deploy.zip too - else the box is left without it
 	if [ -d "${MUPI_SRC}/src/backend-api/src/mupi-app" ]; then
 		unzip -l "${MUPI_SRC}/bin/nodejs/deploy.zip" 2>/dev/null | grep -q " mupi-app/index.html$" || fail_update "The app (mupi-app) is missing in deploy.zip of the update package"
@@ -595,121 +788,42 @@ rm -f /tmp/mupibox-update-failed
 	echo -e "XXX\n${STEP}\nCopy MuPiBox-Files... \nXXX"	
 	# MuPiBox
 	before=$(date +%s)
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/earth >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/steampunk >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/fantasybutterflies >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/matrix >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/lines >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/forms >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/comic >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/mystic >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/clone-wars >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/enterprise >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/spiderman >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/supermario >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/pikachu >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/dinosaur >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/unicorn >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/axolotl >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/custom >&3 2>&3
 	
-	#FANTASY-BUTTERFLIES
-	mv ${MUPI_SRC}/themes/fantasybutterflies/odstemplikBold.otf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/fantasybutterflies/odstemplikBold.otf >&3 2>&3
-	mv ${MUPI_SRC}/themes/fantasybutterflies/fantasy-butterflies-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/fantasybutterflies/fantasy-butterflies-bg.jpg >&3 2>&3
-	mv ${MUPI_SRC}/themes/fantasybutterflies/fantasy-circle-bg.png /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/fantasybutterflies/fantasy-circle-bg.png >&3 2>&3
-
-	#LINES
-	mv ${MUPI_SRC}/themes/lines/lines-bg.png /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/lines/lines-bg.png >&3 2>&3
-	mv ${MUPI_SRC}/themes/lines/KOMIKND_.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/lines/KOMIKND_.ttf >&3 2>&3
-
-	#FORMS
-	mv ${MUPI_SRC}/themes/forms/forms-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/forms/forms-bg.jpg >&3 2>&3
-	mv ${MUPI_SRC}/themes/forms/LT_Crafted.otf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/forms/LT_Crafted.otf >&3 2>&3
-
-	#COMIC
-	mv ${MUPI_SRC}/themes/comic/comic-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/comic/comic-bg.jpg >&3 2>&3
-	mv ${MUPI_SRC}/themes/comic/snaphand-v1-free.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/comic/snaphand-v1-free.ttf >&3 2>&3
-
-	#MYSTIC
-	mv ${MUPI_SRC}/themes/mystic/mystic-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/mystic/mystic-bg.jpg >&3 2>&3
-	mv ${MUPI_SRC}/themes/mystic/ylee_Mortal_Heart.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/mystic/ylee_Mortal_Heart.ttf >&3 2>&3
-
-	#MATRIX
-	mv ${MUPI_SRC}/themes/matrix/matrix-bg.png /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/matrix/matrix-bg.png >&3 2>&3
-	mv ${MUPI_SRC}/themes/matrix/Pixolletta8px.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/matrix/Pixolletta8px.ttf >&3 2>&3
-
-	#CLONE-WARS
-	mv ${MUPI_SRC}/themes/clone-wars/Starjedi.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/clone-wars/Starjedi.ttf >&3 2>&3
-	mv ${MUPI_SRC}/themes/clone-wars/clone-wars-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/clone-wars/clone-wars-bg.jpg >&3 2>&3
-
-	#ENTERPRISE
-	mv ${MUPI_SRC}/themes/enterprise/Nasa21.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/enterprise/Nasa21.ttf >&3 2>&3
-	mv ${MUPI_SRC}/themes/enterprise/enterprise-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/enterprise/enterprise-bg.jpg >&3 2>&3
-	
-	#SPIDERMAN
-	mv ${MUPI_SRC}/themes/spiderman/IntensaFuente.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/spiderman/IntensaFuente.ttf >&3 2>&3
-	mv ${MUPI_SRC}/themes/spiderman/spiderman-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/spiderman/spiderman-bg.jpg >&3 2>&3
-
-	#PIKACHU
-	mv ${MUPI_SRC}/themes/pikachu/PokemonXandY.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/pikachu/PokemonXandY.ttf >&3 2>&3
-	mv ${MUPI_SRC}/themes/pikachu/pikachu-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/pikachu/pikachu-bg.jpg >&3 2>&3
-
-	#MARIO
-	mv ${MUPI_SRC}/themes/supermario/TitanOne-Regular.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/supermario/TitanOne-Regular.ttf >&3 2>&3
-
-	mv ${MUPI_SRC}/themes/supermario/OFL-TitanOne.txt /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/supermario/OFL-TitanOne.txt >&3 2>&3
-	mv ${MUPI_SRC}/themes/supermario/supermario-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/supermario/supermario-bg.jpg >&3 2>&3
-	
-	#DINOSAUR
-	mv ${MUPI_SRC}/themes/dinosaur/BerlinSmallCaps.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/dinosaur/BerlinSmallCaps.ttf >&3 2>&3
-	mv ${MUPI_SRC}/themes/dinosaur/dinosaur-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/dinosaur/dinosaur-bg.jpg >&3 2>&3
-	
-	#UNICORN
-	mv ${MUPI_SRC}/themes/unicorn/MagnoliaScript.otf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/unicorn/MagnoliaScript.otf >&3 2>&3
-	mv ${MUPI_SRC}/themes/unicorn/unicorn-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/unicorn/unicorn-bg.jpg >&3 2>&3
-
-	#AXOLOTOL
-	mv ${MUPI_SRC}/themes/axolotl/MagnoliaScript.otf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/axolotl/MagnoliaScript.otf >&3 2>&3
-	mv ${MUPI_SRC}/themes/axolotl/axolotl-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/axolotl/axolotl-bg.jpg >&3 2>&3
-
-	#EARTH
-	mv ${MUPI_SRC}/themes/earth/earth-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/earth/earth-bg.jpg >&3 2>&3
-	mv ${MUPI_SRC}/themes/earth/Nasa21.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/earth/Nasa21.ttf >&3 2>&3
-
-	#STEAMPUNK
-	mv ${MUPI_SRC}/themes/steampunk/steampunk-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/steampunk/steampunk-bg.jpg >&3 2>&3
-	mv ${MUPI_SRC}/themes/steampunk/Rye-Regular.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/steampunk/Rye-Regular.ttf >&3 2>&3
-
-	mv ${MUPI_SRC}/themes/steampunk/OFL-Rye.txt /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/steampunk/OFL-Rye.txt >&3 2>&3
-	# the name fonts these themes had before (their licenses do not allow passing them on as part of MuPiBox)
-	rm -f /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/supermario/NewSuperMarioFontU.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/steampunk/akaPosse.ttf >&3 2>&3
-	mv ${MUPI_SRC}/themes/steampunk/steampunk-gear.png /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/steampunk/steampunk-gear.png >&3 2>&3
-	mv ${MUPI_SRC}/themes/steampunk/steampunk-header.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/steampunk/steampunk-header.jpg >&3 2>&3
-
-	#CUSTOM
-	ln -s /home/dietpi/MuPiBox/themes/custom-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/custom/custom-bg.jpg
-
-
-	chown dietpi:dietpi -R /home/dietpi/.mupibox/Sonos-Kids-Controller-master/
-
 	# km themes (children's themes of one design): pictures per theme, shared fonts, and the list with their names
 	# (the admin interface shows those). New ones: add the id here, in conf_update.sh and in autosetup.sh.
 	KM_THEMES="kuschelmond moosnest sonnenhof pferdehof fussball fahrzeuge buecherregal kassettenrekorder unterwasser bastelpapier prinzessin einhorn feenschloss weltraum dinoland piratenbucht tagundnacht feuerwehr ritterburg eisenbahn roboter heldenstadt safari eiswelt zirkus meerjungfrau ballett kaetzchen zuckerland schmetterlinge"
-	# the old themes in the km layout (legacy in km-themes.json): their mascots and cover placeholders (their pictures and
-	# fonts were moved above already); coverflow stays as it is
+	
+	# the old themes in the km layout (legacy in km-themes.json): their pictures, fonts, mascots and cover placeholders;
+	# coverflow stays as it is
 	KM_LEGACY_THEMES="axolotl blue captainamerica chocolate cinema winamp clone-wars comic custom danger dark darkred deepblue dinosaur earth enterprise fantasybutterflies forms green ironman light lines matrix mint mystic orange pikachu pink purple red spiderman steampunk supermario unicorn vintage wall-e wood xmas"
+	
 	for theme in ${KM_THEMES} ${KM_LEGACY_THEMES} _fonts; do
 		mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/${theme} >&3 2>&3
 		cp -f ${MUPI_SRC}/themes/${theme}/* /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/${theme}/ >&3 2>&3
 	done
-	# (copied after the chown above: they belonged to root)
-	chown -R dietpi:dietpi /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data >&3 2>&3
+	#CUSTOM
+	ln -s /home/dietpi/MuPiBox/themes/custom-bg.jpg /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/custom/custom-bg.jpg
+	
+	# the name fonts these themes had before (their licenses do not allow passing them on as part of MuPiBox)
+	rm -f /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/supermario/NewSuperMarioFontU.ttf /home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/steampunk/akaPosse.ttf >&3 2>&3
+	
+	# (after the copies above: the theme pictures are dietpi's too)
+	chown dietpi:dietpi -R /home/dietpi/.mupibox/Sonos-Kids-Controller-master/ >&3 2>&3
 	cp -f ${MUPI_SRC}/themes/km-themes.json /home/dietpi/MuPiBox/themes/km-themes.json >&3 2>&3
 	mv ${MUPI_SRC}/themes/*.css /home/dietpi/MuPiBox/themes/ >&3 2>&3
 	mv ${MUPI_SRC}/scripts/chromium-autostart.sh /var/lib/dietpi/dietpi-software/installed/chromium-autostart.sh >&3 2>&3
 	# full colours in the display on a Pi with 2 GB or more: takes DietPi's "low-end device mode" out again (see the file)
-	mkdir -p /etc/chromium.d && tr -d '\r' < ${MUPI_SRC}/config/chromium/zz-mupibox > /etc/chromium.d/zz-mupibox && chmod 644 /etc/chromium.d/zz-mupibox
+	# (not in stable 4.x)
+	if [ -f ${MUPI_SRC}/config/chromium/zz-mupibox ]; then
+		mkdir -p /etc/chromium.d && tr -d '\r' < ${MUPI_SRC}/config/chromium/zz-mupibox > /etc/chromium.d/zz-mupibox && chmod 644 /etc/chromium.d/zz-mupibox
+	fi
 	mv ${MUPI_SRC}/scripts/mupibox/* /usr/local/bin/mupibox/ >&3 2>&3
+	# (handed over by the admin interface of 4.x: the new restart.sh is held too - see hold_restart at the top)
+	if [ -n "${MUPIBOX_UPDATE_HANDED_OVER:-}" ]; then
+		# (not held: logged - stopping here would harm more; restart.sh of 5.0.13 and later checks for the unit itself)
+		hold_restart /var/lib/mupibox-update-admin/restart.sh.held \
+			|| echo "## WARNING: restart.sh could not be held again - a restart click now cuts the update off" >&3 2>&3
+	fi
 	mv ${MUPI_SRC}/scripts/bluetooth/* /usr/local/bin/mupibox/ >&3 2>&3
 	# The battery of Bluetooth headphones (display and app, issue #176): BlueZ 5.66 takes it from PulseAudio only with
 	# its experimental interfaces (BatteryProviderManager1). Applies after the restart.
@@ -738,8 +852,6 @@ rm -f /tmp/mupibox-update-failed
 	after=$(date +%s)
 	echo -e "## Copy MuPiBox-Files  ##  finished after $((after - $before)) seconds" >&3 2>&3
 	STEP=$(($STEP + 1))
-
-
 
 	###############################################################################################
 
@@ -817,6 +929,11 @@ rm -f /tmp/mupibox-update-failed
 	# boot and maintenance screens (scenes, texts, tool; the pictures are put together at the end of the update)
 	rm -rf /home/dietpi/MuPiBox/sysmedia/bootscreens >&3 2>&3
 	cp -r ${MUPI_SRC}/media/bootscreens /home/dietpi/MuPiBox/sysmedia/bootscreens >&3 2>&3
+	# the maintenance screen once more, with the new scripts and pictures: a Touch Display 2 had none from 5.0.13's fbv_options.sh
+	if [ -x /usr/local/bin/mupibox/maintenance_screen.sh ]; then
+		pkill -x fbv >&3 2>&3
+		/usr/local/bin/mupibox/maintenance_screen.sh update >&3 2>&3
+	fi
 	mkdir -p /usr/local/share/fonts/mupibox >&3 2>&3
 	cp ${MUPI_SRC}/themes/_fonts/Fredoka-Variable.ttf /usr/local/share/fonts/mupibox/ >&3 2>&3
 	fc-cache -f >&3 2>&3
@@ -830,15 +947,8 @@ rm -f /tmp/mupibox-update-failed
 	echo -e "XXX\n${STEP}\nInstall LED Control... \nXXX"	
 	
 	before=$(date +%s)
-	rm /usr/local/bin/mupibox/led_control >&3 2>&3
-	gcc -o ${MUPI_SRC}/scripts/led/led_control ${MUPI_SRC}/scripts/led/led_control.c -lpigpio -ljson-c >&3 2>&3
-	#if [ `getconf LONG_BIT` == 32 ]; then
-	#	mv -f ${MUPI_SRC}/bin/led_control/led_control_32 /usr/local/bin/mupibox/led_control >&3 2>&3
-	#else
-	#	mv -f ${MUPI_SRC}/bin/led_control/led_control_64 /usr/local/bin/mupibox/led_control >&3 2>&3
-	#fi
-	mv -f ${MUPI_SRC}/scripts/led/led_control /usr/local/bin/mupibox/led_control >&3 2>&3
-	#/usr/bin/chmod 755 /usr/local/bin/mupibox/led_control >&3 2>&3
+	# (led_control.py drives the LED; the C program of old is no longer built, and goes from a box that still has it)
+	rm -f /usr/local/bin/mupibox/led_control >&3 2>&3
 	after=$(date +%s)
 	echo -e "## LED-Control  ##  finished after $((after - $before)) seconds" >&3 2>&3
 	STEP=$(($STEP + 1))
@@ -1226,10 +1336,16 @@ rm -f /tmp/mupibox-update-failed
 	# The web server's certificate: the box's own, from its small authority for the home network (the app offers it to
 	# install on the phones; an own one uploaded in the app stays) - no longer a new self-signed one on every run, which
 	# no phone can trust and every browser asked about again. Checked at every start too (mupi_tls.service).
-	/usr/local/bin/mupibox/tls_cert.sh ensure >&3 2>&3
-	systemctl enable mupi_tls.service >&3 2>&3
-	systemctl daemon-reload >&3 2>&3
-	systemctl enable --now mupi_tls.timer >&3 2>&3
+	if [ -x /usr/local/bin/mupibox/tls_cert.sh ]; then
+		/usr/local/bin/mupibox/tls_cert.sh ensure >&3 2>&3
+		systemctl enable mupi_tls.service >&3 2>&3
+		systemctl daemon-reload >&3 2>&3
+		systemctl enable --now mupi_tls.timer >&3 2>&3
+	elif [ ! -s /etc/lighttpd/server.pem ]; then
+		# a version without tls_cert.sh (stable 4.x, from a box that has no certificate yet: the 4.0.4 image): the simple
+		# self-signed certificate as before - without one the web server does not start with SSL on
+		openssl req -new -x509 -keyout /etc/lighttpd/server.pem -out /etc/lighttpd/server.pem -days 3650 -nodes -subj "/C=DE/CN=mupibox" >&3 2>&3
+	fi
 	# no scripts or pages from the media folder behind /cover (see the file)
 	cp -f ${MUPI_SRC}/config/lighttpd/99-mupibox-media-noexec.conf /etc/lighttpd/conf-enabled/99-mupibox-media-noexec.conf >&3 2>&3
 	# the app on port 80/443 too: its login at /, the app at /app (see the file)
@@ -1244,6 +1360,7 @@ rm -f /tmp/mupibox-update-failed
 	# PHP answers in the home network) - once, with this update; a marker that outlasts a reset of the configuration
 	# keeps it to this once: switched on again in the app (System › Experten), it stays on. The app's start page says it
 	# was switched off. Afterwards as chosen: an update may bring PHP and lighttpd's PHP module back - off, they go again.
+	# (On a box that came back from 5.1 the right of its PHP pages to run commands as root is given after "done", below.)
 	if [ -x /usr/local/bin/mupibox/legacy_admin.sh ]; then
 		migrate=""
 		if [ ! -e /etc/mupibox/legacy-admin-default.done ]; then
@@ -1364,8 +1481,20 @@ rm -f /tmp/mupibox-update-failed
 		sync
 		# The update counts as done once "done" is on the card: what is left over then is only cleared up - a power cut
 		# while the old installation is being deleted must not bring a half deleted one back
+		# On a box that came back from 5.1 (its folders are there): the right of the admin interface's PHP pages to run
+		# commands as root (restart, shutdown, its settings), as the installation gives it - 5.1 runs no PHP and took it
+		# away, its way back leaves it to this update. Before "done", with a note that this update wrote it: a way back
+		# to 5.1 (restore_interrupted_update.sh, at once or at the next start) takes it away again, after "done" it stays
+		# - no moment a power cut leaves it on 5.1 or 5.0.14 without it. Missing or empty only - a file of the owner's
+		# own is left as it is.
+		if [ "${FINISH_OK}" = 1 ] && [ -d /home/dietpi/.mupibox/server ] && [ ! -s /etc/sudoers.d/www-data ]; then
+			touch /etc/mupibox/sudoers-www-data.by-update && sync
+			{ echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/www-data && chmod 440 /etc/sudoers.d/www-data && sync; } >&3 2>&3 \
+				|| echo "Note: /etc/sudoers.d/www-data could not be written - the admin interface's restart and shutdown do not work" >&3
+		fi
 		[ "${FINISH_OK}" = 1 ] && mark_update done || FINISH_OK=0
 		if [ "${FINISH_OK}" = 1 ]; then
+			rm -f /etc/mupibox/sudoers-www-data.by-update
 			rm -rf "${USERDATA_BAK}" "${BAK_DIR}" >&3 2>&3
 			clear_update_mark
 		fi
