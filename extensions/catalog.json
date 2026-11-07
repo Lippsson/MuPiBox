@@ -66,13 +66,13 @@
   {
     "id": "weather",
     "name": "Wetter",
-    "version": "1.4.3",
+    "version": "1.4.4",
     "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
     "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIxNzYiIGN5PSIxNzIiIHI9IjYwIiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIvPjxwYXRoIGQ9Ik0xNzYgNjR2MjRNMTc2IDI1NnYyNE02OCAxNzJINDRNMzA4IDE3MmgtMjRNOTkgOTVsLTE3LTE3TTI1MyA5NWwxNy0xN005OSAyNDlsLTE3IDE3IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTE4MCA0MjBhNzIgNzIgMCAwIDEtOC0xNDMgMTAwIDEwMCAwIDAgMSAxOTIgMTYgNjIgNjIgMCAwIDEgNCAxMjd6IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPgo=",
     "hostApi": 2,
-    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/weather-1.4.3.mpx",
-    "sha256": "6aaf00c8d319605efafdf405d9d9353f90e13e63e014bcd668ad5a55d1088d18",
-    "size": 115358,
+    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/weather-1.4.4.mpx",
+    "sha256": "3110b2f18812e5eb49c7f6986686e115695839de72af536922d8cc47a2eba054",
+    "size": 115992,
     "resources": {},
     "system": {
       "udev": 0,

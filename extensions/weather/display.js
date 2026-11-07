@@ -180,8 +180,10 @@ export function activate(api) {
       mount(content) {
         const box = document.createElement('div')
         box.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column'
+        // (the dials in a row you swipe through, as the artists' round covers on the start page: one dial is centred, the next
+        // ones look in from the sides; the row snaps to a dial when you let go)
         const row = document.createElement('div')
-        row.style.cssText = 'flex:1;min-height:0;display:flex;justify-content:space-evenly;align-items:center'
+        row.style.cssText = 'flex:1;min-height:0;display:flex;align-items:center;gap:20px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;touch-action:pan-x;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent;cursor:grab'
         const foot = document.createElement('div')
         foot.style.cssText = 'flex:none;height:30px;display:flex;align-items:center;justify-content:center;font:500 15px/1 var(--ion-font-family,inherit);opacity:.75;padding:0 16px;text-align:center'
         foot.textContent = 'Lade …'
@@ -195,19 +197,24 @@ export function activate(api) {
         const shown = new Map()
         let lastSize = 0
 
-        // (six dials in a row, a line of text under each and the status line at the bottom)
-        const dialSize = () => Math.max(120, Math.floor(Math.min(content.clientWidth / 6 - 4, content.clientHeight - 30 - 30)))
+        // (a dial as high as the page allows, a line of text under it and the status line at the bottom; never wider than the page)
+        const dialSize = () => Math.max(120, Math.floor(Math.min(content.clientWidth - 40, content.clientHeight - 30 - 26 - 4 - 16)))
 
         // Every dial is drawn again from the last answer: when the values come (`moving`: the pointers swing to them) and when the
         // page changes its size (a dial has a fixed size; the pointers stand at once).
         const draw = (moving) => {
           if (!ss || !data) return
           const size = dialSize()
+          // (the dial in the middle stays there when the row is drawn again)
+          const before = Array.from(row.children)
+          const middle = before.findIndex((c) => c.offsetLeft + c.offsetWidth / 2 >= row.scrollLeft + row.clientWidth / 2)
           lastSize = size
           row.textContent = ''
+          // (room on both sides: the first and the last dial can stand in the middle too)
+          row.style.paddingInline = `max(20px, calc(50% - ${Math.round(size / 2)}px))`
           for (const dial of dialsFor(data, unitsOf(settings))) {
             const cell = document.createElement('div')
-            cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px'
+            cell.style.cssText = 'flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;scroll-snap-align:center'
             const canvas = document.createElement('canvas')
             const caption = document.createElement('div')
             caption.style.cssText = 'height:26px;display:flex;align-items:center;gap:14px;font:500 15px/1 var(--ion-font-family,inherit);opacity:.85;white-space:nowrap'
@@ -285,7 +292,30 @@ export function activate(api) {
             shown.set(dial.id, value)
             caption.textContent = dial.caption
           }
+          const cell = row.children[Math.max(0, middle)]
+          if (cell) row.scrollLeft = cell.offsetLeft + cell.offsetWidth / 2 - row.clientWidth / 2
         }
+
+        // A mouse drags the row too (a finger swipes it by itself)
+        let drag = null
+        row.addEventListener('pointerdown', (e) => {
+          if (e.pointerType !== 'mouse') return
+          drag = { x: e.clientX, left: row.scrollLeft }
+          row.style.scrollSnapType = 'none'
+          row.style.cursor = 'grabbing'
+          row.setPointerCapture(e.pointerId)
+        })
+        row.addEventListener('pointermove', (e) => {
+          if (drag) row.scrollLeft = drag.left - (e.clientX - drag.x)
+        })
+        const letGo = () => {
+          if (!drag) return
+          drag = null
+          row.style.scrollSnapType = 'x mandatory'
+          row.style.cursor = 'grab'
+        }
+        row.addEventListener('pointerup', letGo)
+        row.addEventListener('pointercancel', letGo)
 
         const refresh = async () => {
           const answer = await api.fetchApi('/data')
