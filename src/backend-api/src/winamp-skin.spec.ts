@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { activateSkin, addSkin, bmpSize, installSkin, listSkins, parsePledit, parseViscolors, readSkinMeta, readZip, removeSkinById, type SkinDirs } from './eltern/winamp-skin'
+import { activateSkin, addSkin, bmpSize, installSkin, listSkins, parsePledit, parseViscolors, readSkinMeta, readZip, removeSkinById, type SkinDirs } from './app-api/winamp-skin'
 
 // A zip with stored (not packed) files - what a skin needs, made here so the test has no file of anyone else's.
 function zip(files: Record<string, Buffer>): Buffer {

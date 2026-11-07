@@ -25,7 +25,7 @@ const arg = (name, fallback) => {
   return i > 0 ? process.argv[i + 1] : fallback
 }
 const www = path.resolve(arg('www', path.join(repo, 'src', 'frontend-box', 'www', 'browser')))
-const out = path.resolve(arg('out', path.join(repo, 'AdminInterface', 'www', 'images')))
+const out = path.resolve(arg('out', path.join(repo, 'themes', 'previews')))
 const themesDir = path.join(repo, 'themes')
 const demoDir = path.join(here, 'demo-bibliothek')
 const only = arg('only', '')

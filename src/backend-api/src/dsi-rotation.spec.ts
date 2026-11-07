@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { dsiConfig, dsiOutput, isDsiRotation } from './eltern/dsi-rotation'
+import { dsiConfig, dsiOutput, isDsiRotation } from './app-api/dsi-rotation'
 
 // a touch at (x, y) in 0..1 becomes (a x + b y + c, d x + e y + f)
 function apply(matrix: string, x: number, y: number): number[] {

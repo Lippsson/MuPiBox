@@ -31,7 +31,7 @@ const SKIN_DIRS = { active: SKIN_DIR, library: SKIN_LIBRARY }
 // ---------- the skin: unpacked with the backend's own code (the same as the app's upload uses) ----------
 mkdirSync(SKIN_DIR, { recursive: true })
 const skinCode = path.join(here, '.skin-code.cjs')
-await build({ entryPoints: [path.join(root, 'src/backend-api/src/eltern/winamp-skin.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: skinCode, logLevel: 'error' })
+await build({ entryPoints: [path.join(root, 'src/backend-api/src/app-api/winamp-skin.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: skinCode, logLevel: 'error' })
 const skinMod = await import(pathToFileURL(skinCode).href)
 const { activateSkin, addSkin, listSkins, removeSkinById } = skinMod.default ?? skinMod
 const wsz = arg('skin')

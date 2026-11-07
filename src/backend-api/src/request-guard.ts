@@ -18,7 +18,7 @@
  */
 import os from 'node:os'
 import type { Request, RequestHandler } from 'express'
-import { requireCsrf, requireSession } from './eltern/middleware'
+import { requireCsrf, requireSession } from './app-api/middleware'
 
 // Endings of the home network nobody can register on the internet - not 'box': .box is a public top-level domain, a
 // foreign page could have taken <boxname>.box and pointed it at the box (DNS rebinding); fritz.box is AVM's own.

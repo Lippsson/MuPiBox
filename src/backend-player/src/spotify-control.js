@@ -17,11 +17,16 @@ const childProcess = require('node:child_process')
 dns.setDefaultResultOrder('ipv4first')
 
 let configBasePath = './config'
-//let networkConfigBasePath = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config'
 if (process.env.NODE_ENV === 'development') {
   configBasePath = '../config'
-  //networkConfigBasePath = '../../backend-api/config'
 }
+// What the box keeps and what it can fetch again, since 5.1 beside the player's folder (~/.mupibox/player):
+// ~/.mupibox/data (an update never touches it) and ~/.mupibox/cache - as the server's paths.ts. In development
+// next to the player's config.
+const MUPI_HOME = '/home/dietpi/.mupibox'
+const DATA_DIR = process.env.NODE_ENV === 'development' ? configBasePath : `${MUPI_HOME}/data`
+const LIBRARY_DIR = process.env.NODE_ENV === 'development' ? configBasePath : `${DATA_DIR}/library`
+const CACHE_DIR = process.env.NODE_ENV === 'development' ? configBasePath : `${MUPI_HOME}/cache`
 
 // mupiboxconfig.json supports live reload — admin saves take effect within ~50ms
 // without a pm2 restart. config.json (Spotify creds, log level, port) is read once
@@ -747,7 +752,7 @@ const TIDAL_SERVICE = 'http://127.0.0.1:5011'
 const PLAYTIME_DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 const PLAYTIME_DEFAULT_LIMITS = { mon: 60, tue: 60, wed: 60, thu: 60, fri: 60, sat: 60, sun: 60 }
 const PLAYTIME_WORKING_PATH = '/tmp/playtime.json'
-const PLAYTIME_CHECKPOINT_PATH = path.join(configBasePath, 'playtime-checkpoint.json')
+const PLAYTIME_CHECKPOINT_PATH = path.join(DATA_DIR, 'playtime-checkpoint.json')
 const PLAYTIME_CHECKPOINT_INTERVAL_MS = 60_000
 
 // What may happen when a limit is reached (play time used up / a quiet window starts):
@@ -1513,7 +1518,7 @@ async function refreshToken() {
 }
 
 // Spotify refused the login (invalid_grant: its 6 months are over, or it was withdrawn): the backend tells the parents
-// (app, Telegram) - see backend-api eltern/spotify-auth-age.ts. The mark goes when a refresh works again.
+// (app, Telegram) - see backend-api app-api/spotify-auth-age.ts. The mark goes when a refresh works again.
 const AUTH_REFUSED_FLAG = '/tmp/.spotify_auth_invalid'
 function markLoginRefused(refused) {
   try {
@@ -1733,7 +1738,7 @@ function mplayerToggle() {
 // went on asking (the grace check every 3 s, the app's state, the pauses). Read again when the file changed; a 429
 // here (with a wait of more than a few seconds) is written into it, so the server and the Smart-Sync wait as well.
 const SPOTIFY_BLOCK_FILE =
-  process.env.SPOTIFY_BLOCK_FILE || path.resolve(__dirname, '..', 'Sonos-Kids-Controller-master', 'cache', 'spotify-block.json')
+  process.env.SPOTIFY_BLOCK_FILE || path.join(CACHE_DIR, 'spotify-block.json')
 let spotifyBlockKept = { mtimeMs: -1, until: 0 }
 function spotifyBlockedUntil() {
   try {
@@ -2792,7 +2797,7 @@ function playRadioURL(radioURL) {
 // for mupibox.episodeResumeDays days after it was last heard (0: without end). Started again - from the episode
 // list, the app or a resume tile - it goes on there. An episode heard to its last half minute counts as heard and
 // starts from the beginning next time. The backend reads the file for the app's episode list.
-const EPISODE_POSITIONS_FILE = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/episode-positions.json'
+const EPISODE_POSITIONS_FILE = path.join(LIBRARY_DIR, 'episode-positions.json')
 const EPISODE_POSITIONS_MAX = 5000
 let episodePositions = null // { [episode key]: { pos, len, at, done } } (by the address, from before the keys)
 // What stays the same of an episode's address from one fetch of its feed to the next - the same as backend-api's
@@ -3609,7 +3614,7 @@ app.post('/winamp/presets', (req, res) => {
 })
 
 // --- Extensions (docs/extensions.md) ---
-// Files that extensions bring along (~/.mupibox/extensions/<id>/player.js) are loaded here: they add routes (/ext/<id>/...), listen to
+// Files that extensions bring along (~/.mupibox/data/extensions/<id>/player.js) are loaded here: they add routes (/ext/<id>/...), listen to
 // what the player does and may be the source of albums that are no folders - the player asks them where it has a folder name
 // (albumFor). The audio CD is such an extension. An error in one of them is caught and switches it off, not the player.
 const extensions = createExtensionHost({

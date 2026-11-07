@@ -20,7 +20,7 @@ Die Webapp der Eltern führt **keinen Code** einer Extension aus (sie läuft mit
 beschreibt die Extension im Manifest (`ui`), die Webapp zeichnet sie.
 
 Jeder Teil ist **optional**; eine Extension bringt nur mit, was sie braucht. Entpackt wird nach
-`/home/dietpi/.mupibox/extensions/<id>/`; welche Extensions an sind, steht in `…/extensions/state.json`
+`/home/dietpi/.mupibox/data/extensions/<id>/`; welche Extensions an sind, steht in `…/extensions/state.json`
 (`{ "cd": { "version": "1.0.0", "enabled": true } }`). Ein defekter Teil legt nur seine Extension still (Fehler im Log),
 nie den Kern.
 
@@ -59,7 +59,7 @@ nie den Kern.
 - `hostApi`: die Nummer der Schnittstelle, für die die Extension geschrieben ist. Der Kern lädt keine Extension mit einer
   höheren Nummer als seiner eigenen.
 - `settings`: was die Extension speichert (Typen `boolean`, `string`, `number`, `secret`; optional `pattern`, `options`: die erlaubten Werte eines `string` oder `number`, und `min`/`max` für ein `number`). Der Kern prüft und
-  speichert die Werte (`~/.mupibox/extensions/settings/<id>.json`); `secret`-Werte gibt er nie zurück, nur ob es einen gibt
+  speichert die Werte (`~/.mupibox/data/extensions/settings/<id>.json`); `secret`-Werte gibt er nie zurück, nur ob es einen gibt
   (`<key>Set`). `legacy`: ein Wert der Konfiguration (`mupibox.cdLookup`), der bei der Installation einmal übernommen wird.
 - `ui`: die Karte der Extension auf der Seite „Erweiterungen“ der Webapp: Titel, Hilfetext und die Felder (je ein Eintrag aus
   `settings`; `dep` = ein Schalter, von dem das Feld abhängt; `choices`: `[{ value, label }]` für eine Einstellung mit `options`, sie
@@ -162,7 +162,7 @@ kommen sie nur aus dem Katalog, dessen Einträge Prüfsumme und Systemschritte a
 
 ## Reihenfolge der Umsetzung
 
-Fertig: Player (`src/backend-player/src/extensions.js`: Laden, `albums`-Quelle, Ereignisse), API (`eltern/extensions.ts`: Laden,
+Fertig: Player (`src/backend-player/src/extensions.js`: Laden, `albums`-Quelle, Ereignisse), API (`app-api/extensions.ts`: Laden,
 Einstellungen, Dateien, Installieren/Entfernen, Katalog), Display (`extension-host.service.ts`: Reiter, Auswurf, Player), Webapp (Seite
 „Erweiterungen“), `tools/mpx/pack.mjs`, die CD-Anbindung als erste Extension (`extensions/cd/`). Die Uhr in der Kopfzeile ist die zweite
 Extension (`extensions/clock/`, `api.header` im Display); sie ist nicht mehr im Kern. Die dritte ist das Wetter (`extensions/weather/`,

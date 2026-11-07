@@ -32,7 +32,7 @@ export function decodeWpaSsid(raw: string): string {
   return Buffer.from(bytes).toString('utf8')
 }
 
-// wpa_cli's scan_results (the box's WiFi page, server.ts, and the app's scan, eltern/routes.ts)
+// wpa_cli's scan_results (the box's WiFi page, server.ts, and the app's scan, app-api/routes.ts)
 
 export interface WifiScanEntry {
   signalDbm: number

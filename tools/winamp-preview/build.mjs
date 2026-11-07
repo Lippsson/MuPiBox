@@ -17,7 +17,7 @@ mkdirSync(path.join(out, 'skin'), { recursive: true })
 
 // the backend's skin code, bundled for node
 await build({
-  entryPoints: [path.join(here, '../../src/backend-api/src/eltern/winamp-skin.ts')],
+  entryPoints: [path.join(here, '../../src/backend-api/src/app-api/winamp-skin.ts')],
   bundle: true, platform: 'node', format: 'cjs', outfile: path.join(out, '_skin.cjs'), logLevel: 'error',
 })
 const { installSkin } = await import(pathToFileURL(path.join(out, '_skin.cjs')).href).then((m) => m.default ?? m)

@@ -18,7 +18,7 @@ CFG = json.load(open(os.path.join(BASE, "..", "bootscreens.json"), encoding="utf
 FONT_CANDIDATES = [
     "/usr/local/share/fonts/mupibox/Fredoka-Variable.ttf",
     CFG["font"]["file"],
-    "/home/dietpi/.mupibox/Sonos-Kids-Controller-master/www/theme-data/_fonts/Fredoka-Variable.ttf",
+    "/home/dietpi/.mupibox/server/www/theme-data/_fonts/Fredoka-Variable.ttf",
     os.path.join(BASE, "..", "..", "..", "themes", "_fonts", "Fredoka-Variable.ttf"),
 ]
 FONT = next((f for f in FONT_CANDIDATES if os.path.isfile(f)), CFG["font"]["file"])

@@ -1,6 +1,8 @@
 #!/bin/bash
 #
 
+. /usr/local/bin/mupibox/mupi_paths.sh
+
 MUPIBOX_CONFIG="/etc/mupibox/mupiboxconfig.json"
 TMP_LEDFILE="/tmp/.power_led"
 OLD_STATE=1
@@ -85,7 +87,7 @@ do
 		# a display with KMS (Touch Display 2, Waveshare, EDATEC): the firmware does not know it ("Can't open device
 		# file") - what get_monitor.sh found with the X server instead
 		if [ -z "${displayState}" ]; then
-			case "$(/usr/bin/jq -r '.monitor // "On"' /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/monitor.json 2>/dev/null)" in
+			case "$(/usr/bin/jq -r '.monitor // "On"' ${MUPI_SERVER_CONFIG}/monitor.json 2>/dev/null)" in
 				Off) displayState=0 ;;
 				*) displayState=1 ;;
 			esac

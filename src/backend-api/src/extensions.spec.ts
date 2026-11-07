@@ -1,12 +1,12 @@
-// The checks of the extension installer (eltern/extensions.ts): what a package may hold and what it may ask to have set up as root.
+// The checks of the extension installer (app-api/extensions.ts): what a package may hold and what it may ask to have set up as root.
 // No box needed; the install itself (download, sudo) is tried on a box.
 import assert from 'node:assert'
 import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { readZip } from './eltern/winamp-skin'
-import { verifyPackage, checkManifest, checkSettings, checkUdevRules, type Manifest } from './eltern/extensions'
+import { readZip } from './app-api/winamp-skin'
+import { verifyPackage, checkManifest, checkSettings, checkUdevRules, type Manifest } from './app-api/extensions'
 
 const files = (...names: string[]) => new Set(['manifest.json', ...names])
 const base = (extra: Record<string, unknown> = {}) => ({ id: 'cd', name: 'CD', version: '1.0.0', hostApi: 1, ...extra })

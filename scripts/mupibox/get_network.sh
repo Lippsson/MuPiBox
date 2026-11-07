@@ -2,12 +2,14 @@
 #
 # Get Network-Data and create Online / Offline Data.json for showing Media in MuPiBox
 
-DATA_FILE="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json"
-ACTIVE_FILE="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/active_data.json"
-OFFLINE_FILE="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/offline_data.json"
-RESUME_FILE="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/resume.json"
-ACTIVERESUME_FILE="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/active_resume.json"
-OFFLINERESUME_FILE="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/offline_resume.json"
+. /usr/local/bin/mupibox/mupi_paths.sh
+
+DATA_FILE="${MUPI_LIBRARY}/data.json"
+ACTIVE_FILE="${MUPI_LIBRARY}/active_data.json"
+OFFLINE_FILE="${MUPI_LIBRARY}/offline_data.json"
+RESUME_FILE="${MUPI_LIBRARY}/resume.json"
+ACTIVERESUME_FILE="${MUPI_LIBRARY}/active_resume.json"
+OFFLINERESUME_FILE="${MUPI_LIBRARY}/offline_resume.json"
 
 # The library without what needs the internet. Podcasts with episodes on the SD card stay (their list then shows
 # those only, see podcast-offline.ts; a resume tile of a kept episode too, by its address); the list is made again
@@ -21,7 +23,7 @@ offline_filter() {
 
 CONFIG="/etc/mupibox/mupiboxconfig.json"
 NETWORKCONFIG="/tmp/network.json"
-#FRONTENDCONFIG="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/config.json"
+#FRONTENDCONFIG="${MUPI_SERVER_CONFIG}/config.json"
 #PLAYERSTATE=$(cat /tmp/playerstate)
 DATA_LOCK="/tmp/.data.lock"
 RESUME_LOCK="/tmp/.resume.lock"

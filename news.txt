@@ -1,3 +1,14 @@
+<h3>DEV 5.1.0 - changes compared to 5.0.15</h3>
+<b>Folders of the box</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>Program, data and cache are kept apart below ~/.mupibox: server/ and player/ (the programs - an update replaces them), data/ (what the box keeps: the library, the covers of the local albums, the logs, the sessions of the app - an update never touches it) and cache/ (what can be fetched or made again). Before, they were mixed in Sonos-Kids-Controller-master and spotifycontroller-main, and every update had to save the data, replace the program and put the data back - its most delicate step. The update moves a box over by itself; a move cut off (a power cut) is finished at the next start. The names of before stay as links, so scripts and commands that use them go on working. Backups keep the library under its name of before, so an older box restores them too. Going back from 5.1 goes to 5.0.14 (the stable version made for it; the update puts PHP and its switched-off admin interface back for it), and the next update to 5.1 moves the box over again. Older versions do not know the box of 5.1: the update refuses them and changes nothing - to use one of them, install it anew.</li>
+</ul>
+<b>Previous admin interface</b>
+</ul>
+<ul id='ulnews' class='ulnews'>
+<li id='linews' class='linews'>The previous admin interface (the PHP pages, off by default since 5.0.12) is gone: the app does everything it did. The update removes it together with PHP - nothing on the box answers with PHP any more - and the web server's right to run anything as root, which only the PHP pages used. The box's start page leads straight into the app. A Spotify login through the old address https://&lt;box&gt;/spotify.php goes on to the app, and backups made in the admin interface can still be restored in the app. The pictures of the theme tiles in the app now come with the themes.</li>
+</ul>
 <h3>DEV 5.0.15 - changes compared to 5.0.14</h3>
 <b>WiFi and LAN</b>
 </ul>

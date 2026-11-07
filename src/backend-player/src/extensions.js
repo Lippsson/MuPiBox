@@ -1,4 +1,4 @@
-// Extensions in the player (see docs/extensions.md): files of ~/.mupibox/extensions/<id>/ that an extension brings along are
+// Extensions in the player (see docs/extensions.md): files of ~/.mupibox/data/extensions/<id>/ that an extension brings along are
 // loaded here when the player starts - its `player.js` gets a `host` to add routes, listen to what the player does, and be a
 // source of albums that are no folders (an audio CD). Everything an extension does goes through guards: an error in it is
 // logged and switches that extension off for the session; the player and the other extensions go on.
@@ -7,7 +7,20 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const HOST_API = 1
-const EXT_DIR = process.env.MUPIBOX_EXT_DIR || '/home/dietpi/.mupibox/extensions'
+// Since 5.1 below data/ (what the box keeps); a box that came over from before has them in ~/.mupibox/extensions: moved once
+// (the API's extensions.ts does the same - whoever is first wins). In development the player's config folder.
+const MUPI_HOME = '/home/dietpi/.mupibox'
+const EXT_DIR = process.env.MUPIBOX_EXT_DIR || (process.env.NODE_ENV === 'development' ? path.resolve('../config/extensions') : `${MUPI_HOME}/data/extensions`)
+if (!process.env.MUPIBOX_EXT_DIR && process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') {
+  try {
+    if (fs.existsSync(`${MUPI_HOME}/extensions`) && !fs.existsSync(EXT_DIR)) {
+      fs.mkdirSync(path.dirname(EXT_DIR), { recursive: true })
+      fs.renameSync(`${MUPI_HOME}/extensions`, EXT_DIR)
+    }
+  } catch {
+    // (the other process was faster, or it is not possible)
+  }
+}
 const ID = /^[a-z][a-z0-9-]{1,30}$/
 const EVENTS = new Set(['stop', 'finished', 'track', 'config'])
 // what an extension may set in what the player says of the playback

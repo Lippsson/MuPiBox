@@ -15,7 +15,7 @@ equaliser work; there is no sound). Made for the Winamp theme, which needs a 192
 
 Open http://localhost:8200/home in a browser window of exactly 1920 x 480 pixels (the theme checks the window size when
 the page loads; in the Claude Code browser pane: set the size, then reload). The skin is unpacked by the backend's own
-code (src/backend-api/src/eltern/winamp-skin.ts), so what works here is what the upload does on the box.
+code (src/backend-api/src/app-api/winamp-skin.ts), so what works here is what the upload does on the box.
 
 The parents' app is there too: http://localhost:8200/app/ (no login) - its theme page is http://localhost:8200/app/#/theme.
 Choosing a theme there changes the display at once; with "Winamp" chosen the skin card appears, and uploading a .wsz

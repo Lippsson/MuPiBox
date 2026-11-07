@@ -9,7 +9,9 @@
 # backlight goes off (bl_power 4), does a tap wake it, the backlight comes back - and only when it was this script
 # that switched it off. Stopped (shutdown, restart), the backlight comes back too.
 
-MONITOR_FILE="/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/monitor.json"
+. /usr/local/bin/mupibox/mupi_paths.sh
+
+MONITOR_FILE="${MUPI_SERVER_CONFIG}/monitor.json"
 minimumsize=18
 
 # M7: track the last persisted state in-process so we only write monitor.json
