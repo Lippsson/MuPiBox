@@ -11969,12 +11969,17 @@ const CONTROLLERS = {
         const ico = e.icon
           ? `<span class="ext-ico" style="--ext-icon:url('${esc(e.icon)}')" aria-hidden="true"></span>`
           : `<span class="ext-ico letter" aria-hidden="true">${esc(String(e.name).slice(0, 1).toUpperCase())}</span>`
+        // (an extension that is not installed yet has its switch too: off - switching it on installs it, after the question)
         const action = installed
           ? `<button type="button" class="btn sm danger" data-ext-remove="${esc(e.id)}">Entfernen</button>`
-          : `<button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">${e.installedVersion ? 'Neue Version installieren' : 'Installieren'}</button>`
+          : e.installedVersion
+            ? `<button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">Neue Version installieren</button>`
+            : ''
         const sw = installed
           ? `<label class="switch"><input type="checkbox" data-ext-toggle="${esc(e.id)}" ${e.enabled ? 'checked' : ''} aria-label="${esc(e.name)}"><span></span></label>`
-          : ''
+          : e.installedVersion
+            ? ''
+            : `<label class="switch"><input type="checkbox" data-ext-install-toggle="${esc(e.id)}" aria-label="${esc(e.name)}"><span></span></label>`
         return `<div class="ext-card${installed ? '' : ' offer'}" data-q="${esc(q)}">
           <div class="ext-head">${ico}<div class="ext-text"><b>${esc(e.name)}</b> <small>${esc(e.version)}</small><p>${esc(e.description)}</p></div></div>
           <div class="ext-foot"><button type="button" class="btn sm" data-ext-details="${esc(e.id)}" data-installed="${installed}">Details</button>${action}<span class="grow"></span>${sw}</div>
@@ -12008,6 +12013,14 @@ const CONTROLLERS = {
         const e = entry(b.dataset.extInstall)
         b.onclick = () =>
           extensionAction('install', e.id, `${e.name} installieren`, `${extSystemNote(e.system)} Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, e.installedVersion ? 'Neue Version installieren' : 'Installieren', `${e.name} ist installiert.`)
+      }
+      for (const input of root.querySelectorAll('[data-ext-install-toggle]')) {
+        const e = entry(input.dataset.extInstallToggle)
+        input.onchange = async () => {
+          // (the switch stays off until the box has installed it: the page is drawn again afterwards)
+          input.checked = false
+          await extensionAction('install', e.id, `${e.name} installieren`, `${extSystemNote(e.system)} Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.`, 'Installieren', `${e.name} ist installiert.`)
+        }
       }
       for (const b of root.querySelectorAll('[data-ext-remove]')) {
         const e = entry(b.dataset.extRemove)
