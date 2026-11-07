@@ -1,0 +1,15 @@
+{
+  "id": "unit-demo",
+  "name": "Unit demo",
+  "version": "1.0.0",
+  "description": "A demo of an extension with its own systemd service: a small background program that writes a heartbeat. Check it at /api/ext/unit-demo/status. Install it to try the install test, and remove it again.",
+  "hostApi": 2,
+  "api": "api.js",
+  "icon": "icon.svg",
+  "resources": {
+    "services": [{ "name": "mpx-unit-demo.service", "provides": true, "purpose": "writes a heartbeat every 10 seconds" }]
+  },
+  "system": {
+    "units": [{ "name": "mpx-unit-demo.service", "file": "units/mpx-unit-demo.service" }]
+  }
+}

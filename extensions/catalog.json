@@ -36,6 +36,34 @@
     }
   },
   {
+    "id": "unit-demo",
+    "name": "Unit demo",
+    "version": "1.0.0",
+    "description": "A demo of an extension with its own systemd service: a small background program that writes a heartbeat. Check it at /api/ext/unit-demo/status. Install it to try the install test, and remove it again.",
+    "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBkPSJNMzIgMjcyaDExMmw0OC0xMjggODAgMjQwIDY0LTE3NiAzMiA2NGgxMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iY3VycmVudENvbG9yIiBzdHJva2Utd2lkdGg9IjMyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4K",
+    "hostApi": 2,
+    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/unit-demo-1.0.0.mpx",
+    "sha256": "8fca3d4b52c7d8f936ec11de8935ca8e28f0480ce926b13d0d8fa7715dde9ee0",
+    "size": 2471,
+    "resources": {
+      "services": [
+        {
+          "name": "mpx-unit-demo.service",
+          "provides": true,
+          "purpose": "writes a heartbeat every 10 seconds"
+        }
+      ]
+    },
+    "system": {
+      "udev": 0,
+      "units": [
+        "mpx-unit-demo.service"
+      ],
+      "groups": [],
+      "packages": []
+    }
+  },
+  {
     "id": "weather",
     "name": "Wetter",
     "version": "1.4.2",

@@ -1,0 +1,14 @@
+[Unit]
+Description=MuPiBox extension unit-demo: a heartbeat
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node @EXT_DIR@/daemon.js
+WorkingDirectory=@EXT_DIR@
+Restart=on-failure
+RestartSec=5
+SyslogIdentifier=mpx-unit-demo
+
+[Install]
+WantedBy=multi-user.target
