@@ -122,7 +122,8 @@ export class ExtensionHostService {
       apiUrl: environment.backend.apiUrl,
       fetch: async (path) => {
         try {
-          const response = await fetch(`${environment.backend.playerUrl}${path}`)
+          // (the player answers only the box's own pages, and those say so with this header - see backend-player/src/request-guard.js)
+          const response = await fetch(`${environment.backend.playerUrl}${path}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
           return response.ok ? await response.json() : null
         } catch {
           return null
