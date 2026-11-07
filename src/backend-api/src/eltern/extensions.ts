@@ -239,7 +239,10 @@ function run(cmd: string, args: string[], timeoutMs = 60000, env?: NodeJS.Proces
 
 /** After a change the services start again (the API itself too: its answer is sent first) and the display loads its page. */
 function restartServices(): void {
-  const script = 'sleep 1; PM2=$(command -v pm2 || echo /usr/local/bin/pm2); "$PM2" restart server spotify-control >/dev/null 2>&1; sleep 10; curl -s -m 5 -X POST http://127.0.0.1:5005/display/reload-page >/dev/null 2>&1'
+  // (pm2 stops the whole process tree of "server" when it restarts it - this script is a child of it. So the work runs in a
+  // subshell that is put in the background: when the outer shell ends, init takes it over and it is out of the tree.)
+  const work = 'sleep 1; PM2=$(command -v pm2 || echo /usr/local/bin/pm2); "$PM2" restart spotify-control >/dev/null 2>&1; "$PM2" restart server >/dev/null 2>&1; sleep 10; curl -s -m 5 -X POST http://127.0.0.1:5005/display/reload-page >/dev/null 2>&1'
+  const script = `( ${work} ) >/dev/null 2>&1 &`
   const child = spawn('sh', ['-c', script], { detached: true, stdio: 'ignore' })
   child.on('error', () => undefined)
   child.unref()
