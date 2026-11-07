@@ -1,7 +1,7 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
   "hostApi": 2,
   "resources": {},
@@ -152,7 +152,7 @@
           },
           {
             "value": "inch",
-            "label": "Inch"
+            "label": "Zoll"
           }
         ]
       },
@@ -196,7 +196,7 @@
           },
           {
             "value": "kn",
-            "label": "knots"
+            "label": "Knoten"
           }
         ]
       }

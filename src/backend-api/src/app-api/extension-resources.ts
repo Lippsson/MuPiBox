@@ -41,6 +41,11 @@ export interface Conflict {
   what: string
   /** who has it, e.g. "MuPiBox (the player)", "extension clock", "lighttpd (running)" */
   by: string
+  /** the same as a list of who holds it ("MuPiBox (power button, shim)", "extension clock", "lighttpd (running)" ...) */
+  holders?: string[]
+  /** what could not be looked at (only for the warning "the test is less sure"): "the boot configuration", "the open ports" ... */
+  blind?: string[]
+  /** in English, for the log: the app writes the sentence itself, in the language of the user, from the fields above */
   message: string
 }
 
@@ -137,20 +142,20 @@ export function findConflicts(wanted: Resources | undefined, taken: Taken): Conf
   const w = normalizeResources(wanted)
   for (const p of w.ports) {
     const by = taken.ports.get(`${p.proto}:${p.port}`)
-    if (by?.length) out.push({ kind: 'port', severity: 'error', what: `port ${p.port}/${p.proto}`, by: by.join(', '), message: `Port ${p.port}/${p.proto} is already used by ${by.join(', ')}.` })
+    if (by?.length) out.push({ kind: 'port', severity: 'error', what: `port ${p.port}/${p.proto}`, by: by.join(', '), holders: by, message: `Port ${p.port}/${p.proto} is already used by ${by.join(', ')}.` })
   }
   for (const g of w.gpio) {
     const by = taken.gpio.get(g.pin)
-    if (by?.length) out.push({ kind: 'gpio', severity: 'error', what: `GPIO ${g.pin}`, by: by.join(', '), message: `GPIO ${g.pin} is already used by ${by.join(', ')}.` })
+    if (by?.length) out.push({ kind: 'gpio', severity: 'error', what: `GPIO ${g.pin}`, by: by.join(', '), holders: by, message: `GPIO ${g.pin} is already used by ${by.join(', ')}.` })
   }
   for (const s of w.services) {
     const by = taken.units.get(s.name)
-    if (s.provides && by?.length) out.push({ kind: 'service', severity: 'error', what: `service ${s.name}`, by: by.join(', '), message: `The service ${s.name} exists already (${by.join(', ')}).` })
+    if (s.provides && by?.length) out.push({ kind: 'service', severity: 'error', what: `service ${s.name}`, by: by.join(', '), holders: by, message: `The service ${s.name} exists already (${by.join(', ')}).` })
     // (a service it relies on, that is not there: the extension may install it itself with a package - so only a warning)
     if (!s.provides && !by?.length) out.push({ kind: 'service', severity: 'warn', what: `service ${s.name}`, by: '-', message: `The service ${s.name} is not on the box (yet).` })
   }
   if (out.length === 0 && taken.blind.length > 0) {
-    out.push({ kind: 'port', severity: 'warn', what: 'the check', by: '-', message: `Could not look at: ${taken.blind.join(', ')}. The test is less sure.` })
+    out.push({ kind: 'port', severity: 'warn', what: 'the check', by: '-', blind: [...taken.blind], message: `Could not look at: ${taken.blind.join(', ')}. The test is less sure.` })
   }
   return out
 }
@@ -353,13 +358,7 @@ export async function gatherTaken(options: {
   return t
 }
 
-/** Words for the app: what an extension needs. */
-export function describeResources(r: Resources | undefined): { ports: string[]; gpio: string[]; services: string[] } {
-  const n = normalizeResources(r)
-  const why = (p: string) => (p ? ` – ${p}` : '')
-  return {
-    ports: n.ports.map((p) => `${p.port}/${p.proto}${why(p.purpose)}`),
-    gpio: n.gpio.map((g) => `GPIO ${g.pin}${why(g.purpose)}`),
-    services: n.services.map((s) => `${s.name} (${s.provides ? 'is installed' : 'is needed'})${why(s.purpose)}`),
-  }
+/** What an extension needs, for the app (which writes the words itself, in the language of the user): the normalized declaration. */
+export function describeResources(r: Resources | undefined): NormalizedResources {
+  return normalizeResources(r)
 }

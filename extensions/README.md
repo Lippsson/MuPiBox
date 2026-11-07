@@ -68,8 +68,9 @@ settings card from what the manifest declares.
 - **`settings`** and **`ui`**: what the extension stores and how the settings card looks. Types are `boolean`, `string`, `number`
   and `secret` (a token or password: the box never sends it back to the app, only whether one is set).
 - **`system`**: what the box sets up as root, see section 5.
-- Texts in the manifest are shown as written. The app translates only its own texts, so write them in English unless the extension is
-  meant for one language only.
+- Texts in the manifest are shown as written. The app translates a text only if it knows it exactly, so write yours in English
+  unless the extension is meant for one language only. (The extensions shipped in this repository are written in German, the source
+  language of the app, and their texts are translated by the app's own language files, `src/backend-api/src/mupi-app/i18n/`.)
 
 ## 4. Declare what you need: `resources`
 

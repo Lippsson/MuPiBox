@@ -11156,50 +11156,106 @@ function newerInCatalog(installedExt) {
   return c && versionNewer(c.version, installedExt.version) ? c : null
 }
 
-/* The report about what an extension needs, sets up and collides with is in English on purpose and is not translated piece by
-   piece (translate="no"): it lists what the extension declares and what the box answers - ports, pins, services - and a list that
-   is half in one language and half in another is worse than a plain English one. */
+/* The report about what an extension needs, sets up and collides with. Its words are German (the language the app's texts are written in)
+   and go through tr() here, piece by piece: the report puts sentences together from what the box says, and the page's own translation
+   (which cuts a text at its separators) must not do it a second time - so the report is marked translate="no". */
+
+// Who holds a port or a pin, as the box says it (English, a fixed set of phrases) -> the app's text
+const EXT_WHO = {
+  'MuPiBox (web server)': 'MuPiBox (Webserver)',
+  'MuPiBox (SSH)': 'MuPiBox (SSH)',
+  'MuPiBox (server and display)': 'MuPiBox (Server und Display)',
+  'MuPiBox (server behind the web server)': 'MuPiBox (Server hinter dem Webserver)',
+  'MuPiBox (player)': 'MuPiBox (Player)',
+  'MuPiBox (remote display, VNC)': 'MuPiBox (Display aus der Ferne, VNC)',
+  'MuPiBox (remote display, noVNC)': 'MuPiBox (Display aus der Ferne, noVNC)',
+  'MuPiBox (DietPi dashboard)': 'MuPiBox (DietPi-Dashboard)',
+  'MuPiBox (power button, shim)': 'MuPiBox (Ein-/Aus-Taster, Shim)',
+  'MuPiBox (power LED)': 'MuPiBox (Betriebs-LED)',
+  'MuPiBox (fan)': 'MuPiBox (Lüfter)',
+  'MuPiBox (rotary encoder)': 'MuPiBox (Drehgeber)',
+  'MuPiBox (MuPiHAT, I2C)': 'MuPiBox (MuPiHAT, I²C)',
+  'the boot configuration (spi: SPI bus)': 'die Boot-Konfiguration (spi: SPI-Bus)',
+  'the boot configuration (enable_uart: serial port)': 'die Boot-Konfiguration (enable_uart: serielle Schnittstelle)',
+  'installed on the box': 'auf der Box installiert',
+  'a running program': 'ein laufendes Programm',
+}
+const EXT_WHO_PATTERNS = [
+  [/^extension (.+)$/, 'Erweiterung {}'],
+  [/^the boot configuration \((i2c\w*): I2C bus\)$/, 'die Boot-Konfiguration ({}: I²C-Bus)'],
+  [/^the boot configuration \(dtoverlay (.+)\)$/, 'die Boot-Konfiguration (dtoverlay {})'],
+  [/^(.+) \(running\)$/, '{} (läuft)'],
+  [/^(.+) \(in use\)$/, '{} (in Benutzung)'],
+]
+// what the test could not look at
+const EXT_BLIND = { 'the boot configuration': 'die Boot-Konfiguration', 'the open ports': 'die offenen Ports', 'the GPIO lines': 'die GPIO-Leitungen', 'the services': 'die Dienste' }
+
+const extWho = (by) => {
+  if (EXT_WHO[by]) return tr(EXT_WHO[by])
+  for (const [re, de] of EXT_WHO_PATTERNS) {
+    const m = re.exec(by)
+    if (m) return tr(de.replace('{}', m[1]))
+  }
+  return by
+}
+
+// One finding of the test, as a sentence in the language of the user
+function extConflictText(c) {
+  const what = String(c.what).replace(/^(port|GPIO|service) /, '')
+  const who = (c.holders ?? []).map(extWho).join(', ')
+  if (c.blind) return tr(`Nicht alles ließ sich prüfen (${c.blind.map((b) => tr(EXT_BLIND[b] ?? b)).join(', ')}). Der Test ist weniger sicher.`)
+  if (c.kind === 'service') return tr(c.severity === 'error' ? `Der Dienst ${what} gibt es schon (${who}).` : `Der Dienst ${what} ist (noch) nicht auf der Box.`)
+  return tr(c.kind === 'gpio' ? `GPIO ${what} ist schon belegt von ${who}.` : `Port ${what} ist schon belegt von ${who}.`)
+}
 
 // What an extension sets up on the system, as list items
 function extSystemItems(system) {
   const items = []
   const rules = Array.isArray(system?.udev) ? system.udev.length : Number(system?.udev ?? 0)
-  if (rules === 1) items.push('Adds a device rule (access rights for a device)')
-  else if (rules > 1) items.push('Adds device rules (access rights for devices)')
-  // (the catalog names them as text, an installed extension has the objects of its manifest)
+  if (rules === 1) items.push(tr('Legt eine Geräteregel an (Zugriffsrechte für ein Gerät)'))
+  else if (rules > 1) items.push(tr('Legt Geräteregeln an (Zugriffsrechte für Geräte)'))
+  // (the catalog names the units as text, an installed extension has the objects of its manifest)
   const units = (system?.units ?? []).map((u) => (typeof u === 'string' ? u : u.name))
-  if (units.length) items.push(`Adds and starts the systemd ${units.length === 1 ? 'service' : 'services'}: ${units.join(', ')}`)
-  if (system?.groups?.length) items.push(`Adds the box's user to the group: ${system.groups.join(', ')}`)
-  if (system?.packages?.length) items.push(`Installs packages: ${system.packages.join(', ')}`)
+  if (units.length) items.push(tr(units.length === 1 ? `Legt den systemd-Dienst ${units[0]} an und startet ihn` : `Legt die systemd-Dienste ${units.join(', ')} an und startet sie`))
+  if (system?.groups?.length) items.push(tr(`Nimmt den Benutzer der Box in die Gruppe ${system.groups.join(', ')} auf`))
+  if (system?.packages?.length) items.push(tr(`Installiert Pakete: ${system.packages.join(', ')}`))
   return items
 }
 
 // The report as HTML: what it needs (ports, GPIO pins, services), what it sets up and - with a test result - what is taken already
 function extReportHtml({ resources, system, conflicts }) {
-  const list = (items) => `<ul class="ext-list">${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`
-  const group = (head, items) => (items?.length ? `<p class="ext-sub">${esc(head)}</p>${list(items)}` : '')
-  const needs = [group('Ports', resources?.ports), group('GPIO pins', resources?.gpio), group('Services', resources?.services)].join('')
-  const setup = extSystemItems(system)
+  const list = (items) => `<ul class="ext-list">${items.map((i) => `<li>${i}</li>`).join('')}</ul>`
+  // (the purpose is a text of the extension: shown as it is, translated when the app knows it)
+  const why = (purpose) => (purpose ? `<span class="ext-why"> – ${esc(tr(purpose))}</span>` : '')
+  const group = (head, items) => (items.length ? `<p class="ext-sub">${esc(tr(head))}</p>${list(items)}` : '')
+  const r = resources ?? {}
+  const needs = [
+    group('Ports', (r.ports ?? []).map((p) => `${esc(`${p.port}/${p.proto}`)}${why(p.purpose)}`)),
+    group('GPIO-Pins', (r.gpio ?? []).map((g) => `${esc(`GPIO ${g.pin}`)}${why(g.purpose)}`)),
+    group('Dienste', (r.services ?? []).map((s) => `${esc(s.name)} <span class="ext-why">(${esc(tr(s.provides ? 'wird mitgebracht' : 'wird gebraucht'))})</span>${why(s.purpose)}`)),
+  ].join('')
+  const setup = system ? extSystemItems(system) : []
   const errors = (conflicts ?? []).filter((c) => c.severity === 'error')
   const warns = (conflicts ?? []).filter((c) => c.severity !== 'error')
+  const h3 = (text) => `<h3>${esc(tr(text))}</h3>`
   return [
-    `<h3>Needs</h3>${needs || '<p class="help" style="margin:0">No ports, GPIO pins or services.</p>'}`,
-    system ? `<h3>Sets up</h3>${setup.length ? list(setup) : '<p class="help" style="margin:0">Nothing on the system.</p>'}` : '',
-    errors.length ? `<h3>Conflicts with this box</h3>${list(errors.map((c) => c.message))}` : '',
-    warns.length ? `<h3>Notes</h3>${list(warns.map((c) => c.message))}` : '',
-    conflicts ? `<p class="ext-verdict ${errors.length ? 'bad' : 'ok'}">${errors.length ? 'Remove or change what uses these first.' : 'No conflicts found.'}</p>` : '',
+    `${h3('Braucht')}${needs || `<p class="help" style="margin:0">${esc(tr('Keine Ports, GPIO-Pins oder Dienste.'))}</p>`}`,
+    system ? `${h3('Richtet ein')}${setup.length ? list(setup.map(esc)) : `<p class="help" style="margin:0">${esc(tr('Nichts am System.'))}</p>`}` : '',
+    errors.length ? `${h3('Kollidiert mit der Box')}${list(errors.map((c) => esc(extConflictText(c))))}` : '',
+    warns.length ? `${h3('Hinweise')}${list(warns.map((c) => esc(extConflictText(c))))}` : '',
+    conflicts ? `<p class="ext-verdict ${errors.length ? 'bad' : 'ok'}">${esc(tr(errors.length ? 'Entferne oder ändere zuerst, was das belegt.' : 'Keine Konflikte gefunden.'))}</p>` : '',
   ].join('')
 }
 
-// The question before an install (or the reason why it cannot be): the report, then "Cancel" and the button - or only "Got it" when
-// something it needs is taken. Resolves true when the user goes on.
-function extReview({ title, resources, system, conflicts, okLabel, extra }) {
+// The question before an install (or the reason why it cannot be): the report, then "Abbrechen" and the button - or only "Verstanden" when
+// something it needs is taken. Resolves true when the user goes on. `extra`: further lines (already in the language of the user).
+function extReview({ title, resources, system, conflicts, okLabel, extra = [] }) {
   const blocked = (conflicts ?? []).some((c) => c.severity === 'error')
   return new Promise((resolve) => {
     let answer = false
     openSheet(
-      `<div class="ext-review" translate="no"><h2>${esc(title)}</h2>${extReportHtml({ resources, system, conflicts })}${extra ? `<p class="help" style="margin:0">${esc(extra)}</p>` : ''}
-       <div class="btns">${blocked ? '<button class="btn primary" data-close>Got it</button>' : `<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>${esc(okLabel)}</button>`}</div></div>`,
+      `<div class="ext-review" translate="no"><h2>${esc(title)}</h2>${extReportHtml({ resources, system, conflicts })}${extra.map((x) => `<p class="help" style="margin:0">${esc(x)}</p>`).join('')}
+       <div class="btns">${blocked ? `<button class="btn primary" data-close>${esc(tr('Verstanden'))}</button>` : `<button class="btn" data-close>${esc(tr('Abbrechen'))}</button><button class="btn primary" data-ok>${esc(tr(okLabel))}</button>`}</div></div>`,
       (sheet, close) => {
         sheet.querySelector('[data-close]').onclick = close
         const ok = sheet.querySelector('[data-ok]')
@@ -11214,20 +11270,20 @@ function extReview({ title, resources, system, conflicts, okLabel, extra }) {
   })
 }
 
-const EXT_RESTART_NOTE = 'Afterwards the box restarts its services; playback is interrupted.'
+const extRestartNote = () => tr('Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.')
 
 // Installs (or updates) an extension of the catalog: the test against the box first, then the report and the question
 async function installExtension(e, kind, doneText) {
   const check = await api(`${API}/extensions/check`, { method: 'POST', body: { id: e.id } })
   if (!check.ok) return toast('Die Prüfung auf Konflikte hat nicht geklappt', 'info')
-  const update = kind === 'Update'
+  const update = kind === 'Update installieren'
   const go = await extReview({
-    title: update ? `Update ${e.name} to ${e.version}?` : `Install ${e.name} ${e.version}?`,
+    title: tr(update ? `${e.name} auf ${e.version} aktualisieren?` : `${e.name} ${e.version} installieren?`),
     resources: check.body.resources,
     system: e.system ?? {},
     conflicts: check.body.conflicts ?? [],
     okLabel: kind,
-    extra: EXT_RESTART_NOTE,
+    extra: [extRestartNote()],
   })
   if (!go) return
   const r = await api(`${API}/extensions/install`, { method: 'POST', body: { id: e.id } })
@@ -12078,8 +12134,10 @@ const CONTROLLERS = {
           : `<label class="switch"><input type="checkbox" data-ext-install-toggle="${esc(e.id)}" aria-label="${esc(e.name)}"><span></span></label>`
         // a newer version in the catalog: a line of text under the buttons (like the notice of WordPress), no card of its own
         const next = installed ? newerInCatalog(e) : null
+        // ("{} oder {}." is cut at the {}: the two links stand in the places the language gives them)
+        const [lead, mid, tail] = tr('{} oder {}.').split('{}')
         const upd = next
-          ? `<p class="ext-update">${icon('sync', 16)}<span>${esc(`Es gibt eine neue Version von ${e.name}: ${next.version}.`)} <button type="button" class="linkbtn" data-ext-details="${esc(e.id)}" data-installed="false" data-ext-new="true">Details ansehen</button> oder <button type="button" class="linkbtn" data-ext-update="${esc(e.id)}">jetzt aktualisieren</button>.</span></p>`
+          ? `<p class="ext-update">${icon('sync', 16)}<span translate="no">${esc(tr(`Es gibt eine neue Version von ${e.name}: ${next.version}.`))} ${esc(lead)}<button type="button" class="linkbtn" data-ext-details="${esc(e.id)}" data-installed="false" data-ext-new="true">${esc(tr('Details ansehen'))}</button>${esc(mid)}<button type="button" class="linkbtn" data-ext-update="${esc(e.id)}">${esc(tr('jetzt aktualisieren'))}</button>${esc(tail)}</span></p>`
           : ''
         return `<div class="ext-card${installed ? '' : ' offer'}" data-q="${esc(q)}">
           <div class="ext-head">${ico}<div class="ext-text"><b>${esc(e.name)}</b> <small>${esc(e.version)}</small><p>${esc(e.description)}</p></div></div>
@@ -12088,6 +12146,8 @@ const CONTROLLERS = {
         </div>`
       }
       // (what the catalog offers and is not installed; a newer version of an installed one shows in its own card)
+      // ("Bitte lies mehr dazu in der {}." is cut at the {}: the link stands in the place the language gives it)
+      const guide = tr('Bitte lies mehr dazu in der {}.').split('{}')
       const offered = exts.catalog.filter((e) => !e.installedVersion)
       const note = exts.catalogError ? '<p class="help">Der Katalog ist gerade nicht erreichbar. Die Box braucht dafür das Internet.</p>' : ''
       const cards = [...exts.installed.map((e) => card(e, true)), ...offered.map((e) => card(e, false))]
@@ -12103,7 +12163,7 @@ const CONTROLLERS = {
             { type: 'html', html: `<h2 class="ext-title">Alle Erweiterungen</h2>${note}<div class="ext-grid">${cards.join('') || '<p class="help">Keine Erweiterungen verfügbar.</p>'}</div>` },
             {
               type: 'html',
-              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/Lippsson/MuPiBox/tree/dev5.1/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab. <span translate="no">Please read more about the extension <a href="${EXT_GUIDELINE_URL}" target="_blank" rel="noopener noreferrer">guideline</a> here.</span></span></div>`,
+              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/Lippsson/MuPiBox/tree/dev5.1/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab. <span translate="no">${esc(guide[0])}<a href="${EXT_GUIDELINE_URL}" target="_blank" rel="noopener noreferrer">${esc(tr('Richtlinie für Erweiterungen'))}</a>${esc(guide[1])}</span></span></div>`,
             },
           ],
         },
@@ -12118,14 +12178,14 @@ const CONTROLLERS = {
       for (const b of root.querySelectorAll('[data-ext-install]')) {
         const e = entry(b.dataset.extInstall)
         b.onclick = () =>
-          installExtension(e, 'Install', `${e.name} ist installiert.`)
+          installExtension(e, 'Installieren', `${e.name} ist installiert.`)
       }
       for (const input of root.querySelectorAll('[data-ext-install-toggle]')) {
         const e = entry(input.dataset.extInstallToggle)
         input.onchange = async () => {
           // (the switch stays off until the box has installed it: the page is drawn again afterwards)
           input.checked = false
-          await installExtension(e, 'Install', `${e.name} ist installiert.`)
+          await installExtension(e, 'Installieren', `${e.name} ist installiert.`)
         }
       }
       for (const b of root.querySelectorAll('[data-ext-remove]')) {
@@ -12143,7 +12203,7 @@ const CONTROLLERS = {
           const r = await api(`${API}/extensions/enable`, { method: 'POST', body: { id: e.id, enabled } })
           if (!r.ok) {
             input.checked = !enabled
-            if (r.body?.error === 'conflict') return extReview({ title: `${e.name} can't be switched on`, resources: e.resources, conflicts: r.body.conflicts })
+            if (r.body?.error === 'conflict') return extReview({ title: tr(`${e.name} kann nicht eingeschaltet werden`), resources: e.resources, conflicts: r.body.conflicts })
             return toast('Hat nicht geklappt', 'info')
           }
           toast('Die Dienste starten neu …')
@@ -12162,15 +12222,15 @@ const CONTROLLERS = {
         const r = await fetch(`${API}/extensions/upload`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream', 'x-mupibox-csrf': state.csrf }, body: file }).catch(() => null)
         const body = await r?.json().catch(() => null)
         if (!r || !r.ok) return toast(`Das ist keine passende Erweiterung: ${body?.error ?? ''}`.trim(), 'info')
-        const what = `${body.name} ${body.version}${body.installedVersion ? ` (replaces ${body.installedVersion})` : ''}`
+        const what = `${body.name} ${body.version}${body.installedVersion ? tr(` (ersetzt ${body.installedVersion})`) : ''}`
         const blocked = (body.conflicts ?? []).some((c) => c.severity === 'error')
         const go1 = await extReview({
-          title: blocked ? `${what} can't be installed` : `Install ${what}?`,
+          title: tr(blocked ? `${what} kann nicht installiert werden` : `${what} installieren?`),
           resources: body.resources,
           system: body.system ?? {},
           conflicts: body.conflicts ?? [],
-          okLabel: 'Install',
-          extra: `An extension runs on the box without protection: install only files from sources you trust. Checksum (SHA-256): ${body.sha256.slice(0, 16)}… ${EXT_RESTART_NOTE}`,
+          okLabel: 'Installieren',
+          extra: [tr('Eine Erweiterung läuft auf der Box ohne Schutz: Installiere nur Dateien aus Quellen, denen du vertraust.'), tr(`Prüfsumme (SHA-256): ${body.sha256.slice(0, 16)}…`), extRestartNote()],
         })
         if (!go1) return
         const go = await api(`${API}/extensions/install`, { method: 'POST', body: { token: body.token } })
@@ -12185,7 +12245,7 @@ const CONTROLLERS = {
       for (const b of root.querySelectorAll('[data-ext-update]')) {
         const c = exts.catalog.find((x) => x.id === b.dataset.extUpdate)
         b.onclick = () =>
-          installExtension(c, 'Update', `${c.name} ist aktualisiert.`)
+          installExtension(c, 'Update installieren', `${c.name} ist aktualisiert.`)
       }
     },
   },

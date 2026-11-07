@@ -37,20 +37,20 @@
   },
   {
     "id": "unit-demo",
-    "name": "Unit demo",
-    "version": "1.0.0",
-    "description": "A demo of an extension with its own systemd service: a small background program that writes a heartbeat. Check it at /api/ext/unit-demo/status. Install it to try the install test, and remove it again.",
+    "name": "Unit-Demo",
+    "version": "1.0.1",
+    "description": "Eine Demo für eine Erweiterung mit eigenem systemd-Dienst: ein kleines Hintergrundprogramm, das einen Herzschlag schreibt. Zu sehen unter /api/ext/unit-demo/status. Zum Ausprobieren des Installationstests: installieren und wieder entfernen.",
     "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBkPSJNMzIgMjcyaDExMmw0OC0xMjggODAgMjQwIDY0LTE3NiAzMiA2NGgxMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iY3VycmVudENvbG9yIiBzdHJva2Utd2lkdGg9IjMyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4K",
     "hostApi": 2,
-    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/unit-demo-1.0.0.mpx",
-    "sha256": "8fca3d4b52c7d8f936ec11de8935ca8e28f0480ce926b13d0d8fa7715dde9ee0",
-    "size": 2471,
+    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/unit-demo-1.0.1.mpx",
+    "sha256": "096f7788e03e0d6a13ebbd778a5aee38abd37f1ee166ff7a4a129103385b00f3",
+    "size": 2515,
     "resources": {
       "services": [
         {
           "name": "mpx-unit-demo.service",
           "provides": true,
-          "purpose": "writes a heartbeat every 10 seconds"
+          "purpose": "schreibt alle 10 Sekunden einen Herzschlag"
         }
       ]
     },
@@ -66,16 +66,17 @@
   {
     "id": "weather",
     "name": "Wetter",
-    "version": "1.4.2",
+    "version": "1.4.3",
     "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
     "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIxNzYiIGN5PSIxNzIiIHI9IjYwIiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIvPjxwYXRoIGQ9Ik0xNzYgNjR2MjRNMTc2IDI1NnYyNE02OCAxNzJINDRNMzA4IDE3MmgtMjRNOTkgOTVsLTE3LTE3TTI1MyA5NWwxNy0xN005OSAyNDlsLTE3IDE3IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTE4MCA0MjBhNzIgNzIgMCAwIDEtOC0xNDMgMTAwIDEwMCAwIDAgMSAxOTIgMTYgNjIgNjIgMCAwIDEgNCAxMjd6IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPgo=",
     "hostApi": 2,
-    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/weather-1.4.2.mpx",
-    "sha256": "c4e29388ea7776828baf270d3f7a6b0604301c8e7f09e4cab16f94dadbc033db",
-    "size": 115357,
+    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/weather-1.4.3.mpx",
+    "sha256": "6aaf00c8d319605efafdf405d9d9353f90e13e63e014bcd668ad5a55d1088d18",
+    "size": 115358,
     "resources": {},
     "system": {
       "udev": 0,
+      "units": [],
       "groups": [],
       "packages": []
     }

@@ -1243,6 +1243,7 @@ textarea[hidden] { display: none; }
 .ext-sub { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--mp-muted); }
 .ext-list { margin: 2px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.45; }
 .ext-list li { margin: 2px 0; overflow-wrap: anywhere; }
+.ext-why { color: var(--mp-muted); }
 .ext-verdict { margin: 4px 0 0; font-weight: 600; font-size: 14px; }
 .ext-verdict.ok { color: var(--mp-success); }
 .ext-verdict.bad { color: var(--mp-danger); }
