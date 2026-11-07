@@ -3253,5 +3253,11 @@
  "schreibt alle 10 Sekunden einen Herzschlag": "escreve um batimento cardíaco a cada 10 segundos",
  "MuPiBox unterstützen": "Apoia a MuPiBox",
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "A MuPiBox é um projeto livre desenvolvido nos tempos livres. Se gostas da caixa, o projeto agradece um pequeno donativo.",
- "Zur Spendenseite": "Para a página de donativos"
+ "Zur Spendenseite": "Para a página de donativos",
+ "Reihenfolge der Uhren": "Ordem dos medidores",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Segura num medidor pela pega e move-o para outro lugar. O ecrã mostra sempre dois medidores lado a lado.",
+ "Verschieben": "Mover",
+ "Luftfeuchte": "Humidade",
+ "Windrichtung": "Direção do vento",
+ "Regenmenge": "Quantidade de chuva"
 }

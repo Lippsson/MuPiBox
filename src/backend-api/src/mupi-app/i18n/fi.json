@@ -3253,5 +3253,11 @@
  "schreibt alle 10 Sekunden einen Herzschlag": "kirjoittaa sydämenlyönnin 10 sekunnin välein",
  "MuPiBox unterstützen": "Tue MuPiBoxia",
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox on vapaa projekti, jota kehitetään vapaa-ajalla. Jos pidät laatikosta, projekti ilahtuu pienestä lahjoituksesta.",
- "Zur Spendenseite": "Lahjoitussivulle"
+ "Zur Spendenseite": "Lahjoitussivulle",
+ "Reihenfolge der Uhren": "Mittareiden järjestys",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Tartu mittariin kahvasta ja siirrä se toiseen kohtaan. Näyttö näyttää aina kaksi mittaria vierekkäin.",
+ "Verschieben": "Siirrä",
+ "Luftfeuchte": "Ilmankosteus",
+ "Windrichtung": "Tuulen suunta",
+ "Regenmenge": "Sademäärä"
 }

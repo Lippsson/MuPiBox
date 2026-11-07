@@ -135,9 +135,9 @@ Webapp › Einstellungen › System › **Erweiterungen**: Karten wie auf der Er
 was der Katalog bietet, steht mit „Installieren“ dahinter. Nur mit Anmeldung (Eltern). Nach einer Änderung starten Player, API und Display neu (eine Wiedergabe
 bricht dabei ab; die Webapp sagt es vorher).
 
-## Die Schnittstellen (`hostApi` 1 und 2)
+## Die Schnittstellen (`hostApi` 1, 2 und 3)
 
-Die Nummer 2 (Wetter) bringt zum Display `api.overlay`, `api.fetchApi` und im Manifest `lookup`, `options`, `min`/`max`. Ein Paket mit `hostApi: 1` läuft unverändert.
+Die Nummer 2 (Wetter) bringt zum Display `api.overlay`, `api.fetchApi` und im Manifest `lookup`, `options`, `min`/`max`. Ein Paket mit `hostApi: 1` läuft unverändert. Die Nummer 3 (Wetter 1.5) bringt im Manifest `type: "order"`: eine Liste, die man in der Webapp per Drag and Drop sortiert (`choices` = Namen und Beschriftungen, die Einstellung ist ein `string` mit den Namen, durch Komma getrennt; der Standardwert nennt jeden Eintrag einmal).
 
 ### Player: `activate(host)`
 

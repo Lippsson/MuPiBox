@@ -3253,5 +3253,11 @@
  "schreibt alle 10 Sekunden einen Herzschlag": "γράφει έναν χτύπο καρδιάς κάθε 10 δευτερόλεπτα",
  "MuPiBox unterstützen": "Υποστήριξε το MuPiBox",
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "Το MuPiBox είναι ένα ελεύθερο έργο που αναπτύσσεται στον ελεύθερο χρόνο. Αν σου αρέσει το κουτί, το έργο θα χαρεί για μια μικρή δωρεά.",
- "Zur Spendenseite": "Στη σελίδα δωρεών"
+ "Zur Spendenseite": "Στη σελίδα δωρεών",
+ "Reihenfolge der Uhren": "Σειρά των οργάνων",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Πιάσε ένα όργανο από τη λαβή και μετακίνησέ το σε άλλη θέση. Η οθόνη δείχνει πάντα δύο όργανα δίπλα-δίπλα.",
+ "Verschieben": "Μετακίνηση",
+ "Luftfeuchte": "Υγρασία",
+ "Windrichtung": "Κατεύθυνση ανέμου",
+ "Regenmenge": "Ποσότητα βροχής"
 }

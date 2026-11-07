@@ -3253,5 +3253,11 @@
  "schreibt alle 10 Sekunden einen Herzschlag": "skriver en hjärtslagssignal var 10:e sekund",
  "MuPiBox unterstützen": "Stöd MuPiBox",
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox är ett fritt projekt som utvecklas på fritiden. Om du gillar boxen blir projektet glatt över en liten donation.",
- "Zur Spendenseite": "Till donationssidan"
+ "Zur Spendenseite": "Till donationssidan",
+ "Reihenfolge der Uhren": "Mätarnas ordning",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Ta tag i en mätare i greppet och flytta den till en annan plats. Displayen visar alltid två mätare bredvid varandra.",
+ "Verschieben": "Flytta",
+ "Luftfeuchte": "Luftfuktighet",
+ "Windrichtung": "Vindriktning",
+ "Regenmenge": "Regnmängd"
 }

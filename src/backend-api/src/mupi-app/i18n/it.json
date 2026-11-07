@@ -3253,5 +3253,11 @@
  "schreibt alle 10 Sekunden einen Herzschlag": "scrive un battito ogni 10 secondi",
  "MuPiBox unterstützen": "Sostieni MuPiBox",
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox è un progetto libero sviluppato nel tempo libero. Se la box ti piace, il progetto sarà felice di una piccola donazione.",
- "Zur Spendenseite": "Alla pagina delle donazioni"
+ "Zur Spendenseite": "Alla pagina delle donazioni",
+ "Reihenfolge der Uhren": "Ordine degli strumenti",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Prendi uno strumento dalla maniglia e spostalo in un altro punto. Il display mostra sempre due strumenti affiancati.",
+ "Verschieben": "Sposta",
+ "Luftfeuchte": "Umidità",
+ "Windrichtung": "Direzione del vento",
+ "Regenmenge": "Quantità di pioggia"
 }

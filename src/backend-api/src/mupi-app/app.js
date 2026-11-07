@@ -11350,6 +11350,14 @@ function extensionDetails(e, installed) {
         const now = e.settings?.[it.key]
         return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xl-${k}">${esc(it.label)}</label><p style="margin:0 0 6px"><b data-xcurrent="${k}">${esc(now || '–')}</b></p><div class="ext-results" data-xresults="${k}" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div><div class="row" style="gap:8px"><input class="input" id="xl-${k}" type="search" placeholder="Suchen …" autocomplete="off" ${NO_PW_MANAGER}><button type="button" class="btn" data-xlookup="${k}">Suchen</button></div>${help}</div>`
       }
+      if (it.type === 'order') {
+        // a list to put in order by dragging: the setting names the choices, comma separated (a name that is missing goes last)
+        const names = it.choices.map((c) => c.value)
+        const have = String(e.settings?.[it.key] ?? '').split(',').filter((v, i, all) => names.includes(v) && all.indexOf(v) === i)
+        const sorted = [...have, ...names.filter((v) => !have.includes(v))]
+        const label = (v) => it.choices.find((c) => c.value === v).label
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><ol class="ext-order" data-xorder="${k}">${sorted.map((v) => `<li data-v="${esc(v)}"><button type="button" class="grip" aria-label="Verschieben"></button><span>${esc(label(v))}</span></li>`).join('')}</ol>${help}</div>`
+      }
       if (it.choices) {
         const now = e.settings?.[it.key]
         return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><div class="seg" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')}</div>${help}</div>`
@@ -11452,6 +11460,62 @@ function extensionDetails(e, installed) {
           }
           timer = setTimeout(search, 400)
         }
+      }
+      // (a list to put in order: a row is taken at its grip and dragged - finger or mouse - or moved with the arrow keys; saved when it is let go)
+      for (const list of sheet.querySelectorAll('[data-xorder]')) {
+        const key = list.dataset.xorder
+        const order = () => [...list.children].map((li) => li.dataset.v)
+        let saved = order()
+        const keep = async () => {
+          const now = order()
+          if (now.join() === saved.join()) return
+          const ok = await save({ [key]: now.join(',') }, false)
+          if (ok) {
+            saved = now
+            e.settings[key] = now.join(',')
+            return
+          }
+          // (not saved: the list goes back to the order it had)
+          for (const v of saved) list.append(list.querySelector(`[data-v="${CSS.escape(v)}"]`))
+        }
+        let drag = null
+        list.addEventListener('pointerdown', (ev) => {
+          const grip = ev.target.closest?.('.grip')
+          if (!grip || (ev.pointerType === 'mouse' && ev.button !== 0)) return
+          const li = grip.closest('li')
+          drag = { li, grab: ev.clientY - li.getBoundingClientRect().top }
+          li.classList.add('dragging')
+          grip.setPointerCapture(ev.pointerId)
+          ev.preventDefault()
+        })
+        list.addEventListener('pointermove', (ev) => {
+          if (!drag) return
+          const { li } = drag
+          li.style.transform = ''
+          // (it stands before the first other row whose middle is below the pointer)
+          const next = [...list.children].find((o) => o !== li && o.getBoundingClientRect().top + o.offsetHeight / 2 > ev.clientY)
+          if (next !== li.nextElementSibling) list.insertBefore(li, next ?? null)
+          li.style.transform = `translateY(${ev.clientY - drag.grab - li.getBoundingClientRect().top}px)`
+        })
+        const letGo = () => {
+          if (!drag) return
+          drag.li.classList.remove('dragging')
+          drag.li.style.transform = ''
+          drag = null
+          keep()
+        }
+        list.addEventListener('pointerup', letGo)
+        list.addEventListener('pointercancel', letGo)
+        list.addEventListener('keydown', (ev) => {
+          const li = ev.target.closest?.('li')
+          if (!li || (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown')) return
+          ev.preventDefault()
+          if (ev.key === 'ArrowUp' && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling)
+          else if (ev.key === 'ArrowDown' && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li)
+          else return
+          li.querySelector('.grip').focus()
+          keep()
+        })
       }
       // (a choice from a few: saved at once, as a switch is)
       for (const group of sheet.querySelectorAll('[data-xseg]')) {

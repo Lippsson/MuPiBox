@@ -46,7 +46,7 @@ describe('manifest of an extension', () => {
   it('refuses a bad id, a missing part and a newer host', () => {
     assert.ok(checkManifest(base({ id: '../x' }), files()))
     assert.ok(checkManifest(base({ player: 'player.js' }), files()))
-    assert.ok(checkManifest(base({ hostApi: 3 }), files()))
+    assert.ok(checkManifest(base({ hostApi: 4 }), files()))
     assert.ok(checkManifest(base({ version: '1.0' }), files()))
   })
   it('refuses file names that leave the folder', () => {
@@ -141,6 +141,21 @@ describe('the weather extension of this repository', () => {
     assert.ok(lookup(str, { key: 'a', label: 'A', type: 'lookup', search: 'https://example.com/x' }))
     assert.ok(lookup({ a: { type: 'boolean' } }, { key: 'a', label: 'A', type: 'lookup', search: '/api/ext/xy/places' }))
     assert.strictEqual(lookup(str, { key: 'a', label: 'A', type: 'lookup', search: '/api/ext/xy/places' }), null)
+  })
+  it('an order field: a text that names every choice once', () => {
+    const choices = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }, { value: 'c', label: 'C' }]
+    const manifest = (settings: unknown, item: unknown = { key: 'o', label: 'O', type: 'order', choices }) => base({ id: 'xy', hostApi: 3, settings, ui: { title: 'T', items: [item] } })
+    const str = { o: { type: 'string', default: 'a,b,c' } }
+    assert.strictEqual(checkManifest(manifest(str), files()), null)
+    assert.ok(checkManifest(manifest({ o: { type: 'string', default: 'a,b' } }), files()), 'a default that misses a choice')
+    assert.ok(checkManifest(manifest({ o: { type: 'boolean' } }), files()))
+    assert.ok(checkManifest(manifest(str, { key: 'o', label: 'O', type: 'order', choices: [{ value: 'a', label: 'A' }] }), files()), 'one choice is no order')
+    assert.ok(checkManifest(manifest(str, { key: 'o', label: 'O', type: 'order', choices: [{ value: 'a', label: 'A' }, { value: 'a', label: 'A2' }] }), files()), 'the same choice twice')
+    const m = manifest(str) as unknown as Manifest
+    assert.deepStrictEqual(checkSettings(m, { o: 'c,a,b' }), { ok: true, clean: { o: 'c,a,b' } })
+    assert.strictEqual(checkSettings(m, { o: 'a,b' }).ok, false)
+    assert.strictEqual(checkSettings(m, { o: 'a,a,b' }).ok, false)
+    assert.strictEqual(checkSettings(m, { o: 'a,b,x' }).ok, false)
   })
   it('is packed as the catalog says', () => {
     const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'weather')

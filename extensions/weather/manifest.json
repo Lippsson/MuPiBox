@@ -1,9 +1,9 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.4.5",
+  "version": "1.5.0",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
-  "hostApi": 2,
+  "hostApi": 3,
   "resources": {},
   "api": "api.js",
   "display": "display.js",
@@ -81,6 +81,11 @@
         "mph",
         "kn"
       ]
+    },
+    "order": {
+      "type": "string",
+      "default": "temp,hum,wind,dir,baro,rain",
+      "pattern": "^[a-z]{2,10}(,[a-z]{2,10}){0,11}$"
     }
   },
   "ui": {
@@ -197,6 +202,38 @@
           {
             "value": "kn",
             "label": "Knoten"
+          }
+        ]
+      },
+      {
+        "key": "order",
+        "label": "Reihenfolge der Uhren",
+        "help": "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.",
+        "type": "order",
+        "choices": [
+          {
+            "value": "temp",
+            "label": "Temperatur"
+          },
+          {
+            "value": "hum",
+            "label": "Luftfeuchte"
+          },
+          {
+            "value": "wind",
+            "label": "Windstärke"
+          },
+          {
+            "value": "dir",
+            "label": "Windrichtung"
+          },
+          {
+            "value": "baro",
+            "label": "Luftdruck"
+          },
+          {
+            "value": "rain",
+            "label": "Regenmenge"
           }
         ]
       }

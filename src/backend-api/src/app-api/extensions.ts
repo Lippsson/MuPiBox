@@ -32,7 +32,7 @@ if (!process.env.MUPIBOX_EXT_DIR && process.env.NODE_ENV !== 'test' && process.e
     // (the other process was faster, or it is not possible: then they stay where they are and are not found - logged by the load)
   }
 }
-export const HOST_API = 2
+export const HOST_API = 3
 const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/catalog.json'
 // the largest package (the file as it is sent and downloaded; what is in it may be three times that, unpacked)
 const MAX_MPX = 16 * 1024 * 1024
@@ -58,7 +58,7 @@ export interface Manifest {
   display?: string
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
-  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup'; search?: string }[] }
+  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order'; search?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -297,12 +297,19 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
       if (!x.settings?.[item?.key]) return `ui: no such setting: ${item?.key}`
       if (typeof item.label !== 'string' || item.label.length > 100 || (item.help !== undefined && (typeof item.help !== 'string' || item.help.length > 800))) return `ui: bad text: ${item.key}`
       if (item.dep !== undefined && x.settings?.[item.dep]?.type !== 'boolean') return `ui: dep must be a switch: ${item.key}`
-      if (item.type !== undefined) {
+      if (item.type === 'order') {
+        // a list to put in order by dragging (hostApi 3): the setting is a text with the names of the choices, comma separated
+        const names = (item.choices ?? []).map((c) => c?.value)
+        if (x.settings[item.key].type !== 'string' || !Array.isArray(item.choices) || item.choices.length < 2 || item.choices.length > 12) return `ui: bad order: ${item.key}`
+        if (item.choices.some((c) => typeof c?.value !== 'string' || !/^[a-z][a-z0-9]{0,11}$/.test(c.value) || typeof c.label !== 'string' || c.label.length > 60) || new Set(names).size !== names.length) return `ui: bad order choices: ${item.key}`
+        const def = x.settings[item.key].default
+        if (def !== undefined && !isOrderOf(def, names as string[])) return `ui: the default of an order must name every choice once: ${item.key}`
+      } else if (item.type !== undefined) {
         // a search: a text field with a button; the extension's own API part answers with the places to choose from (see the app)
         if (item.type !== 'lookup' || x.settings[item.key].type !== 'string' || item.choices !== undefined) return `ui: bad type: ${item.key}`
         if (typeof item.search !== 'string' || !new RegExp(`^/api/ext/${x.id}/[a-z]{1,30}$`).test(item.search)) return `ui: bad search address: ${item.key}`
       }
-      if (item.choices !== undefined) {
+      if (item.choices !== undefined && item.type !== 'order') {
         const options = x.settings[item.key].options
         if (!options || !Array.isArray(item.choices) || item.choices.length !== options.length) return `ui: choices must name every option: ${item.key}`
         if (item.choices.some((c) => !options.includes(c?.value as never) || typeof c.label !== 'string' || c.label.length > 60)) return `ui: bad choices: ${item.key}`
@@ -329,6 +336,13 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
 }
 
 /** The values of a settings request, checked against the manifest; unknown keys are an error. */
+/** Is the text a list of exactly these names, each once, comma separated (the value of an "order" field)? */
+export function isOrderOf(value: unknown, names: string[]): boolean {
+  if (typeof value !== 'string') return false
+  const got = value.split(',')
+  return got.length === names.length && new Set(got).size === got.length && got.every((n) => names.includes(n))
+}
+
 export function checkSettings(manifest: Manifest, values: Record<string, unknown>): { ok: true; clean: Record<string, unknown> } | { ok: false; error: string } {
   const clean: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(values)) {
@@ -344,6 +358,8 @@ export function checkSettings(manifest: Manifest, values: Record<string, unknown
       if (typeof value !== 'string' || value.length > 300) return { ok: false, error: `${key}: a text` }
       if (spec.pattern && !new RegExp(spec.pattern).test(value.trim())) return { ok: false, error: `${key}: does not fit` }
       if (spec.options && !spec.options.includes(value.trim())) return { ok: false, error: `${key}: not one of the options` }
+      const order = manifest.ui?.items.find((i) => i.key === key && i.type === 'order')
+      if (order && !isOrderOf(value.trim(), (order.choices ?? []).map((c) => String(c.value)))) return { ok: false, error: `${key}: not an order of the choices` }
     }
     clean[key] = typeof value === 'string' ? value.trim() : value
   }

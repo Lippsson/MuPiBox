@@ -99,6 +99,13 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 const trendName = (n) => (n > 0 ? 'UP' : n < 0 ? 'DOWN' : 'STEADY')
 
 /** The dials with their scales, coloured sections, areas and texts for an answer of the API part, in the chosen units. */
+/** The dials in the order the settings name (comma separated ids): a dial the text does not name, or names twice, comes in its own place after the others. */
+export function orderDials(dials, order) {
+  const names = typeof order === 'string' ? order.split(',') : []
+  const first = names.filter((n, i) => names.indexOf(n) === i).map((n) => dials.find((d) => d.id === n)).filter(Boolean)
+  return [...first, ...dials.filter((d) => !first.includes(d))]
+}
+
 export function dialsFor(data, units = UNIT_DEFAULTS) {
   const U = {
     temp: UNITS.temp[units.temp] ?? UNITS.temp.c,
@@ -222,7 +229,7 @@ export function activate(api) {
           const mask = `linear-gradient(to right, transparent ${side - 8}px, #000 ${side}px, #000 calc(100% - ${side}px), transparent calc(100% - ${side - 8}px))`
           row.style.maskImage = mask
           row.style.webkitMaskImage = mask
-          for (const dial of dialsFor(data, unitsOf(settings))) {
+          for (const dial of orderDials(dialsFor(data, unitsOf(settings)), settings?.order)) {
             const cell = document.createElement('div')
             cell.style.cssText = 'flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;scroll-snap-align:start'
             const canvas = document.createElement('canvas')

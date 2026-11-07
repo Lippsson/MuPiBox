@@ -3253,5 +3253,11 @@
  "schreibt alle 10 Sekunden einen Herzschlag": "записывает «сердцебиение» каждые 10 секунд",
  "MuPiBox unterstützen": "Поддержите MuPiBox",
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox — свободный проект, который развивается в свободное время. Если вам нравится устройство, проект будет рад небольшому пожертвованию.",
- "Zur Spendenseite": "На страницу пожертвований"
+ "Zur Spendenseite": "На страницу пожертвований",
+ "Reihenfolge der Uhren": "Порядок приборов",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Возьми прибор за ручку и перенеси на другое место. На дисплее всегда видны два прибора рядом.",
+ "Verschieben": "Переместить",
+ "Luftfeuchte": "Влажность",
+ "Windrichtung": "Направление ветра",
+ "Regenmenge": "Количество осадков"
 }

@@ -1248,6 +1248,14 @@ textarea[hidden] { display: none; }
 .ext-sub { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--mp-muted); }
 .ext-list { margin: 2px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.45; }
 .ext-list li { margin: 2px 0; overflow-wrap: anywhere; }
+/* a list to put in order by dragging (an "order" field of an extension) */
+.ext-order { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ext-order li { display: flex; align-items: center; gap: 12px; padding: 4px 12px 4px 4px; border: 1px solid var(--mp-border); border-radius: var(--mp-r); background: var(--mp-surface); font-size: 15px; font-weight: 600; user-select: none; }
+.ext-order li.dragging { position: relative; z-index: 2; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); border-color: var(--mp-primary); }
+.ext-order .grip { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: var(--mp-r-sm); background: transparent; cursor: grab; touch-action: none; }
+.ext-order .grip::before { content: ''; width: 12px; height: 18px; background: radial-gradient(circle, var(--mp-muted) 1.6px, transparent 2px) 0 0 / 6px 6px; }
+.ext-order .grip:focus-visible { outline: 2px solid var(--mp-primary); }
+.ext-order li.dragging .grip { cursor: grabbing; }
 .ext-why { color: var(--mp-muted); }
 .ext-verdict { margin: 4px 0 0; font-weight: 600; font-size: 14px; }
 .ext-verdict.ok { color: var(--mp-success); }

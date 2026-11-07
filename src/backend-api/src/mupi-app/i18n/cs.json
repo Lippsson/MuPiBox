@@ -3253,5 +3253,11 @@
  "schreibt alle 10 Sekunden einen Herzschlag": "zapisuje „tlukot srdce“ každých 10 sekund",
  "MuPiBox unterstützen": "Podpořte MuPiBox",
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox je svobodný projekt, který vzniká ve volném čase. Pokud se vám box líbí, projekt se bude těšit z malého daru.",
- "Zur Spendenseite": "Na stránku s dary"
+ "Zur Spendenseite": "Na stránku s dary",
+ "Reihenfolge der Uhren": "Pořadí měřicích přístrojů",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Uchopte měřicí přístroj za úchyt a přesuňte ho na jiné místo. Displej vždy zobrazuje dva přístroje vedle sebe.",
+ "Verschieben": "Přesunout",
+ "Luftfeuchte": "Vlhkost",
+ "Windrichtung": "Směr větru",
+ "Regenmenge": "Množství deště"
 }

@@ -3253,5 +3253,11 @@
  "schreibt alle 10 Sekunden einen Herzschlag": "her 10 saniyede bir kalp atışı yazar",
  "MuPiBox unterstützen": "MuPiBox’a destek ol",
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox, boş zamanlarda geliştirilen özgür bir projedir. Kutuyu beğendiysen proje küçük bir bağıştan memnun olur.",
- "Zur Spendenseite": "Bağış sayfasına git"
+ "Zur Spendenseite": "Bağış sayfasına git",
+ "Reihenfolge der Uhren": "Göstergelerin sırası",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Bir göstergeyi tutamağından tut ve başka bir yere taşı. Ekranda her zaman iki gösterge yan yana görünür.",
+ "Verschieben": "Taşı",
+ "Luftfeuchte": "Nem",
+ "Windrichtung": "Rüzgâr yönü",
+ "Regenmenge": "Yağış miktarı"
 }

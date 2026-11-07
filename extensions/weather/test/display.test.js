@@ -127,3 +127,12 @@ test('the scale of a pressure outside of the usual one grows in the steps of its
   assert.equal(f[0].start, -20)
   assert.equal(f.at(-1).stop, 100)
 })
+
+test('the dials in the order of the settings; a missing or doubled name does not lose a dial', async () => {
+  const { orderDials } = await load()
+  const dials = ['temp', 'hum', 'wind', 'dir', 'baro', 'rain'].map((id) => ({ id }))
+  const ids = (list) => list.map((d) => d.id).join()
+  assert.equal(ids(orderDials(dials, 'rain,baro,dir,wind,hum,temp')), 'rain,baro,dir,wind,hum,temp')
+  assert.equal(ids(orderDials(dials, undefined)), 'temp,hum,wind,dir,baro,rain')
+  assert.equal(ids(orderDials(dials, 'wind,temp,wind,x')), 'wind,temp,hum,dir,baro,rain')
+})
