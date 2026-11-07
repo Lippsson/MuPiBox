@@ -438,7 +438,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     const installed = []
     for (const [id, s] of Object.entries(state)) {
       const m = await readManifest(id)
-      if (m) installed.push({ id, name: m.name, version: m.version, description: m.description ?? '', icon: m.icon && s.enabled !== false ? `/ext/${id}/${m.icon}` : null, enabled: s.enabled !== false, system: m.system ?? {}, ui: m.ui ?? null, settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])), settings: await publicSettings(m), job: jobs.get(id) ?? null })
+      if (m) installed.push({ id, name: m.name, version: m.version, description: m.description ?? '', icon: m.icon ? `/ext/${id}/${m.icon}` : null, enabled: s.enabled !== false, system: m.system ?? {}, ui: m.ui ?? null, settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])), settings: await publicSettings(m), job: jobs.get(id) ?? null })
     }
     let catalog: unknown[] = []
     let catalogError: string | null = null
@@ -579,7 +579,12 @@ export function mountExtensions(app: express.Express, deps: ExtensionDeps): void
   app.get(/^\/ext\/([a-z][a-z0-9-]{1,30})\/(.+)$/, localNetworkOnly, async (req, res) => {
     const id = req.params[0]
     const rel = req.params[1]
-    const manifest = (await enabledManifests()).find((m) => m.id === id)
+    let manifest = (await enabledManifests()).find((m) => m.id === id)
+    if (!manifest) {
+      // (an extension that is off has no part on the display, but its picture is shown on the page of the extensions)
+      const installed = await readManifest(id)
+      if (installed?.icon === rel && id in (await readState())) manifest = installed
+    }
     if (!manifest || !FILE.test(rel) || rel.includes('..') || !ALLOWED_FILES.test(rel) || rel === manifest.player || rel === manifest.api) {
       res.status(404).end()
       return
