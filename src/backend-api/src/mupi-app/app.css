@@ -325,7 +325,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   /* (the player and the column beside it as high as each other: the tiles flush with its top, the quick actions with
      its bottom) */
   .content.start { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: stretch; }
-  .content.start .start-more, .content.start .update-note { grid-column: 1 / -1; }
+  .content.start .start-more, .content.start .update-note, .content.start .start-donate { grid-column: 1 / -1; }
   .start-side > .section-label { margin-top: auto; }
 }
 .now { gap: 16px; }
@@ -684,6 +684,11 @@ a.btn { text-decoration: none; color: inherit; }
 
 /* the announcement of a new version (or an update running): a band under the player, across the page on the PC */
 .update-note { display: flex; flex-direction: column; gap: 10px; }
+/* the donation box at the bottom of the start page */
+.donate-box { flex-direction: row; align-items: center; gap: 14px; flex-wrap: wrap; }
+.donate-box .donate-text { flex: 1 1 240px; min-width: 0; }
+.donate-box h2 { margin: 0 0 4px; }
+.donate-box .help { margin: 0; }
 .update-note:empty { display: none; }
 .update-note .notice { margin-bottom: 0; }
 .update-note .notice-body { align-items: center; padding: 14px 16px; }

@@ -3250,5 +3250,8 @@
  "Windstärke": "Ένταση ανέμου",
  "Knoten": "Κόμβοι",
  "Eine Demo für eine Erweiterung mit eigenem systemd-Dienst: ein kleines Hintergrundprogramm, das einen Herzschlag schreibt. Zu sehen unter /api/ext/unit-demo/status. Zum Ausprobieren des Installationstests: installieren und wieder entfernen.": "Επίδειξη μιας επέκτασης με δική της υπηρεσία systemd: ένα μικρό πρόγραμμα παρασκηνίου που γράφει έναν χτύπο καρδιάς. Φαίνεται στη διεύθυνση /api/ext/unit-demo/status. Για να δοκιμάσεις τον έλεγχο εγκατάστασης: εγκατάστησέ την και αφαίρεσέ την ξανά.",
- "schreibt alle 10 Sekunden einen Herzschlag": "γράφει έναν χτύπο καρδιάς κάθε 10 δευτερόλεπτα"
+ "schreibt alle 10 Sekunden einen Herzschlag": "γράφει έναν χτύπο καρδιάς κάθε 10 δευτερόλεπτα",
+ "MuPiBox unterstützen": "Υποστήριξε το MuPiBox",
+ "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "Το MuPiBox είναι ένα ελεύθερο έργο που αναπτύσσεται στον ελεύθερο χρόνο. Αν σου αρέσει το κουτί, το έργο θα χαρεί για μια μικρή δωρεά.",
+ "Zur Spendenseite": "Στη σελίδα δωρεών"
 }

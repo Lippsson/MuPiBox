@@ -3250,5 +3250,8 @@
  "Windstärke": "Швидкість вітру",
  "Knoten": "Вузли",
  "Eine Demo für eine Erweiterung mit eigenem systemd-Dienst: ein kleines Hintergrundprogramm, das einen Herzschlag schreibt. Zu sehen unter /api/ext/unit-demo/status. Zum Ausprobieren des Installationstests: installieren und wieder entfernen.": "Демонстрація розширення з власною службою systemd: невелика фонова програма, що записує «серцебиття». Видно за адресою /api/ext/unit-demo/status. Щоб спробувати перевірку встановлення: встанови й знову видали.",
- "schreibt alle 10 Sekunden einen Herzschlag": "записує «серцебиття» кожні 10 секунд"
+ "schreibt alle 10 Sekunden einen Herzschlag": "записує «серцебиття» кожні 10 секунд",
+ "MuPiBox unterstützen": "Підтримайте MuPiBox",
+ "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox — вільний проєкт, який розвивається у вільний час. Якщо вам подобається бокс, проєкт буде радий невеликому пожертвуванню.",
+ "Zur Spendenseite": "На сторінку пожертвувань"
 }

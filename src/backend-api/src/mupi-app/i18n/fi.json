@@ -3250,5 +3250,8 @@
  "Windstärke": "Tuulen nopeus",
  "Knoten": "Solmua",
  "Eine Demo für eine Erweiterung mit eigenem systemd-Dienst: ein kleines Hintergrundprogramm, das einen Herzschlag schreibt. Zu sehen unter /api/ext/unit-demo/status. Zum Ausprobieren des Installationstests: installieren und wieder entfernen.": "Esittely laajennuksesta, jolla on oma systemd-palvelu: pieni taustaohjelma, joka kirjoittaa sydämenlyönnin. Näkyy osoitteessa /api/ext/unit-demo/status. Asennustestin kokeiluun: asenna ja poista se uudelleen.",
- "schreibt alle 10 Sekunden einen Herzschlag": "kirjoittaa sydämenlyönnin 10 sekunnin välein"
+ "schreibt alle 10 Sekunden einen Herzschlag": "kirjoittaa sydämenlyönnin 10 sekunnin välein",
+ "MuPiBox unterstützen": "Tue MuPiBoxia",
+ "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox on vapaa projekti, jota kehitetään vapaa-ajalla. Jos pidät laatikosta, projekti ilahtuu pienestä lahjoituksesta.",
+ "Zur Spendenseite": "Lahjoitussivulle"
 }

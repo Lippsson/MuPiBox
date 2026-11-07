@@ -3222,5 +3222,8 @@
  "Windstärke",
  "Knoten",
  "Eine Demo für eine Erweiterung mit eigenem systemd-Dienst: ein kleines Hintergrundprogramm, das einen Herzschlag schreibt. Zu sehen unter /api/ext/unit-demo/status. Zum Ausprobieren des Installationstests: installieren und wieder entfernen.",
- "schreibt alle 10 Sekunden einen Herzschlag"
+ "schreibt alle 10 Sekunden einen Herzschlag",
+ "MuPiBox unterstützen",
+ "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.",
+ "Zur Spendenseite"
 ]
