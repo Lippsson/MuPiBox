@@ -49,6 +49,8 @@ export interface CatalogEntry {
   name: string
   version: string
   description: string
+  /** A small SVG as a data address: the page shows it before the extension is installed. */
+  icon?: string
   hostApi: number
   url: string
   sha256: string
@@ -235,6 +237,8 @@ async function fetchCatalog(deps: ExtensionDeps): Promise<CatalogEntry[]> {
   const list = (Array.isArray(body) ? body : []).filter(
     (e): e is CatalogEntry => ID.test(String(e?.id)) && VERSION.test(String(e?.version)) && /^https:\/\//.test(String(e?.url)) && /^[0-9a-f]{64}$/.test(String(e?.sha256)) && Number.isInteger(e?.hostApi) && e.hostApi <= HOST_API && e.size <= MAX_MPX,
   )
+  // (an icon is only a small SVG as a data address - the page puts it into a style, so nothing else may get in)
+  for (const e of list) if (e.icon !== undefined && !/^data:image\/svg\+xml;base64,[A-Za-z0-9+/=]{1,6000}$/.test(String(e.icon))) delete e.icon
   catalogCache = { at: Date.now(), list }
   return list
 }

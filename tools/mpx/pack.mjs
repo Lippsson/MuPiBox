@@ -116,11 +116,18 @@ try {
 } catch {
   // the first entry
 }
+// the icon goes into the catalog as a small data address, so the page of the extensions shows it before the extension is installed
+let icon
+if (manifest.icon && /\.svg$/i.test(manifest.icon)) {
+  const svg = readFileSync(path.join(dir, manifest.icon))
+  if (svg.length <= 4096) icon = `data:image/svg+xml;base64,${svg.toString('base64')}`
+}
 const entry = {
   id,
   name: manifest.name,
   version: manifest.version,
   description: manifest.description ?? '',
+  ...(icon ? { icon } : {}),
   hostApi: manifest.hostApi,
   url: `https://raw.githubusercontent.com/${repo}/${branch}/extensions/dist/${outName}`,
   sha256,
