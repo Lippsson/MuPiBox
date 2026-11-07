@@ -11972,9 +11972,7 @@ const CONTROLLERS = {
         // (an extension that is not installed yet has its switch too: off - switching it on installs it, after the question)
         const action = installed
           ? `<button type="button" class="btn sm danger" data-ext-remove="${esc(e.id)}">Entfernen</button>`
-          : e.installedVersion
-            ? `<button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">Neue Version installieren</button>`
-            : ''
+          : `<button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">${e.installedVersion ? 'Neue Version installieren' : 'Installieren'}</button>`
         const sw = installed
           ? `<label class="switch"><input type="checkbox" data-ext-toggle="${esc(e.id)}" ${e.enabled ? 'checked' : ''} aria-label="${esc(e.name)}"><span></span></label>`
           : e.installedVersion
