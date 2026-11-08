@@ -20,6 +20,22 @@ else
 	[ ${#COLOR} -eq 6 ] && xsetroot -solid "#${COLOR}" 2>/dev/null
 fi
 
+# A display on the ribbon cable of a Pi 5 whose KMS driver is not the one X takes as its main GPU (the Waveshare panels: the
+# DSI has a driver of its own, next to the HDMI one): X sees it as a second GPU's output, named DSI-<card>-<n> (DSI-1-2), and
+# leaves it off - the screen stays at a blank 1024 x 768 on the HDMI that nothing is plugged in. Such an output is switched on
+# here, turned as the app's Drehung says (the Monitor sections of /etc/X11/xorg.conf.d name DSI-2 and do not reach it), and
+# the window below then goes by its size. (An output named DSI-<n> is the main GPU's: X switches it on and turns it itself.)
+DSI_X=$(xrandr 2>/dev/null | awk '/^DSI-[0-9]+-[0-9]+ connected/ { print $1; exit }')
+if [ -n "${DSI_X}" ]; then
+	case "$(jq -r '.mupibox.displayRotation // 0' /etc/mupibox/mupiboxconfig.json 2>/dev/null)" in
+		90) DSI_TURN=right ;;
+		180) DSI_TURN=inverted ;;
+		270) DSI_TURN=left ;;
+		*) DSI_TURN=normal ;;
+	esac
+	xrandr --output "${DSI_X}" --auto --rotate "${DSI_TURN}" 2>/dev/null
+fi
+
 # A mirrored display on the ribbon cable (app: Display > Drehung, mupibox.dsiRotation 0x10000 / 0x20000): the X server's
 # own option for it (Monitor "Reflect") is ignored by the KMS driver, so xrandr mirrors it here. Turning is done by X's
 # configuration (/etc/X11/xorg.conf.d/20-mupibox-rotate.conf), the touch's turn and mirror by its own file.
@@ -29,7 +45,7 @@ case "$(jq -r '.mupibox.dsiRotation // "0"' /etc/mupibox/mupiboxconfig.json 2>/d
 	*) REFLECT= ;;
 esac
 if [ -n "${REFLECT}" ]; then
-	DSI_OUT=$(xrandr 2>/dev/null | awk '/^DSI-[0-9]+ connected/ { print $1; exit }')
+	DSI_OUT=$(xrandr 2>/dev/null | awk '/^DSI-[0-9]+(-[0-9]+)? connected/ { print $1; exit }')
 	[ -n "${DSI_OUT}" ] && xrandr --output "${DSI_OUT}" --reflect "${REFLECT}" 2>/dev/null
 fi
 
@@ -74,7 +90,7 @@ for c in /sys/class/drm/card*-DSI-*/status; do
 		REFLECT=$(cat /etc/X11/mupibox-reflect 2>/dev/null)
 		case "${REFLECT}" in
 			x | y)
-				OUT=$(basename "$(dirname "${c}")" | sed 's/^card[0-9]*-//')
+				OUT=${DSI_X:-$(basename "$(dirname "${c}")" | sed 's/^card[0-9]*-//')}
 				xrandr --output "${OUT}" --reflect "${REFLECT}" 2>/dev/null
 				;;
 		esac
