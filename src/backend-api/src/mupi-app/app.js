@@ -2007,13 +2007,33 @@ function serviceCover(it) {
 }
 // (no cover of its own and none from the service - a radio station, a local entry: the artist's cover, if one is set)
 const coverOf = (it) => ownCover(it.cover_override ?? it.cover ?? (serviceCover(it) || it.artistcover_override || it.artistcover || ''))
-// A picture of the box's own cover folder (Bibliothek › Cover, saved as http://<box name>/cover/<file>): through the
-// app's own address - a phone does not know the box's name (MuPiBox), the box's display does. Only a name without a
-// dot (the box's) or the address the app is opened with; a picture of another server stays as it is.
+// A picture of the box's own cover folder (Bibliothek › Cover, saved as http://<box name>/cover/<file>, see covers.ts):
+// through the app's own address - a phone does not know the box's name (MuPiBox), the box's display does. Only the
+// box's names: the one it has (/api/network, also with .local), the default one (a cover chosen before a new name
+// keeps it) and the address the app is opened with - a picture of another server ("nas") stays as it is.
+const boxHosts = new Set(['mupibox', 'mupibox.local', location.hostname.toLowerCase()])
+let boxHostsAsked = null
+function loadBoxHosts() {
+  // (no name in the answer - the box not reachable for a moment: asked again with the next page)
+  boxHostsAsked ??= api('/api/network')
+    .then((r) => {
+      const host = r.ok ? String(r.body?.host ?? '').trim().toLowerCase() : ''
+      if (!host) {
+        boxHostsAsked = null
+        return
+      }
+      boxHosts.add(host)
+      boxHosts.add(`${host}.local`)
+    })
+    .catch(() => {
+      boxHostsAsked = null
+    })
+  return boxHostsAsked
+}
 function ownCover(url) {
   const m = /^https?:\/\/([^/:?#]+)(?::(?:80|443))?\/cover\/([^/?#]+)$/i.exec(String(url ?? ''))
   if (!m) return url
-  return !m[1].includes('.') || m[1] === location.hostname ? `/cover/${m[2]}` : url
+  return boxHosts.has(m[1].toLowerCase()) ? `/cover/${m[2]}` : url
 }
 
 // Spotify entries that only name an artist are not playable on their own (the box looks their albums up itself)
@@ -2048,7 +2068,8 @@ async function loadHear() {
   // (whether TIDAL is on: its entries only then - see playable)
   await loadServices().catch(() => undefined)
   const [data, nas, ...local] = await Promise.all([
-    api('/api/data'),
+    // (the box's names first: its own pictures go through the app's address, see ownCover)
+    loadBoxHosts().then(() => api('/api/data')),
     api('/api/nas/artists?expand=1'),
     ...['audiobook', 'music', 'other'].map((c) => api(`/api/library/artists?category=${c}`)),
   ])
@@ -2089,7 +2110,7 @@ function topTiles() {
       }
       for (const [artist, list] of groups) {
         if (list.length === 1) tiles.push(entryTile(list[0]))
-        else tiles.push({ kind: 'artist', title: artist, sub: `${list.length} Einträge`, cover: list[0].artistcover ?? coverOf(list[0]), badge: badgeOf(list[0]), folder: true, path: artist })
+        else tiles.push({ kind: 'artist', title: artist, sub: `${list.length} Einträge`, cover: ownCover(list[0].artistcover ?? coverOf(list[0])), badge: badgeOf(list[0]), folder: true, path: artist })
       }
     }
     for (const c of cat === 'all' ? ['audiobook', 'music', 'other'] : [cat]) {
@@ -2209,7 +2230,7 @@ function drawHear() {
   grid.innerHTML = hearTiles
     .map(
       (t, i) => `<button class="cover-tile" data-i="${i}" aria-label="${esc(`${t.folder ? 'Öffnen' : 'Abspielen'}: ${t.title}`)}">
-        <span class="cover-img">${t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : ''}<span class="cover-ph">${icon(t.folder ? 'folder' : 'music', 28)}</span>
+        <span class="cover-img">${t.cover ? `<img src="${esc(ownCover(t.cover))}" alt="" loading="lazy">` : ''}<span class="cover-ph">${icon(t.folder ? 'folder' : 'music', 28)}</span>
           ${t.badge ? `<span class="cover-badge">${esc(t.badge)}</span>` : ''}${t.folder ? `<span class="cover-folder">${icon('folder', 14)}</span>` : ''}</span>
         <b translate="no">${esc(t.title)}</b>${t.sub ? `<small${t.subIsName ? ' translate="no"' : ''}>${esc(t.sub)}</small>` : ''}</button>`,
     )
@@ -2399,7 +2420,8 @@ const lib = { items: null, local: {}, nas: [], cat: 'all', src: 'all', q: '', sy
 
 async function loadLib() {
   const [data, sync, nas, subs, profiles, covers, ...local] = await Promise.all([
-    api('/api/data'),
+    // (the box's names first: its own pictures go through the app's address, see ownCover)
+    loadBoxHosts().then(() => api('/api/data')),
     api(`${SYNC_API}/status`),
     api('/api/nas/artists'),
     api(`${API}/library/subscriptions`),
@@ -3011,6 +3033,9 @@ function openEntrySheet(item, back = null) {
   // picture fields emptied)
   const fromSpotify = (u) => /^https:\/\/i\.scdn\.co\//.test(u) || u.startsWith('/api/spotify/cover')
   const spotifyPictureBack = item.type === 'spotify' && !!serviceCover(item) && [val('cover'), val('artistcover')].some((v) => v && !fromSpotify(String(v)))
+  // the same for TIDAL: its picture is kept in the entry itself (an own one replaced it) - asked from TIDAL again
+  const tidalKind = item.type === 'tidal' && ['album', 'playlist', 'artist'].includes(item.tidalKind) && item.id ? item.tidalKind : ''
+  const tidalPictureBack = !!tidalKind && [val('cover'), val('artistcover')].some((v) => v && !/^https:\/\/resources\.tidal\.com\//.test(String(v)))
   const folder = place ? String(item.artist ?? '').trim() : ''
   // (alone in its folder - as the app added playlists before, in one of their own name: a tile spares a tap)
   const aloneInFolder = !!folder && (lib.items ?? []).filter((it) => it && !it.isResume && it.category === item.category && String(it.artist ?? '').trim() === folder).length === 1
@@ -3032,6 +3057,7 @@ function openEntrySheet(item, back = null) {
        })
        .join('')}
      ${spotifyPictureBack ? `<div class="btns"><button type="button" class="btn" data-svc-pic>${icon('image', 18)}Bild von Spotify verwenden</button></div>` : ''}
+     ${tidalPictureBack ? `<div class="btns"><button type="button" class="btn" data-tidal-pic>${icon('image', 18)}Bild von TIDAL verwenden</button></div>` : ''}
      <div class="field"><label for="e-cat">Kategorie</label>${catSelect('e-cat', item.category_override ?? (isSync ? '' : item.category === 'radio' ? 'other' : item.category), isSync)}</div>
      ${playOptions ? entryPlayFields(item) : ''}
      ${item.type === 'rss' ? offlineField(item) : ''}
@@ -3054,6 +3080,22 @@ function openEntrySheet(item, back = null) {
         }
         e.currentTarget.disabled = true
         toast('Mit „Speichern“ zeigt die Box wieder das Bild von Spotify')
+      })
+      // (TIDAL's picture asked again and put into the cover field, the artist's field emptied - saved with "Speichern")
+      const tidalBtn = sheet.querySelector('[data-tidal-pic]')
+      tidalBtn?.addEventListener('click', async () => {
+        tidalBtn.disabled = true
+        const r = await api(`${API}/tidal/item/${tidalKind}/${encodeURIComponent(item.id)}`)
+        const picture = r.ok && typeof r.body?.cover === 'string' && /^https:\/\//.test(r.body.cover) ? r.body.cover : ''
+        if (!picture) {
+          tidalBtn.disabled = false
+          return toast(r.status === 409 ? 'TIDAL ist ausgeschaltet – einschalten unter Einstellungen › Dienste › TIDAL' : 'Das Bild von TIDAL ließ sich nicht laden', 'info')
+        }
+        const cover = sheet.querySelector('#e-cover')
+        const artistcover = sheet.querySelector('#e-artistcover')
+        if (cover) cover.value = picture
+        if (artistcover) artistcover.value = ''
+        toast('Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL')
       })
       if (item.type === 'rss') loadOfflineStatus(item.id, sheet.querySelector('#e-offline-status'))
       if (playOptions && item.type === 'rss') {
