@@ -239,6 +239,20 @@ export class WinampService {
       const timer = setInterval(() => this.clock.set(Date.now()), 250)
       onCleanup(() => clearInterval(timer))
     })
+    // the theme comes on (when the display starts, or chosen in the app while a page of the library shows): the windows
+    // go by the page - the player's page shows the player (wide: the playlist beside it), any other page stays in sight
+    // (the player covered a folder the child was looking at until a tab was pressed)
+    let wasActive = false
+    effect(() => {
+      const on = this.active()
+      untracked(() => {
+        if (on && !wasActive) {
+          const onPlayer = this.router.url.startsWith('/player')
+          this.right.set(onPlayer ? (this.layout === 'compact' ? 'player' : 'pl') : 'lib')
+        }
+        wasActive = on
+      })
+    })
     effect(() => {
       const on = this.active()
       document.body.classList.toggle('wa-on', on && this.layout === 'wide')
