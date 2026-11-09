@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Käytä TIDALin kuvaa",
  "Das Bild von TIDAL ließ sich nicht laden": "TIDALin kuvaa ei voitu ladata",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "”Tallenna” jälkeen boksi näyttää taas TIDALin kuvan",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Pois = soittolistoja ei synkronoida, ei myöskään käsin (painike, Telegram /resync), eivätkä myöhemmin ilmestyvät jaksot tule itsestään. Mitä tilaat tai lisäät haun kautta, tulee silti boksiin. Sisällöt säilyvät laatikossa."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Pois = soittolistoja ei synkronoida, ei myöskään käsin (painike, Telegram /resync), eivätkä myöhemmin ilmestyvät jaksot tule itsestään. Mitä tilaat tai lisäät haun kautta, tulee silti boksiin. Sisällöt säilyvät laatikossa.",
+ "noch nicht auf der Box": "ei vielä boksissa",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Lisätty yksittäin haun kautta. Se tulee boksiin seuraavassa synkronoinnissa.",
+ "Vormerkung aufheben": "Peru lisäys",
+ "Vormerkung aufgehoben": "Lisäys peruttu",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Lisätty myös yksittäin haun kautta: se pitää albumin boksissa, vaikka se poistuisi soittolistalta.",
+ "Einzeln hinzugefügt aufheben": "Peru yksittäinen lisäys",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Peruttu – albumi pysyy, kun se on soittolistalla",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Albumi · ei vielä boksissa · Spotify · Smart-Sync"
 }

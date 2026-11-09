@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Usar la imagen de TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "No se pudo cargar la imagen de TIDAL",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Con «Guardar» la caja vuelve a mostrar la imagen de TIDAL",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Apagado = sin sincronizar las playlists, tampoco a mano (botón, Telegram /resync), y sin episodios publicados más tarde de forma automática. Lo que suscribes o añades a través de la búsqueda llega igualmente a la caja. Los contenidos de la caja se mantienen."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Apagado = sin sincronizar las playlists, tampoco a mano (botón, Telegram /resync), y sin episodios publicados más tarde de forma automática. Lo que suscribes o añades a través de la búsqueda llega igualmente a la caja. Los contenidos de la caja se mantienen.",
+ "noch nicht auf der Box": "aún no está en la caja",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Añadido por separado desde la búsqueda. Llega a la caja con la próxima sincronización.",
+ "Vormerkung aufheben": "Deshacer la adición",
+ "Vormerkung aufgehoben": "Adición deshecha",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "También añadido por separado desde la búsqueda: eso lo mantiene en la caja aunque salga de la playlist.",
+ "Einzeln hinzugefügt aufheben": "Deshacer la adición individual",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Deshecho – el álbum se queda mientras esté en la playlist",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Álbum · aún no está en la caja · Spotify · Smart-Sync"
 }

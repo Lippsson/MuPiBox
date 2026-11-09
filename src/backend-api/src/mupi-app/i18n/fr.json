@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Utiliser l'image de TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "L'image de TIDAL n'a pas pu être chargée",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Avec « Enregistrer », la box affiche de nouveau l'image de TIDAL",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Désactivé = pas de synchro des playlists, même pas manuelle (bouton, Telegram /resync), et pas d'épisodes sortis plus tard d'eux-mêmes. Ce à quoi tu t'abonnes ou ce que tu ajoutes via la recherche arrive quand même sur la Box. Les contenus restent sur la Box."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Désactivé = pas de synchro des playlists, même pas manuelle (bouton, Telegram /resync), et pas d'épisodes sortis plus tard d'eux-mêmes. Ce à quoi tu t'abonnes ou ce que tu ajoutes via la recherche arrive quand même sur la Box. Les contenus restent sur la Box.",
+ "noch nicht auf der Box": "pas encore sur la box",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Ajouté seul depuis la recherche. Il arrive sur la box avec la prochaine synchronisation.",
+ "Vormerkung aufheben": "Annuler l'ajout",
+ "Vormerkung aufgehoben": "Ajout annulé",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Ajouté aussi seul depuis la recherche : cela le garde sur la box, même s'il quitte la playlist.",
+ "Einzeln hinzugefügt aufheben": "Annuler l'ajout individuel",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Annulé – l'album reste tant qu'il est dans la playlist",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Album · pas encore sur la box · Spotify · Smart-Sync"
 }

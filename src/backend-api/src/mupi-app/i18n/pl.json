@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Użyj obrazu z TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Nie udało się wczytać obrazu z TIDAL",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Po „Zapisz” Box znów pokaże obraz z TIDAL",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Wył. = brak synchronizacji playlist, także ręcznej (przycisk, Telegram /resync), i żadnych później wydanych odcinków automatycznie. To, co subskrybujesz lub dodajesz przez wyszukiwanie, i tak trafi na Box. Treści na Boxie pozostają."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Wył. = brak synchronizacji playlist, także ręcznej (przycisk, Telegram /resync), i żadnych później wydanych odcinków automatycznie. To, co subskrybujesz lub dodajesz przez wyszukiwanie, i tak trafi na Box. Treści na Boxie pozostają.",
+ "noch nicht auf der Box": "jeszcze nie na Boxie",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Dodano pojedynczo przez wyszukiwanie. Trafi na Box przy następnej synchronizacji.",
+ "Vormerkung aufheben": "Cofnij dodanie",
+ "Vormerkung aufgehoben": "Dodanie cofnięte",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Dodano też pojedynczo przez wyszukiwanie: dzięki temu zostaje na Boxie, nawet gdy zniknie z playlisty.",
+ "Einzeln hinzugefügt aufheben": "Cofnij pojedyncze dodanie",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Cofnięto – album zostaje, dopóki jest na playliście",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Album · jeszcze nie na Boxie · Spotify · Smart-Sync"
 }

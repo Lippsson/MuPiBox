@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Använd bilden från TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Bilden från TIDAL kunde inte laddas",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Med ”Spara” visar boxen bilden från TIDAL igen",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Av = ingen synk av spellistorna, inte ens manuellt (knapp, Telegram /resync), och inga senare utgivna avsnitt av sig själva. Det du prenumererar på eller lägger till via sökningen kommer ändå till boxen. Innehållet på boxen finns kvar."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Av = ingen synk av spellistorna, inte ens manuellt (knapp, Telegram /resync), och inga senare utgivna avsnitt av sig själva. Det du prenumererar på eller lägger till via sökningen kommer ändå till boxen. Innehållet på boxen finns kvar.",
+ "noch nicht auf der Box": "inte på boxen än",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Tillagt enskilt via sökningen. Det kommer till boxen med nästa synk.",
+ "Vormerkung aufheben": "Ångra tillägget",
+ "Vormerkung aufgehoben": "Tillägget ångrat",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Också tillagt enskilt via sökningen: det håller kvar det på boxen även om det försvinner ur spellistan.",
+ "Einzeln hinzugefügt aufheben": "Ångra enskilt tillägg",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Ångrat – albumet stannar så länge det finns i spellistan",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Album · inte på boxen än · Spotify · Smart-Sync"
 }

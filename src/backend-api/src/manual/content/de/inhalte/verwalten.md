@@ -18,6 +18,9 @@ Ein Abo, von dem noch keine Folge auf der Box ist, steht trotzdem in der Bibliot
 
 Ein einzeln hinzugefügtes Album öffnest du in der Bibliothek wie jeden Eintrag. **Entfernen** nimmt es von der Box; es kommt mit dem nächsten Sync nicht zurück.
 
+- Ist es noch nicht auf der Box (der Sync steht noch aus), steht es als „Album · noch nicht auf der Box“ in der Bibliothek. **Vormerkung aufheben** nimmt es zurück.
+- Ist es zusätzlich in einer deiner Spotify-Playlists, gibt es kein Entfernen; dafür **Einzeln hinzugefügt aufheben**. Dann bleibt es nur so lange, wie es in der Playlist ist.
+
 ## Backup nicht vergessen
 
 Die Liste der Inhalte, die Cover und die Konfiguration stecken im **Konfigurations-Backup** ([Backup](../wartung/backup.md)). Mache vor größeren Änderungen eines.

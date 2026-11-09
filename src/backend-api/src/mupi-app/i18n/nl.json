@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Afbeelding van TIDAL gebruiken",
  "Das Bild von TIDAL ließ sich nicht laden": "De afbeelding van TIDAL kon niet worden geladen",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Met „Opslaan” toont de box weer de afbeelding van TIDAL",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Uit = geen sync van de playlists, ook niet handmatig (knop, Telegram /resync), en geen later verschenen afleveringen vanzelf. Wat je via het zoeken abonneert of toevoegt, komt toch op de box. De inhoud op de box blijft."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Uit = geen sync van de playlists, ook niet handmatig (knop, Telegram /resync), en geen later verschenen afleveringen vanzelf. Wat je via het zoeken abonneert of toevoegt, komt toch op de box. De inhoud op de box blijft.",
+ "noch nicht auf der Box": "nog niet op de box",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Los toegevoegd via het zoeken. Het komt met de volgende sync op de box.",
+ "Vormerkung aufheben": "Toevoeging intrekken",
+ "Vormerkung aufgehoben": "Toevoeging ingetrokken",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Ook los toegevoegd via het zoeken: dat houdt het op de box, ook als het uit de playlist gaat.",
+ "Einzeln hinzugefügt aufheben": "Losse toevoeging intrekken",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Ingetrokken – het album blijft zolang het in de playlist staat",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Album · nog niet op de box · Spotify · Smart-Sync"
 }

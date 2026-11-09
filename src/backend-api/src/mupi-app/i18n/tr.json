@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "TIDAL'ın görselini kullan",
  "Das Bild von TIDAL ließ sich nicht laden": "TIDAL'ın görseli yüklenemedi",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "“Kaydet” ile kutu yeniden TIDAL'ın görselini gösterir",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Kapalı = çalma listeleri eşitlenmez, elle de (düğme, Telegram /resync), ve sonradan çıkan bölümler kendiliğinden gelmez. Arama üzerinden abone olduğun veya eklediğin şeyler yine de kutuya gelir. Kutudaki içerikler kalır."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Kapalı = çalma listeleri eşitlenmez, elle de (düğme, Telegram /resync), ve sonradan çıkan bölümler kendiliğinden gelmez. Arama üzerinden abone olduğun veya eklediğin şeyler yine de kutuya gelir. Kutudaki içerikler kalır.",
+ "noch nicht auf der Box": "henüz kutuda değil",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Aramadan tek tek eklendi. Bir sonraki eşitlemeyle kutuya gelir.",
+ "Vormerkung aufheben": "Eklemeyi geri al",
+ "Vormerkung aufgehoben": "Ekleme geri alındı",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Ayrıca aramadan tek tek eklendi: bu, çalma listesinden çıksa bile onu kutuda tutar.",
+ "Einzeln hinzugefügt aufheben": "Tek eklemeyi geri al",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Geri alındı – albüm çalma listesinde olduğu sürece kalır",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Albüm · henüz kutuda değil · Spotify · Smart-Sync"
 }

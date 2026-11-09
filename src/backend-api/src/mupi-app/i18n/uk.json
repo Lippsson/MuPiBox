@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Використати зображення з TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Не вдалося завантажити зображення з TIDAL",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Після «Зберегти» бокс знову покаже зображення з TIDAL",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Вимк. = плейлисти не синхронізуються, навіть вручну (кнопка, Telegram /resync), і епізоди, що вийшли пізніше, самі не приходять. Те, на що ви підписуєтеся або що додаєте через пошук, однаково потрапить на бокс. Вміст на боксі залишиться."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Вимк. = плейлисти не синхронізуються, навіть вручну (кнопка, Telegram /resync), і епізоди, що вийшли пізніше, самі не приходять. Те, на що ви підписуєтеся або що додаєте через пошук, однаково потрапить на бокс. Вміст на боксі залишиться.",
+ "noch nicht auf der Box": "ще не на боксі",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Додано окремо через пошук. Потрапить на бокс із наступною синхронізацією.",
+ "Vormerkung aufheben": "Скасувати додавання",
+ "Vormerkung aufgehoben": "Додавання скасовано",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Також додано окремо через пошук: це тримає його на боксі, навіть якщо воно зникне з плейлиста.",
+ "Einzeln hinzugefügt aufheben": "Скасувати окреме додавання",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Скасовано – альбом залишається, поки він у плейлисті",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Альбом · ще не на боксі · Spotify · Smart-Sync"
 }

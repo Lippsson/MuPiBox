@@ -18,6 +18,9 @@ A subscription none of whose episodes is on the box yet is listed in the library
 
 An album added on its own is opened in the library like any entry. **Remove** takes it off the box; it does not come back with the next sync.
 
+- If it is not on the box yet (the sync is still to come), it is listed as “Album · not on the box yet”. **Take back** withdraws it.
+- If it is also in one of your Spotify playlists, there is no Remove; instead **Take back the single add**. Then it stays only as long as it is in the playlist.
+
 ## Do not forget the backup
 
 The list of content, the covers and the configuration are in the **configuration backup** ([Backup](../wartung/backup.md)). Make one before larger changes.

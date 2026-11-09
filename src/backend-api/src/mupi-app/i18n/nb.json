@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Bruk bildet fra TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Bildet fra TIDAL kunne ikke lastes",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Med «Lagre» viser boksen bildet fra TIDAL igjen",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Av = ingen synk av spillelistene, heller ikke manuelt (knapp, Telegram /resync), og ingen senere utgitte episoder av seg selv. Det du abonnerer på eller legger til via søket, kommer likevel på boksen. Innholdet på boksen blir værende."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Av = ingen synk av spillelistene, heller ikke manuelt (knapp, Telegram /resync), og ingen senere utgitte episoder av seg selv. Det du abonnerer på eller legger til via søket, kommer likevel på boksen. Innholdet på boksen blir værende.",
+ "noch nicht auf der Box": "ikke på boksen ennå",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Lagt til enkeltvis fra søket. Det kommer på boksen med neste synkronisering.",
+ "Vormerkung aufheben": "Angre tillegget",
+ "Vormerkung aufgehoben": "Tillegget angret",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Også lagt til enkeltvis fra søket: Det holder det på boksen selv om det forsvinner fra spillelisten.",
+ "Einzeln hinzugefügt aufheben": "Angre enkelt tillegg",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Angret – albumet blir så lenge det er i spillelisten",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Album · ikke på boksen ennå · Spotify · Smart-Sync"
 }

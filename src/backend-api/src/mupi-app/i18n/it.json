@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Usa l'immagine di TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Impossibile caricare l'immagine di TIDAL",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Con «Salva» il box mostra di nuovo l'immagine di TIDAL",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Spento = nessuna sincronizzazione delle playlist, nemmeno manuale (pulsante, Telegram /resync), e nessun episodio uscito più tardi in automatico. Ciò a cui ti abboni o che aggiungi tramite la ricerca arriva comunque sul box. I contenuti sulla box restano."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Spento = nessuna sincronizzazione delle playlist, nemmeno manuale (pulsante, Telegram /resync), e nessun episodio uscito più tardi in automatico. Ciò a cui ti abboni o che aggiungi tramite la ricerca arriva comunque sul box. I contenuti sulla box restano.",
+ "noch nicht auf der Box": "non ancora sul box",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Aggiunto singolarmente dalla ricerca. Arriva sul box con la prossima sincronizzazione.",
+ "Vormerkung aufheben": "Annulla l'aggiunta",
+ "Vormerkung aufgehoben": "Aggiunta annullata",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Aggiunto anche singolarmente dalla ricerca: questo lo tiene sul box anche se esce dalla playlist.",
+ "Einzeln hinzugefügt aufheben": "Annulla l'aggiunta singola",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Annullato – l'album resta finché è nella playlist",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Album · non ancora sul box · Spotify · Smart-Sync"
 }

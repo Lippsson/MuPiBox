@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Usar a imagem do TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Não foi possível carregar a imagem do TIDAL",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Com «Guardar» a caixa volta a mostrar a imagem do TIDAL",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Desligado = sem sincronização das playlists, nem manual (botão, Telegram /resync), e sem episódios publicados mais tarde automaticamente. O que subscreves ou adicionas pela pesquisa chega mesmo assim à caixa. Os itens na caixa mantêm-se."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Desligado = sem sincronização das playlists, nem manual (botão, Telegram /resync), e sem episódios publicados mais tarde automaticamente. O que subscreves ou adicionas pela pesquisa chega mesmo assim à caixa. Os itens na caixa mantêm-se.",
+ "noch nicht auf der Box": "ainda não está na caixa",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Adicionado à parte pela pesquisa. Chega à caixa com a próxima sincronização.",
+ "Vormerkung aufheben": "Desfazer a adição",
+ "Vormerkung aufgehoben": "Adição desfeita",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Também adicionado à parte pela pesquisa: isso mantém-no na caixa, mesmo que saia da playlist.",
+ "Einzeln hinzugefügt aufheben": "Desfazer a adição individual",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Desfeito – o álbum fica enquanto estiver na playlist",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Álbum · ainda não está na caixa · Spotify · Smart-Sync"
 }

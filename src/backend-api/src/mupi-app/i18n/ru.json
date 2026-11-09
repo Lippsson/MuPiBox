@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Использовать картинку из TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Не удалось загрузить картинку из TIDAL",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "После «Сохранить» бокс снова покажет картинку из TIDAL",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Выкл = плейлисты не синхронизируются, даже вручную (кнопка, Telegram /resync), и эпизоды, вышедшие позже, сами не приходят. То, на что вы подписываетесь или что добавляете через поиск, всё равно попадёт на бокс. Материалы на устройстве останутся."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Выкл = плейлисты не синхронизируются, даже вручную (кнопка, Telegram /resync), и эпизоды, вышедшие позже, сами не приходят. То, на что вы подписываетесь или что добавляете через поиск, всё равно попадёт на бокс. Материалы на устройстве останутся.",
+ "noch nicht auf der Box": "ещё не на боксе",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Добавлено отдельно через поиск. Попадёт на бокс со следующей синхронизацией.",
+ "Vormerkung aufheben": "Отменить добавление",
+ "Vormerkung aufgehoben": "Добавление отменено",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Также добавлено отдельно через поиск: это удерживает его на боксе, даже если оно уйдёт из плейлиста.",
+ "Einzeln hinzugefügt aufheben": "Отменить отдельное добавление",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Отменено – альбом остаётся, пока он в плейлисте",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Альбом · ещё не на боксе · Spotify · Smart-Sync"
 }

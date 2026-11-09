@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Brug billedet fra TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Billedet fra TIDAL kunne ikke hentes",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Med „Gem“ viser boksen igen billedet fra TIDAL",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Fra = ingen sync af playlisterne, heller ikke manuelt (knap, Telegram /resync), og ingen senere udkomne afsnit af sig selv. Det, du abonnerer på eller tilføjer via søgningen, kommer alligevel på boksen. Indholdet på boksen bevares."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Fra = ingen sync af playlisterne, heller ikke manuelt (knap, Telegram /resync), og ingen senere udkomne afsnit af sig selv. Det, du abonnerer på eller tilføjer via søgningen, kommer alligevel på boksen. Indholdet på boksen bevares.",
+ "noch nicht auf der Box": "endnu ikke på boksen",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Tilføjet enkeltvis via søgningen. Det kommer på boksen med næste synkronisering.",
+ "Vormerkung aufheben": "Fortryd tilføjelsen",
+ "Vormerkung aufgehoben": "Tilføjelsen fortrudt",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Også tilføjet enkeltvis via søgningen: Det holder det på boksen, selv hvis det forsvinder fra playlisten.",
+ "Einzeln hinzugefügt aufheben": "Fortryd enkelt tilføjelse",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Fortrudt – albummet bliver, så længe det er i playlisten",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Album · endnu ikke på boksen · Spotify · Smart-Sync"
 }

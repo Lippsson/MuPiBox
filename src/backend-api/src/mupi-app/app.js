@@ -2561,6 +2561,16 @@ function libGroups() {
         // (no album yet to take the picture from: the artist's own from Spotify, cached by the box)
         add(`sub|${a.id}`, { kind: 'sub', artist, src: 'spotify-sync', cat, sub: a, cover: `/api/spotify/cover-for/artist/${encodeURIComponent(a.id)}` })
       }
+      // an album added one by one from the search that is not on the box yet (the sync still to come, Spotify blocking
+      // the box): there all the same, to take it back
+      for (const al of lib.subs?.explicit_albums ?? []) {
+        if (!al?.id || (lib.items ?? []).some((it) => it && it.type === 'spotify' && it.id === al.id)) continue
+        const cat = al.category === 'radio' ? 'other' : al.category || 'audiobook'
+        const artist = String(al.name || al.id)
+        if (lib.cat !== 'all' && cat !== lib.cat) continue
+        if (q && !norm(artist).includes(q)) continue
+        add(`pin|${al.id}`, { kind: 'pin', artist, src: 'spotify-sync', cat, pin: al, cover: `/api/spotify/cover-for/album/${encodeURIComponent(al.id)}` })
+      }
     }
   }
   if (lib.src === 'all' || lib.src === 'local') {
@@ -2603,6 +2613,7 @@ function libSub(g) {
           ? 'TIDAL'
           : (SOURCE_LABEL[g.src] ?? '')
   if (g.kind === 'sub') return 'Abo · noch keine Folgen · Spotify · Smart-Sync'
+  if (g.kind === 'pin') return 'Album · noch nicht auf der Box · Spotify · Smart-Sync'
   if (g.kind === 'local') return `${g.folder.libraryIsContainer ? 'Ordner' : 'Album'} · ${src}`
   if (g.kind === 'nas') return `${g.folder.nasIsContainer ? 'Ordner' : 'Album'} · ${src}`
   if (g.entries.length === 1) {
@@ -2622,7 +2633,7 @@ function drawLib() {
   if (!list || !lib.items) return
   drawLibTiles()
   libShown = libGroups()
-  const total = libShown.reduce((n, g) => n + (g.kind === 'sub' ? 0 : g.entries?.length || 1), 0)
+  const total = libShown.reduce((n, g) => n + (g.kind === 'sub' || g.kind === 'pin' ? 0 : g.entries?.length || 1), 0)
   const all = lib.items.filter((it) => it && !it.isResume && it.category !== 'resume' && it.type !== 'library').length + Object.values(lib.local).reduce((n, l) => n + l.length, 0) + lib.nas.length
   const end = lib.sync?.state?.last_sync_end
   $('#lib-count').textContent = `${total} von ${all} Inhalten${end ? ` · letzter Sync ${hhmm(Date.parse(end))}` : ''}`
@@ -2683,6 +2694,36 @@ function endSubscription(a) {
   })
 }
 
+// An album added one by one from the search (spotify_sync.explicit_albums): taken back - out of that list only; an entry
+// that also comes from a playlist or a subscription stays, one that came only from here goes with the next sync
+async function dropPin(albumId) {
+  const r = await api(`${API}/library/remove-album`, { method: 'POST', body: { albumId } })
+  if (!r.ok) {
+    toast('Das hat nicht geklappt', 'info')
+    return false
+  }
+  return true
+}
+const isPinned = (id) => !!id && (lib.subs?.explicit_albums ?? []).some((al) => al?.id === id)
+
+// An album added from the search that is not on the box yet: what it is, and taking it back
+function openPinSheet(al) {
+  openSheet(
+    `<h2 translate="no">${esc(al.name || al.id)}</h2><p class="help" style="margin:0">${esc(`${catLabel(al.category === 'radio' ? 'other' : al.category || 'audiobook')} · Spotify`)}</p>
+     <p class="help" style="margin:0">Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.</p>
+     <div class="btns"><button class="btn danger" data-unpin>Vormerkung aufheben</button><button class="btn" data-close>Schließen</button></div>`,
+    (sheet, close) => {
+      sheet.querySelector('[data-close]').onclick = close
+      sheet.querySelector('[data-unpin]').onclick = async () => {
+        close()
+        if (!(await dropPin(al.id))) return
+        toast('Vormerkung aufgehoben')
+        libReload()
+      }
+    },
+  )
+}
+
 // One of several subscriptions in a group (see openLibGroup): its rule and its end, with the way back to the group
 function openLibSubSheet(a, back) {
   openSheet(
@@ -2736,6 +2777,7 @@ async function removeLibEntries(items, { subscriptionEnded = false } = {}) {
 function openLibGroup(g) {
   if (g.kind === 'local') return openLocalSheet(g.folder)
   if (g.kind === 'nas') return openNasSheet(g.folder)
+  if (g.kind === 'pin') return openPinSheet(g.pin)
   const entries = [...(g.entries ?? [])].sort((a, b) => a.title.localeCompare(b.title, 'de', { numeric: true }))
   // Taking the whole group off: a subscribed artist's albums by ending the subscription, else every entry that can go
   // here (a playlist's entries of the sync stay - they go in Spotify)
@@ -3074,6 +3116,7 @@ function openEntrySheet(item, back = null) {
      ${playOptions ? entryPlayFields(item) : ''}
      ${item.type === 'rss' ? offlineField(item) : ''}
      ${isSync && !syncRemovable(item) ? `<p class="help" style="margin:0">Kommt aus einer deiner Spotify-Playlists: Entfernen geht dort – in Spotify aus der Playlist nehmen, der nächste Sync nimmt es dann von der Box.</p>` : ''}
+     ${isSync && !syncRemovable(item) && isPinned(item.id) ? `<p class="help" style="margin:0">Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.</p><div class="btns"><button type="button" class="btn" data-unpin>Einzeln hinzugefügt aufheben</button></div>` : ''}
      ${wholeArtist ? `<div class="section-label" style="margin:0">Alben</div><div id="e-albums"><p class="help">Lade die Alben von Spotify …</p></div>` : ''}
      ${tidalArtist ? tidalRangeFields(item) : ''}
      <div class="btns">${!isSync || syncRemovable(item) ? `<button class="btn danger" data-del>${isSync ? 'Entfernen' : 'Löschen'}</button>` : ''}<button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Speichern</button></div>`,
@@ -3084,6 +3127,13 @@ function openEntrySheet(item, back = null) {
       if (placer) sheet.querySelector('#e-cat').addEventListener('change', () => void placer.reload())
       if (wholeArtist) loadArtistAlbums(item, sheet.querySelector('#e-albums'))
       if (tidalArtist) wireTidalRange(item, sheet)
+      // (only the mark of "added one by one" goes - the entry stays while the playlist has it)
+      sheet.querySelector('[data-unpin]')?.addEventListener('click', async () => {
+        close()
+        if (!(await dropPin(item.id))) return
+        toast('Aufgehoben – das Album bleibt, solange es in der Playlist ist')
+        libReload()
+      })
       // (the own pictures out of the fields - saved with "Speichern", then the box shows Spotify's picture again)
       sheet.querySelector('[data-svc-pic]')?.addEventListener('click', (e) => {
         for (const k of ['cover', 'artistcover']) {

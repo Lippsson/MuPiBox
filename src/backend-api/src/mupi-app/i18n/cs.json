@@ -3316,5 +3316,13 @@
  "Bild von TIDAL verwenden": "Použít obrázek z TIDALu",
  "Das Bild von TIDAL ließ sich nicht laden": "Obrázek z TIDALu se nepodařilo načíst",
  "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Po „Uložit“ box znovu ukáže obrázek z TIDALu",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Vypnuto = žádná synchronizace playlistů, ani ručně (tlačítko, Telegram /resync), a žádné později vydané díly samy od sebe. Co odebíráte nebo přidáte přes vyhledávání, se na box přesto dostane. Obsah na boxu zůstane."
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Vypnuto = žádná synchronizace playlistů, ani ručně (tlačítko, Telegram /resync), a žádné později vydané díly samy od sebe. Co odebíráte nebo přidáte přes vyhledávání, se na box přesto dostane. Obsah na boxu zůstane.",
+ "noch nicht auf der Box": "zatím není na boxu",
+ "Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.": "Přidáno jednotlivě přes vyhledávání. Na box se dostane při příští synchronizaci.",
+ "Vormerkung aufheben": "Zrušit přidání",
+ "Vormerkung aufgehoben": "Přidání zrušeno",
+ "Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.": "Navíc přidáno jednotlivě přes vyhledávání: díky tomu zůstane na boxu, i když z playlistu zmizí.",
+ "Einzeln hinzugefügt aufheben": "Zrušit jednotlivé přidání",
+ "Aufgehoben – das Album bleibt, solange es in der Playlist ist": "Zrušeno – album zůstane, dokud je v playlistu",
+ "Album · noch nicht auf der Box · Spotify · Smart-Sync": "Album · zatím není na boxu · Spotify · Smart-Sync"
 }
