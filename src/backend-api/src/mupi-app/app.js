@@ -2507,6 +2507,18 @@ function libGroups() {
       const g = add(`${src}|${cat}|${artist}`, { kind: 'entries', artist, src, cat, cover: it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? serviceCover(it) })
       g.entries.push({ item: it, title })
     }
+    // a subscribed artist none of whose albums is on the box yet (just subscribed, the sync still to come, all left
+    // out): there all the same, to change or end it here
+    if (lib.src === 'all' || lib.src === 'spotify' || lib.src === 'spotify-sync') {
+      for (const a of lib.subs?.artists ?? []) {
+        if (!a?.id || subEntries(a).length) continue
+        const cat = a.category === 'radio' ? 'other' : a.category || 'audiobook'
+        const artist = String(a.name || a.id)
+        if (lib.cat !== 'all' && cat !== lib.cat) continue
+        if (q && !norm(artist).includes(q)) continue
+        add(`sub|${a.id}`, { kind: 'sub', artist, src: 'spotify-sync', cat, sub: a })
+      }
+    }
   }
   if (lib.src === 'all' || lib.src === 'local') {
     for (const [c] of CATS) {
@@ -2547,6 +2559,7 @@ function libSub(g) {
         : first?.type === 'tidal'
           ? 'TIDAL'
           : (SOURCE_LABEL[g.src] ?? '')
+  if (g.kind === 'sub') return 'Abo · wartet auf den Sync · Spotify · Smart-Sync'
   if (g.kind === 'local') return `${g.folder.libraryIsContainer ? 'Ordner' : 'Album'} · ${src}`
   if (g.kind === 'nas') return `${g.folder.nasIsContainer ? 'Ordner' : 'Album'} · ${src}`
   if (g.entries.length === 1) {
@@ -2566,7 +2579,7 @@ function drawLib() {
   if (!list || !lib.items) return
   drawLibTiles()
   libShown = libGroups()
-  const total = libShown.reduce((n, g) => n + (g.entries?.length || 1), 0)
+  const total = libShown.reduce((n, g) => n + (g.kind === 'sub' ? 0 : g.entries?.length || 1), 0)
   const all = lib.items.filter((it) => it && !it.isResume && it.category !== 'resume' && it.type !== 'library').length + Object.values(lib.local).reduce((n, l) => n + l.length, 0) + lib.nas.length
   const end = lib.sync?.state?.last_sync_end
   $('#lib-count').textContent = `${total} von ${all} Inhalten${end ? ` · letzter Sync ${hhmm(Date.parse(end))}` : ''}`
@@ -2593,6 +2606,56 @@ function syncRemovable(item) {
     item.type === 'spotify' &&
     /^[A-Za-z0-9]{22}$/.test(String(item.id ?? '')) &&
     !(Array.isArray(item.spotify_sync_playlists) && item.spotify_sync_playlists.length)
+  )
+}
+
+// The albums a subscription brought onto the box (the sync marks them with the artist's id; one of before without it:
+// by the name)
+const subOwns = (a, it) => (it.artistid ? it.artistid === a.id : !!a.name && it.artist === a.name)
+function subEntries(a) {
+  return (lib.items ?? []).filter((it) => it && !it.isResume && (it.source ?? 'manual') === 'spotify-sync' && subOwns(a, it))
+}
+const subSummary = (a) =>
+  `${subRange(a)} · ${catLabel(a.category === 'radio' ? 'other' : a.category || 'audiobook')}${a.exclude_album_ids?.length ? ` · ${a.exclude_album_ids.length} ausgeschlossen` : ''}`
+
+// after a change of a subscription's rule in the library: the sync brings it, the library is read again
+async function libSubDone(text) {
+  const sync = await fireSync()
+  toast(`${text} ${sync}`)
+  libReload()
+}
+
+// Ends a subscription and takes its albums off at once: they are found in the whole library (not only in the group or
+// the search shown) - those of a playlist and those added one by one from the search stay
+function endSubscription(a) {
+  const explicit = new Set((lib.subs?.explicit_albums ?? []).map((x) => x?.id).filter(Boolean))
+  const own = subEntries(a).filter((it) => syncRemovable(it) && !explicit.has(it.id))
+  const name = a.name || a.id
+  confirmSheet('Abo beenden', own.length ? `„${name}“ abbestellen? Seine Folgen (${own.length}) gehen gleich von der Box.` : `„${name}“ abbestellen?`, async () => {
+    const r = await api(`${API}/library/unsubscribe-artist`, { method: 'POST', body: { artistId: a.id } })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    await removeLibEntries(own, { subscriptionEnded: true })
+    toast(`Abo beendet: ${name}`)
+    libReload()
+  })
+}
+
+// One of several subscriptions in a group (see openLibGroup): its rule and its end, with the way back to the group
+function openLibSubSheet(a, back) {
+  openSheet(
+    `<button class="sheet-back" data-back>${icon('back', 18)}<span translate="no">${esc(back.title)}</span></button>
+     <h2 translate="no">${esc(a.name || a.id)}</h2><p class="help" style="margin:0">${esc(subSummary(a))}</p>
+     ${subControlsHtml(a)}
+     <div class="btns"><button class="btn danger" data-unsub>Abo beenden</button><button class="btn" data-close>Schließen</button></div>`,
+    (sheet, close) => {
+      sheet.querySelector('[data-close]').onclick = close
+      sheet.querySelector('[data-back]').onclick = () => back.open()
+      mountSubControls(sheet, a, close, libSubDone)
+      sheet.querySelector('[data-unsub]').onclick = () => {
+        close()
+        endSubscription(a)
+      }
+    },
   )
 }
 
@@ -2630,39 +2693,55 @@ async function removeLibEntries(items, { subscriptionEnded = false } = {}) {
 function openLibGroup(g) {
   if (g.kind === 'local') return openLocalSheet(g.folder)
   if (g.kind === 'nas') return openNasSheet(g.folder)
-  if (g.entries.length === 1) return openEntrySheet(g.entries[0].item)
-  const entries = [...g.entries].sort((a, b) => a.title.localeCompare(b.title, 'de', { numeric: true }))
+  const entries = [...(g.entries ?? [])].sort((a, b) => a.title.localeCompare(b.title, 'de', { numeric: true }))
   // Taking the whole group off: a subscribed artist's albums by ending the subscription, else every entry that can go
   // here (a playlist's entries of the sync stay - they go in Spotify)
   const items = entries.map((e) => e.item)
   const isSyncItem = (it) => (it.source ?? 'manual') === 'spotify-sync'
-  const sub = (lib.subs?.artists ?? []).find((a) => a?.name && a.name === g.artist && items.some((it) => isSyncItem(it)))
+  // (the subscriptions the group's albums came from: one - its rule is changed here, above its albums; several - an
+  // artist field renamed to the same folder name: each is offered on its own, none is guessed)
+  const subsHere = g.sub ? [g.sub] : (lib.subs?.artists ?? []).filter((a) => a?.id && items.some((it) => isSyncItem(it) && subOwns(a, it)))
+  const sub = subsHere.length === 1 ? subsHere[0] : null
+  if (!subsHere.length && entries.length === 1) return openEntrySheet(entries[0].item)
   const removable = items.filter((it) => !isSyncItem(it) || syncRemovable(it))
   const kept = items.length - removable.length
   const groupBtn = sub
     ? `<button class="btn danger" data-unsub>Abo beenden</button>`
-    : removable.length > 1
+    : !subsHere.length && removable.length > 1
       ? `<button class="btn danger" data-delall>Alle entfernen</button>`
       : ''
+  const subBlock = sub
+    ? `<div class="section-label" style="margin:0">Abo</div>
+       <p class="help" style="margin:0">${esc(subSummary(sub))}</p>
+       ${subControlsHtml(sub)}
+       <div class="section-label" style="margin:0">Auf der Box</div>`
+    : subsHere.length
+      ? `<div class="section-label" style="margin:0">Abos</div><div class="rows">${subsHere
+          .map((a, i) => `<button class="entry lib-row" data-subi="${i}"><span class="lbl"><b translate="no">${esc(a.name || a.id)}</b><small>${esc(subSummary(a))}</small></span><span class="chev">${icon('chevron', 18)}</span></button>`)
+          .join('')}</div>
+         <div class="section-label" style="margin:0">Auf der Box</div>`
+      : ''
   openSheet(
-    `<h2 translate="no">${esc(g.artist)}</h2><p class="help" style="margin:0">${esc(libSub(g))}${g.src === 'spotify-sync' ? ' – kommt vom Spotify-Sync, Abo und Bereich unter „Verwaltete Inhalte“.' : ''}</p>
-     <div class="rows">${entries
-       .map((e, i) => `<button class="entry lib-row" data-e="${i}"><span class="lbl"><b translate="no">${esc(e.title)}</b></span><span class="chev">${icon('chevron', 18)}</span></button>`)
-       .join('')}</div>
+    `<h2 translate="no">${esc(g.artist)}</h2><p class="help" style="margin:0">${esc(libSub(g))}${g.src === 'spotify-sync' && !sub ? ' – kommt vom Spotify-Sync.' : ''}</p>
+     ${subBlock}
+     ${
+       entries.length
+         ? `<div class="rows">${entries
+             .map((e, i) => `<button class="entry lib-row" data-e="${i}"><span class="lbl"><b translate="no">${esc(e.title)}</b></span><span class="chev">${icon('chevron', 18)}</span></button>`)
+             .join('')}</div>`
+         : `<p class="help" style="margin:0">Noch keine Folgen auf der Box – sie kommen mit dem nächsten Sync.</p>`
+     }
      <div class="btns">${groupBtn}<button class="btn" data-close>Schließen</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = close
+      if (sub) mountSubControls(sheet, sub, close, libSubDone)
       sheet.querySelector('[data-unsub]')?.addEventListener('click', () => {
         close()
-        const own = items.filter((it) => isSyncItem(it) && syncRemovable(it))
-        confirmSheet('Abo beenden', `„${g.artist}“ abbestellen? Seine Folgen (${own.length}) gehen gleich von der Box.`, async () => {
-          const r = await api(`${API}/library/unsubscribe-artist`, { method: 'POST', body: { artistId: sub.id } })
-          if (!r.ok) return toast('Das hat nicht geklappt', 'info')
-          await removeLibEntries(own, { subscriptionEnded: true })
-          toast(`Abo beendet: ${g.artist}`)
-          libReload()
-        })
+        endSubscription(sub)
       })
+      for (const b of sheet.querySelectorAll('[data-subi]')) {
+        b.onclick = () => openLibSubSheet(subsHere[Number(b.dataset.subi)], { title: g.artist, open: () => openLibGroup(g) })
+      }
       sheet.querySelector('[data-delall]')?.addEventListener('click', () => {
         close()
         const n = removable.length
@@ -3548,7 +3627,7 @@ function managedTop() {
   const s = managed.subs ?? {}
   const artists = s.artists ?? []
   const albums = s.explicit_albums ?? []
-  const range = (a) => (a.range_from || a.range_to ? `Folgen ${a.range_from ?? 1}–${a.range_to ?? '…'}` : 'alle Folgen')
+  const range = subRange
   return [
     `<p class="page-intro">Über die Suche hinzugefügte Künstler-Abos und Alben. Beim Künstler den Bereich (Folge von–bis) eingrenzen und einzelne Alben aus- oder einschließen.</p>`,
     `<section class="card"><h2>Künstler-Abos</h2>${
@@ -3581,30 +3660,41 @@ async function managedDone(text, page) {
   if (currentPage()?.id === page.id) renderPage(page)
 }
 
-function openSubSheet(a, page) {
-  openSheet(
-    `<h2 translate="no">${esc(a.name || a.id)}</h2><p class="help" style="margin:0">„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = offen.</p>
+// The rule of a subscription (what the Smart-Sync brings of the artist): the range of episodes and the albums let in or
+// left out. The same in the library (the artist's group) and on "Verwaltete Inhalte".
+const subRange = (a) => (a.range_from || a.range_to ? `Folgen ${a.range_from ?? 1}–${a.range_to ?? '…'}` : 'alle Folgen')
+function subControlsHtml(a) {
+  return `<p class="help" style="margin:0">„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = offen.</p>
      <div class="rule-times"><div class="field"><label for="s-from">Folge von</label><input class="input" id="s-from" type="number" min="1" value="${esc(a.range_from ?? '')}"></div>
        <div class="field"><label for="s-to">Folge bis</label><input class="input" id="s-to" type="number" min="1" value="${esc(a.range_to ?? '')}"></div></div>
      <div class="btns"><button class="btn primary" data-range>Bereich übernehmen</button><button class="btn" data-albums>Alben ein-/ausschließen</button></div>
-     <div id="s-albums"></div>
+     <div id="s-albums"></div>`
+}
+// done(text): after a new range (the sheet closes); the albums' switches say themselves what they did
+function mountSubControls(sheet, a, close, done) {
+  sheet.querySelector('[data-range]').onclick = async () => {
+    const num = (id) => {
+      const v = sheet.querySelector(id).value.trim()
+      return v === '' ? undefined : Math.floor(Number(v))
+    }
+    const range_from = num('#s-from')
+    const range_to = num('#s-to')
+    if ([range_from, range_to].some((v) => v !== undefined && !(v >= 1)) || (range_from && range_to && range_from > range_to)) return toast('Bitte einen gültigen Bereich eintragen', 'info')
+    const r = await api(`${API}/library/subscribe-artist`, { method: 'POST', body: { artistId: a.id, name: a.name, category: a.category, range_from, range_to } })
+    if (!r.ok) return toast(r.body?.error ?? 'Das hat nicht geklappt', 'info')
+    close()
+    done('Bereich übernommen.')
+  }
+  sheet.querySelector('[data-albums]').onclick = () => loadSubAlbums(a, sheet.querySelector('#s-albums'))
+}
+
+function openSubSheet(a, page) {
+  openSheet(
+    `<h2 translate="no">${esc(a.name || a.id)}</h2>${subControlsHtml(a)}
      <div class="btns"><button class="btn danger" data-unsub>Abo entfernen</button><button class="btn" data-close>Schließen</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = close
-      sheet.querySelector('[data-range]').onclick = async () => {
-        const num = (id) => {
-          const v = sheet.querySelector(id).value.trim()
-          return v === '' ? undefined : Math.floor(Number(v))
-        }
-        const range_from = num('#s-from')
-        const range_to = num('#s-to')
-        if ([range_from, range_to].some((v) => v !== undefined && !(v >= 1)) || (range_from && range_to && range_from > range_to)) return toast('Bitte einen gültigen Bereich eintragen', 'info')
-        const r = await api(`${API}/library/subscribe-artist`, { method: 'POST', body: { artistId: a.id, name: a.name, category: a.category, range_from, range_to } })
-        if (!r.ok) return toast(r.body?.error ?? 'Das hat nicht geklappt', 'info')
-        close()
-        managedDone('Bereich übernommen.', page)
-      }
-      sheet.querySelector('[data-albums]').onclick = () => loadSubAlbums(a, sheet.querySelector('#s-albums'))
+      mountSubControls(sheet, a, close, (text) => managedDone(text, page))
       sheet.querySelector('[data-unsub]').onclick = () => {
         close()
         confirmSheet('Abo entfernen', `„${a.name || a.id}“ abbestellen? Der nächste Sync nimmt die Alben von der Box.`, async () => {
@@ -4093,13 +4183,13 @@ async function subscribeSpotifyArtist(a) {
       sub: 'Künstler auf Spotify',
       img: a.img,
       have: search.have.has(`artist:${a.id}`),
-      haveText: 'Schon abonniert – Bereich und Kategorie änderst du unter „Verwaltete Inhalte“.',
+      haveText: 'Schon abonniert – den Bereich änderst du in der Bibliothek beim Künstler.',
       cat: search.cat,
       // (Smart-Sync off: they come all the same, see fireSync - but nothing that appears later)
       text:
         lib.sync && !lib.sync.enabled
-          ? 'Alle Folgen kommen auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, kommen nur mit Smart-Sync von selbst (Bibliothek › Spotify). Den Bereich kannst du danach unter „Verwaltete Inhalte“ eingrenzen.'
-          : 'Alle Folgen kommen auf die Box, neue später von selbst. Den Bereich kannst du danach unter „Verwaltete Inhalte“ eingrenzen.',
+          ? 'Alle Folgen kommen auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, kommen nur mit Smart-Sync von selbst (Bibliothek › Spotify). Den Bereich kannst du danach in der Bibliothek beim Künstler eingrenzen.'
+          : 'Alle Folgen kommen auf die Box, neue später von selbst. Den Bereich kannst du danach in der Bibliothek beim Künstler eingrenzen.',
       okLabel: 'Abonnieren',
     },
     async (category) => {
