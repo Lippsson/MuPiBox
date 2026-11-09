@@ -3268,5 +3268,6 @@
  "Regenmenge": "Quantidade de chuva",
  "Entwicklermodus": "Modo de programador",
  "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Enviar e instalar ficheiros de extensão próprios, não só do catálogo.",
- "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "No modo de programador podes enviar ficheiros de extensão próprios. Uma extensão pode fazer tudo na caixa – até como administrador (root). Envia apenas ficheiros que criaste ou cuja fonte é de confiança."
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "No modo de programador podes enviar ficheiros de extensão próprios. Uma extensão pode fazer tudo na caixa – até como administrador (root). Envia apenas ficheiros que criaste ou cuja fonte é de confiança.",
+ "Winamp-Skin": "Skin do Winamp"
 }

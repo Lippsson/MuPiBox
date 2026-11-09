@@ -3268,5 +3268,6 @@
  "Regenmenge": "Ilość opadów",
  "Entwicklermodus": "Tryb dewelopera",
  "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Przesyłaj i instaluj własne pliki rozszerzeń, nie tylko z katalogu.",
- "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "W trybie dewelopera możesz przesyłać własne pliki rozszerzeń. Rozszerzenie może zrobić na boxie wszystko – także jako administrator (root). Przesyłaj tylko pliki, które sam przygotowałeś lub których źródłu ufasz."
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "W trybie dewelopera możesz przesyłać własne pliki rozszerzeń. Rozszerzenie może zrobić na boxie wszystko – także jako administrator (root). Przesyłaj tylko pliki, które sam przygotowałeś lub których źródłu ufasz.",
+ "Winamp-Skin": "Skórka Winamp"
 }

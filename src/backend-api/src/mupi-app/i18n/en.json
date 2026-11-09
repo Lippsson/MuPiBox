@@ -3284,5 +3284,6 @@
  "Regenmenge": "Rainfall",
  "Entwicklermodus": "Developer mode",
  "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Upload and install your own extension files, not only from the catalog.",
- "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "In developer mode you can upload your own extension files. An extension can do anything on the box – even as administrator (root). Only upload files you built yourself or whose source you trust."
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "In developer mode you can upload your own extension files. An extension can do anything on the box – even as administrator (root). Only upload files you built yourself or whose source you trust.",
+ "Winamp-Skin": "Winamp skin"
 }

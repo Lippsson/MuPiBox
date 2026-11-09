@@ -3268,5 +3268,6 @@
  "Regenmenge": "Кількість опадів",
  "Entwicklermodus": "Режим розробника",
  "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Завантажувати й установлювати власні файли розширень, не лише з каталогу.",
- "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "У режимі розробника ви можете завантажувати власні файли розширень. Розширення може робити на боксі все – навіть як адміністратор (root). Завантажуйте лише файли, які ви створили самі або джерелу яких довіряєте."
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "У режимі розробника ви можете завантажувати власні файли розширень. Розширення може робити на боксі все – навіть як адміністратор (root). Завантажуйте лише файли, які ви створили самі або джерелу яких довіряєте.",
+ "Winamp-Skin": "Скін Winamp"
 }

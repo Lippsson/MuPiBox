@@ -4,6 +4,7 @@ import { MAIN_H, MAIN_W, WinampMainView } from './winamp-main-view'
 import { PL_H, PLAYLIST_CSS, WinampPlaylistView } from './winamp-playlist-view'
 import type { Skin } from './winamp-skin'
 import { el, formatClock, WINAMP_BASE_CSS } from './winamp-skin'
+import { DisplayTextsService } from '../display-texts.service'
 import { WinampService } from './winamp.service'
 
 // A window is 275 skin pixels wide; the half of the 1920 x 480 display is 960 wide
@@ -74,6 +75,8 @@ export class WinampShellComponent implements OnDestroy {
   private plView: WinampPlaylistView | undefined
   private popup: HTMLElement | undefined
   private toastTimer: ReturnType<typeof setTimeout> | undefined
+  private readonly texts = inject(DisplayTextsService)
+  private noSkinNote: HTMLElement | undefined
 
   constructor() {
     this.host.append(this.left, this.right)
@@ -88,6 +91,12 @@ export class WinampShellComponent implements OnDestroy {
       const skin = this.svc.skin()
       const loaded = this.svc.skinLoaded()
       untracked(() => this.build(skin, loaded))
+    })
+    effect(() => {
+      // (read first, so the effect follows the language even while no note is shown)
+      this.texts.text('winampNoSkin')
+      this.texts.text('winampNoSkinHint')
+      untracked(() => this.fillNoSkinNote())
     })
     effect(() => {
       // (read first: with the window not built yet the optional call would never touch the signal)
@@ -139,6 +148,13 @@ export class WinampShellComponent implements OnDestroy {
     this.svc.showView('lib')
   }
 
+  private fillNoSkinNote(): void {
+    const line = this.noSkinNote?.children[0]
+    const hint = this.noSkinNote?.children[1]
+    if (line) line.textContent = this.texts.text('winampNoSkin')
+    if (hint) hint.textContent = this.texts.text('winampNoSkinHint')
+  }
+
   ngOnDestroy(): void {
     document.removeEventListener('click', this.onBarPress, true)
     this.main?.destroy()
@@ -149,10 +165,14 @@ export class WinampShellComponent implements OnDestroy {
     this.left.replaceChildren()
     this.right.replaceChildren()
     this.main = this.eqView = this.plView = undefined
+    this.noSkinNote = undefined
     if (!skin) {
       if (!loaded) return
+      // (the texts in the box's language; the effect in the constructor fills them in again once the language is known)
       const note = el('wa-message')
-      note.innerHTML = 'No Winamp skin installed<small>Upload a .wsz skin in the parents\' app: Settings › Appearance › Winamp skin</small>'
+      note.append(document.createElement('span'), document.createElement('small'))
+      this.noSkinNote = note
+      this.fillNoSkinNote()
       this.left.appendChild(note)
       return
     }
