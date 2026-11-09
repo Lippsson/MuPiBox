@@ -3094,7 +3094,6 @@
  "Alle {} Einträge von „{}“ aus der Bibliothek entfernen? Einträge aus einer Spotify-Playlist ({}) bleiben – die gehen in Spotify.": "Usunąć z biblioteki wszystkie pozycje „{1}” ({0})? Pozycje z playlisty Spotify ({2}) zostają – te usuwa się w Spotify.",
  "Alle entfernen": "Usuń wszystko",
  "Alle Folgen kommen auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, kommen nur mit Smart-Sync von selbst (Bibliothek › Spotify). Den Bereich kannst du danach unter „Verwaltete Inhalte“ eingrenzen.": "Wszystkie odcinki trafią na Boxa. Smart-Sync jest wyłączony: odcinki, które ukażą się później, przychodzą same tylko ze Smart-Sync (Biblioteka › Spotify). Zakres możesz potem zawęzić w „Zarządzane treści”.",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du unter „Verwaltete Inhalte“ abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Wył. = brak synchronizacji playlist, także ręcznej (przycisk, Telegram /resync), i żadnych później wydanych odcinków automatycznie. To, co subskrybujesz lub dodajesz w „Zarządzane treści”, i tak trafi na Boxa. Treści na Boxie pozostają.",
  "Es kommt jetzt auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, holt die Box nicht von selbst – dafür den Smart-Sync einschalten (Bibliothek › Spotify).": "Teraz trafia na Boxa. Smart-Sync jest wyłączony: odcinków, które ukażą się później, Box nie pobierze sam – w tym celu włącz Smart-Sync (Biblioteka › Spotify).",
  "In {} s kommt es auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, holt die Box nicht von selbst – dafür den Smart-Sync einschalten (Bibliothek › Spotify).": "Za {} s trafi na Boxa. Smart-Sync jest wyłączony: odcinków, które ukażą się później, Box nie pobierze sam – w tym celu włącz Smart-Sync (Biblioteka › Spotify).",
  "Kommt aus einer deiner Spotify-Playlists: Entfernen geht dort – in Spotify aus der Playlist nehmen, der nächste Sync nimmt es dann von der Box.": "Pochodzi z jednej z twoich playlist Spotify: usunąć można tylko tam – wyjmij to z playlisty w Spotify, a następna synchronizacja usunie to z Boxa.",
@@ -3316,5 +3315,6 @@
  "Mit „Speichern“ zeigt die Box wieder das Bild von Spotify": "Po „Zapisz” Box znów pokaże obraz ze Spotify",
  "Bild von TIDAL verwenden": "Użyj obrazu z TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Nie udało się wczytać obrazu z TIDAL",
- "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Po „Zapisz” Box znów pokaże obraz z TIDAL"
+ "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Po „Zapisz” Box znów pokaże obraz z TIDAL",
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Wył. = brak synchronizacji playlist, także ręcznej (przycisk, Telegram /resync), i żadnych później wydanych odcinków automatycznie. To, co subskrybujesz lub dodajesz przez wyszukiwanie, i tak trafi na Box. Treści na Boxie pozostają."
 }

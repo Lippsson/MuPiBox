@@ -3094,7 +3094,6 @@
  "Alle {} Einträge von „{}“ aus der Bibliothek entfernen? Einträge aus einer Spotify-Playlist ({}) bleiben – die gehen in Spotify.": "Ta bort alla {} poster av ”{}” från biblioteket? Poster från en Spotify-spellista ({}) blir kvar – dem tar du bort i Spotify.",
  "Alle entfernen": "Ta bort alla",
  "Alle Folgen kommen auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, kommen nur mit Smart-Sync von selbst (Bibliothek › Spotify). Den Bereich kannst du danach unter „Verwaltete Inhalte“ eingrenzen.": "Alla avsnitt kommer på boxen. Smart-Sync är av: avsnitt som kommer ut senare kommer bara av sig själva med Smart-Sync (Bibliotek › Spotify). Omfånget kan du sedan begränsa under ”Hanterat innehåll”.",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du unter „Verwaltete Inhalte“ abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Av = ingen synk av spellistorna, inte ens manuellt (knapp, Telegram /resync), och inga senare utgivna avsnitt av sig själva. Det du prenumererar på eller lägger till under ”Hanterat innehåll” kommer ändå på boxen. Innehållet på boxen finns kvar.",
  "Es kommt jetzt auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, holt die Box nicht von selbst – dafür den Smart-Sync einschalten (Bibliothek › Spotify).": "Det kommer på boxen nu. Smart-Sync är av: avsnitt som kommer ut senare hämtar boxen inte av sig själv – slå på Smart-Sync för det (Bibliotek › Spotify).",
  "In {} s kommt es auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, holt die Box nicht von selbst – dafür den Smart-Sync einschalten (Bibliothek › Spotify).": "Om {} s kommer det på boxen. Smart-Sync är av: avsnitt som kommer ut senare hämtar boxen inte av sig själv – slå på Smart-Sync för det (Bibliotek › Spotify).",
  "Kommt aus einer deiner Spotify-Playlists: Entfernen geht dort – in Spotify aus der Playlist nehmen, der nächste Sync nimmt es dann von der Box.": "Kommer från en av dina Spotify-spellistor: ta bort det där – ta ut det ur spellistan i Spotify, så tar nästa synk bort det från boxen.",
@@ -3316,5 +3315,6 @@
  "Mit „Speichern“ zeigt die Box wieder das Bild von Spotify": "Med ”Spara” visar boxen bilden från Spotify igen",
  "Bild von TIDAL verwenden": "Använd bilden från TIDAL",
  "Das Bild von TIDAL ließ sich nicht laden": "Bilden från TIDAL kunde inte laddas",
- "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Med ”Spara” visar boxen bilden från TIDAL igen"
+ "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "Med ”Spara” visar boxen bilden från TIDAL igen",
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Av = ingen synk av spellistorna, inte ens manuellt (knapp, Telegram /resync), och inga senare utgivna avsnitt av sig själva. Det du prenumererar på eller lägger till via sökningen kommer ändå till boxen. Innehållet på boxen finns kvar."
 }

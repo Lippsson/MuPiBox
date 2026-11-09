@@ -3061,7 +3061,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
    * An album of the Spotify sync taken off the box from the library ("Entfernen"): out of the albums added one by one,
    * and left out of every artist subscription (a left-out album that is not one of a subscription's changes nothing
    * there). The app then deletes the entry itself (/api/delete-many), so it goes at once, also with Smart-Sync off - and no sync brings it back. Back again: the album's
-   * switch in the subscription (Verwaltete Inhalte) or adding it anew.
+   * switch in the subscription (in the library, at the artist) or adding it anew.
    */
   router.post('/library/remove-synced', requireSession, requireCsrf, async (req, res) => {
     // (albumIds: several of one artist at once - a whole group, the config written once)

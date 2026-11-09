@@ -2504,14 +2504,26 @@ function drawLibTiles() {
   const al = lib.subs?.explicit_albums?.length ?? 0
   const tiles = [
     ['spotify', 'music', 'Spotify', spotify],
-    ['verwaltet', 'lib', 'Verwaltete Inhalte', lib.subs ? `${a} ${a === 1 ? 'Abo' : 'Abos'} · ${al} ${al === 1 ? 'Album' : 'Alben'}` : ''],
+    // (what the search subscribed or added: the library shows it with the source Smart-Sync - the subscriptions' rules at
+    // their artists)
+    ['abos', 'sync', 'Abos', lib.subs ? `${a} ${a === 1 ? 'Abo' : 'Abos'} · ${al} ${al === 1 ? 'Album' : 'Alben'}` : ''],
     ['nas', 'server', 'NAS', lib.nasProfile ? `Profil ${lib.nasProfile}` : `${lib.nas.length} Ordner`],
     ['cover', 'image', 'Cover', lib.covers != null ? `${lib.covers} gefunden` : 'Eigene Bilder'],
   ]
   box.innerHTML = tiles
     .map(([id, ic, t, sub]) => `<button class="lib-tile" data-go="${id}"><span class="tile">${icon(ic, 18)}</span><span class="lbl"><b>${esc(t)}</b><small>${esc(sub)}</small></span></button>`)
     .join('')
-  for (const b of box.querySelectorAll('[data-go]')) b.onclick = () => go(b.dataset.go)
+  for (const b of box.querySelectorAll('[data-go]')) {
+    b.onclick = () => {
+      if (b.dataset.go !== 'abos') return go(b.dataset.go)
+      lib.src = 'spotify-sync'
+      lib.cat = 'all'
+      for (const x of $('#lib-src')?.children ?? []) x.setAttribute('aria-selected', String(x.dataset.v === 'spotify-sync'))
+      for (const x of $('#lib-cat')?.children ?? []) x.setAttribute('aria-selected', String(x.dataset.v === 'all'))
+      drawLib()
+      $('#lib-list')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+  }
 }
 
 // The list: everything grouped by artist (as the box shows it), per source; a group opens its entries
@@ -2800,8 +2812,8 @@ function openLibGroup(g) {
   )
 }
 
-// Starts a sync run and says what happens; used after every change of the managed content
-// (subs: after a change of the artists or albums managed here - those come also with Smart-Sync off, only the
+// Starts a sync run and says what happens; used after every change of a subscription or an album from the search
+// (subs: after a change of the subscribed artists or albums - those come also with Smart-Sync off, only the
 // playlists then stay as they are; "Jetzt abgleichen" on the Spotify page asks without it)
 async function fireSync(subs = true) {
   const r = await api(`${SYNC_API}/trigger?source=webapp${subs ? '&subscriptions=1' : ''}`, { method: 'POST' })
@@ -3688,49 +3700,8 @@ async function squareImage(file, max = 1000) {
   }
 }
 
-/* Verwaltete Inhalte: the artist subscriptions and albums added from the search */
-
-const managed = { subs: null }
-
-function managedTop() {
-  const s = managed.subs ?? {}
-  const artists = s.artists ?? []
-  const albums = s.explicit_albums ?? []
-  const range = subRange
-  return [
-    `<p class="page-intro">Über die Suche hinzugefügte Künstler-Abos und Alben. Beim Künstler den Bereich (Folge von–bis) eingrenzen und einzelne Alben aus- oder einschließen.</p>`,
-    `<section class="card"><h2>Künstler-Abos</h2>${
-      artists.length
-        ? `<div class="rows">${artists
-            .map((a, i) => `<button class="entry lib-row" data-sub="${i}"><span class="avatar">${esc(initials(a.name || a.id))}</span><span class="lbl"><b translate="no">${esc(a.name || a.id)}</b><small>${esc(range(a))} · ${esc(catLabel(a.category))}${a.exclude_album_ids?.length ? ` · ${a.exclude_album_ids.length} ausgeschlossen` : ''}</small></span><span class="chev">${icon('chevron', 18)}</span></button>`)
-            .join('')}</div>`
-        : `<p class="help" style="margin:0">Noch keine. Über „Auf Spotify suchen“ einen Künstler mit ＋ abonnieren.</p>`
-    }</section>`,
-    `<section class="card"><h2>Einzelne Alben</h2>${
-      albums.length
-        ? `<div class="rows">${albums
-            .map((a, i) => `<div class="entry"><span class="avatar">${esc(initials(a.name || a.id))}</span><span class="lbl"><b translate="no">${esc(a.name || a.id)}</b><small>${esc(catLabel(a.category))}</small></span><button class="btn danger sm" data-album="${i}">Entfernen</button></div>`)
-            .join('')}</div>`
-        : `<p class="help" style="margin:0">Noch keine.</p>`
-    }</section>`,
-  ]
-}
-
-async function loadManaged() {
-  const r = await api(`${API}/library/subscriptions`)
-  if (!r.ok) throw new Error(`subscriptions ${r.status}`)
-  managed.subs = r.body ?? {}
-}
-
-async function managedDone(text, page) {
-  const sync = await fireSync()
-  toast(`${text} ${sync}`)
-  libChanged()
-  if (currentPage()?.id === page.id) renderPage(page)
-}
-
 // The rule of a subscription (what the Smart-Sync brings of the artist): the range of episodes and the albums let in or
-// left out. The same in the library (the artist's group) and on "Verwaltete Inhalte".
+// left out - in the library, at the artist (openLibGroup, openLibSubSheet).
 const subRange = (a) => (a.range_from || a.range_to ? `Folgen ${a.range_from ?? 1}–${a.range_to ?? '…'}` : 'alle Folgen')
 function subControlsHtml(a) {
   return `<p class="help" style="margin:0">„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = offen.</p>
@@ -3755,25 +3726,6 @@ function mountSubControls(sheet, a, close, done) {
     done('Bereich übernommen.')
   }
   sheet.querySelector('[data-albums]').onclick = () => loadSubAlbums(a, sheet.querySelector('#s-albums'))
-}
-
-function openSubSheet(a, page) {
-  openSheet(
-    `<h2 translate="no">${esc(a.name || a.id)}</h2>${subControlsHtml(a)}
-     <div class="btns"><button class="btn danger" data-unsub>Abo entfernen</button><button class="btn" data-close>Schließen</button></div>`,
-    (sheet, close) => {
-      sheet.querySelector('[data-close]').onclick = close
-      mountSubControls(sheet, a, close, (text) => managedDone(text, page))
-      sheet.querySelector('[data-unsub]').onclick = () => {
-        close()
-        confirmSheet('Abo entfernen', `„${a.name || a.id}“ abbestellen? Der nächste Sync nimmt die Alben von der Box.`, async () => {
-          const r = await api(`${API}/library/unsubscribe-artist`, { method: 'POST', body: { artistId: a.id } })
-          if (!r.ok) return toast('Das hat nicht geklappt', 'info')
-          managedDone('Abo entfernt.', page)
-        })
-      }
-    },
-  )
 }
 
 async function loadSubAlbums(a, box) {
@@ -4851,7 +4803,7 @@ function tidalRangeQuery(it) {
 }
 
 // The library's sheet of a whole TIDAL artist: the range and the albums left out (as a Spotify subscription has them
-// on "Verwaltete Inhalte") - saved with the sheet. The albums with their positions come from the service.
+// at its artist in the library) - saved with the sheet. The albums with their positions come from the service.
 function tidalRangeFields(item) {
   return `<div class="section-label" style="margin:0">${esc('Folgen und Alben')}</div>
     <p class="help" style="margin:0">${esc('„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = alle.')}</p>
@@ -12098,23 +12050,6 @@ const CONTROLLERS = {
       })
     },
   },
-  verwaltet: {
-    load: loadManaged,
-    top: managedTop,
-    sections: () => [],
-    mount(root, page) {
-      for (const b of root.querySelectorAll('[data-sub]')) b.onclick = () => openSubSheet(managed.subs.artists[Number(b.dataset.sub)], page)
-      for (const b of root.querySelectorAll('[data-album]')) {
-        const al = managed.subs.explicit_albums[Number(b.dataset.album)]
-        b.onclick = () =>
-          confirmSheet('Entfernen', `„${al.name || al.id}“ entfernen? Der nächste Sync nimmt es von der Box.`, async () => {
-            const r = await api(`${API}/library/remove-album`, { method: 'POST', body: { albumId: al.id } })
-            if (!r.ok) return toast('Das hat nicht geklappt', 'info')
-            managedDone('Entfernt.', page)
-          })
-      }
-    },
-  },
   suche: {
     top: searchTop,
     sections: () => [],
@@ -12370,7 +12305,7 @@ const CONTROLLERS = {
     sections: (page) =>
       page.sections.map((sec) => ({
         ...sec,
-        items: sec.items.map((it) => (it.key === 'syncOn' ? { ...it, help: 'Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du unter „Verwaltete Inhalte“ abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.' } : it)),
+        items: sec.items.map((it) => (it.key === 'syncOn' ? { ...it, help: 'Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.' } : it)),
       })),
     byLabel: {
       async Speichern() {

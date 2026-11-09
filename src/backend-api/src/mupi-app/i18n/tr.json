@@ -3094,7 +3094,6 @@
  "Alle {} Einträge von „{}“ aus der Bibliothek entfernen? Einträge aus einer Spotify-Playlist ({}) bleiben – die gehen in Spotify.": "„{1}“ için {0} kaydın tümü kütüphaneden kaldırılsın mı? Bir Spotify çalma listesinden gelen kayıtlar ({2}) kalır – onlar Spotify'da kaldırılır.",
  "Alle entfernen": "Tümünü kaldır",
  "Alle Folgen kommen auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, kommen nur mit Smart-Sync von selbst (Bibliothek › Spotify). Den Bereich kannst du danach unter „Verwaltete Inhalte“ eingrenzen.": "Tüm bölümler kutuya gelir. Smart-Sync kapalı: daha sonra çıkan bölümler yalnızca Smart-Sync ile kendiliğinden gelir (Kütüphane › Spotify). Aralığı sonra „Yönetilen içerikler“ altında daraltabilirsin.",
- "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du unter „Verwaltete Inhalte“ abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Kapalı = çalma listeleri eşitlenmez, elle de (düğme, Telegram /resync), ve sonradan çıkan bölümler kendiliğinden gelmez. „Yönetilen içerikler“ altında abone olduğun veya eklediğin şeyler yine de kutuya gelir. Kutudaki içerikler kalır.",
  "Es kommt jetzt auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, holt die Box nicht von selbst – dafür den Smart-Sync einschalten (Bibliothek › Spotify).": "Şimdi kutuya geliyor. Smart-Sync kapalı: daha sonra çıkan bölümleri kutu kendiliğinden almaz – bunun için Smart-Sync'i aç (Kütüphane › Spotify).",
  "In {} s kommt es auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, holt die Box nicht von selbst – dafür den Smart-Sync einschalten (Bibliothek › Spotify).": "{} sn içinde kutuya gelir. Smart-Sync kapalı: daha sonra çıkan bölümleri kutu kendiliğinden almaz – bunun için Smart-Sync'i aç (Kütüphane › Spotify).",
  "Kommt aus einer deiner Spotify-Playlists: Entfernen geht dort – in Spotify aus der Playlist nehmen, der nächste Sync nimmt es dann von der Box.": "Spotify çalma listelerinden birinden geliyor: kaldırma orada yapılır – Spotify'da çalma listesinden çıkar, sonraki senkronizasyon onu kutudan kaldırır.",
@@ -3316,5 +3315,6 @@
  "Mit „Speichern“ zeigt die Box wieder das Bild von Spotify": "“Kaydet” ile kutu yeniden Spotify'ın görselini gösterir",
  "Bild von TIDAL verwenden": "TIDAL'ın görselini kullan",
  "Das Bild von TIDAL ließ sich nicht laden": "TIDAL'ın görseli yüklenemedi",
- "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "“Kaydet” ile kutu yeniden TIDAL'ın görselini gösterir"
+ "Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL": "“Kaydet” ile kutu yeniden TIDAL'ın görselini gösterir",
+ "Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.": "Kapalı = çalma listeleri eşitlenmez, elle de (düğme, Telegram /resync), ve sonradan çıkan bölümler kendiliğinden gelmez. Arama üzerinden abone olduğun veya eklediğin şeyler yine de kutuya gelir. Kutudaki içerikler kalır."
 }
