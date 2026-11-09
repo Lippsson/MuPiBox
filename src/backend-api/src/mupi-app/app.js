@@ -1086,6 +1086,13 @@ function startSkeleton() {
       ${navRow('g-system', 'System', 'Über die Box, Neustart, Updates', 'gear')}
       ${navRow('ext:manual', 'Handbuch', 'Anleitung zu Box, Display und App', 'book')}
     </div></section>`,
+    // (the donation box: last on the start page)
+    `<section class="card donate-box start-donate">
+      <span class="tile">${icon('heart', 20)}</span>
+      <div class="donate-text"><h2>MuPiBox unterstützen</h2>
+        <p class="help">MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.</p></div>
+      <a class="btn primary" href="https://mupibox.de/spenden/" target="_blank" rel="noopener">${icon('ext', 16)}Zur Spendenseite</a>
+    </section>`,
   ]
 }
 
@@ -6582,6 +6589,8 @@ async function loadTheme() {
   disp.theme = r.body
   const c = await api(`${API}/display/custom-theme`)
   disp.custom = c.ok ? c.body : null
+  const w = await api(`${API}/display/winamp-skin`)
+  disp.winamp = w.ok ? w.body : null
 }
 async function loadDisplayOptions() {
   const r = await api(`${API}/display-options`)
@@ -6635,6 +6644,8 @@ function themeTop() {
             <b translate="no">${esc(themeLabel(n))}</b>${n === t.current ? '<small>aktiv</small>' : ''}</button>`,
         )
         .join('')}</div></section>`,
+    // (below the themes, while "winamp" is the theme: the skins are kept when another theme is chosen)
+    ...(t.current === 'winamp' && disp.winamp ? [winampCard()] : []),
   ]
 }
 
@@ -6680,6 +6691,116 @@ function mountTheme(root, page) {
       )
   }
   mountCustomCard(root)
+  mountWinampCard(root, page)
+}
+
+/* Winamp theme: the player of a classic Winamp 2.x skin (.wsz) on the left half of a 1920 × 480 display. The skin is
+   unpacked by the box (app-api/winamp-skin.ts); the display loads it at once. Shown on the theme page while "winamp" is
+   the theme. */
+
+function winampCard() {
+  const w = disp.winamp
+  const skins = w?.skins ?? []
+  const shown = !!w?.active
+  return `<section class="card wide" id="wa-card"><h2>Winamp-Skin</h2>
+    <p class="help">Das Theme „Winamp“ zeichnet den Player mit einem klassischen Winamp-Skin (.wsz). Alle Skins, die du hochlädst, bleiben in dieser Liste und lassen sich jederzeit wieder auswählen.</p>
+    ${
+      skins.length
+        ? `<ul class="wa-list">${skins
+            .map(
+              (s) => `<li class="wa-row${s.active ? ' on' : ''}"><button class="wa-pickrow" type="button" data-id="${esc(s.id)}" aria-pressed="${s.active}" aria-label="${esc(s.name)}">
+                <span class="wa-prev"><canvas width="275" height="116" data-base="/theme-data/winamp/skins/${encodeURIComponent(s.id)}" data-v="${s.version}"></canvas></span>
+                <span class="wa-name"><b translate="no">${esc(s.name)}</b>${s.active ? `<small>${shown ? 'wird angezeigt' : 'ausgewählt'}</small>` : ''}</span></button>
+                <button class="btn sm danger" type="button" data-del="${esc(s.id)}" aria-label="${esc(s.name)} entfernen">${icon('close', 18)}Entfernen</button></li>`,
+            )
+            .join('')}</ul>`
+        : '<p class="help"><b>Noch kein Skin installiert.</b> Ohne Skin zeigt die Box nur einen Hinweis.</p>'
+    }
+    <div class="btns"><button class="btn sm primary" type="button" id="wa-pick">${icon('up', 18)}Skin hochladen (.wsz)</button></div>
+    <input type="file" id="wa-file" accept=".wsz,.zip,application/zip" hidden>
+    <small>Mehr Skins zum Herunterladen: <a href="https://skins.webamp.org/" target="_blank" rel="noopener" translate="no">Winamp Skin Museum</a></small></section>`
+}
+
+/* The picture of a skin: main.bmp alone is only the background - the buttons, sliders, clock and title bar are in the skin's
+   other bitmaps, so they are put on it here (the same places as the display draws them: winamp-main-view.ts). */
+async function drawSkinPreview(canvas) {
+  const { base, v } = canvas.dataset
+  const load = (name) =>
+    new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => resolve(null)
+      img.src = `${base}/${name}?v=${v}`
+    })
+  const names = ['main', 'titlebar', 'cbuttons', 'shufrep', 'volume', 'balance', 'posbar', 'numbers', 'nums_ex', 'playpaus', 'monoster']
+  const pic = Object.fromEntries(await Promise.all(names.map(async (n) => [n, await load(`${n}.bmp`)])))
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = false
+  const put = (name, sx, sy, w, h, dx, dy) => pic[name] && ctx.drawImage(pic[name], sx, sy, w, h, dx, dy, w, h)
+  put('main', 0, 0, 275, 116, 0, 0)
+  put('titlebar', 27, 0, 275, 14, 0, 0)
+  for (let i = 0; i < 5; i++) put('cbuttons', i * 23, 0, 23, 18, 16 + i * 23, 88)
+  put('cbuttons', 114, 0, 22, 16, 136, 89)
+  put('shufrep', 28, 0, 47, 15, 164, 89)
+  put('shufrep', 0, 0, 28, 15, 210, 89)
+  put('shufrep', 0, 61, 23, 12, 219, 58)
+  put('shufrep', 23, 61, 23, 12, 242, 58)
+  // volume at about half, balance in the middle (the handle is a picture of its own in the taller sheets)
+  put('volume', 0, 14 * 15, 68, 13, 107, 57)
+  put('balance', 9, 0, 38, 13, 177, 57)
+  if (pic.volume?.naturalHeight >= 433) put('volume', 15, 422, 14, 11, 107 + 27, 58)
+  if (pic.balance?.naturalHeight >= 433) put('balance', 15, 422, 14, 11, 177 + 12, 58)
+  // (a 1 x 1 posbar.bmp is a skin that hides the knob)
+  if (pic.posbar?.naturalWidth >= 100) put('posbar', 248, 0, 29, 10, 16, 72)
+  const digits = pic.numbers ? 'numbers' : 'nums_ex'
+  for (const [i, x] of [48, 60, 78, 90].entries()) put(digits, 0, 0, 9, 13, x, 26)
+  put('playpaus', 18, 0, 9, 9, 26, 28)
+  put('monoster', 0, 12, 29, 12, 239, 41)
+}
+
+function mountWinampCard(root, page) {
+  const card = $('#wa-card', root)
+  if (!card) return
+  for (const canvas of card.querySelectorAll('canvas[data-base]')) drawSkinPreview(canvas)
+  const refresh = async () => {
+    await loadTheme()
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  }
+  $('#wa-pick', card).onclick = () => $('#wa-file', card).click()
+  $('#wa-file', card).onchange = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 8 * 1024 * 1024) return toast('Die Datei ist zu groß (höchstens 8 MB).', 'info')
+    const r = await fetch(`${API}/display/winamp-skin`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/zip', 'x-mupibox-csrf': state.csrf, 'x-skin-name': encodeURIComponent(file.name) },
+      body: file,
+    }).catch(() => null)
+    const body = r ? await r.json().catch(() => ({})) : {}
+    if (!r?.ok) return toast(body.error === 'not a Winamp skin' || body.error === 'not a zip' ? 'Das ist kein Winamp-Skin (.wsz).' : 'Hochladen ging nicht', 'info')
+    toast(`Skin „${body.name}“ ist installiert. ${body.reloaded ? 'Das Display zeigt es gleich.' : 'Das Display zeigt es nach dem nächsten Neuladen.'}`)
+    await refresh()
+  }
+  for (const row of card.querySelectorAll('.wa-pickrow')) {
+    row.onclick = async () => {
+      if (row.getAttribute('aria-pressed') === 'true') return
+      const r = await api(`${API}/display/winamp-skin/select`, { method: 'POST', body: { id: row.dataset.id } })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      toast(`Skin „${r.body.name}“ ist ausgewählt. ${r.body.reloaded ? 'Das Display zeigt es gleich.' : 'Das Display zeigt es nach dem nächsten Neuladen.'}`)
+      await refresh()
+    }
+  }
+  for (const del of card.querySelectorAll('[data-del]')) {
+    del.onclick = async () => {
+      const skin = (disp.winamp?.skins ?? []).find((s) => s.id === del.dataset.del)
+      if (!(await ask('Skin entfernen?', `„${skin?.name ?? ''}“ wird aus der Liste gelöscht.`, 'Entfernen'))) return
+      const r = await api(`${API}/display/winamp-skin?id=${encodeURIComponent(del.dataset.del)}`, { method: 'DELETE', body: {} })
+      toast(r.ok ? 'Skin entfernt' : 'Das hat nicht geklappt', r.ok ? undefined : 'info')
+      await refresh()
+    }
+  }
 }
 
 /* Eigenes Theme ("custom"): the parents' picture and its settings - on the theme page, only while "custom" is the
@@ -9286,7 +9407,7 @@ function mountTls(root, page) {
 /* Einstellungen › System: its pages in four groups, a short state beside some (version, health, update) */
 
 const SYS_GROUPS = [
-  ['Die Box', ['ueber', 'zustand', 'updates', 'backup']],
+  ['Die Box', ['ueber', 'zustand', 'updates', 'erweiterungen', 'backup']],
   ['Betrieb', ['neustart', 'protokolle', 'systemopt']],
   ['Für Fortgeschrittene', ['browser', 'experten']],
   ['Allgemein', ['sprache', 'rechtliches']],
@@ -11104,6 +11225,425 @@ function mountTidal(root, page) {
   }
 }
 
+/* Extensions (docs/extensions.md): the catalog on GitHub, install / switch off / remove, and the settings the installed ones declare */
+
+// the guideline for people who write extensions (English), in the repository
+const EXT_GUIDELINE_URL = 'https://github.com/Lippsson/MuPiBox/blob/dev5.1/extensions/README.md'
+const exts = { installed: [], catalog: [], catalogError: null }
+async function loadExtensions() {
+  const r = await api(`${API}/extensions`)
+  if (!r.ok) throw new Error(`extensions ${r.status}`)
+  Object.assign(exts, { installed: [], catalog: [], catalogError: null }, r.body)
+  for (const e of exts.installed) {
+    for (const [k, t] of Object.entries(e.settingTypes ?? {})) state.values.set(`ext.${e.id}.${k}`, t === 'secret' ? '' : e.settings?.[k])
+  }
+}
+
+// "1.4.2" > "1.4.1": true when version a is newer than b (numbers part by part; a missing part is 0)
+function versionNewer(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0)
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (d) return d > 0
+  }
+  return false
+}
+
+// The catalog's entry for an installed extension, when it is a newer version than the installed one
+function newerInCatalog(installedExt) {
+  const c = exts.catalog.find((x) => x.id === installedExt.id)
+  return c && versionNewer(c.version, installedExt.version) ? c : null
+}
+
+/* The report about what an extension needs, sets up and collides with. Its words are German (the language the app's texts are written in)
+   and go through tr() here, piece by piece: the report puts sentences together from what the box says, and the page's own translation
+   (which cuts a text at its separators) must not do it a second time - so the report is marked translate="no". */
+
+// Who holds a port or a pin, as the box says it (English, a fixed set of phrases) -> the app's text
+const EXT_WHO = {
+  'MuPiBox (web server)': 'MuPiBox (Webserver)',
+  'MuPiBox (SSH)': 'MuPiBox (SSH)',
+  'MuPiBox (server and display)': 'MuPiBox (Server und Display)',
+  'MuPiBox (server behind the web server)': 'MuPiBox (Server hinter dem Webserver)',
+  'MuPiBox (player)': 'MuPiBox (Player)',
+  'MuPiBox (remote display, VNC)': 'MuPiBox (Display aus der Ferne, VNC)',
+  'MuPiBox (remote display, noVNC)': 'MuPiBox (Display aus der Ferne, noVNC)',
+  'MuPiBox (DietPi dashboard)': 'MuPiBox (DietPi-Dashboard)',
+  'MuPiBox (power button, shim)': 'MuPiBox (Ein-/Aus-Taster, Shim)',
+  'MuPiBox (power LED)': 'MuPiBox (Betriebs-LED)',
+  'MuPiBox (fan)': 'MuPiBox (Lüfter)',
+  'MuPiBox (rotary encoder)': 'MuPiBox (Drehgeber)',
+  'MuPiBox (MuPiHAT, I2C)': 'MuPiBox (MuPiHAT, I²C)',
+  'the boot configuration (spi: SPI bus)': 'die Boot-Konfiguration (spi: SPI-Bus)',
+  'the boot configuration (enable_uart: serial port)': 'die Boot-Konfiguration (enable_uart: serielle Schnittstelle)',
+  'installed on the box': 'auf der Box installiert',
+  'a running program': 'ein laufendes Programm',
+}
+const EXT_WHO_PATTERNS = [
+  [/^extension (.+)$/, 'Erweiterung {}'],
+  [/^the boot configuration \((i2c\w*): I2C bus\)$/, 'die Boot-Konfiguration ({}: I²C-Bus)'],
+  [/^the boot configuration \(dtoverlay (.+)\)$/, 'die Boot-Konfiguration (dtoverlay {})'],
+  [/^(.+) \(running\)$/, '{} (läuft)'],
+  [/^(.+) \(in use\)$/, '{} (in Benutzung)'],
+]
+// what the test could not look at
+const EXT_BLIND = { 'the boot configuration': 'die Boot-Konfiguration', 'the open ports': 'die offenen Ports', 'the GPIO lines': 'die GPIO-Leitungen', 'the services': 'die Dienste' }
+
+const extWho = (by) => {
+  if (EXT_WHO[by]) return tr(EXT_WHO[by])
+  for (const [re, de] of EXT_WHO_PATTERNS) {
+    const m = re.exec(by)
+    if (m) return tr(de.replace('{}', m[1]))
+  }
+  return by
+}
+
+// One finding of the test, as a sentence in the language of the user
+function extConflictText(c) {
+  const what = String(c.what).replace(/^(port|GPIO|service) /, '')
+  const who = (c.holders ?? []).map(extWho).join(', ')
+  if (c.blind) return tr(`Nicht alles ließ sich prüfen (${c.blind.map((b) => tr(EXT_BLIND[b] ?? b)).join(', ')}). Der Test ist weniger sicher.`)
+  if (c.kind === 'service') return tr(c.severity === 'error' ? `Der Dienst ${what} gibt es schon (${who}).` : `Der Dienst ${what} ist (noch) nicht auf der Box.`)
+  return tr(c.kind === 'gpio' ? `GPIO ${what} ist schon belegt von ${who}.` : `Port ${what} ist schon belegt von ${who}.`)
+}
+
+// What an extension sets up on the system, as list items
+function extSystemItems(system) {
+  const items = []
+  const rules = Array.isArray(system?.udev) ? system.udev.length : Number(system?.udev ?? 0)
+  if (rules === 1) items.push(tr('Legt eine Geräteregel an (Zugriffsrechte für ein Gerät)'))
+  else if (rules > 1) items.push(tr('Legt Geräteregeln an (Zugriffsrechte für Geräte)'))
+  // (the catalog names the units as text, an installed extension has the objects of its manifest)
+  const units = (system?.units ?? []).map((u) => (typeof u === 'string' ? u : u.name))
+  if (units.length) items.push(tr(units.length === 1 ? `Legt den systemd-Dienst ${units[0]} an und startet ihn` : `Legt die systemd-Dienste ${units.join(', ')} an und startet sie`))
+  if (system?.groups?.length) items.push(tr(`Nimmt den Benutzer der Box in die Gruppe ${system.groups.join(', ')} auf`))
+  if (system?.packages?.length) items.push(tr(`Installiert Pakete: ${system.packages.join(', ')}`))
+  return items
+}
+
+// The report as HTML: what it needs (ports, GPIO pins, services), what it sets up and - with a test result - what is taken already
+function extReportHtml({ resources, system, conflicts }) {
+  const list = (items) => `<ul class="ext-list">${items.map((i) => `<li>${i}</li>`).join('')}</ul>`
+  // (the purpose is a text of the extension: shown as it is, translated when the app knows it)
+  const why = (purpose) => (purpose ? `<span class="ext-why"> – ${esc(tr(purpose))}</span>` : '')
+  const group = (head, items) => (items.length ? `<p class="ext-sub">${esc(tr(head))}</p>${list(items)}` : '')
+  const r = resources ?? {}
+  const needs = [
+    group('Ports', (r.ports ?? []).map((p) => `${esc(`${p.port}/${p.proto}`)}${why(p.purpose)}`)),
+    group('GPIO-Pins', (r.gpio ?? []).map((g) => `${esc(`GPIO ${g.pin}`)}${why(g.purpose)}`)),
+    group('Dienste', (r.services ?? []).map((s) => `${esc(s.name)} <span class="ext-why">(${esc(tr(s.provides ? 'wird mitgebracht' : 'wird gebraucht'))})</span>${why(s.purpose)}`)),
+  ].join('')
+  const setup = system ? extSystemItems(system) : []
+  const errors = (conflicts ?? []).filter((c) => c.severity === 'error')
+  const warns = (conflicts ?? []).filter((c) => c.severity !== 'error')
+  const h3 = (text) => `<h3>${esc(tr(text))}</h3>`
+  return [
+    `${h3('Braucht')}${needs || `<p class="help" style="margin:0">${esc(tr('Keine Ports, GPIO-Pins oder Dienste.'))}</p>`}`,
+    system ? `${h3('Richtet ein')}${setup.length ? list(setup.map(esc)) : `<p class="help" style="margin:0">${esc(tr('Nichts am System.'))}</p>`}` : '',
+    errors.length ? `${h3('Kollidiert mit der Box')}${list(errors.map((c) => esc(extConflictText(c))))}` : '',
+    warns.length ? `${h3('Hinweise')}${list(warns.map((c) => esc(extConflictText(c))))}` : '',
+    conflicts ? `<p class="ext-verdict ${errors.length ? 'bad' : 'ok'}">${esc(tr(errors.length ? 'Entferne oder ändere zuerst, was das belegt.' : 'Keine Konflikte gefunden.'))}</p>` : '',
+  ].join('')
+}
+
+// The question before an install (or the reason why it cannot be): the report, then "Abbrechen" and the button - or only "Verstanden" when
+// something it needs is taken. Resolves true when the user goes on. `extra`: further lines (already in the language of the user).
+function extReview({ title, resources, system, conflicts, okLabel, extra = [] }) {
+  const blocked = (conflicts ?? []).some((c) => c.severity === 'error')
+  return new Promise((resolve) => {
+    let answer = false
+    openSheet(
+      `<div class="ext-review" translate="no"><h2>${esc(title)}</h2>${extReportHtml({ resources, system, conflicts })}${extra.map((x) => `<p class="help" style="margin:0">${esc(x)}</p>`).join('')}
+       <div class="btns">${blocked ? `<button class="btn primary" data-close>${esc(tr('Verstanden'))}</button>` : `<button class="btn" data-close>${esc(tr('Abbrechen'))}</button><button class="btn primary" data-ok>${esc(tr(okLabel))}</button>`}</div></div>`,
+      (sheet, close) => {
+        sheet.querySelector('[data-close]').onclick = close
+        const ok = sheet.querySelector('[data-ok]')
+        if (ok)
+          ok.onclick = () => {
+            answer = true
+            close()
+          }
+      },
+      () => setTimeout(() => resolve(answer)),
+    )
+  })
+}
+
+const extRestartNote = () => tr('Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.')
+
+// Installs (or updates) an extension of the catalog: the test against the box first, then the report and the question
+async function installExtension(e, kind, doneText) {
+  const check = await api(`${API}/extensions/check`, { method: 'POST', body: { id: e.id } })
+  if (!check.ok) return toast('Die Prüfung auf Konflikte hat nicht geklappt', 'info')
+  const update = kind === 'Update installieren'
+  const go = await extReview({
+    title: tr(update ? `${e.name} auf ${e.version} aktualisieren?` : `${e.name} ${e.version} installieren?`),
+    resources: check.body.resources,
+    system: e.system ?? {},
+    conflicts: check.body.conflicts ?? [],
+    okLabel: kind,
+    extra: [extRestartNote()],
+  })
+  if (!go) return
+  const r = await api(`${API}/extensions/install`, { method: 'POST', body: { id: e.id } })
+  if (!r.ok) return toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+  toast('Wird erledigt …')
+  watchExtensionJob(e.id, doneText)
+}
+
+// The install or removal runs on the box (a download, the setup, then the services start again): watched until it is over
+async function watchExtensionJob(id, doneText) {
+  for (let i = 0; i < 400; i++) {
+    await new Promise((r) => setTimeout(r, 1500))
+    const r = await api(`${API}/extensions`)
+    // (the services start again at the end: the box does not answer for a moment - that is the end)
+    if (!r.ok) {
+      toast(`${doneText} Die Dienste starten neu …`)
+      await new Promise((resolve) => setTimeout(resolve, 12000))
+      break
+    }
+    const all = [...(r.body.installed ?? []), ...(r.body.catalog ?? [])]
+    const job = all.find((e) => e.id === id)?.job
+    if (job && !job.running) {
+      if (job.ok === false) {
+        toast(`Hat nicht geklappt: ${job.error ?? ''}`, 'info')
+        return renderPage(currentPage(), true)
+      }
+      toast(`${doneText} Die Dienste starten neu …`)
+      await new Promise((resolve) => setTimeout(resolve, 12000))
+      break
+    }
+    if (!job) break
+  }
+  if (currentPage()?.id === 'erweiterungen') renderPage(currentPage(), true)
+}
+
+async function extensionAction(path, id, askTitle, askText, askOk, doneText) {
+  if (!(await ask(askTitle, askText, askOk))) return
+  const r = await api(`${API}/extensions/${path}`, { method: 'POST', body: { id } })
+  if (!r.ok) return toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+  toast('Wird erledigt …')
+  watchExtensionJob(id, doneText)
+}
+
+// The "Details" of an extension: what it is and sets up, and - when it is installed and on - its settings (declared in its manifest)
+function extensionDetails(e, installed) {
+  const fields = installed && e.enabled && e.ui ? e.ui.items : []
+  const type = (it) => e.settingTypes?.[it.key]
+  const form = fields
+    .map((it) => {
+      const k = esc(it.key)
+      const help = it.help ? `<small class="help">${esc(it.help)}</small>` : ''
+      if (type(it) === 'boolean') {
+        return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
+      }
+      if (it.type === 'lookup') {
+        // a search of the extension's own API part: a few words, then the places that fit to choose from
+        const now = e.settings?.[it.key]
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xl-${k}">${esc(it.label)}</label><p style="margin:0 0 6px"><b data-xcurrent="${k}">${esc(now || '–')}</b></p><div class="ext-results" data-xresults="${k}" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div><div class="row" style="gap:8px"><input class="input" id="xl-${k}" type="search" placeholder="Suchen …" autocomplete="off" ${NO_PW_MANAGER}><button type="button" class="btn" data-xlookup="${k}">Suchen</button></div>${help}</div>`
+      }
+      if (it.type === 'order') {
+        // a list to put in order by dragging: the setting names the choices, comma separated (a name that is missing goes last)
+        const names = it.choices.map((c) => c.value)
+        const have = String(e.settings?.[it.key] ?? '').split(',').filter((v, i, all) => names.includes(v) && all.indexOf(v) === i)
+        const sorted = [...have, ...names.filter((v) => !have.includes(v))]
+        const label = (v) => it.choices.find((c) => c.value === v).label
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><ol class="ext-order" data-xorder="${k}">${sorted.map((v) => `<li data-v="${esc(v)}"><button type="button" class="ext-grip" aria-label="Verschieben"></button><span>${esc(label(v))}</span></li>`).join('')}</ol>${help}</div>`
+      }
+      if (it.choices) {
+        const now = e.settings?.[it.key]
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><div class="seg" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')}</div>${help}</div>`
+      }
+      const secret = type(it) === 'secret'
+      const kind = secret ? 'password' : type(it) === 'number' ? 'number' : 'text'
+      return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xk-${k}">${esc(it.label)}</label><input class="input" id="xk-${k}" type="${kind}" data-xk="${k}" data-secret="${secret}" value="${secret ? '' : esc(e.settings?.[it.key] ?? '')}" placeholder="${secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : ''}" ${NO_PW_MANAGER}>${help}</div>`
+    })
+    .join('')
+  const hasText = fields.some((it) => type(it) !== 'boolean' && !it.choices && it.type !== 'lookup')
+  openSheet(
+    `<h2>${esc(e.name)} <small>${esc(e.version)}</small></h2>
+     <p class="help" style="margin:0">${esc(e.description)}</p>
+     <div class="ext-review" translate="no">${extReportHtml({ resources: e.resources, system: e.system ?? {} })}</div>
+     ${e.ui ? `<h3>${esc(e.ui.title)}</h3><p class="help" style="margin:0">${esc(e.ui.help ?? '')}</p>` : ''}
+     ${installed && !e.enabled && e.ui ? '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>' : ''}
+     ${form}
+     <div class="btns">${hasText ? '<button class="btn primary" data-xsave>Speichern</button>' : ''}<button class="btn" data-close>Schließen</button></div>`,
+    (sheet, close) => {
+      sheet.querySelector('[data-close]').onclick = close
+      // (a field that depends on a switch is shown while the switch is on)
+      const dep = () => {
+        for (const d of sheet.querySelectorAll('[data-ext-dep]')) {
+          const on = d.dataset.extDep ? sheet.querySelector(`[data-xk="${CSS.escape(d.dataset.extDep)}"]`)?.checked !== false : true
+          d.hidden = !on
+        }
+      }
+      dep()
+      const save = async (values, quiet) => {
+        const r = await api(`${API}/ext/${e.id}/settings`, { method: 'POST', body: { values } })
+        if (!r.ok) {
+          toast(r.body?.error ? 'Das sieht nicht richtig aus' : 'Nicht gespeichert', 'info')
+          return false
+        }
+        if (!quiet) toast('Gespeichert')
+        return r.body
+      }
+      for (const input of sheet.querySelectorAll('input[type="checkbox"][data-xk]')) {
+        input.onchange = async () => {
+          dep()
+          const ok = await save({ [input.dataset.xk]: input.checked }, false)
+          if (ok) e.settings[input.dataset.xk] = input.checked
+          else input.checked = !input.checked
+        }
+      }
+      // (a search: the places that fit, one tap takes one - its values are saved at once)
+      for (const item of fields.filter((it) => it.type === 'lookup')) {
+        const input = sheet.querySelector(`#xl-${CSS.escape(item.key)}`)
+        const list = sheet.querySelector(`[data-xresults="${CSS.escape(item.key)}"]`)
+        let latest = 0
+        let timer = 0
+        const search = async () => {
+          clearTimeout(timer)
+          const q = input.value.trim()
+          const mine = ++latest
+          // (the hint stands under the field, where it is seen; a toast is gone before it is read)
+          if (q.length < 2) {
+            list.textContent = 'Bitte mindestens zwei Buchstaben eingeben.'
+            return
+          }
+          list.textContent = 'Suche …'
+          const r = await api(`${item.search}?q=${encodeURIComponent(q)}`, { timeoutMs: 20000 })
+          // (a newer search was started while this one ran: its answer counts)
+          if (mine !== latest) return
+          list.textContent = ''
+          if (!r.ok || !Array.isArray(r.body)) {
+            list.textContent = 'Die Suche hat nicht geklappt. Die Box braucht dafür das Internet.'
+            return
+          }
+          if (r.body.length === 0) list.textContent = 'Nichts gefunden.'
+          for (const hit of r.body.slice(0, 10)) {
+            const b = document.createElement('button')
+            b.type = 'button'
+            b.className = 'btn'
+            b.style.textAlign = 'left'
+            b.textContent = String(hit.label)
+            b.onclick = async () => {
+              const ok = await save(hit.values, false)
+              if (!ok) return
+              Object.assign(e.settings, hit.values)
+              sheet.querySelector(`[data-xcurrent="${CSS.escape(item.key)}"]`).textContent = String(e.settings[item.key] ?? '–')
+              list.textContent = ''
+              input.value = ''
+            }
+            list.append(b)
+          }
+        }
+        sheet.querySelector(`[data-xlookup="${CSS.escape(item.key)}"]`).onclick = search
+        // (a block body: an arrow that returns false for the other keys would cancel them, and no letter would appear)
+        input.onkeydown = (ev) => {
+          if (ev.key === 'Enter') search()
+        }
+        // (it searches while one types, a moment after the last letter)
+        input.oninput = () => {
+          clearTimeout(timer)
+          if (input.value.trim().length < 2) {
+            latest++
+            list.textContent = ''
+            return
+          }
+          timer = setTimeout(search, 400)
+        }
+      }
+      // (a list to put in order: a row is taken at its grip and dragged - finger or mouse - or moved with the arrow keys; saved when it is let go)
+      for (const list of sheet.querySelectorAll('[data-xorder]')) {
+        const key = list.dataset.xorder
+        const order = () => [...list.children].map((li) => li.dataset.v)
+        let saved = order()
+        const keep = async () => {
+          const now = order()
+          if (now.join() === saved.join()) return
+          const ok = await save({ [key]: now.join(',') }, false)
+          if (ok) {
+            saved = now
+            e.settings[key] = now.join(',')
+            return
+          }
+          // (not saved: the list goes back to the order it had)
+          for (const v of saved) list.append(list.querySelector(`[data-v="${CSS.escape(v)}"]`))
+        }
+        let drag = null
+        list.addEventListener('pointerdown', (ev) => {
+          const grip = ev.target.closest?.('.ext-grip')
+          if (!grip || (ev.pointerType === 'mouse' && ev.button !== 0)) return
+          const li = grip.closest('li')
+          drag = { li, grab: ev.clientY - li.getBoundingClientRect().top }
+          li.classList.add('dragging')
+          grip.setPointerCapture(ev.pointerId)
+          ev.preventDefault()
+        })
+        list.addEventListener('pointermove', (ev) => {
+          if (!drag) return
+          const { li } = drag
+          li.style.transform = ''
+          // (it stands before the first other row whose middle is below the pointer)
+          const next = [...list.children].find((o) => o !== li && o.getBoundingClientRect().top + o.offsetHeight / 2 > ev.clientY)
+          if (next !== li.nextElementSibling) list.insertBefore(li, next ?? null)
+          li.style.transform = `translateY(${ev.clientY - drag.grab - li.getBoundingClientRect().top}px)`
+        })
+        const letGo = () => {
+          if (!drag) return
+          drag.li.classList.remove('dragging')
+          drag.li.style.transform = ''
+          drag = null
+          keep()
+        }
+        list.addEventListener('pointerup', letGo)
+        list.addEventListener('pointercancel', letGo)
+        list.addEventListener('keydown', (ev) => {
+          const li = ev.target.closest?.('li')
+          if (!li || (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown')) return
+          ev.preventDefault()
+          if (ev.key === 'ArrowUp' && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling)
+          else if (ev.key === 'ArrowDown' && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li)
+          else return
+          li.querySelector('.ext-grip').focus()
+          keep()
+        })
+      }
+      // (a choice from a few: saved at once, as a switch is)
+      for (const group of sheet.querySelectorAll('[data-xseg]')) {
+        const key = group.dataset.xseg
+        for (const b of group.querySelectorAll('button')) {
+          b.onclick = async () => {
+            const value = type({ key }) === 'number' ? Number(b.dataset.v) : b.dataset.v
+            const ok = await save({ [key]: value }, false)
+            if (!ok) return
+            e.settings[key] = value
+            for (const o of group.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b))
+          }
+        }
+      }
+      const saveButton = sheet.querySelector('[data-xsave]')
+      if (saveButton) {
+        saveButton.onclick = async () => {
+          const values = {}
+          for (const input of sheet.querySelectorAll('input.input[data-xk]')) {
+            // (a secret that was not typed stays as it is)
+            if (input.dataset.secret === 'true' && !input.value.trim()) continue
+            values[input.dataset.xk] = input.type === 'number' ? Number(input.value) : input.value.trim()
+          }
+          if (!Object.keys(values).length) return toast('Bitte etwas eintragen', 'info')
+          const ok = await save(values, false)
+          if (!ok) return
+          await loadExtensions()
+          close()
+          renderPage(currentPage(), false)
+        }
+      }
+    },
+  )
+}
+
 const CONTROLLERS = {
   spielzeit: {
     load: loadCaps,
@@ -11447,7 +11987,9 @@ const CONTROLLERS = {
         save({ url: /^https?:\/\//i.test(v) ? v : `http://${v}`, allow: true }, 'Erlaubt')
       }
       $('#fh-add', root).onclick = add
-      $('#fh-new', root).onkeydown = (e) => e.key === 'Enter' && add()
+      $('#fh-new', root).onkeydown = (e) => {
+        if (e.key === 'Enter') add()
+      }
     },
     async change(key, v) {
       const field = { svcPod: 'podcastSearch', svcRadio: 'radioSearch' }[key]
@@ -11727,6 +12269,140 @@ const CONTROLLERS = {
         if (!(await ask('Auflösung ändern', `Das Display startet mit ${resX} × ${resY} Pixeln neu. Das dauert ein paar Sekunden.`, 'Übernehmen'))) return
         if (await saveDisplayOptions({ resX, resY }, 'Auflösung gespeichert')) Object.assign(disp.opts, { resX, resY })
       },
+    },
+  },
+  erweiterungen: {
+    load: loadExtensions,
+    // like the extensions page of a browser: a search field and a grid of cards - icon, name, description, Details, Entfernen and
+    // the switch; the ones the catalog offers stand behind the installed ones with an Installieren button
+    sections: () => {
+      const card = (e, installed) => {
+        const q = `${e.name} ${e.description}`.toLowerCase()
+        const ico = e.icon
+          ? `<span class="ext-ico" style="--ext-icon:url('${esc(e.icon)}')" aria-hidden="true"></span>`
+          : `<span class="ext-ico letter" aria-hidden="true">${esc(String(e.name).slice(0, 1).toUpperCase())}</span>`
+        // (an extension that is not installed yet has its switch too: off - switching it on installs it, after the question)
+        const action = installed
+          ? `<button type="button" class="btn sm danger" data-ext-remove="${esc(e.id)}">Entfernen</button>`
+          : `<button type="button" class="btn sm primary" data-ext-install="${esc(e.id)}">Installieren</button>`
+        const sw = installed
+          ? `<label class="switch"><input type="checkbox" data-ext-toggle="${esc(e.id)}" ${e.enabled ? 'checked' : ''} aria-label="${esc(e.name)}"><span></span></label>`
+          : `<label class="switch"><input type="checkbox" data-ext-install-toggle="${esc(e.id)}" aria-label="${esc(e.name)}"><span></span></label>`
+        // a newer version in the catalog: a line of text under the buttons (like the notice of WordPress), no card of its own
+        const next = installed ? newerInCatalog(e) : null
+        // ("{} oder {}." is cut at the {}: the two links stand in the places the language gives them)
+        const [lead, mid, tail] = tr('{} oder {}.').split('{}')
+        const upd = next
+          ? `<p class="ext-update">${icon('sync', 16)}<span translate="no">${esc(tr(`Es gibt eine neue Version von ${e.name}: ${next.version}.`))} ${esc(lead)}<button type="button" class="linkbtn" data-ext-details="${esc(e.id)}" data-installed="false" data-ext-new="true">${esc(tr('Details ansehen'))}</button>${esc(mid)}<button type="button" class="linkbtn" data-ext-update="${esc(e.id)}">${esc(tr('jetzt aktualisieren'))}</button>${esc(tail)}</span></p>`
+          : ''
+        return `<div class="ext-card${installed ? '' : ' offer'}" data-q="${esc(q)}">
+          <div class="ext-head">${ico}<div class="ext-text"><b>${esc(e.name)}</b> <small>${esc(e.version)}</small><p>${esc(e.description)}</p></div></div>
+          <div class="ext-foot"><button type="button" class="btn sm" data-ext-details="${esc(e.id)}" data-installed="${installed}">Details</button>${action}<span class="grow"></span>${sw}</div>
+          ${upd}
+        </div>`
+      }
+      // (what the catalog offers and is not installed; a newer version of an installed one shows in its own card)
+      // ("Bitte lies mehr dazu in der {}." is cut at the {}: the link stands in the place the language gives it)
+      const guide = tr('Bitte lies mehr dazu in der {}.').split('{}')
+      const offered = exts.catalog.filter((e) => !e.installedVersion)
+      const note = exts.catalogError ? '<p class="help">Der Katalog ist gerade nicht erreichbar. Die Box braucht dafür das Internet.</p>' : ''
+      const cards = [...exts.installed.map((e) => card(e, true)), ...offered.map((e) => card(e, false))]
+      return [
+        {
+          title: '',
+          items: [
+            {
+              type: 'html',
+              html: `<div class="ext-bar"><div class="search">${icon('search')}<input class="input" id="ext-q" type="search" placeholder="Erweiterungen suchen" autocomplete="off"></div>
+                <button type="button" class="btn" data-ext-upload>Datei hochladen</button><input type="file" id="ext-file" accept=".mpx,.zip,application/zip" hidden></div>`,
+            },
+            { type: 'html', html: `<h2 class="ext-title">Alle Erweiterungen</h2>${note}<div class="ext-grid">${cards.join('') || '<p class="help">Keine Erweiterungen verfügbar.</p>'}</div>` },
+            {
+              type: 'html',
+              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/Lippsson/MuPiBox/tree/dev5.1/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab. <span translate="no">${esc(guide[0])}<a href="${EXT_GUIDELINE_URL}" target="_blank" rel="noopener noreferrer">${esc(tr('Richtlinie für Erweiterungen'))}</a>${esc(guide[1])}</span></span></div>`,
+            },
+          ],
+        },
+      ]
+    },
+    mount(root) {
+      const entry = (id) => exts.installed.find((e) => e.id === id) ?? exts.catalog.find((e) => e.id === id)
+      $('#ext-q', root)?.addEventListener('input', (ev) => {
+        const q = ev.target.value.trim().toLowerCase()
+        for (const c of root.querySelectorAll('.ext-card')) c.hidden = !!q && !c.dataset.q.includes(q)
+      })
+      for (const b of root.querySelectorAll('[data-ext-install]')) {
+        const e = entry(b.dataset.extInstall)
+        b.onclick = () =>
+          installExtension(e, 'Installieren', `${e.name} ist installiert.`)
+      }
+      for (const input of root.querySelectorAll('[data-ext-install-toggle]')) {
+        const e = entry(input.dataset.extInstallToggle)
+        input.onchange = async () => {
+          // (the switch stays off until the box has installed it: the page is drawn again afterwards)
+          input.checked = false
+          await installExtension(e, 'Installieren', `${e.name} ist installiert.`)
+        }
+      }
+      for (const b of root.querySelectorAll('[data-ext-remove]')) {
+        const e = entry(b.dataset.extRemove)
+        b.onclick = () => extensionAction('remove', e.id, `${e.name} entfernen`, 'Die Erweiterung und ihre Geräteregeln werden entfernt. Ihre Einstellungen bleiben, falls du sie wieder installierst. Danach starten die Dienste der Box neu.', 'Entfernen', `${e.name} ist entfernt.`)
+      }
+      for (const input of root.querySelectorAll('[data-ext-toggle]')) {
+        const e = entry(input.dataset.extToggle)
+        input.onchange = async () => {
+          const enabled = input.checked
+          if (!(await ask(`${e.name} ${enabled ? 'einschalten' : 'ausschalten'}`, 'Danach starten die Dienste der Box neu; eine Wiedergabe bricht dabei ab.', enabled ? 'Einschalten' : 'Ausschalten'))) {
+            input.checked = !enabled
+            return
+          }
+          const r = await api(`${API}/extensions/enable`, { method: 'POST', body: { id: e.id, enabled } })
+          if (!r.ok) {
+            input.checked = !enabled
+            if (r.body?.error === 'conflict') return extReview({ title: tr(`${e.name} kann nicht eingeschaltet werden`), resources: e.resources, conflicts: r.body.conflicts })
+            return toast('Hat nicht geklappt', 'info')
+          }
+          toast('Die Dienste starten neu …')
+          setTimeout(() => currentPage()?.id === 'erweiterungen' && renderPage(currentPage(), true), 13000)
+        }
+      }
+      // an extension file from the user's own computer: read and checked by the box first, installed only after the question
+      const picker = $('#ext-file', root)
+      $('[data-ext-upload]', root)?.addEventListener('click', () => picker.click())
+      picker?.addEventListener('change', async () => {
+        const file = picker.files?.[0]
+        picker.value = ''
+        if (!file) return
+        if (file.size > 16 * 1024 * 1024) return toast('Die Datei ist zu groß (höchstens 16 MB)', 'info')
+        toast('Wird geprüft …')
+        const r = await fetch(`${API}/extensions/upload`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream', 'x-mupibox-csrf': state.csrf }, body: file }).catch(() => null)
+        const body = await r?.json().catch(() => null)
+        if (!r || !r.ok) return toast(`Das ist keine passende Erweiterung: ${body?.error ?? ''}`.trim(), 'info')
+        const what = `${body.name} ${body.version}${body.installedVersion ? tr(` (ersetzt ${body.installedVersion})`) : ''}`
+        const blocked = (body.conflicts ?? []).some((c) => c.severity === 'error')
+        const go1 = await extReview({
+          title: tr(blocked ? `${what} kann nicht installiert werden` : `${what} installieren?`),
+          resources: body.resources,
+          system: body.system ?? {},
+          conflicts: body.conflicts ?? [],
+          okLabel: 'Installieren',
+          extra: [tr('Eine Erweiterung läuft auf der Box ohne Schutz: Installiere nur Dateien aus Quellen, denen du vertraust.'), tr(`Prüfsumme (SHA-256): ${body.sha256.slice(0, 16)}…`), extRestartNote()],
+        })
+        if (!go1) return
+        const go = await api(`${API}/extensions/install`, { method: 'POST', body: { token: body.token } })
+        if (!go.ok) return toast(go.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+        toast('Wird erledigt …')
+        watchExtensionJob(go.body.id, `${body.name} ist installiert.`)
+      })
+      for (const b of root.querySelectorAll('[data-ext-details]')) {
+        // ("Details ansehen" in the update line shows the new version, as the catalog describes it)
+        b.onclick = () => (b.dataset.extNew ? extensionDetails(exts.catalog.find((x) => x.id === b.dataset.extDetails), false) : extensionDetails(entry(b.dataset.extDetails), b.dataset.installed === 'true'))
+      }
+      for (const b of root.querySelectorAll('[data-ext-update]')) {
+        const c = exts.catalog.find((x) => x.id === b.dataset.extUpdate)
+        b.onclick = () =>
+          installExtension(c, 'Update installieren', `${c.name} ist aktualisiert.`)
+      }
     },
   },
   bedienung: {

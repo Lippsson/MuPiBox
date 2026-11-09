@@ -16,6 +16,7 @@ import {
 import { addIcons } from 'ionicons'
 import {
   bookOutline,
+  discOutline,
   musicalNotesOutline,
   radioOutline,
   serverOutline,
@@ -30,6 +31,7 @@ import { CoverFlipService } from '../cover-flip.service'
 import { HeaderVisibilityService } from '../header-visibility.service'
 import { LoadingComponent } from '../loading/loading.component'
 import type { CategoryType } from '../media'
+import { ExtensionHostService } from '../extension-host.service'
 import { isStandaloneMedia, MediaService } from '../media.service'
 import { MediaUnavailableComponent } from '../media-unavailable/media-unavailable.component'
 import type { MupiboxConfig } from '../mupibox-config.model'
@@ -97,6 +99,16 @@ export class HomePage extends SwiperIonicEventsHelper {
   protected visibleCategories = computed(() =>
     this.categories.filter((c) => !this.hiddenCategories().includes(c.key) && (c.key !== 'nas' || this.nasTabWanted())),
   )
+  // Tabs of extensions (the audio CD in the drive, for one) after the others, so none of them moves; they are no list - a tap runs
+  // what the extension does
+  private readonly extensions = inject(ExtensionHostService)
+  protected readonly headerCategories = computed<{ key: string; icon?: string; src?: string }[]>(() => [
+    ...this.visibleCategories(),
+    ...this.extensions
+      .tabs()
+      .filter((t) => t.visible)
+      .map((t) => ({ key: t.id, src: t.src })),
+  ])
 
   protected artists: Signal<Artist[]>
   // Category of the list currently shown; a reload of the same category keeps the scroll position.
@@ -124,7 +136,7 @@ export class HomePage extends SwiperIonicEventsHelper {
     private coverFlip: CoverFlipService,
   ) {
     super()
-    addIcons({ timerOutline, bookOutline, musicalNotesOutline, radioOutline, serverOutline })
+    addIcons({ timerOutline, bookOutline, discOutline, musicalNotesOutline, radioOutline, serverOutline })
 
     this.http.get<MupiboxConfig>(`${environment.backend.apiUrl}/config`).subscribe({
       next: (config) => {
@@ -260,8 +272,19 @@ export class HomePage extends SwiperIonicEventsHelper {
   }
 
   protected categoryChanged(event: any): void {
+    if (this.extensions.tabs().some((t) => t.id === event.detail.value)) {
+      // (the tab is a button, not a list: the segment goes back to the list that is shown)
+      if (event.target) event.target.value = this.category()
+      this.extensions.select(event.detail.value)
+      return
+    }
     this.categoryChosen = true
     this.category.set(event.detail.value)
+  }
+
+  protected categoryClicked(key: string): void {
+    if (this.extensions.tabs().some((t) => t.id === key)) return this.extensions.select(key)
+    this.category.set(key as CategoryType)
   }
 
   protected async artistCoverClicked(artist: Artist): Promise<void> {

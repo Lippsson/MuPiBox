@@ -48,6 +48,7 @@ import {
 import { ipRateLimit, localNetworkOnly, parseCookie, requireCsrf, requireSession } from './middleware'
 import { registerCustomCoverRoutes } from './covers'
 import { registerDisplayRoutes } from './display'
+import { registerExtensionRoutes } from './extensions'
 import { registerDisplayProfileRoutes } from './display-profile'
 import { registerSpeechRoutes } from './speech-routes'
 import { registerCustomBootRoutes } from './bootscreen-custom'
@@ -418,6 +419,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   // (and back: a track, an album or a folder of the card as a download - local-download.ts)
   if (deps.localLibrary) registerLocalDownloadRoutes(router, deps.localLibrary)
   registerDisplayRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
+  // (extensions: the catalog, install, switch on and off, remove, the settings of an extension)
+  registerExtensionRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerDisplayProfileRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig })
   registerSpeechRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerCustomBootRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })

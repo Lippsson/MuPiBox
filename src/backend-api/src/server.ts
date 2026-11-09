@@ -37,6 +37,7 @@ import { loadSpotifyTokenStore } from './spotify-sync/config-loader'
 import { createSpotifySyncRouter } from './spotify-sync/routes'
 import { startScheduler } from './spotify-sync/scheduler'
 import type { RunSyncDeps } from './spotify-sync/state-machine'
+import { mountExtensions } from './app-api/extensions'
 import { buildElternLandingHandler, createElternApiRouter, registerDisplayNetworkRoutes, setOnSpotifyCacheCleared } from './app-api/routes'
 import { startSpotifyLoginWatch } from './app-api/spotify-auth-age'
 import { startTlsWatch } from './app-api/tls'
@@ -8245,6 +8246,7 @@ app.get('/api/track-cover', async (req, res) => {
   await sendThumbnail(res, thumb)
 })
 
+
 function sendThumbnail(res: express.Response, thumb: string): Promise<void> {
   return stat(thumb).then((info) => {
     // Revalidated on every use (a cheap 304 on the box itself) instead of cached blindly for a day, so a
@@ -8622,6 +8624,9 @@ app.use(
     },
   }),
 )
+// Extensions (docs/extensions.md): their files for the display and the app (/ext/<id>/...), the list of the ones that are on
+// (/api/ext/active) and the API parts they bring along (/api/ext/<id>/...). Installing and removing is in the app's routes.
+mountExtensions(app, { getMupiboxConfig: getMupiboxConfigSync, updateMupiboxConfig })
 // The parents' web app (/parents, first /eltern) is replaced by the app: its addresses lead there, with a login link's
 // token (bookmarks, home-screen icons, Telegram messages sent before)
 app.use(['/parents', '/eltern'], (req, res) => {

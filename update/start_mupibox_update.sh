@@ -1049,7 +1049,7 @@ rm -f /tmp/mupibox-update-failed
 	
 	# the old themes in the km layout (legacy in km-themes.json): their pictures, fonts, mascots and cover placeholders;
 	# coverflow stays as it is
-	KM_LEGACY_THEMES="axolotl blue captainamerica chocolate cinema clone-wars comic custom danger dark darkred deepblue dinosaur earth enterprise fantasybutterflies forms green ironman light lines matrix mint mystic orange pikachu pink purple red spiderman steampunk supermario unicorn vintage wall-e wood xmas"
+	KM_LEGACY_THEMES="axolotl blue captainamerica chocolate cinema winamp clone-wars comic custom danger dark darkred deepblue dinosaur earth enterprise fantasybutterflies forms green ironman light lines matrix mint mystic orange pikachu pink purple red spiderman steampunk supermario unicorn vintage wall-e wood xmas"
 	
 	for theme in ${KM_THEMES} ${KM_LEGACY_THEMES} _fonts; do
 		mkdir -p ${MUPI_WWW}/theme-data/${theme} >&3 2>&3
@@ -1453,6 +1453,12 @@ rm -f /tmp/mupibox-update-failed
 		cp -f ${MUPI_SRC}/config/udev/99-mupibox-eth.rules /etc/udev/rules.d/99-mupibox-eth.rules >&3 2>&3
 		udevadm control --reload >&3 2>&3
 	fi
+	# the CD drive is an extension now (extensions/cd, installed from the app): its rule comes with it - the one the base used to
+	# install is taken away
+	if [ -f /etc/udev/rules.d/99-mupibox-cdrom.rules ]; then
+		rm -f /etc/udev/rules.d/99-mupibox-cdrom.rules >&3 2>&3
+		udevadm control --reload >&3 2>&3
+	fi
 	systemctl daemon-reload >&3 2>&3
 	# remote display: a VNC that is running keeps its old settings (open to the network) until it starts again
 	systemctl try-restart mupi_vnc.service mupi_novnc.service >&3 2>&3
@@ -1545,7 +1551,7 @@ rm -f /tmp/mupibox-update-failed
 	  echo "dtoverlay=pwm,pin=${LED_PIN},func=4" | tee -a "${BOOT_CONFIG}" >&3 2>&3
 	fi
 
-	usermod -aG dialout dietpi >&3 2>&3
+	usermod -aG dialout,cdrom dietpi >&3 2>&3
 	after=$(date +%s)
 	echo -e "## Set environment	##  finished after $((after - $before)) seconds" >&3 2>&3
 	STEP=$(($STEP + 1))

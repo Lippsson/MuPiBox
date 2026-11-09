@@ -30,3 +30,9 @@ export const COVERS_DIR = `${DATA_DIR}/covers`
 export const LOGS_DIR = production ? `${DATA_DIR}/logs` : DATA_DIR
 
 export const CACHE_DIR = production ? `${MUPI_HOME}/cache` : path.resolve('cache')
+
+/** The installed extensions (their files, state.json, settings/ and data/) - what the box keeps, so below data/. Before the
+ *  layout of 5.1 they lay in ~/.mupibox/extensions (EXTENSIONS_DIR_BEFORE; extensions.ts moves them over once). */
+export const EXTENSIONS_DIR = `${DATA_DIR}/extensions`
+export const EXTENSIONS_DIR_BEFORE = `${MUPI_HOME}/extensions`
+

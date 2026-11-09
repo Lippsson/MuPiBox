@@ -62,6 +62,8 @@ export interface Media {
   // "audiobook/Artist/Album", read live from disk at any depth. Entries without
   // it are old-style library entries from data.json (category/artist/title).
   libraryPath?: string
+  // Never kept for "Fortsetzen" (an extension's album that may be gone later, like the audio CD in the drive)
+  noResume?: boolean
   // True for a local folder with subfolders holding audio: it opens the next level.
   libraryIsContainer?: boolean
   // The audio files lying directly in such a folder (NAS or local), next to its subfolders: listed first.

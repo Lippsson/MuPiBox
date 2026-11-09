@@ -5,6 +5,8 @@ const path = require('node:path')
 const dns = require('node:dns')
 const SpotifyWebApi = require('spotify-web-api-node')
 const createMpv = require('./mpv-wrapper.js')
+const { createExtensionHost, redactSecrets } = require('./extensions.js')
+const Q = require('./queue.js')
 const { isPlaylistUrl, pointsAtBox, resolveStreamUrl } = require('./playlist-url.js')
 const googleTTS = require('google-tts-api')
 const fs = require('node:fs')
@@ -191,9 +193,20 @@ function applyLoudness() {
   player.setLoudness?.(mode)
   console.log(`${new Date().toLocaleString()}: [Player] loudness levelling: ${mode}`)
 }
+// The Winamp theme's equaliser and balance (the display's windows, see frontend-box/src/app/winamp): kept in a file so
+// they come back after a restart; only mpv has the filters
+const WINAMP_SOUND_FILE = '/home/dietpi/.mupibox/winamp-sound.json'
+const winampSound = { on: false, auto: false, preamp: 0, bands: new Array(10).fill(0), balance: 0 }
+try {
+  Object.assign(winampSound, JSON.parse(fs.readFileSync(WINAMP_SOUND_FILE, 'utf8')))
+} catch {
+  // none saved yet
+}
+const applyWinampSound = () => player.setSound?.(winampSound)
 player.on('ready', () => {
   loudnessApplied = null // (a new mpv process after a respawn starts without the filter)
   applyLoudness()
+  applyWinampSound()
 })
 
 // Refuse commands a foreign web page sends through a visitor's browser; CORS only for the box's
@@ -224,7 +237,7 @@ const apiAccessToken = {
 
 player.on('percent_pos', (val) => {
   //console.log('track progress is', val);
-  if (!isCuePlayback()) currentMeta.progressTime = val
+  if (!isCuePlayback() && !albumNow()?.progress) currentMeta.progressTime = val
 })
 
 // --- CUE albums (one audio file, tracks by start time - see /api/nas/tracklist) ---
@@ -261,9 +274,20 @@ function cueSeek(seconds) {
 
 player.on('length', (val) => {
   if (currentCue) currentCue.fileLength = val
-  if (!isCuePlayback()) currentMeta.durationSeconds = val
+  if (!isCuePlayback() && !albumNow()?.progress) currentMeta.durationSeconds = val
 })
 player.on('time_pos', (seconds) => {
+  // an album that is no folder (an extension's: the audio CD) says where in its track the playing time of the whole is
+  const album = currentMeta.currentPlayer === 'mplayer' ? albumNow() : undefined
+  if (album?.progress) {
+    const at = album.progress(seconds, player.trackIndex?.() ?? currentMeta.currentTracknr - 1)
+    if (at) {
+      currentMeta.positionSeconds = at.position
+      if (at.duration !== undefined) currentMeta.durationSeconds = at.duration
+      if (at.progress !== undefined) currentMeta.progressTime = at.progress
+    } else currentMeta.positionSeconds = seconds
+    return
+  }
   if (!isCuePlayback()) {
     pendingCueSeek = null
     currentMeta.positionSeconds = seconds
@@ -349,6 +373,9 @@ player.on('metadata', (val) => {
   } else if (currentMeta.currentType === 'tidal') {
     const track = currentTidalTracks[currentMeta.currentTracknr - 1]
     if (track) currentMeta.currentTrackname = track.name
+  } else if (albumNow()) {
+    // (an album that is no folder - an extension's - names its tracks)
+    currentMeta.currentTrackname = albumNow().trackName?.(currentMeta.currentTracknr, val) || val.Title
   } else if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio') {
     currentMeta.currentTrackname = val.Title
   }
@@ -441,6 +468,8 @@ function finishLoading() {
 // mpv says file-loaded (track-change) as soon as the stream is OPEN and fills its cache after that - the dots ended in
 // that moment, and the display showed nothing for the seconds until the sound came. The loading ends with the cache
 // filled, or, for a stream that reports no buffering, with the sound running (time_pos past where it started).
+// what the file is, for the Winamp theme's little displays (kbit/s, kHz, mono / stereo)
+player.on('audio-info', (info) => Object.assign(currentMeta, info))
 player.on('cache-fill', (percent) => {
   if (currentMeta.loading) {
     currentMeta.loadProgress = Math.min(100, Math.round((percent / cachePrefillPercent) * 100))
@@ -461,7 +490,7 @@ player.on('time_pos', checkSilence)
 
 player.on('filename', (val) => {
   log.debug('track name is', val)
-  if (!currentMeta.currentTrackname && currentMeta.currentPlayer !== 'spotify') {
+  if (!currentMeta.currentTrackname && currentMeta.currentPlayer !== 'spotify' && !albumNow()) {
     currentMeta.currentTrackname = val
       .split('.mp3')[0]
       .split('.flac')[0]
@@ -480,7 +509,7 @@ player.on('path', (val) => {
     currentMeta.trackFile =
       typeof val === 'string' && val.startsWith(mediaRoot) ? `local:${val.slice(mediaRoot.length)}` : undefined
   }
-  if (!['rss', 'radio', 'nas', 'tidal'].includes(currentMeta.currentType)) {
+  if (!['rss', 'radio', 'nas', 'tidal'].includes(currentMeta.currentType) && !albumNow()) {
     // The folder holding the file, whatever the folder depth (was: fixed 7th segment).
     const pathParts = val.split('/')
     if (pathParts.length > 2) {
@@ -529,6 +558,8 @@ player.on('playlist-finish', () => {
   // the album or episode played to its end (not a stop: that empties currentPlayer first) - the display goes back
   // to its list at once instead of waiting 10 s for the player to stay silent
   if (currentMeta.currentPlayer === 'mplayer') currentMeta.finished = true
+  albumNow()?.onFinished?.() // (an album that is no folder: it played to its end)
+  extensions.emit('finished')
   // Library album finished naturally — drop its resume entry so the user
   // isn't offered "weiterhören" at the very end next time. Spotify and RSS
   // are skipped: Spotify gives no clean end-of-album signal via the
@@ -672,6 +703,14 @@ const currentMeta = {
   positionSeconds: 0,
   durationSeconds: 0,
   volume: 0,
+  // the file that plays (mpv): kbit/s, kHz, channels - 0 when not known
+  bitrate: 0,
+  khz: 0,
+  channels: 0,
+  // the playlist starts again at its end (Winamp theme's REP button)
+  repeat: false,
+  // Shuffle of a local or NAS album (mpv): "next" and the end of a track choose a track not played yet; the numbers stay
+  shuffle: false,
   // Radio streams and podcasts are buffered before they start: how far along that is.
   loading: false,
   // Cover of a radio station or podcast episode started by the parents' app (?cover=): the display shows it when it
@@ -1917,6 +1956,7 @@ function stop() {
     currentMeta.pause = false
     spotifyRunning = false
   } else if (currentMeta.currentPlayer === 'mplayer') {
+    resetLocalShuffle()
     stopLoading()
     player.stop()
     // mplayer ignores 'stop' while it is still opening a playlist; it then starts playing after all, and
@@ -1928,8 +1968,13 @@ function stop() {
         if (stopGeneration === playbackGeneration) player.stop()
       }, delay)
     }
+    albumNow()?.onStop?.()
+    extensions.emit('stop')
     //currentMeta.playing = false;
     writeplayerstatePause()
+    currentMeta.bitrate = 0
+    currentMeta.khz = 0
+    currentMeta.channels = 0
     forgetLocalTrack()
     currentMeta.currentPlayer = ''
     currentMeta.pause = false
@@ -2089,7 +2134,24 @@ function jumpToTrack(targetPosition) {
   }
 }
 
+// Shuffle of a local or NAS album: only the engine's choice of the next track (mpv-wrapper.js), nothing at Spotify
+function localShuffle(on) {
+  if (currentMeta.currentPlayer !== 'mplayer' || typeof player.setShuffle !== 'function' || isCuePlayback()) return false
+  currentMeta.shuffle = on
+  player.setShuffle(on)
+  log.debug(`${now()}: [Spotify Control] Shuffle of the album: ${on ? 'on' : 'off'}`)
+  return true
+}
+// (every playback starts without shuffle, as the player page switches Spotify's off when it is left)
+function resetLocalShuffle() {
+  if (currentMeta.shuffle || player.shuffling?.()) {
+    currentMeta.shuffle = false
+    player.setShuffle?.(false)
+  }
+}
+
 function shuffleon() {
+  if (localShuffle(true)) return
   forgetSpotifyState()
   if (spotifyBlockedUntil()) return
   spotifyApi.setShuffle(true, ownSpotifyDeviceOptions()).then(
@@ -2107,6 +2169,8 @@ function shuffleon() {
 }
 
 function shuffleoff() {
+  if (localShuffle(false)) return
+  resetLocalShuffle()
   forgetSpotifyState()
   if (spotifyBlockedUntil()) return
   spotifyApi.setShuffle(false, ownSpotifyDeviceOptions()).then(
@@ -2410,6 +2474,8 @@ function scheduleResumeJumps(trackNr, progressPct, firstJumpMs) {
 
 // resume: { track, percent } - where the album goes on (only an engine that starts there takes it, see playListAtTrack)
 function playList(playedList, resume) {
+  const album = extensions.albumFor(decodeURI(playedList).replace(/:/g, '/'))
+  if (album) return playAlbumProvider(album)
   playbackGeneration++
   currentMeta.trackFile = undefined // the new album's first file sets it (see the path event)
   clearLibraryResumeTimers()
@@ -2478,6 +2544,7 @@ async function playNasList(nasPath, resume = null) {
       return
     }
     currentNasTracks = tracks
+    rememberNasTracks(tracks)
     // Tracks of a CUE album all point at the same file: it is loaded once and the tracks are found by time.
     const cueMode = tracks.length > 1 && tracks.every((track) => track.cue === true)
     currentCue = cueMode ? { tracks, fileLength: 0 } : null
@@ -3017,7 +3084,11 @@ function seek(progress) {
     }
   } else if (currentMeta.currentPlayer === 'mplayer') {
     if (progress > 1) {
-      if (isCuePlayback()) {
+      // (an album that is no folder: a place in its track, as an absolute time of the whole)
+      const albumSeek = albumNow()?.seek?.(progress, player.trackIndex?.() ?? currentMeta.currentTracknr - 1)
+      if (typeof albumSeek === 'number') {
+        player.exec('seek', [albumSeek, '2'])
+      } else if (isCuePlayback()) {
         const index = Math.max(0, currentMeta.currentTracknr - 1)
         const track = currentCue.tracks[index]
         const end = cueTrackEnd(index)
@@ -3172,6 +3243,19 @@ async function volumeCap() {
 }
 
 /*gets available devices, searches for the active one and returns its volume*/
+// An absolute volume (the Winamp theme's slider), in the same queue as the steps and under the same maximum
+async function setVolumeTo(percent) {
+  _volumeOpQueue = _volumeOpQueue.then(async () => {
+    const cap = await volumeCap()
+    const target = Math.max(0, Math.min(cap, percent))
+    await cmdCall(`/usr/bin/amixer sset Master ${target}%`)
+    currentMeta.volume = target
+  }).catch((err) => {
+    log.warn(`${now()}: [setVolumeTo] op failed:`, err?.message || err)
+  })
+  return _volumeOpQueue
+}
+
 async function setVolume(volume, step = 5) {
   // step: percent per change (5 for the +5 / -5 commands, 1..10 for the rotary encoder)
   const volumeUp = `/usr/bin/amixer sset Master ${step}%+`
@@ -3481,6 +3565,384 @@ app.post('/display/reload-page', (_req, res) => {
   res.json({ ok: true })
 })
 
+// The Winamp theme's equaliser and balance: GET reads them (supported: false = mplayer, which has no filter), POST sets
+// them live and keeps them in a file
+app.get('/winamp/sound', (_req, res) => {
+  res.json({ supported: typeof player.setSound === 'function', ...winampSound })
+})
+app.post('/winamp/sound', (req, res) => {
+  const body = req.body ?? {}
+  const num = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || 0))
+  winampSound.on = body.on === true
+  winampSound.auto = body.auto === true
+  winampSound.preamp = num(body.preamp, -12, 12)
+  winampSound.bands = Array.from({ length: 10 }, (_, i) => num(Array.isArray(body.bands) ? body.bands[i] : 0, -12, 12))
+  winampSound.balance = num(body.balance, -100, 100)
+  applyWinampSound()
+  fs.writeFile(WINAMP_SOUND_FILE, JSON.stringify(winampSound), () => undefined)
+  res.json({ ok: true })
+})
+
+// The equaliser's presets of the Winamp theme: the ones the children / parents saved (named), the auto-load ones (one per
+// album: AUTO loads them when the album plays) and the default. The display keeps the whole set and sends it back whole.
+const WINAMP_PRESETS_FILE = '/home/dietpi/.mupibox/winamp-presets.json'
+const cleanValues = (v) => {
+  const num = (x) => Math.max(-12, Math.min(12, Math.round((Number(x) || 0) * 2) / 2))
+  return { preamp: num(v?.preamp), bands: Array.from({ length: 10 }, (_, i) => num(Array.isArray(v?.bands) ? v.bands[i] : 0)) }
+}
+const cleanSet = (body, max) => {
+  const out = {}
+  for (const [name, v] of Object.entries(body && typeof body === 'object' ? body : {}).slice(0, max)) {
+    const key = [...String(name)].filter((c) => c.charCodeAt(0) >= 32).join('').trim().slice(0, 80)
+    if (key) out[key] = cleanValues(v)
+  }
+  return out
+}
+function readPresets() {
+  try {
+    const f = JSON.parse(fs.readFileSync(WINAMP_PRESETS_FILE, 'utf8'))
+    return { presets: cleanSet(f.presets, 60), auto: cleanSet(f.auto, 300), default: f.default ? cleanValues(f.default) : null }
+  } catch {
+    return { presets: {}, auto: {}, default: null }
+  }
+}
+app.get('/winamp/presets', (_req, res) => res.json(readPresets()))
+app.post('/winamp/presets', (req, res) => {
+  const b = req.body ?? {}
+  const set = { presets: cleanSet(b.presets, 60), auto: cleanSet(b.auto, 300), default: b.default ? cleanValues(b.default) : null }
+  fs.writeFile(WINAMP_PRESETS_FILE, JSON.stringify(set), (err) => (err ? res.status(500).json({ error: 'write_failed' }) : res.json({ ok: true })))
+})
+
+// --- Extensions (docs/extensions.md) ---
+// Files that extensions bring along (~/.mupibox/data/extensions/<id>/player.js) are loaded here: they add routes (/ext/<id>/...), listen to
+// what the player does and may be the source of albums that are no folders - the player asks them where it has a folder name
+// (albumFor). The audio CD is such an extension. An error in one of them is caught and switches it off, not the player.
+const extensions = createExtensionHost({
+  app,
+  log: {
+    debug: (text) => log.debug(`${now()}: [Spotify Control] ${text}`),
+    info: (text) => log.info(`${now()}: [Spotify Control] ${text}`),
+    warn: (text) => console.warn(`${now()}: [Spotify Control] ${text}`),
+  },
+  getConfig: () => redactSecrets(muPiBoxConfig ?? {}),
+  getMeta: () => currentMeta,
+  engine: {
+    command: (command) => (typeof player.command === 'function' ? player.command(command) : Promise.resolve(null)),
+    playEntries: (entries) => player.playEntries?.(entries),
+    setVolume: (percent) => player.setVolume(percent),
+    startVolume: () => volumeStart,
+    trackIndex: () => player.trackIndex?.() ?? -1,
+  },
+  stop: () => stop(),
+  generation: () => playbackGeneration,
+})
+extensions.load()
+
+/** The album that plays, when its folder name is an extension's (the audio CD), else undefined. */
+const albumNow = () => extensions.albumFor(currentMeta.path)
+
+// An album of an extension starts: it puts its tracks in mpv's playlist (host.engine.playEntries) and says what it is; the rest -
+// counting, the volume, the state - is as for a folder. Nothing to play (no disc): nothing changes.
+async function playAlbumProvider(album) {
+  playbackGeneration++
+  currentMeta.trackFile = undefined
+  clearLibraryResumeTimers()
+  const started = await album.play()
+  if (!started) return
+  writeplayerstatePlay()
+  player.setVolume(volumeStart)
+  currentMeta.currentTracknr = 0
+  currentMeta.path = album.folder
+  if (started.album) currentMeta.album = started.album
+  if (started.totalTracks) currentMeta.totalTracks = started.totalTracks
+}
+
+// --- The queue: the Winamp playlist window edits what plays ---
+// The playlist of a local album (a folder of the library) or of a NAS album is mpv's own playlist; the display's Winamp playlist
+// window selects entries, removes them (remove, crop, new list), sorts them, adds a folder (of the library, or of the NAS) and
+// saves and loads lists (queue.js has the logic around it). Nothing here touches a file or a folder, on the box or on the NAS:
+// only what is queued changes. An audio CD, a CUE album of the NAS, TIDAL and Spotify have no such queue (their lists are not
+// files); /queue says so (editable: false). A queue holds files of one kind: the library's, or the NAS's.
+const MEDIA_ROOT = '/home/dietpi/MuPiBox/media'
+const NAS_PREFIX = 'nas:' // (in a path of the folder browser and in a saved list: a path on the NAS)
+const queueLists = Q.createListStore('/home/dietpi/.mupibox/winamp-lists')
+
+// The tracks of the NAS, by their path: kept from every NAS list that was played or added, so the names of a queue that was
+// sorted or cut down are known (the playlist of mpv holds only the stream addresses)
+const nasTrackByPath = new Map()
+const rememberNasTracks = (tracks) => {
+  for (const track of tracks) if (track?.path) nasTrackByPath.set(track.path, track)
+}
+const nasStreamUrl = (track) => {
+  const url = `http://localhost:8200/api/nas/stream?path=${encodeURIComponent(track.path)}`
+  return /\.wma$/i.test(track.path) ? `ffmpeg://${url}` : url
+}
+
+/** 'local', 'nas', or null: what kind of queue plays now (null - nothing, a CD, a CUE album, TIDAL, Spotify: no queue to edit) */
+function queueKind() {
+  if (currentMeta.currentPlayer !== 'mplayer' || typeof player.list !== 'object') return null
+  if (currentMeta.currentType === 'local' && !albumNow()) return 'local'
+  if (currentMeta.currentType === 'nas' && currentCue === null) return 'nas'
+  return null
+}
+const queueEditable = () => queueKind() !== null
+
+/** [{ position, id, file, source, name, current }] of the playlist as it is now; null when mpv did not answer */
+async function queueEntries() {
+  const entries = await player.list.entries()
+  if (!entries) return null
+  return entries.map((e, i) => {
+    const source = Q.describeSource(e.filename, MEDIA_ROOT)
+    const nas = nasTrackByPath.get(source.full)
+    return { position: i + 1, id: e.id, file: e.filename, source, name: nas ? String(nas.name).replace(/\.[^./]+$/, '') : Q.nameOfFile(source.full), current: e.current }
+  })
+}
+
+// After an edit: the player's own count and place follow the playlist (the next track change would only tell it later); a NAS
+// queue's track list (the names the player shows) is put in the order of the playlist
+async function queueFollowEdit() {
+  const entries = await queueEntries()
+  if (!entries) return null
+  currentMeta.totalTracks = entries.length
+  const at = entries.findIndex((e) => e.current)
+  if (at >= 0) currentMeta.currentTracknr = at + 1
+  if (currentMeta.currentType === 'nas') currentNasTracks = entries.map((e) => nasTrackByPath.get(e.source.full) ?? { path: e.source.full, name: e.source.file })
+  return entries
+}
+
+const queueNotEditable = (res) => res.status(409).json({ ok: false, error: 'not editable' })
+
+app.get('/queue', async (_req, res) => {
+  if (!queueEditable()) return res.json({ editable: false, entries: [] })
+  const entries = await queueEntries()
+  if (!entries) return res.json({ editable: false, entries: [] })
+  res.json({ editable: true, current: entries.findIndex((e) => e.current) + 1, entries: entries.map(({ position, name, source }) => ({ position, name, file: source.file })) })
+})
+
+// remove the entries at ?pos=1,3 (1-based, as the display counts), or everything else (crop)
+for (const [route, keepChosen] of [['remove', false], ['crop', true]]) {
+  app.get(`/queue/${route}`, async (req, res) => {
+    if (!queueEditable()) return queueNotEditable(res)
+    const entries = await queueEntries()
+    if (!entries) return res.status(503).json({ ok: false })
+    const chosen = Q.indexesOf(req.query.pos, entries.length)
+    const gone = keepChosen ? Q.others(chosen, entries.length) : chosen
+    if (gone.length >= entries.length || gone.length === 0) {
+      // (nothing chosen, or everything: the list is not emptied by accident - "new list" does that)
+      return res.json({ ok: gone.length === 0, removed: 0 })
+    }
+    await player.list.remove(gone)
+    await queueFollowEdit()
+    res.json({ ok: true, removed: gone.length })
+  })
+}
+
+// sort: title, file, path, reverse, random - the entry that plays keeps playing (mpv moves entries, it does not restart them)
+app.get('/queue/sort/:mode', async (req, res) => {
+  if (!queueEditable()) return queueNotEditable(res)
+  const entries = await queueEntries()
+  if (!entries) return res.status(503).json({ ok: false })
+  let target
+  try {
+    // (the title of a NAS entry is the NAS's own name for it; the file and path are those on the NAS)
+    target = Q.sortedIds(entries.map((e) => ({ id: e.id, filename: e.source.full, title: e.name })), req.params.mode)
+  } catch {
+    return res.status(400).json({ ok: false, error: 'unknown sort' })
+  }
+  for (const [from, to] of Q.movesFor(entries.map((e) => e.id), target)) await player.list.move(from, to)
+  await queueFollowEdit()
+  res.json({ ok: true })
+})
+
+// a new list: what plays stops, nothing is queued
+app.get('/queue/new', async (_req, res) => {
+  if (!queueEditable()) return queueNotEditable(res)
+  const nas = currentMeta.currentType === 'nas'
+  stop()
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  await player.list.clear()
+  if (nas) currentNasTracks = []
+  currentMeta.totalTracks = 0
+  currentMeta.currentTracknr = 0
+  res.json({ ok: true })
+})
+
+// ---- the folders to add from: the library's, or the NAS's (a path that starts with "nas:") ----
+
+// the NAS's own lists (the box's backend API; they cost a call to the NAS): the folders shown on the box, or the ones below a folder
+async function nasFolders(nasPath, ms = 25000) {
+  const url = nasPath ? `http://localhost:8200/api/nas/children?path=${encodeURIComponent(nasPath)}` : 'http://localhost:8200/api/nas/artists?expand=1'
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(ms) })
+    const list = response.ok ? await response.json() : null
+    if (!Array.isArray(list)) return null
+    return list
+      .filter((entry) => entry?.nasPath)
+      .map((entry) => ({ name: String(entry.title || entry.artist || path.posix.basename(entry.nasPath)), path: `${NAS_PREFIX}${entry.nasPath}`, audio: 0 }))
+  } catch {
+    return null
+  }
+}
+
+// the audio tracks of a NAS folder, as the NAS tab plays them (an album with a cue sheet is one file: it is not added)
+async function nasFolderTracks(nasPath) {
+  try {
+    const response = await fetch(`http://localhost:8200/api/nas/tracklist?path=${encodeURIComponent(nasPath)}`, { signal: AbortSignal.timeout(25000) })
+    const list = response.ok ? await response.json() : null
+    return Array.isArray(list) ? list.filter((t) => t?.path && t.cue !== true) : []
+  } catch {
+    return []
+  }
+}
+
+// the folders of the library to add from (?path= the folder, '' the library itself). A queue of the NAS adds from the NAS; with nothing
+// queued the browser starts at the library and has the NAS (when it has folders to show) as a folder of its own.
+app.get('/queue/dirs', async (req, res) => {
+  const wanted = String(req.query.path ?? '')
+  const kind = queueKind()
+  if (wanted.startsWith(NAS_PREFIX) || (kind === 'nas' && wanted === '')) {
+    const nasPath = wanted.slice(NAS_PREFIX.length)
+    const folders = await nasFolders(nasPath)
+    if (!folders) return res.status(502).json({ ok: false, error: 'NAS not reachable' })
+    return res.json({ ok: true, path: wanted, audio: 0, canAdd: nasPath !== '', folders })
+  }
+  if (kind === 'nas') return res.status(409).json({ ok: false, error: 'not the same kind' })
+  const listing = Q.listFolders(MEDIA_ROOT, wanted)
+  if (!listing) return res.status(404).json({ ok: false })
+  // (the library's root holds the three categories - the other folders there are the box's own: covers, the NAS copy, downloads)
+  if (wanted === '') listing.folders = listing.folders.filter((f) => ['audiobook', 'music', 'other'].includes(f.name))
+  if (wanted === '' && kind === null && (await nasFolders('', 4000))?.length) listing.folders.push({ name: 'NAS', path: NAS_PREFIX, audio: 0 })
+  res.json({ ok: true, ...listing, canAdd: listing.audio > 0 })
+})
+
+// the audio files directly in ?path= are queued after the last entry (an empty queue: they start playing)
+app.get('/queue/add', async (req, res) => {
+  const wanted = String(req.query.path ?? '')
+  if (typeof player.list !== 'object') return res.status(409).json({ ok: false })
+  const kind = queueKind()
+  if (wanted.startsWith(NAS_PREFIX)) {
+    const nasPath = wanted.slice(NAS_PREFIX.length)
+    if (!nasPath) return res.status(400).json({ ok: false })
+    if (kind === 'local') return res.status(409).json({ ok: false, error: 'not the same kind' })
+    if (kind === null) {
+      // nothing queued: the folder plays as an album of the NAS does (its list is asked for, the start held while paused, ...)
+      switchToMplayer()
+      currentMeta.currentType = 'nas'
+      await playNasList(encodeURIComponent(nasPath))
+      return res.json({ ok: true })
+    }
+    const tracks = await nasFolderTracks(nasPath)
+    if (tracks.length === 0) return res.status(404).json({ ok: false, error: 'no audio there' })
+    rememberNasTracks(tracks)
+    await player.list.append(tracks.map(nasStreamUrl))
+    await queueFollowEdit()
+    return res.json({ ok: true, added: tracks.length })
+  }
+  if (kind === 'nas') return res.status(409).json({ ok: false, error: 'not the same kind' })
+  const files = Q.audioFilesIn(MEDIA_ROOT, wanted)
+  if (!files || files.length === 0) return res.status(404).json({ ok: false, error: 'no audio there' })
+  if (kind === 'local') {
+    await player.list.append(files)
+    await queueFollowEdit()
+  } else {
+    await playQueueFiles(files, wanted)
+  }
+  res.json({ ok: true, added: files.length })
+})
+
+// these files are the playlist and play from the first (a folder added to an empty queue, a loaded list)
+async function playQueueFiles(files, label) {
+  playbackGeneration++
+  playbackRequest++
+  resetLocalShuffle()
+  clearLibraryResumeTimers()
+  switchToMplayer()
+  currentCue = null
+  currentMeta.currentType = 'local'
+  currentMeta.trackFile = undefined
+  currentMeta.finished = false
+  currentMeta.pause = false
+  currentMeta.currentTracknr = 0
+  currentMeta.path = label
+  currentMeta.totalTracks = files.length
+  writeplayerstatePlay()
+  await player.list.replace(files)
+  player.setVolume(volumeStart)
+}
+
+// the same for tracks of the NAS (a loaded list of the NAS)
+async function playQueueNas(tracks, label) {
+  playbackGeneration++
+  playbackRequest++
+  resetLocalShuffle()
+  clearLibraryResumeTimers()
+  switchToMplayer()
+  currentCue = null
+  rememberNasTracks(tracks)
+  currentNasTracks = tracks
+  currentMeta.currentType = 'nas'
+  currentMeta.trackFile = undefined
+  currentMeta.finished = false
+  currentMeta.pause = false
+  currentMeta.currentTracknr = 0
+  currentMeta.path = label
+  currentMeta.album = label
+  currentMeta.totalTracks = tracks.length
+  currentMeta.currentTrackname = String(tracks[0]?.name ?? label).replace(/\.[^./]+$/, '')
+  writeplayerstatePlay()
+  await player.list.replace(tracks.map(nasStreamUrl))
+  player.setVolume(volumeStart)
+}
+
+// save the queue under a name (?name=; without one: the album and the day). A NAS queue is saved as paths on the NAS.
+app.get('/queue/save', async (req, res) => {
+  if (!queueEditable()) return queueNotEditable(res)
+  const entries = await queueEntries()
+  if (!entries || entries.length === 0) return res.status(409).json({ ok: false, error: 'nothing to save' })
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '.')
+  const fallback = `${String(currentMeta.album || 'List').replace(/[^\p{L}\p{N} ._()-]/gu, ' ').trim().slice(0, 40) || 'List'} ${stamp}`
+  const nas = currentMeta.currentType === 'nas'
+  const name = queueLists.save(req.query.name ?? fallback, entries.map((e) => (nas ? `${NAS_PREFIX}${e.source.full}` : e.file)))
+  if (!name) return res.status(400).json({ ok: false, error: 'bad name' })
+  res.json({ ok: true, name })
+})
+
+app.get('/queue/lists', (_req, res) => res.json({ ok: true, lists: queueLists.list() }))
+
+app.get('/queue/load', async (req, res) => {
+  const saved = queueLists.load(req.query.name) ?? []
+  if (typeof player.list !== 'object') return res.status(409).json({ ok: false })
+  if (saved[0]?.startsWith(NAS_PREFIX)) {
+    // (a list of the NAS: its tracks - a track the NAS does not have any more is skipped by mpv when it comes to it)
+    const tracks = saved.filter((f) => f.startsWith(NAS_PREFIX)).map((f) => f.slice(NAS_PREFIX.length)).map((p) => nasTrackByPath.get(p) ?? { path: p, name: path.posix.basename(p) })
+    await playQueueNas(tracks, String(req.query.name))
+    return res.json({ ok: true, count: tracks.length })
+  }
+  // (a file that is gone from the box is left out of the list)
+  const files = saved.filter((f) => f.startsWith(`${MEDIA_ROOT}/`) && !f.includes('..') && fs.existsSync(f))
+  if (files.length === 0) return res.status(404).json({ ok: false, error: 'list not found or empty' })
+  await playQueueFiles(files, String(req.query.name))
+  res.json({ ok: true, count: files.length })
+})
+
+app.get('/queue/deletelist', (req, res) => res.json({ ok: queueLists.remove(req.query.name) }))
+
+// what is known of the entry at ?pos=
+app.get('/queue/info', async (req, res) => {
+  const entries = await queueEntries()
+  const entry = entries?.[Q.indexesOf(req.query.pos, entries?.length ?? 0)[0]]
+  if (!entry) return res.status(404).json({ ok: false })
+  let size = 0
+  if (entry.source.inLibrary) {
+    try {
+      size = fs.statSync(entry.source.full).size
+    } catch {
+      // gone
+    }
+  }
+  res.json({ ok: true, position: entry.position, name: entry.name, file: entry.source.file, folder: entry.source.folder, size, extension: entry.source.extension })
+})
+
 /*endpoint to return all local metainformation*/
 /*only used if sonos-kids-player is modified*/
 app.get('/local', (_req, res) => {
@@ -3490,7 +3952,7 @@ app.get('/local', (_req, res) => {
   // landen nicht in der Response, obwohl die Mutationen am Objekt
   // ankommen.
   // (generation: which start this is - a stop of the display's background playback names it, see ?gen=)
-  res.json({ ...currentMeta, generation: playbackRequest })
+  res.json({ ...currentMeta, generation: playbackRequest, shuffleSupported: typeof player.setShuffle === 'function' })
 })
 
 app.get('/spotify/token', (_req, res) => {
@@ -3511,6 +3973,11 @@ app.get('/local/tracklist/:encoded', (req, res) => {
   const playedTitelmod = decodeURI(req.params.encoded).replace(/:/g, '/')
   if (playedTitelmod.split('/').includes('..')) {
     res.status(400).json({ error: 'invalid path' })
+    return
+  }
+  const album = extensions.albumFor(playedTitelmod)
+  if (album?.tracklist) {
+    res.json(album.tracklist())
     return
   }
 
@@ -3699,6 +4166,7 @@ app.use((req, res) => {
   // picture of a podcast played before it (radio and podcasts set their own below, Spotify brings its own).
   const newMedia = command.name.includes('spotify:') || ['library', 'nas', 'tidal', 'radio', 'rss'].some((segment) => hasDirSegment(command, segment))
   if (newMedia) {
+    resetLocalShuffle()
     playbackRequest++
     currentMeta.pause = false
     if (['library', 'nas', 'tidal'].some((segment) => hasDirSegment(command, segment))) currentMeta.cover = triggerCover
@@ -3815,6 +4283,12 @@ app.use((req, res) => {
     // +5 / -5 as before; other steps (1..10) come from the rotary encoder
     const step = Math.min(10, Math.max(1, Math.abs(Number.parseInt(command.name, 10))))
     setVolume(command.name.startsWith('+') ? 1 : 0, step)
+  }
+  else if (/^=\d{1,3}$/.test(command.name)) setVolumeTo(Number.parseInt(command.name.slice(1), 10))
+  else if (command.name === 'repeaton' || command.name === 'repeatoff') {
+    // (mpv: the playlist loops; with mplayer nothing changes and the button shows it)
+    currentMeta.repeat = command.name === 'repeaton' && typeof player.setRepeat === 'function'
+    player.setRepeat?.(command.name === 'repeaton')
   }
   else if (command.name === 'shuffleon') shuffleon()
   else if (command.name === 'shuffleoff') shuffleoff()
