@@ -24,6 +24,8 @@ Options: `--www <display build>` (default `src/frontend-box/www/browser`), `--ou
 - `custom`: the example landscape `demo-bibliothek/custom-beispiel.svg` instead of the parents' picture, with the hint
   "Beispiel".
 - `tagundnacht`: the day (the script sets the clock to 12:00).
+- `winamp`: the main window with the theme's base skin (`themes/winamp/base-2.91.wsz`, unpacked by the script as the
+  box does it) and a made-up track that plays ("3. Lumi am Meer"), so the clock, the analyser and the title show.
 
 The demo library (`demo-bibliothek/`) is made up: six covers without text and short invented names, no real audio
 plays, characters or brands. The pictures may go into the public repository.
