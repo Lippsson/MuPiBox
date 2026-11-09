@@ -1086,13 +1086,8 @@ function startSkeleton() {
       ${navRow('g-system', 'System', 'Über die Box, Neustart, Updates', 'gear')}
       ${navRow('ext:manual', 'Handbuch', 'Anleitung zu Box, Display und App', 'book')}
     </div></section>`,
-    // (the donation box: last on the start page)
-    `<section class="card donate-box start-donate">
-      <span class="tile">${icon('heart', 20)}</span>
-      <div class="donate-text"><h2>MuPiBox unterstützen</h2>
-        <p class="help">MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.</p></div>
-      <a class="btn primary" href="https://mupibox.de/spenden/" target="_blank" rel="noopener">${icon('ext', 16)}Zur Spendenseite</a>
-    </section>`,
+    // (no donation box here for now: one way for the notice in the app - with the statistics' switch - is still to be
+    // agreed on in the core team; the old admin interface has its monthly one)
   ]
 }
 
