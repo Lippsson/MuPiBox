@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
+import { deflateRawSync } from 'node:zlib'
 import { readZip } from './app-api/winamp-skin'
 import { verifyPackage, checkManifest, checkSettings, checkUdevRules, checkUnitFile, type Manifest } from './app-api/extensions'
 
@@ -48,6 +49,42 @@ describe('manifest of an extension', () => {
     assert.ok(checkManifest(base({ player: 'player.js' }), files()))
     assert.ok(checkManifest(base({ hostApi: 4 }), files()))
     assert.ok(checkManifest(base({ version: '1.0' }), files()))
+  })
+  it('counts what really unpacks, not the sizes the archive names', () => {
+    // one file that says it has 100 bytes and unpacks to 1.5 MB - over a whole limit of 1 MB
+    const raw = deflateRawSync(Buffer.alloc(1_500_000))
+    const name = Buffer.from('a.txt')
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(8, 8)
+    local.writeUInt32LE(raw.length, 18)
+    local.writeUInt32LE(100, 22)
+    local.writeUInt16LE(name.length, 26)
+    const central = Buffer.alloc(46)
+    central.writeUInt32LE(0x02014b50, 0)
+    central.writeUInt16LE(8, 10)
+    central.writeUInt32LE(raw.length, 20)
+    central.writeUInt32LE(100, 24)
+    central.writeUInt16LE(name.length, 28)
+    central.writeUInt32LE(0, 42)
+    const cdStart = local.length + name.length + raw.length
+    const end = Buffer.alloc(22)
+    end.writeUInt32LE(0x06054b50, 0)
+    end.writeUInt16LE(1, 8)
+    end.writeUInt16LE(1, 10)
+    end.writeUInt32LE(central.length + name.length, 12)
+    end.writeUInt32LE(cdStart, 16)
+    const zip = Buffer.concat([local, name, raw, central, name, end])
+    assert.throws(() => readZip(zip, { maxFile: 2_000_000, maxTotal: 1_048_576, strict: true }))
+  })
+  it('refuses the names of the folders all extensions share (settings, data)', () => {
+    assert.ok(checkManifest(base({ id: 'settings' }), files()))
+    assert.ok(checkManifest(base({ id: 'data' }), files()))
+  })
+  it('refuses a package name apt-get would read as "remove"', () => {
+    assert.ok(checkManifest(base({ system: { packages: ['lighttpd-'] } }), files()))
+    assert.strictEqual(checkManifest(base({ system: { packages: ['libcdio-utils', 'g++'] } }), files()), null)
+    assert.strictEqual(checkManifest(base({ system: { packages: ['libcdio-utils', 'cd-discid'] } }), files()), null)
   })
   it('refuses file names that leave the folder', () => {
     assert.ok(checkManifest(base({ player: '../player.js' }), files('../player.js')))

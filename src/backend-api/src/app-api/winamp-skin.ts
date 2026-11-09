@@ -80,13 +80,20 @@ export function readZip(buf: Buffer, limits: ZipLimits = {}): ZipEntry[] {
       if (limits.strict) throw new Error(`${name.slice(0, 40)} is too large`)
       continue
     }
-    total += size
-    if (total > maxTotal) throw new Error('too large')
+    if (total + size > maxTotal) throw new Error('too large')
     if (local + 30 > buf.length || buf.readUInt32LE(local) !== 0x04034b50) throw new Error('broken zip')
     const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28)
     const raw = buf.subarray(start, start + compressed)
-    if (method === 0) entries.push({ name, data: Buffer.from(raw) })
-    else if (method === 8) entries.push({ name, data: inflateRawSync(raw, { maxOutputLength: maxFile }) })
+    // (what really comes out counts, not what the archive says: a file that says it is small and unpacks to much more
+    // went past the limit of the whole - at most what is left of it, and it must be the size it said)
+    let data: Buffer | null = null
+    if (method === 0) data = Buffer.from(raw)
+    else if (method === 8) data = inflateRawSync(raw, { maxOutputLength: Math.max(1, Math.min(maxFile, maxTotal - total)) })
+    if (!data) continue
+    if (data.length !== size) throw new Error('broken zip')
+    total += data.length
+    if (total > maxTotal) throw new Error('too large')
+    entries.push({ name, data })
   }
   return entries
 }
