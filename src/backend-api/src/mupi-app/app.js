@@ -11223,7 +11223,7 @@ function mountTidal(root, page) {
 /* Extensions (docs/extensions.md): the catalog on GitHub, install / switch off / remove, and the settings the installed ones declare */
 
 // the guideline for people who write extensions (English), in the repository
-const EXT_GUIDELINE_URL = 'https://github.com/Lippsson/MuPiBox/blob/dev5.1/extensions/README.md'
+const EXT_GUIDELINE_URL = 'https://github.com/wowa1990/MuPiBox/blob/upstream-v5.1-pr/extensions/README.md'
 const exts = { installed: [], catalog: [], catalogError: null }
 async function loadExtensions() {
   const r = await api(`${API}/extensions`)
@@ -12309,12 +12309,17 @@ const CONTROLLERS = {
             {
               type: 'html',
               html: `<div class="ext-bar"><div class="search">${icon('search')}<input class="input" id="ext-q" type="search" placeholder="Erweiterungen suchen" autocomplete="off"></div>
-                <button type="button" class="btn" data-ext-upload>Datei hochladen</button><input type="file" id="ext-file" accept=".mpx,.zip,application/zip" hidden></div>`,
+                ${exts.devMode ? `<button type="button" class="btn" data-ext-upload>Datei hochladen</button><input type="file" id="ext-file" accept=".mpx,.zip,application/zip" hidden>` : ''}</div>`,
             },
             { type: 'html', html: `<h2 class="ext-title">Alle Erweiterungen</h2>${note}<div class="ext-grid">${cards.join('') || '<p class="help">Keine Erweiterungen verfügbar.</p>'}</div>` },
             {
               type: 'html',
-              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/Lippsson/MuPiBox/tree/dev5.1/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab. <span translate="no">${esc(guide[0])}<a href="${EXT_GUIDELINE_URL}" target="_blank" rel="noopener noreferrer">${esc(tr('Richtlinie für Erweiterungen'))}</a>${esc(guide[1])}</span></span></div>`,
+              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/wowa1990/MuPiBox/tree/upstream-v5.1-pr/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab. <span translate="no">${esc(guide[0])}<a href="${EXT_GUIDELINE_URL}" target="_blank" rel="noopener noreferrer">${esc(tr('Richtlinie für Erweiterungen'))}</a>${esc(guide[1])}</span></span></div>`,
+            },
+            // (own extension files only in developer mode: an extension can do everything on the box)
+            {
+              type: 'html',
+              html: `<div class="row"><span class="lbl"><b>Entwicklermodus</b><small>Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.</small></span><label class="switch"><input type="checkbox" data-ext-devmode ${exts.devMode ? 'checked' : ''} aria-label="Entwicklermodus"><span></span></label></div>`,
             },
           ],
         },
@@ -12322,6 +12327,28 @@ const CONTROLLERS = {
     },
     mount(root) {
       const entry = (id) => exts.installed.find((e) => e.id === id) ?? exts.catalog.find((e) => e.id === id)
+      // developer mode: switched on only after the warning
+      $('[data-ext-devmode]', root)?.addEventListener('change', (ev) => {
+        const cb = ev.target
+        const set = async (on) => {
+          const r = await api(`${API}/extensions/devmode`, { method: 'POST', body: { on } })
+          if (!r.ok) {
+            cb.checked = !on
+            return toast('Das hat nicht geklappt', 'info')
+          }
+          renderPage(currentPage(), true)
+        }
+        if (!cb.checked) return set(false)
+        cb.checked = false
+        confirmSheet(
+          'Entwicklermodus',
+          'Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.',
+          () => {
+            cb.checked = true
+            return set(true)
+          },
+        )
+      })
       $('#ext-q', root)?.addEventListener('input', (ev) => {
         const q = ev.target.value.trim().toLowerCase()
         for (const c of root.querySelectorAll('.ext-card')) c.hidden = !!q && !c.dataset.q.includes(q)

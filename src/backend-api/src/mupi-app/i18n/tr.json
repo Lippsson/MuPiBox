@@ -3265,5 +3265,8 @@
  "Verschieben": "Taşı",
  "Luftfeuchte": "Nem",
  "Windrichtung": "Rüzgâr yönü",
- "Regenmenge": "Yağış miktarı"
+ "Regenmenge": "Yağış miktarı",
+ "Entwicklermodus": "Geliştirici modu",
+ "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Yalnızca katalogdan değil, kendi uzantı dosyalarını yükle ve kur.",
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "Geliştirici modunda kendi uzantı dosyalarını yükleyebilirsin. Bir uzantı kutuda her şeyi yapabilir – yönetici (root) olarak bile. Yalnızca kendin hazırladığın ya da kaynağına güvendiğin dosyaları yükle."
 }

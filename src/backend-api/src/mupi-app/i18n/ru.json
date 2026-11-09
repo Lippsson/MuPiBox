@@ -3265,5 +3265,8 @@
  "Verschieben": "Переместить",
  "Luftfeuchte": "Влажность",
  "Windrichtung": "Направление ветра",
- "Regenmenge": "Количество осадков"
+ "Regenmenge": "Количество осадков",
+ "Entwicklermodus": "Режим разработчика",
+ "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Загружать и устанавливать собственные файлы расширений, не только из каталога.",
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "В режиме разработчика вы можете загружать собственные файлы расширений. Расширение может делать на боксе всё – даже как администратор (root). Загружайте только файлы, которые вы создали сами или источнику которых доверяете."
 }

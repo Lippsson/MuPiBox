@@ -3265,5 +3265,8 @@
  "Verschieben": "Déplacer",
  "Luftfeuchte": "Humidité",
  "Windrichtung": "Direction du vent",
- "Regenmenge": "Quantité de pluie"
+ "Regenmenge": "Quantité de pluie",
+ "Entwicklermodus": "Mode développeur",
+ "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Téléverser et installer tes propres fichiers d'extension, pas seulement depuis le catalogue.",
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "En mode développeur, tu peux téléverser tes propres fichiers d'extension. Une extension peut tout faire sur la box – même en tant qu'administrateur (root). Ne téléverse que des fichiers que tu as créés toi-même ou dont tu fais confiance à la source."
 }

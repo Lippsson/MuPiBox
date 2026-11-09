@@ -3265,5 +3265,8 @@
  "Verschieben": "Přesunout",
  "Luftfeuchte": "Vlhkost",
  "Windrichtung": "Směr větru",
- "Regenmenge": "Množství deště"
+ "Regenmenge": "Množství deště",
+ "Entwicklermodus": "Režim vývojáře",
+ "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Nahrávat a instalovat vlastní soubory rozšíření, nejen z katalogu.",
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "V režimu vývojáře můžete nahrávat vlastní soubory rozšíření. Rozšíření může na boxu dělat cokoli – i jako správce (root). Nahrávejte jen soubory, které jste sami vytvořili nebo jejichž zdroji důvěřujete."
 }

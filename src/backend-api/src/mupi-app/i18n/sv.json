@@ -3265,5 +3265,8 @@
  "Verschieben": "Flytta",
  "Luftfeuchte": "Luftfuktighet",
  "Windrichtung": "Vindriktning",
- "Regenmenge": "Regnmängd"
+ "Regenmenge": "Regnmängd",
+ "Entwicklermodus": "Utvecklarläge",
+ "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Ladda upp och installera egna tilläggsfiler, inte bara från katalogen.",
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "I utvecklarläget kan du ladda upp egna tilläggsfiler. Ett tillägg kan göra allt på boxen – även som administratör (root). Ladda bara upp filer som du själv har gjort eller vars källa du litar på."
 }

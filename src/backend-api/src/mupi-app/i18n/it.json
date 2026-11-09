@@ -3265,5 +3265,8 @@
  "Verschieben": "Sposta",
  "Luftfeuchte": "Umidità",
  "Windrichtung": "Direzione del vento",
- "Regenmenge": "Quantità di pioggia"
+ "Regenmenge": "Quantità di pioggia",
+ "Entwicklermodus": "Modalità sviluppatore",
+ "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Carica e installa file di estensione propri, non solo dal catalogo.",
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "In modalità sviluppatore puoi caricare file di estensione propri. Un'estensione può fare tutto sul box, anche come amministratore (root). Carica solo file che hai creato tu o di cui ti fidi della fonte."
 }

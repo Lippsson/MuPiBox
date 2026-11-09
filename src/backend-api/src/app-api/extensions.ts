@@ -33,7 +33,9 @@ if (!process.env.MUPIBOX_EXT_DIR && process.env.NODE_ENV !== 'test' && process.e
   }
 }
 export const HOST_API = 3
-const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/catalog.json'
+// (the catalog of the MuPiBox, in its repository: what is in it is trusted - an extension can do everything on the box; while 5.1
+// is not with splitti yet, the 5.1 branch of the fork that builds it)
+const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/catalog.json'
 // the largest package (the file as it is sent and downloaded; what is in it may be three times that, unpacked)
 const MAX_MPX = 16 * 1024 * 1024
 const ID = /^[a-z][a-z0-9-]{1,30}$/
@@ -374,9 +376,15 @@ export function checkSettings(manifest: Manifest, values: Record<string, unknown
 
 let catalogCache: { at: number; list: CatalogEntry[] } | null = null
 
+/** Developer mode (mupibox.extensionDevMode, switched in the app): own extension files and another catalog. Off, only the MuPiBox
+ *  catalog installs - an extension runs as the box's user, who may do everything as root. */
+function devMode(deps: ExtensionDeps): boolean {
+  return (deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.extensionDevMode === true
+}
+
 function catalogUrl(deps: ExtensionDeps): string {
   const set = (deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.extensionCatalog
-  return typeof set === 'string' && /^https:\/\//.test(set) ? set : DEFAULT_CATALOG
+  return devMode(deps) && typeof set === 'string' && /^https:\/\//.test(set) ? set : DEFAULT_CATALOG
 }
 
 /** The page of the catalog to read in a browser: the extensions folder on GitHub for the default catalog, else the address that was set. */
@@ -719,7 +727,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     } catch (error) {
       catalogError = (error as Error).message
     }
-    res.json({ installed, catalog, catalogError, catalogPage: catalogPage(deps), hostApi: HOST_API })
+    res.json({ installed, catalog, catalogError, catalogPage: catalogPage(deps), hostApi: HOST_API, devMode: devMode(deps) })
   })
 
   const start = (action: Job['action'], work: (id: string, body?: Record<string, unknown>) => Promise<void>): RequestHandler[] => [
@@ -747,6 +755,11 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     const token = typeof body?.token === 'string' ? body.token : ''
     const upload = token ? uploads.get(token) : undefined
     if (token) uploads.delete(token)
+    // (an uploaded file only in developer mode - switched off meanwhile: not installed)
+    if (token && !devMode(deps)) {
+      Object.assign(jobs.get(id) as Job, { running: false, ok: false, error: 'own extension files only in developer mode' })
+      return Promise.resolve()
+    }
     return installExtension(id, deps, upload && upload.until > Date.now() ? upload.pkg : undefined)
   }))
 
@@ -776,6 +789,10 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
   // An extension file from the user (not from the catalog): read and checked here, nothing installed yet. The answer says what it is
   // and what it would set up, the app asks, and the install then names the token.
   router.post('/extensions/upload', requireSession, requireCsrf, express.raw({ type: () => true, limit: MAX_MPX }), async (req, res) => {
+    if (!devMode(deps)) {
+      res.status(403).json({ error: 'own extension files only in developer mode' })
+      return
+    }
     const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
     const checked = verifyPackage(bytes)
     if (!checked.ok) {
@@ -801,6 +818,23 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
       installedVersion: state[m.id]?.version ?? null,
       sha256: createHash('sha256').update(bytes).digest('hex'),
     })
+  })
+  // Developer mode on or off ({ on }): off, files uploaded before and not installed yet are forgotten
+  router.post('/extensions/devmode', requireSession, requireCsrf, async (req, res) => {
+    const on = (req.body as { on?: unknown } | undefined)?.on === true
+    if (!deps.updateMupiboxConfig) {
+      res.status(500).json({ error: 'settings cannot be written' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const mb = ((cfg.mupibox as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      if (on) mb.extensionDevMode = true
+      else delete mb.extensionDevMode
+      cfg.mupibox = mb
+    })
+    if (!on) uploads.clear()
+    catalogCache = null
+    res.json({ ok: true, devMode: on })
   })
   router.post('/extensions/remove', ...start('remove', removeExtension))
 

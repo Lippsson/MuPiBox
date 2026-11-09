@@ -3265,5 +3265,8 @@
  "Verschieben": "Siirrä",
  "Luftfeuchte": "Ilmankosteus",
  "Windrichtung": "Tuulen suunta",
- "Regenmenge": "Sademäärä"
+ "Regenmenge": "Sademäärä",
+ "Entwicklermodus": "Kehittäjätila",
+ "Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.": "Lataa ja asenna omia laajennustiedostoja, ei vain luettelosta.",
+ "Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.": "Kehittäjätilassa voit ladata omia laajennustiedostoja. Laajennus voi tehdä boksissa mitä tahansa – myös ylläpitäjänä (root). Lataa vain tiedostoja, jotka olet itse tehnyt tai joiden lähteeseen luotat."
 }
