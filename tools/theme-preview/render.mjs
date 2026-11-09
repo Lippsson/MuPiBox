@@ -395,6 +395,9 @@ for (const theme of themes) {
     }
   }
   if (theme === 'custom') await evaluate(exampleBadge)
+  // Winamp: the start page shows the library under the windows (as on the box) - the button that brings the player back,
+  // so the picture shows the main window
+  if (theme === 'winamp') await evaluate(`(() => { document.querySelector('mupi-winamp-shell .wa-back')?.click(); return 'ok' })()`)
   await sleep(1800)
   const shot = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 800, height: 480, scale: 0.8 } })
   const file = path.join(out, `${theme}.png`)
