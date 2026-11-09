@@ -2006,7 +2006,15 @@ function serviceCover(it) {
   return ref ? `/api/spotify/cover-for/${ref[0]}/${encodeURIComponent(ref[1])}` : ''
 }
 // (no cover of its own and none from the service - a radio station, a local entry: the artist's cover, if one is set)
-const coverOf = (it) => it.cover_override ?? it.cover ?? (serviceCover(it) || it.artistcover_override || it.artistcover || '')
+const coverOf = (it) => ownCover(it.cover_override ?? it.cover ?? (serviceCover(it) || it.artistcover_override || it.artistcover || ''))
+// A picture of the box's own cover folder (Bibliothek › Cover, saved as http://<box name>/cover/<file>): through the
+// app's own address - a phone does not know the box's name (MuPiBox), the box's display does. Only a name without a
+// dot (the box's) or the address the app is opened with; a picture of another server stays as it is.
+function ownCover(url) {
+  const m = /^https?:\/\/([^/:?#]+)(?::(?:80|443))?\/cover\/([^/?#]+)$/i.exec(String(url ?? ''))
+  if (!m) return url
+  return !m[1].includes('.') || m[1] === location.hostname ? `/cover/${m[2]}` : url
+}
 
 // Spotify entries that only name an artist are not playable on their own (the box looks their albums up itself)
 // Entries that subscribe a whole Spotify artist (only artistid): a folder of that artist's albums (as on the box)
@@ -2015,7 +2023,7 @@ const spotifyArtistTile = (it) => ({
   kind: 'spartist',
   title: itemArtist(it) || itemTitle(it),
   sub: catOf(it) === 'music' ? 'Alle Alben' : 'Alle Folgen',
-  cover: it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? `/api/spotify/cover-for/artist/${encodeURIComponent(it.artistid)}`,
+  cover: ownCover(it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? `/api/spotify/cover-for/artist/${encodeURIComponent(it.artistid)}`),
   badge: 'Spotify',
   folder: true,
   path: it.artistid,
@@ -2027,7 +2035,7 @@ const tidalArtistTile = (it) => ({
   kind: 'tdartist',
   title: itemArtist(it) || itemTitle(it),
   sub: catOf(it) === 'music' ? 'Alle Alben' : 'Alle Folgen',
-  cover: it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? '',
+  cover: ownCover(it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? ''),
   badge: 'TIDAL',
   folder: true,
   path: it.id,
@@ -2999,6 +3007,10 @@ function openEntrySheet(item, back = null) {
     ['artistcover', place ? 'Ordner-Cover (Bild-URL)' : 'Interpret-Cover (Bild-URL)'],
   ]
   const val = (k) => item[`${k}_override`] ?? (isSync ? '' : item[k] ?? '')
+  // an own picture in a Spotify entry (not one of Spotify's, as most entries keep): one tap back to Spotify's (both
+  // picture fields emptied)
+  const fromSpotify = (u) => /^https:\/\/i\.scdn\.co\//.test(u) || u.startsWith('/api/spotify/cover')
+  const spotifyPictureBack = item.type === 'spotify' && !!serviceCover(item) && [val('cover'), val('artistcover')].some((v) => v && !fromSpotify(String(v)))
   const folder = place ? String(item.artist ?? '').trim() : ''
   // (alone in its folder - as the app added playlists before, in one of their own name: a tile spares a tap)
   const aloneInFolder = !!folder && (lib.items ?? []).filter((it) => it && !it.isResume && it.category === item.category && String(it.artist ?? '').trim() === folder).length === 1
@@ -3019,6 +3031,7 @@ function openEntrySheet(item, back = null) {
              }`
        })
        .join('')}
+     ${spotifyPictureBack ? `<div class="btns"><button type="button" class="btn" data-svc-pic>${icon('image', 18)}Bild von Spotify verwenden</button></div>` : ''}
      <div class="field"><label for="e-cat">Kategorie</label>${catSelect('e-cat', item.category_override ?? (isSync ? '' : item.category === 'radio' ? 'other' : item.category), isSync)}</div>
      ${playOptions ? entryPlayFields(item) : ''}
      ${item.type === 'rss' ? offlineField(item) : ''}
@@ -3033,6 +3046,15 @@ function openEntrySheet(item, back = null) {
       if (placer) sheet.querySelector('#e-cat').addEventListener('change', () => void placer.reload())
       if (wholeArtist) loadArtistAlbums(item, sheet.querySelector('#e-albums'))
       if (tidalArtist) wireTidalRange(item, sheet)
+      // (the own pictures out of the fields - saved with "Speichern", then the box shows Spotify's picture again)
+      sheet.querySelector('[data-svc-pic]')?.addEventListener('click', (e) => {
+        for (const k of ['cover', 'artistcover']) {
+          const input = sheet.querySelector(`#e-${k}`)
+          if (input) input.value = ''
+        }
+        e.currentTarget.disabled = true
+        toast('Mit „Speichern“ zeigt die Box wieder das Bild von Spotify')
+      })
       if (item.type === 'rss') loadOfflineStatus(item.id, sheet.querySelector('#e-offline-status'))
       if (playOptions && item.type === 'rss') {
         wireEpisodePick(sheet, 'e', () =>
@@ -3157,6 +3179,7 @@ function openEntrySheet(item, back = null) {
 // A cover of the SD card after it was changed: the same address, so the browser is told it is new (its memory would
 // show the old picture)
 function stampedCover(url) {
+  url = ownCover(url)
   return url && lib.coverStamp && String(url).startsWith('/api/library/file') ? `${url}&v=${lib.coverStamp}` : url
 }
 const localCoverUrl = (path) => `/api/library/file?path=${encodeURIComponent(path)}&w=400`
