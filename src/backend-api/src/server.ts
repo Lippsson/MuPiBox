@@ -43,6 +43,7 @@ import { startSpotifyLoginWatch } from './app-api/spotify-auth-age'
 import { startTlsWatch } from './app-api/tls'
 import { startWeeklySummary } from './app-api/weekly-summary'
 import { startInstallationStatistics } from './app-api/telemetry'
+import { registerPhotoDisplayRoutes } from './app-api/photos/albums'
 import { startNightDim } from './app-api/night-dim'
 import { bootConfigPath } from './app-api/boot-paths'
 import { startSpeech } from './speech'
@@ -8436,6 +8437,9 @@ app.get('/api/library/children', async (req, res) => {
 })
 
 // Cover images (and audio) of library folders, with Range support.
+// The photo display's albums for the box's display (only with the display switched on - app-api/photos/albums.ts)
+registerPhotoDisplayRoutes(app, { getMupiboxConfig: () => getMupiboxConfigSync() })
+
 app.get('/api/library/file', async (req, res) => {
   const rel = libraryRel(typeof req.query.path === 'string' ? req.query.path : '')
   const contentType = rel ? nasContentTypes[path.extname(rel).toLowerCase()] : undefined

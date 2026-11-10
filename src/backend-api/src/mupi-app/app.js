@@ -2429,6 +2429,11 @@ async function loadLib() {
     api('/api/online-covers'),
     ...CATS.map(([c]) => api(`/api/library/artists?category=${c}`)),
   ])
+  // (the photos' line: its numbers, without holding up the library)
+  api(`${API}/photos/overview?light=1`).then((r) => {
+    lib.photos = r.ok ? r.body : null
+    drawLibPhotos()
+  })
   lib.items = Array.isArray(data.body) ? data.body : []
   lib.sync = sync.ok ? sync.body : null
   lib.nas = Array.isArray(nas.body) ? nas.body : []
@@ -2475,6 +2480,8 @@ const avatarColor = (name) => AVATAR_COLORS[[...String(name)].reduce((h, ch) => 
 function libTop() {
   return [
     `<button class="btn primary block lib-add" id="lib-add">${icon('plus', 18)}Hinzufügen</button>`,
+    // (the photo display's albums: a part of their own, only with the display switched on - see drawLibPhotos)
+    `<div class="wide" id="lib-photos" hidden></div>`,
     `<div class="lib-tiles wide" id="lib-tiles"></div>`,
     `<div class="search wide">${icon('search')}<input class="input" id="lib-q" type="search" placeholder="In der Bibliothek suchen" autocomplete="off" value="${esc(lib.q)}"></div>`,
     `<div class="pills wide" id="lib-cat">${[['all', 'Alle'], ...CATS.map(([c]) => [c, CAT_SHORT[c]]), ['nas', 'NAS']].map(([id, t]) => `<button aria-selected="${lib.cat === id}" data-v="${id}">${t}</button>`).join('')}</div>`,
@@ -2628,10 +2635,23 @@ function libSub(g) {
   return `${g.entries.length} ${g.cat === 'music' ? 'Alben' : 'Folgen'} · ${src}`
 }
 
+function drawLibPhotos() {
+  const box = $('#lib-photos')
+  if (!box) return
+  const p = lib.photos
+  box.hidden = !p?.enabled
+  if (!p?.enabled) return
+  const t = p.totals
+  const sub = t.albums ? `${t.albums} ${t.albums === 1 ? 'Album' : 'Alben'} · ${t.photos} ${t.photos === 1 ? 'Foto' : 'Fotos'}` : 'Noch keine Fotos'
+  box.innerHTML = `<section class="card nav-card"><div class="navlist">${navRow('fotos', 'Fotos', sub, 'image')}</div></section>`
+  box.querySelector('[data-go]').onclick = () => go('fotos')
+}
+
 function drawLib() {
   const list = $('#lib-list')
   if (!list || !lib.items) return
   drawLibTiles()
+  drawLibPhotos()
   libShown = libGroups()
   const total = libShown.reduce((n, g) => n + (g.kind === 'sub' || g.kind === 'pin' ? 0 : g.entries?.length || 1), 0)
   const all = lib.items.filter((it) => it && !it.isResume && it.category !== 'resume' && it.type !== 'library').length + Object.values(lib.local).reduce((n, l) => n + l.length, 0) + lib.nas.length
@@ -11424,6 +11444,372 @@ function mountHa(root, page) {
   }
 }
 
+/* Bibliothek › Fotos (5.1, backend-api app-api/photos/albums.ts): the albums of the photo display - the overview with
+   its numbers and the card's space, an album with its pictures, uploading into it. A part of its own, beside the
+   radio plays and the music: never in their lists, filters or "Hören". */
+
+const photoLib = { overview: null, album: null, albumId: null, selecting: false, chosen: new Set() }
+const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'] }
+const photoFile = (albumId, assetId, size) => `${API}/photos/file/${albumId}/${assetId}/${size}`
+
+async function loadPhotoOverview() {
+  const r = await api(`${API}/photos/overview`)
+  if (!r.ok) throw new Error(`photos ${r.status}`)
+  photoLib.overview = r.body
+}
+
+function photoAlbumRow(a, { toggle = true, sub = '' } = {}) {
+  const [ic, src] = PHOTO_SOURCE[a.source] ?? PHOTO_SOURCE.upload
+  const counts = `${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}${a.videos ? ` · ${a.videos} ${a.videos === 1 ? 'Video' : 'Videos'}` : ''} · ${src}`
+  const state = a.display ? `<small class="ph-state ok">Auf der Box</small>` : `<small class="ph-state">Am Display ausgeblendet</small>`
+  return `<div class="entry ph-album${a.display ? '' : ' hidden-album'}" data-album="${esc(a.id)}">
+    <button class="ph-album-open" data-open="${esc(a.id)}" aria-label="${esc(a.title)}">
+      <span class="ph-thumb">${a.cover ? `<img src="${esc(photoFile(a.id, a.cover, 's'))}" alt="" loading="lazy">` : icon('image', 22)}<span class="ph-src" title="${esc(src)}">${icon(ic, 13)}</span></span>
+      <span class="lbl"><b translate="no">${esc(a.title)}</b><small>${esc(sub || counts)}</small>${state}</span></button>
+    ${toggle ? `<label class="switch"><input type="checkbox" role="switch" data-show="${esc(a.id)}" ${a.display ? 'checked' : ''} aria-label="${esc(tr('Am Display zeigen'))}: ${esc(a.title)}"><span></span></label>` : ''}</div>`
+}
+
+function photoStorageBar(s) {
+  if (!s?.total) return ''
+  const used = s.total - s.free
+  const other = Math.max(0, used - s.photos)
+  const pct = (n) => `${Math.max(0, Math.min(100, (n / s.total) * 100)).toFixed(2)}%`
+  return `<div class="ph-storage"><div class="slider-head"><b>Speicher auf der Box</b><span class="help" style="margin:0">${esc(`${formatBytes(s.free)} frei von ${formatBytes(s.total)}`)}</span></div>
+    <div class="ph-bar" role="img" aria-label="${esc(`${formatBytes(s.photos)} Fotos, ${formatBytes(other)} anderes, ${formatBytes(s.free)} frei`)}"><i class="ph-b-photos" style="width:${pct(s.photos)}"></i><i class="ph-b-other" style="width:${pct(other)}"></i></div>
+    <div class="ph-legend"><span><i class="ph-b-photos"></i>${esc(`Fotos ${formatBytes(s.photos)}`)}</span><span><i class="ph-b-other"></i>${esc(`Hörspiele, Musik und System ${formatBytes(other)}`)}</span><span><i></i>frei</span></div></div>`
+}
+
+function photoOverviewTop() {
+  const o = photoLib.overview
+  if (!o) return []
+  if (!o.enabled) {
+    return [`<section class="card wide"><p class="help" style="margin:0">Die Fotoanzeige ist aus.</p><div class="navlist">${navRow('g-fotos', 'Fotoanzeige einschalten', 'Einstellungen › Fotos', 'image')}</div></section>`]
+  }
+  const buttons = `<div class="btns wide ph-actions"><button class="btn primary" id="ph-upload">${icon('up', 18)}Fotos hochladen</button></div>`
+  if (!o.albums.length) {
+    return [
+      buttons,
+      `<section class="card wide"><div class="photo-hero"><span class="photo-hero-ic">${icon('image', 30)}</span><h2>Noch keine Fotos</h2>
+        <p class="help">Lade Fotos vom Handy hoch. Die Box zeigt sie als Alben am Display.</p></div>${photoStorageBar(o.storage)}</section>`,
+      `<div class="note wide">${icon('lock', 18)}<span>Fotos bleiben auf der Box in deinem Heimnetz. Es gibt keine Links zum Teilen.</span></div>`,
+    ]
+  }
+  const t = o.totals
+  const stat = (label, n) => `<div class="ph-stat"><small>${esc(tr(label))}</small><b>${esc(String(n))}</b></div>`
+  return [
+    buttons,
+    `<section class="card wide"><h2>Überblick</h2><div class="ph-stats">${stat('Fotos', t.photos)}${stat('Videos', t.videos)}${stat('Alben', t.albums)}</div>${photoStorageBar(o.storage)}</section>`,
+    `<section class="card wide"><div class="card-head"><h2>Alben am Display</h2>${o.albums.length > 1 ? '<button class="btn sm" id="ph-order">Reihenfolge</button>' : ''}</div>
+      <div class="rows">${o.albums.map((a) => photoAlbumRow(a)).join('')}</div>
+      <p class="help" style="margin:0">Ausgeblendete Alben bleiben auf der Box, am Display erscheinen sie nicht.</p></section>`,
+    `<section class="card wide"><h2>Anzeige</h2><div class="navlist">${navRow('g-fotos', 'Einstellungen der Fotoanzeige', 'Diashow, Videos, Bildschirmschoner', 'gear')}</div></section>`,
+  ]
+}
+
+async function photoShowSwitch(input, after) {
+  const r = await api(`${API}/photos/albums/${input.dataset.show}`, { method: 'POST', body: { display: input.checked } })
+  if (!r.ok) {
+    input.checked = !input.checked
+    return toast('Nicht gespeichert', 'info')
+  }
+  toast(input.checked ? 'Am Display sichtbar' : 'Am Display ausgeblendet')
+  after?.()
+}
+
+function mountPhotoOverview(root, page) {
+  const again = async () => {
+    await loadPhotoOverview().catch(() => undefined)
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  }
+  for (const b of root.querySelectorAll('[data-open]')) b.onclick = () => openPhotoAlbum(b.dataset.open)
+  for (const s of root.querySelectorAll('[data-show]')) s.onchange = () => photoShowSwitch(s, again)
+  $('#ph-upload', root)?.addEventListener('click', () => photoUploadSheet(null, again))
+  $('#ph-order', root)?.addEventListener('click', () => photoOrderSheet(again))
+}
+
+function openPhotoAlbum(id) {
+  photoLib.albumId = id
+  photoLib.selecting = false
+  photoLib.chosen.clear()
+  try {
+    sessionStorage.setItem('mupi-photo-album', id)
+  } catch {}
+  go('fotoalbum')
+}
+
+// The order on the display: up and down - saved with "Fertig"
+function photoOrderSheet(after) {
+  const list = [...(photoLib.overview?.albums ?? [])]
+  const draw = (sheet) => {
+    sheet.querySelector('#ph-order-rows').innerHTML = list
+      .map(
+        (a, i) => `<div class="entry ph-album" data-i="${i}"><span class="ph-grip" aria-hidden="true">${icon('grid', 16)}</span>
+          <span class="ph-thumb">${a.cover ? `<img src="${esc(photoFile(a.id, a.cover, 's'))}" alt="">` : icon('image', 22)}</span>
+          <span class="lbl"><b translate="no">${esc(a.title)}</b></span>
+          <button class="icon-btn soft" data-up="${i}" ${i ? '' : 'disabled'} aria-label="${esc(tr('Nach oben'))}">${icon('up', 16)}</button>
+          <button class="icon-btn soft ph-down" data-down="${i}" ${i < list.length - 1 ? '' : 'disabled'} aria-label="${esc(tr('Nach unten'))}">${icon('up', 16)}</button></div>`,
+      )
+      .join('')
+    for (const b of sheet.querySelectorAll('[data-up]')) b.onclick = () => move(sheet, Number(b.dataset.up), -1)
+    for (const b of sheet.querySelectorAll('[data-down]')) b.onclick = () => move(sheet, Number(b.dataset.down), 1)
+  }
+  const move = (sheet, i, by) => {
+    const j = i + by
+    if (j < 0 || j >= list.length) return
+    ;[list[i], list[j]] = [list[j], list[i]]
+    draw(sheet)
+    sheet.querySelector(`[data-i="${j}"] [data-${by < 0 ? 'up' : 'down'}]`)?.focus()
+  }
+  openSheet(
+    `<h2>Reihenfolge</h2><p class="help" style="margin:0">Nutze die Pfeile. So erscheinen die Alben am Display.</p><div class="rows" id="ph-order-rows"></div>
+     <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Fertig</button></div>`,
+    (sheet, close) => {
+      draw(sheet)
+      sheet.querySelector('[data-close]').onclick = close
+      sheet.querySelector('[data-ok]').onclick = async () => {
+        const r = await api(`${API}/photos/albums/order`, { method: 'POST', body: { ids: list.map((a) => a.id) } })
+        if (!r.ok) return toast('Nicht gespeichert', 'info')
+        close()
+        toast('Gespeichert')
+        after?.()
+      }
+    },
+  )
+}
+
+// Uploading (the short way, from the overview and an album): into an album chosen or a new one, the files one after the
+// other; what was left out is said at the end with its reason
+const PHOTO_SKIP = { format: 'Format wird nicht unterstützt', duplicate: 'Schon im Album', broken: 'Datei beschädigt', space: 'Kein Platz mehr' }
+function photoUploadSheet(albumId, after) {
+  const uploads = (photoLib.overview?.albums ?? []).filter((a) => a.source === 'upload')
+  const chosen = albumId ?? uploads[0]?.id ?? ''
+  openSheet(
+    `<h2>Fotos hochladen</h2>
+     ${albumId ? '' : `<div class="field"><label for="ph-up-album">Wohin?</label><select class="input" id="ph-up-album">${uploads.map((a) => `<option value="${esc(a.id)}"${a.id === chosen ? ' selected' : ''}>${esc(a.title)}</option>`).join('')}<option value="">${esc(tr('Neues Album'))}</option></select></div>
+       <div class="field" id="ph-up-new"${chosen ? ' hidden' : ''}><label for="ph-up-name">Name des Albums</label><input class="input" id="ph-up-name" maxlength="40" autocomplete="off"></div>`}
+     <div class="field"><label for="ph-up-files">Fotos</label><input class="input" id="ph-up-files" type="file" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.heic,.heif"><small>JPEG, PNG, HEIC (iPhone)</small></div>
+     <div class="note">${icon('lock', 18)}<span>Die Box speichert Fotos verkleinert (ca. 1280 px) und entfernt Standortdaten. Die Originale bleiben auf deinem Gerät.</span></div>
+     <p class="help" id="ph-up-state" style="margin:0" hidden></p>
+     <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Hochladen</button></div>`,
+    (sheet, close) => {
+      let stop = false
+      const sel = sheet.querySelector('#ph-up-album')
+      sel?.addEventListener('change', () => (sheet.querySelector('#ph-up-new').hidden = sel.value !== ''))
+      sheet.querySelector('[data-close]').onclick = () => {
+        stop = true
+        close()
+      }
+      sheet.querySelector('[data-ok]').onclick = async (e) => {
+        const files = [...(sheet.querySelector('#ph-up-files').files ?? [])]
+        if (!files.length) return toast('Bitte Fotos wählen', 'info')
+        let target = albumId ?? sel?.value ?? ''
+        if (!target) {
+          const title = sheet.querySelector('#ph-up-name').value.trim()
+          if (!title) return toast('Bitte einen Namen für das Album eintragen', 'info')
+          const r = await api(`${API}/photos/albums`, { method: 'POST', body: { title } })
+          if (!r.ok) return toast('Das Album ließ sich nicht anlegen', 'info')
+          target = r.body.id
+        }
+        const check = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: files.length } })
+        if (check.ok && check.body?.enough === false) return toast('Nicht genug Platz auf der Box', 'info')
+        e.target.disabled = true
+        const line = sheet.querySelector('#ph-up-state')
+        line.hidden = false
+        let ok = 0
+        const skipped = []
+        for (const [i, f] of files.entries()) {
+          if (stop) break
+          line.textContent = tr(`${i + 1} von ${files.length} Dateien …`)
+          const r = await fetch(`${API}/photos/upload?album=${encodeURIComponent(target)}&name=${encodeURIComponent(f.name)}`, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/octet-stream', 'x-mupibox-csrf': state.csrf },
+            body: f,
+          }).catch(() => null)
+          const body = r ? await r.json().catch(() => ({})) : {}
+          if (r?.ok && body.ok) ok++
+          else skipped.push(`${f.name}: ${tr(PHOTO_SKIP[body.skipped] ?? (body.error === 'heif_missing' ? 'HEIC wird gerade eingerichtet' : 'Hochladen fehlgeschlagen'))}`)
+        }
+        close()
+        toast(skipped.length ? tr(`${ok} übernommen, ${skipped.length} übersprungen`) : tr(`${ok} übernommen`), skipped.length ? 'info' : 'ok')
+        if (skipped.length) console.warn('[photos] skipped', skipped)
+        after?.(target)
+      }
+    },
+  )
+}
+
+async function loadPhotoAlbum() {
+  let id = photoLib.albumId
+  if (!id) {
+    try {
+      id = sessionStorage.getItem('mupi-photo-album')
+    } catch {}
+  }
+  if (!id) throw new Error('no album')
+  const [a, o] = await Promise.all([api(`${API}/photos/albums/${id}`), photoLib.overview ? null : api(`${API}/photos/overview`)])
+  if (!a.ok) throw new Error(`album ${a.status}`)
+  if (o?.ok) photoLib.overview = o.body
+  photoLib.albumId = id
+  photoLib.album = a.body
+}
+
+function photoAlbumTop() {
+  const a = photoLib.album
+  if (!a) return []
+  const upload = a.source === 'upload'
+  const sel = photoLib.selecting
+  const n = photoLib.chosen.size
+  const grid = a.assets.length
+    ? `<div class="ph-grid${sel ? ' selecting' : ''}">${a.assets
+        .map(
+          (x) => `<button class="ph-tile${photoLib.chosen.has(x.id) ? ' chosen' : ''}" data-asset="${esc(x.id)}" aria-label="${esc(tr('Foto'))}" ${sel ? `aria-pressed="${photoLib.chosen.has(x.id)}"` : ''}>
+            <img src="${esc(photoFile(a.id, x.id, 's'))}" alt="" loading="lazy">${x.id === a.cover ? `<span class="ph-cover-pill">${esc(tr('Titelbild'))}</span>` : ''}${sel ? `<span class="ph-check">${icon('check', 16)}</span>` : ''}</button>`,
+        )
+        .join('')}</div>`
+    : `<p class="help" style="margin:0">Noch keine Fotos in diesem Album.</p>`
+  return [
+    `<section class="card wide">${photoAlbumRow(a, { sub: a.display ? 'Am Display sichtbar' : 'Am Display ausgeblendet' })}
+      ${upload ? `<div class="btns"><button class="btn primary" id="ph-add">${icon('plus', 18)}Fotos hinzufügen</button>${a.assets.length ? `<button class="btn" id="ph-select">${icon('check', 18)}${sel ? 'Fertig' : 'Auswählen'}</button>` : ''}</div>` : ''}</section>`,
+    upload
+      ? `<section class="card wide"><h2>Album</h2><div class="navlist">
+          <button class="navrow" id="ph-rename"><span class="tile">${icon('text', 18)}</span><span class="lbl"><b>Umbenennen</b></span><span class="chev">${icon('chevron', 18)}</span></button>
+          <button class="navrow" id="ph-delete"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Album löschen</b></span></button></div></section>`
+      : '',
+    `<section class="card wide"><div class="card-head"><h2>${esc(sel ? tr(`${n} ausgewählt`) : tr(`${a.assets.length} Fotos`))}</h2>${sel ? '<button class="btn sm" id="ph-all">Alle</button>' : ''}</div>${grid}</section>`,
+    sel
+      ? `<div class="ph-actionbar wide"><button class="btn" id="ph-sel-cancel">Abbrechen</button>${n === 1 ? '<button class="btn" id="ph-sel-cover">Titelbild</button>' : ''}<button class="btn danger" id="ph-sel-delete" ${n ? '' : 'disabled'}>${esc(tr(`Löschen (${n})`))}</button></div>`
+      : '',
+  ]
+}
+
+function mountPhotoAlbum(root, page) {
+  const a = photoLib.album
+  if (!a) return
+  const title = $('#topbar .title')
+  if (title) {
+    title.textContent = a.title
+    title.setAttribute('translate', 'no')
+  }
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const reload = async () => {
+    photoLib.overview = null
+    await loadPhotoAlbum().catch(() => undefined)
+    redraw()
+  }
+  for (const s of root.querySelectorAll('[data-show]')) s.onchange = () => photoShowSwitch(s, reload)
+  $('#ph-add', root)?.addEventListener('click', () => photoUploadSheet(a.id, reload))
+  $('#ph-select', root)?.addEventListener('click', () => {
+    photoLib.selecting = !photoLib.selecting
+    photoLib.chosen.clear()
+    redraw()
+  })
+  $('#ph-all', root)?.addEventListener('click', () => {
+    for (const x of a.assets) photoLib.chosen.add(x.id)
+    redraw()
+  })
+  $('#ph-sel-cancel', root)?.addEventListener('click', () => {
+    photoLib.selecting = false
+    photoLib.chosen.clear()
+    redraw()
+  })
+  const setCover = async (assetId) => {
+    const r = await api(`${API}/photos/albums/${a.id}`, { method: 'POST', body: { cover: assetId } })
+    if (!r.ok) return toast('Nicht gespeichert', 'info')
+    toast('Titelbild geändert')
+    photoLib.selecting = false
+    photoLib.chosen.clear()
+    reload()
+  }
+  const deleteAssets = (ids) =>
+    confirmSheet('Löschen', tr(`${ids.length} ${ids.length === 1 ? 'Foto' : 'Fotos'} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.`), async () => {
+      const r = await api(`${API}/photos/albums/${a.id}/assets/delete`, { method: 'POST', body: { ids } })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      toast(tr(`${ids.length} ${ids.length === 1 ? 'Foto' : 'Fotos'} gelöscht`))
+      photoLib.selecting = false
+      photoLib.chosen.clear()
+      reload()
+    })
+  $('#ph-sel-cover', root)?.addEventListener('click', () => setCover([...photoLib.chosen][0]))
+  $('#ph-sel-delete', root)?.addEventListener('click', () => deleteAssets([...photoLib.chosen]))
+  for (const t of root.querySelectorAll('[data-asset]')) {
+    t.onclick = () => {
+      const id = t.dataset.asset
+      if (!photoLib.selecting) return photoViewer(a, a.assets.findIndex((x) => x.id === id), { setCover, deleteAssets })
+      if (photoLib.chosen.has(id)) photoLib.chosen.delete(id)
+      else photoLib.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#ph-rename', root)?.addEventListener('click', () =>
+    openSheet(
+      `<h2>Umbenennen</h2><div class="field"><label for="ph-name">Name des Albums</label><input class="input" id="ph-name" maxlength="40" value="${esc(a.title)}" autocomplete="off"><small>So heißt das Album am Display.</small></div>
+       <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Speichern</button></div>`,
+      (sheet, close) => {
+        sheet.querySelector('[data-close]').onclick = close
+        sheet.querySelector('[data-ok]').onclick = async () => {
+          const title = sheet.querySelector('#ph-name').value.trim()
+          if (!title) return toast('Bitte einen Namen für das Album eintragen', 'info')
+          const r = await api(`${API}/photos/albums/${a.id}`, { method: 'POST', body: { title } })
+          if (!r.ok) return toast('Nicht gespeichert', 'info')
+          close()
+          toast('Album umbenannt')
+          reload()
+        }
+      },
+    ),
+  )
+  $('#ph-delete', root)?.addEventListener('click', () =>
+    confirmSheet('Album löschen', tr(`Album „${a.title}“ löschen? ${a.count} ${a.count === 1 ? 'Foto wird' : 'Fotos werden'} von der Box gelöscht. Das lässt sich nicht rückgängig machen.`), async () => {
+      const r = await api(`${API}/photos/albums/${a.id}/delete`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      toast('Album gelöscht')
+      photoLib.overview = null
+      go('fotos')
+    }),
+  )
+}
+
+// The app's full view of a picture: swiping (or the arrows) to the next, "Als Titelbild" and "Löschen" - nothing else
+function photoViewer(a, start, { setCover, deleteAssets }) {
+  let i = Math.max(0, start)
+  openSheet(
+    `<div class="ph-view"><img id="ph-view-img" alt=""><button class="icon-btn soft ph-prev" aria-label="${esc(tr('Voriges Bild'))}">${icon('back', 18)}</button><button class="icon-btn soft ph-next" aria-label="${esc(tr('Nächstes Bild'))}">${icon('chevron', 18)}</button></div>
+     <p class="help" id="ph-view-n" style="margin:0;text-align:center"></p>
+     <div class="btns">${a.source === 'upload' ? '<button class="btn danger" data-del>Löschen</button>' : ''}<button class="btn" data-cover>Als Titelbild</button><button class="btn primary" data-close>Schließen</button></div>`,
+    (sheet, close) => {
+      const img = sheet.querySelector('#ph-view-img')
+      const show = () => {
+        const x = a.assets[i]
+        img.src = photoFile(a.id, x.id, 'f')
+        sheet.querySelector('#ph-view-n').textContent = `${i + 1} / ${a.assets.length}`
+      }
+      const step = (by) => {
+        i = (i + by + a.assets.length) % a.assets.length
+        show()
+      }
+      sheet.querySelector('.ph-prev').onclick = () => step(-1)
+      sheet.querySelector('.ph-next').onclick = () => step(1)
+      let x0 = null
+      img.addEventListener('pointerdown', (e) => (x0 = e.clientX))
+      img.addEventListener('pointerup', (e) => {
+        if (x0 !== null && Math.abs(e.clientX - x0) > 50) step(e.clientX < x0 ? 1 : -1)
+        x0 = null
+      })
+      sheet.querySelector('[data-close]').onclick = close
+      sheet.querySelector('[data-cover]').onclick = () => {
+        close()
+        setCover(a.assets[i].id)
+      }
+      sheet.querySelector('[data-del]')?.addEventListener('click', () => {
+        close()
+        deleteAssets([a.assets[i].id])
+      })
+      show()
+    },
+  )
+}
+
 /* Fotos (5.1, backend-api app-api/photos): Einstellungen › Fotos switches the photo display on (off by default) and
    holds how it shows them - albums and slideshow, videos, the screensaver. While it is off nothing else about photos
    shows anywhere; switching it off keeps albums, photos and connections. */
@@ -13531,6 +13917,8 @@ const CONTROLLERS = {
   telegram: { load: loadTelegram, top: tgTop, sections: () => [], mount: mountTelegram },
   homeassistant: { load: loadHa, top: haTop, sections: () => [], mount: mountHa },
   tidal: { load: loadTidal, top: tidalTop, sections: () => [], mount: mountTidal },
+  fotos: { load: loadPhotoOverview, top: photoOverviewTop, sections: () => [], mount: mountPhotoOverview, ownNav: true },
+  fotoalbum: { load: loadPhotoAlbum, top: photoAlbumTop, sections: () => [], mount: mountPhotoAlbum },
   'g-fotos': { load: loadPhotoSettings, top: photoSettingsTop, sections: photoSettingsSections, mount: mountPhotoSettings, change: changePhotoSetting },
   mqtt: {
     load: loadMqtt,

@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process'
 import type { Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
+import { registerPhotoAlbumRoutes } from './albums'
 import { applyPhotoSettings, photoSettings } from './settings'
 
 export interface PhotoDeps {
@@ -67,6 +68,9 @@ function installWhatIsNeeded(cfg: MupiboxConfig | undefined): void {
 }
 
 export function registerPhotoRoutes(router: Router, deps: PhotoDeps): void {
+  // (Bibliothek › Fotos: overview, albums, upload - see albums.ts)
+  registerPhotoAlbumRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig })
+
   /** GET /api/app/photos/settings - the settings (with their defaults) and the programs' state */
   router.get('/photos/settings', requireSession, (_req, res) => {
     res.setHeader('Cache-Control', 'no-store')

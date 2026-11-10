@@ -1660,6 +1660,26 @@
    ]
   },
   {
+   "id": "fotos",
+   "slug": "photo-library",
+   "area": "bibliothek",
+   "parent": "bibliothek",
+   "title": "Fotos",
+   "description": "Alben der Fotoanzeige",
+   "icon": "image",
+   "sections": []
+  },
+  {
+   "id": "fotoalbum",
+   "slug": "photo-album",
+   "area": "bibliothek",
+   "parent": "fotos",
+   "title": "Album",
+   "description": "",
+   "icon": "image",
+   "sections": []
+  },
+  {
    "id": "theme",
    "slug": "theme",
    "area": "einstellungen",
