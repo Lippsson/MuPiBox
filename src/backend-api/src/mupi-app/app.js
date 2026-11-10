@@ -11645,6 +11645,9 @@ function photoUploadSheet(albumId, after) {
         const line = sheet.querySelector('#ph-up-state')
         line.hidden = false
         let ok = 0
+        // (files stopped - after their 5 minutes or by closing - whose stop the box did not confirm: they may still
+        // turn up in the album)
+        let unconfirmed = 0
         const skipped = []
         for (const [i, f] of files.entries()) {
           if (upload.stopped) break
@@ -11653,6 +11656,7 @@ function photoUploadSheet(albumId, after) {
           // stopped on the box as well)
           upload.current = new AbortController()
           upload.ticket = photoTicket()
+          upload.cancelling = null
           const timer = setTimeout(stopPhotoUpload, 5 * 60_000)
           const r = await fetch(`${API}/photos/upload?album=${encodeURIComponent(target)}&name=${encodeURIComponent(f.name)}&ticket=${upload.ticket}`, {
             method: 'PUT',
@@ -11665,18 +11669,18 @@ function photoUploadSheet(albumId, after) {
           clearTimeout(timer)
           upload.current = null
           upload.ticket = null
+          // (this file was stopped - its time ran out, or the sheet closed: the box has to confirm it)
+          if (upload.cancelling && !(await upload.cancelling)) unconfirmed++
+          upload.cancelling = null
           if (r?.ok && body.ok) ok++
           else if (!upload.stopped) skipped.push(`${f.name}: ${tr(PHOTO_SKIP[body.skipped] ?? (body.error === 'heif_missing' ? 'HEIC wird gerade eingerichtet' : 'Hochladen fehlgeschlagen'))}`)
         }
         // (stopped before the end - the file on its way is not placed by the box either, see the upload's route)
         const aborted = upload.stopped
         close()
-        if (aborted) {
-          // (the box has to confirm it - without, the photo on its way may still turn up: said so)
-          const confirmed = upload.cancelling ? await upload.cancelling : true
-          if (!confirmed) toast('Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.', 'info')
-          else toast(ok ? tr(`Hochladen abgebrochen – ${ok} übernommen`) : 'Hochladen abgebrochen', 'info')
-        } else toast(skipped.length ? tr(`${ok} übernommen, ${skipped.length} übersprungen`) : tr(`${ok} übernommen`), skipped.length ? 'info' : 'ok')
+        if (unconfirmed) toast('Abbruch von der Box nicht bestätigt – ein abgebrochenes Foto kann trotzdem im Album erscheinen.', 'info')
+        else if (aborted) toast(ok ? tr(`Hochladen abgebrochen – ${ok} übernommen`) : 'Hochladen abgebrochen', 'info')
+        else toast(skipped.length ? tr(`${ok} übernommen, ${skipped.length} übersprungen`) : tr(`${ok} übernommen`), skipped.length ? 'info' : 'ok')
         if (skipped.length) console.warn('[photos] skipped', skipped)
         after?.(target)
       }

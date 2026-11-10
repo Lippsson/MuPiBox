@@ -3428,5 +3428,5 @@
  "Fotos wählen": "Вибрати фото",
  "Oder Fotos hierher ziehen.": "Або перетягни фото сюди.",
  "{} {} gewählt": "Вибрано: {} {}",
- "Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.": "Бокс не підтвердив скасування – останнє фото все ж може з’явитися в альбомі."
+ "Abbruch von der Box nicht bestätigt – ein abgebrochenes Foto kann trotzdem im Album erscheinen.": "Бокс не підтвердив скасування – скасоване фото все ж може з’явитися в альбомі."
 }
