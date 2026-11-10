@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, effect, inject, Signal, signal, WritableSignal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, inject, Signal, signal, untracked, WritableSignal } from '@angular/core'
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop'
 import { NavigationExtras, Router } from '@angular/router'
 import {
@@ -42,6 +42,11 @@ import { NowPlayingPillComponent } from '../now-playing-pill/now-playing-pill.co
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
 import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
 import { KmThemeService } from '../theme/km-theme.service'
+import { PhotoAlbumsComponent } from '../photos/photo-albums.component'
+import { type PhotoAlbumSummary, PhotosService } from '../photos/photos.service'
+
+/** a tab of the start page: a list of the library, or the photo display's albums */
+type HomeTab = CategoryType | 'photos'
 
 @Component({
   selector: 'app-home',
@@ -61,6 +66,7 @@ import { KmThemeService } from '../theme/km-theme.service'
     IonSegment,
     IonSegmentButton,
     SwiperComponent,
+    PhotoAlbumsComponent,
     IonContent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -102,8 +108,11 @@ export class HomePage extends SwiperIonicEventsHelper {
   // Tabs of extensions (the audio CD in the drive, for one) after the others, so none of them moves; they are no list - a tap runs
   // what the extension does
   private readonly extensions = inject(ExtensionHostService)
+  // the photo display (5.1): its tab right of radio, while it is switched on and at least one album is shown here
+  protected readonly photos = inject(PhotosService)
   protected readonly headerCategories = computed<{ key: string; icon?: string; src?: string }[]>(() => [
     ...this.visibleCategories(),
+    ...(this.photos.available() ? [{ key: 'photos', src: 'assets/photos.svg' }] : []),
     ...this.extensions
       .tabs()
       .filter((t) => t.visible)
@@ -118,7 +127,7 @@ export class HomePage extends SwiperIonicEventsHelper {
   protected swiperData: Signal<SwiperData<Artist>[]>
   protected isOnline: Signal<boolean>
   protected isLoading: WritableSignal<boolean> = signal(false)
-  protected category: WritableSignal<CategoryType> = signal('audiobook')
+  protected category: WritableSignal<HomeTab> = signal('audiobook')
   // a tab chosen on the display (tap or swipe): the start tab of the settings, read a moment later, does not replace it
   private categoryChosen = false
   // The picture that stands for a whole list that could not be loaded (once, not per station / podcast):
@@ -155,8 +164,9 @@ export class HomePage extends SwiperIonicEventsHelper {
           this.category.set(start.key)
         }
         // Do not start on a category that is hidden.
+        // (the photos' tab is not one of these: it goes by itself, see below)
         const visible = this.visibleCategories()
-        if (visible.length > 0 && !visible.some((c) => c.key === this.category())) {
+        if (visible.length > 0 && this.category() !== 'photos' && !visible.some((c) => c.key === this.category())) {
           this.category.set(visible[0].key)
         }
         this.configLoaded.set(true)
@@ -171,9 +181,22 @@ export class HomePage extends SwiperIonicEventsHelper {
     this.mediaService.getNasTabWanted().pipe(takeUntilDestroyed()).subscribe((wanted) => {
       this.nasTabWanted.set(wanted)
       const visible = this.visibleCategories()
-      if (visible.length > 0 && !visible.some((c) => c.key === this.category())) {
+      if (visible.length > 0 && this.category() !== 'photos' && !visible.some((c) => c.key === this.category())) {
         this.category.set(visible[0].key)
       }
+    })
+
+    // back from a photo album: the tab "Fotos" again (also when this page is made afresh); and when the photo display
+    // goes (switched off, no album shown any more) while its tab is on the screen: the first tab
+    if (this.photos.backToTab()) {
+      this.photos.backToTab.set(false)
+      this.categoryChosen = true
+      this.category.set('photos')
+    }
+    effect(() => {
+      if (this.category() !== 'photos' || this.photos.available() || !this.photos.loaded()) return
+      const visible = this.visibleCategories()
+      if (visible.length > 0) this.category.set(visible[0].key)
     })
 
     this.isOnline = toSignal(this.mediaService.isOnline())
@@ -205,6 +228,8 @@ export class HomePage extends SwiperIonicEventsHelper {
           if (!background) this.isLoading.set(true)
         }),
         switchMap(({ category, background }) => {
+          // (the photos' tab has its albums, no list of artists)
+          if (category === 'photos') return of({ category, artists: [] as Artist[], json: '[]' })
           return this.mediaService.fetchArtistData(category, background).pipe(
             catchError((error): Observable<Artist[]> => {
               console.error(error)
@@ -261,14 +286,37 @@ export class HomePage extends SwiperIonicEventsHelper {
   }
 
   private switchCategory(step: 1 | -1): void {
-    const visible = this.visibleCategories()
+    const visible: HomeTab[] = [...this.visibleCategories().map((c) => c.key), ...(this.photos.available() ? (['photos'] as const) : [])]
     if (visible.length < 2) return
-    const index = Math.max(
-      0,
-      visible.findIndex((c) => c.key === this.category()),
-    )
+    const index = Math.max(0, visible.indexOf(this.category()))
     this.categoryChosen = true
-    this.category.set(visible[(index + step + visible.length) % visible.length].key)
+    this.category.set(visible[(index + step + visible.length) % visible.length])
+  }
+
+  // the start page shows again (back from an album, a list or the player): the photo albums are asked for again
+  override ionViewWillEnter(): void {
+    this.pageVisible = true
+    super.ionViewWillEnter()
+    this.photos.refresh()
+  }
+
+  override ionViewWillLeave(): void {
+    this.pageVisible = false
+    super.ionViewWillLeave()
+  }
+
+  // the list's swiper is made afresh when the tab "Fotos" gives way to a list: it has not had the page's "it comes"
+  // (Ionic sends it once per visit) and would stay empty - it gets it here
+  private pageVisible = false
+  private readonly swiperAfterPhotos = effect(() => {
+    const swiper = this.swiperComponent()
+    if (swiper && untracked(() => this.pageVisible)) untracked(() => swiper.ionViewWillEnter())
+  })
+
+  protected photoAlbumOpened(album: PhotoAlbumSummary): void {
+    void this.navController.navigateForward(['/photos'], {
+      queryParams: { album: album.id, ...(this.photos.startAsSlideshow() ? { show: '1' } : {}) },
+    })
   }
 
   protected categoryChanged(event: any): void {
@@ -284,7 +332,8 @@ export class HomePage extends SwiperIonicEventsHelper {
 
   protected categoryClicked(key: string): void {
     if (this.extensions.tabs().some((t) => t.id === key)) return this.extensions.select(key)
-    this.category.set(key as CategoryType)
+    this.categoryChosen = true
+    this.category.set(key as HomeTab)
   }
 
   protected async artistCoverClicked(artist: Artist): Promise<void> {

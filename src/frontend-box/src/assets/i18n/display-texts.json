@@ -61,7 +61,24 @@
         "displayTestText": "Do you see this picture? Then tap “Keep”. Otherwise the box goes back to the display before in {s}.",
         "displayTestKeep": "Keep",
         "winampNoSkin": "No Winamp skin installed",
-        "winampNoSkinHint": "Upload a .wsz skin in the parents' app: Settings › Appearance › Winamp skin"
+        "winampNoSkinHint": "Upload a .wsz skin in the parents' app: Settings › Appearance › Winamp skin",
+        "photosSlideshow": "Slideshow",
+        "photosCount": "{n} pictures",
+        "photosCountOne": "1 picture",
+        "photosOpen": "Open album {a}, {n} pictures",
+        "photosPicture": "Picture {n}",
+        "photosBackAlbums": "Back to the albums",
+        "photosBackAlbum": "Back to the album",
+        "photosPrev": "Previous picture",
+        "photosNext": "Next picture",
+        "photosPlay": "Start slideshow",
+        "photosPause": "Pause slideshow",
+        "photosSpeed": "Speed: {s}",
+        "photosSlow": "slow",
+        "photosMedium": "medium",
+        "photosFast": "fast",
+        "photosFill": "Show picture large",
+        "photosFit": "Show whole picture"
       }
     },
     "de": {
@@ -124,7 +141,24 @@
         "displayTestText": "Siehst du dieses Bild? Dann tippe auf „Behalten“. Sonst stellt die Box in {s} das vorige Display wieder ein.",
         "displayTestKeep": "Behalten",
         "winampNoSkin": "Kein Winamp-Skin installiert",
-        "winampNoSkinHint": "Lade einen .wsz-Skin in der Eltern-App hoch: Einstellungen › Aussehen › Winamp-Skin"
+        "winampNoSkinHint": "Lade einen .wsz-Skin in der Eltern-App hoch: Einstellungen › Aussehen › Winamp-Skin",
+        "photosSlideshow": "Diashow",
+        "photosCount": "{n} Bilder",
+        "photosCountOne": "1 Bild",
+        "photosOpen": "Album {a} öffnen, {n} Bilder",
+        "photosPicture": "Bild {n}",
+        "photosBackAlbums": "Zurück zu den Alben",
+        "photosBackAlbum": "Zurück zum Album",
+        "photosPrev": "Voriges Bild",
+        "photosNext": "Nächstes Bild",
+        "photosPlay": "Diashow starten",
+        "photosPause": "Diashow anhalten",
+        "photosSpeed": "Tempo: {s}",
+        "photosSlow": "langsam",
+        "photosMedium": "mittel",
+        "photosFast": "schnell",
+        "photosFill": "Bild groß zeigen",
+        "photosFit": "Ganzes Bild zeigen"
       }
     },
     "fr": {
@@ -187,7 +221,10 @@
         "displayTestText": "Vois-tu cette image ? Touche alors « Garder ». Sinon, la box revient à l’écran précédent dans {s}.",
         "displayTestKeep": "Garder",
         "winampNoSkin": "Aucun skin Winamp installé",
-        "winampNoSkinHint": "Téléverse un skin .wsz dans l'appli des parents : Réglages › Apparence › Skin Winamp"
+        "winampNoSkinHint": "Téléverse un skin .wsz dans l'appli des parents : Réglages › Apparence › Skin Winamp",
+        "photosSlideshow": "Diaporama",
+        "photosCount": "{n} images",
+        "photosCountOne": "1 image"
       }
     },
     "es": {
@@ -250,7 +287,10 @@
         "displayTestText": "¿Ves esta imagen? Entonces toca «Mantener». Si no, la caja vuelve a la pantalla anterior en {s}.",
         "displayTestKeep": "Mantener",
         "winampNoSkin": "No hay ningún skin de Winamp instalado",
-        "winampNoSkinHint": "Sube un skin .wsz en la app de los padres: Ajustes › Apariencia › Skin de Winamp"
+        "winampNoSkinHint": "Sube un skin .wsz en la app de los padres: Ajustes › Apariencia › Skin de Winamp",
+        "photosSlideshow": "Presentación",
+        "photosCount": "{n} imágenes",
+        "photosCountOne": "1 imagen"
       }
     },
     "it": {
@@ -313,7 +353,10 @@
         "displayTestText": "Vedi questa immagine? Allora tocca «Mantieni». Altrimenti il box torna al display precedente tra {s}.",
         "displayTestKeep": "Mantieni",
         "winampNoSkin": "Nessuna skin Winamp installata",
-        "winampNoSkinHint": "Carica una skin .wsz nell'app dei genitori: Impostazioni › Aspetto › Skin Winamp"
+        "winampNoSkinHint": "Carica una skin .wsz nell'app dei genitori: Impostazioni › Aspetto › Skin Winamp",
+        "photosSlideshow": "Presentazione",
+        "photosCount": "{n} immagini",
+        "photosCountOne": "1 immagine"
       }
     },
     "nl": {
@@ -376,7 +419,10 @@
         "displayTestText": "Zie je dit beeld? Tik dan op ‘Houden’. Anders gaat de box over {s} terug naar het vorige scherm.",
         "displayTestKeep": "Houden",
         "winampNoSkin": "Geen Winamp-skin geïnstalleerd",
-        "winampNoSkinHint": "Upload een .wsz-skin in de ouder-app: Instellingen › Uiterlijk › Winamp-skin"
+        "winampNoSkinHint": "Upload een .wsz-skin in de ouder-app: Instellingen › Uiterlijk › Winamp-skin",
+        "photosSlideshow": "Diavoorstelling",
+        "photosCount": "{n} foto’s",
+        "photosCountOne": "1 foto"
       }
     },
     "sv": {
@@ -439,7 +485,10 @@
         "displayTestText": "Ser du den här bilden? Tryck då på ”Behåll”. Annars går boxen tillbaka till den tidigare skärmen om {s}.",
         "displayTestKeep": "Behåll",
         "winampNoSkin": "Inget Winamp-skal installerat",
-        "winampNoSkinHint": "Ladda upp ett .wsz-skal i föräldraappen: Inställningar › Utseende › Winamp-skal"
+        "winampNoSkinHint": "Ladda upp ett .wsz-skal i föräldraappen: Inställningar › Utseende › Winamp-skal",
+        "photosSlideshow": "Bildspel",
+        "photosCount": "{n} bilder",
+        "photosCountOne": "1 bild"
       }
     },
     "da": {
@@ -502,7 +551,10 @@
         "displayTestText": "Kan du se dette billede? Så tryk på “Behold”. Ellers går boksen tilbage til den tidligere skærm om {s}.",
         "displayTestKeep": "Behold",
         "winampNoSkin": "Intet Winamp-skin installeret",
-        "winampNoSkinHint": "Upload et .wsz-skin i forældre-appen: Indstillinger › Udseende › Winamp-skin"
+        "winampNoSkinHint": "Upload et .wsz-skin i forældre-appen: Indstillinger › Udseende › Winamp-skin",
+        "photosSlideshow": "Diasshow",
+        "photosCount": "{n} billeder",
+        "photosCountOne": "1 billede"
       }
     },
     "nb": {
@@ -565,7 +617,10 @@
         "displayTestText": "Ser du dette bildet? Trykk da på «Behold». Ellers går boksen tilbake til den forrige skjermen om {s}.",
         "displayTestKeep": "Behold",
         "winampNoSkin": "Ingen Winamp-skin installert",
-        "winampNoSkinHint": "Last opp en .wsz-skin i foreldreappen: Innstillinger › Utseende › Winamp-skin"
+        "winampNoSkinHint": "Last opp en .wsz-skin i foreldreappen: Innstillinger › Utseende › Winamp-skin",
+        "photosSlideshow": "Lysbildefremvisning",
+        "photosCount": "{n} bilder",
+        "photosCountOne": "1 bilde"
       }
     },
     "fi": {
@@ -628,7 +683,10 @@
         "displayTestText": "Näetkö tämän kuvan? Napauta silloin ”Pidä”. Muuten laatikko palaa aiempaan näyttöön ajassa {s}.",
         "displayTestKeep": "Pidä",
         "winampNoSkin": "Winamp-ulkoasua ei ole asennettu",
-        "winampNoSkinHint": "Lataa .wsz-ulkoasu vanhempien sovelluksessa: Asetukset › Ulkoasu › Winamp-ulkoasu"
+        "winampNoSkinHint": "Lataa .wsz-ulkoasu vanhempien sovelluksessa: Asetukset › Ulkoasu › Winamp-ulkoasu",
+        "photosSlideshow": "Diaesitys",
+        "photosCount": "{n} kuvaa",
+        "photosCountOne": "1 kuva"
       }
     },
     "pl": {
@@ -691,7 +749,10 @@
         "displayTestText": "Widzisz ten obraz? Dotknij wtedy „Zachowaj”. W przeciwnym razie pudełko wróci do poprzedniego wyświetlacza za {s}.",
         "displayTestKeep": "Zachowaj",
         "winampNoSkin": "Brak zainstalowanej skórki Winamp",
-        "winampNoSkinHint": "Prześlij skórkę .wsz w aplikacji dla rodziców: Ustawienia › Wygląd › Skórka Winamp"
+        "winampNoSkinHint": "Prześlij skórkę .wsz w aplikacji dla rodziców: Ustawienia › Wygląd › Skórka Winamp",
+        "photosSlideshow": "Pokaz slajdów",
+        "photosCount": "Zdjęcia: {n}",
+        "photosCountOne": "1 zdjęcie"
       }
     },
     "pt": {
@@ -754,7 +815,10 @@
         "displayTestText": "Vês esta imagem? Então toca em «Manter». Caso contrário, a caixa volta ao ecrã anterior dentro de {s}.",
         "displayTestKeep": "Manter",
         "winampNoSkin": "Nenhum skin do Winamp instalado",
-        "winampNoSkinHint": "Envia um skin .wsz na app dos pais: Definições › Aparência › Skin do Winamp"
+        "winampNoSkinHint": "Envia um skin .wsz na app dos pais: Definições › Aparência › Skin do Winamp",
+        "photosSlideshow": "Apresentação",
+        "photosCount": "{n} imagens",
+        "photosCountOne": "1 imagem"
       }
     },
     "tr": {
@@ -817,7 +881,10 @@
         "displayTestText": "Bu görüntüyü görüyor musun? O zaman “Kalsın”a dokun. Yoksa kutu {s} içinde önceki ekrana döner.",
         "displayTestKeep": "Kalsın",
         "winampNoSkin": "Winamp kaplaması yüklü değil",
-        "winampNoSkinHint": "Ebeveyn uygulamasında bir .wsz kaplaması yükle: Ayarlar › Görünüm › Winamp kaplaması"
+        "winampNoSkinHint": "Ebeveyn uygulamasında bir .wsz kaplaması yükle: Ayarlar › Görünüm › Winamp kaplaması",
+        "photosSlideshow": "Slayt gösterisi",
+        "photosCount": "{n} resim",
+        "photosCountOne": "1 resim"
       }
     },
     "uk": {
@@ -880,7 +947,10 @@
         "displayTestText": "Бачиш це зображення? Тоді торкнися «Залишити». Інакше бокс повернеться до попереднього дисплея через {s}.",
         "displayTestKeep": "Залишити",
         "winampNoSkin": "Скін Winamp не встановлено",
-        "winampNoSkinHint": "Завантажте скін .wsz у застосунку для батьків: Налаштування › Вигляд › Скін Winamp"
+        "winampNoSkinHint": "Завантажте скін .wsz у застосунку для батьків: Налаштування › Вигляд › Скін Winamp",
+        "photosSlideshow": "Слайд-шоу",
+        "photosCount": "Зображень: {n}",
+        "photosCountOne": "1 зображення"
       }
     },
     "ru": {
@@ -943,7 +1013,10 @@
         "displayTestText": "Видишь это изображение? Тогда нажми «Оставить». Иначе бокс вернётся к прежнему дисплею через {s}.",
         "displayTestKeep": "Оставить",
         "winampNoSkin": "Скин Winamp не установлен",
-        "winampNoSkinHint": "Загрузите скин .wsz в приложении для родителей: Настройки › Внешний вид › Скин Winamp"
+        "winampNoSkinHint": "Загрузите скин .wsz в приложении для родителей: Настройки › Внешний вид › Скин Winamp",
+        "photosSlideshow": "Слайд-шоу",
+        "photosCount": "Изображений: {n}",
+        "photosCountOne": "1 изображение"
       }
     },
     "cs": {
@@ -1006,7 +1079,10 @@
         "displayTestText": "Vidíš tento obraz? Pak klepni na „Ponechat“. Jinak se box za {s} vrátí k předchozímu displeji.",
         "displayTestKeep": "Ponechat",
         "winampNoSkin": "Není nainstalován žádný skin Winamp",
-        "winampNoSkinHint": "Nahrajte skin .wsz v aplikaci pro rodiče: Nastavení › Vzhled › Skin Winamp"
+        "winampNoSkinHint": "Nahrajte skin .wsz v aplikaci pro rodiče: Nastavení › Vzhled › Skin Winamp",
+        "photosSlideshow": "Prezentace",
+        "photosCount": "Obrázky: {n}",
+        "photosCountOne": "1 obrázek"
       }
     },
     "el": {
@@ -1069,7 +1145,10 @@
         "displayTestText": "Βλέπεις αυτή την εικόνα; Τότε πάτησε «Κράτα». Αλλιώς το κουτί επιστρέφει στην προηγούμενη οθόνη σε {s}.",
         "displayTestKeep": "Κράτα",
         "winampNoSkin": "Δεν έχει εγκατασταθεί skin Winamp",
-        "winampNoSkinHint": "Ανέβασε ένα skin .wsz στην εφαρμογή γονέων: Ρυθμίσεις › Εμφάνιση › Skin Winamp"
+        "winampNoSkinHint": "Ανέβασε ένα skin .wsz στην εφαρμογή γονέων: Ρυθμίσεις › Εμφάνιση › Skin Winamp",
+        "photosSlideshow": "Προβολή",
+        "photosCount": "{n} εικόνες",
+        "photosCountOne": "1 εικόνα"
       }
     }
   }
