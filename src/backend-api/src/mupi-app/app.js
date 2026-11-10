@@ -11424,6 +11424,178 @@ function mountHa(root, page) {
   }
 }
 
+/* Fotos (5.1, backend-api app-api/photos): Einstellungen › Fotos switches the photo display on (off by default) and
+   holds how it shows them - albums and slideshow, videos, the screensaver. While it is off nothing else about photos
+   shows anywhere; switching it off keeps albums, photos and connections. */
+
+const photoState = { data: null }
+const PHOTO_TEMPO = [
+  ['Langsam · 8 s', 8],
+  ['Mittel · 5 s', 5],
+  ['Schnell · 3 s', 3],
+]
+const PHOTO_ORDER = [
+  ['Gemischt', 'shuffle'],
+  ['Neueste zuerst', 'newest'],
+  ['Nach Aufnahmedatum', 'taken'],
+]
+
+async function loadPhotoSettings() {
+  const r = await api(`${API}/photos/settings`)
+  if (!r.ok) throw new Error(`photos ${r.status}`)
+  setPhotoState(r.body)
+}
+function setPhotoState(body) {
+  photoState.data = body
+  const s = body.settings
+  state.values.set('phSlideStart', s.startAsSlideshow)
+  state.values.set('phTempo', (PHOTO_TEMPO.find(([, v]) => v === s.slideshowSeconds) ?? PHOTO_TEMPO[1])[0])
+  state.values.set('phOrder', (PHOTO_ORDER.find(([, v]) => v === s.order) ?? PHOTO_ORDER[0])[0])
+  state.values.set('phVideos', s.showVideos)
+  state.values.set('phSaver', s.screensaver.enabled)
+  state.values.set('phSaverMin', s.screensaver.afterMinutes)
+  state.values.set('phSaverPlay', s.screensaver.duringPlayback)
+}
+
+// what a program being installed, or one that could not be, means for the parents
+function photoToolNotes(d) {
+  const notes = []
+  const t = d.tools ?? {}
+  const busy = (x, what) => x?.installing && notes.push(`<div class="status-line"><span class="dot"></span><span>${esc(tr(what))}</span></div>`)
+  busy(t.heif, 'Die Box richtet die Umwandlung von iPhone-Fotos (HEIC) ein …')
+  if (d.settings.showVideos) busy(t.video, 'Die Box richtet die Wiedergabe von Videos ein (ffmpeg, braucht Internet) …')
+  const failed = (t.heif?.failed && !t.heif.installed) || (d.settings.showVideos && t.video?.failed && !t.video.installed)
+  if (failed) {
+    notes.push(
+      `<div class="note warn">${icon('info', 18)}<span>${esc(tr('Ein Programm für die Fotoanzeige ließ sich nicht installieren (kein Internet?). Fotos ohne HEIC und ohne Video gehen trotzdem.'))}</span></div><div class="btns"><button class="btn" id="ph-install">Erneut versuchen</button></div>`,
+    )
+  }
+  return notes.join('')
+}
+
+function photoSettingsTop() {
+  const d = photoState.data
+  if (!d) return []
+  if (!d.settings.enabled) {
+    return [
+      `<section class="card photo-off"><div class="photo-hero"><span class="photo-hero-ic">${icon('image', 30)}</span><h2>Fotos am Display</h2>
+        <p class="help">Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.</p></div>
+        <div class="row"><span class="lbl"><b>Fotoanzeige</b><small>Standardmäßig aus.</small></span><label class="switch"><input type="checkbox" id="ph-on" role="switch" aria-label="Fotoanzeige"><span></span></label></div></section>`,
+      `<div class="note wide">${icon('info', 18)}<span>Nach dem Einschalten erscheinen „Fotos“ in der Bibliothek und die Bildzeit unter Spielzeit. Am Display kommt der Reiter „Fotos“ dazu, sobald ein Album freigegeben ist.</span></div>`,
+      `<div class="note wide">${icon('lock', 18)}<span>Fotos bleiben auf der Box in deinem Heimnetz. Es gibt keine Links zum Teilen.</span></div>`,
+    ]
+  }
+  return [
+    `<section class="card wide"><div class="row"><span class="lbl"><b>Fotoanzeige</b><small>Fotos am Display, Bibliothek › Fotos und Bildzeit sind eingeschaltet.</small></span><label class="switch"><input type="checkbox" id="ph-on" role="switch" checked aria-label="Fotoanzeige"><span></span></label></div>${photoToolNotes(d)}</section>`,
+  ]
+}
+
+function photoSettingsSections() {
+  if (!photoState.data?.settings.enabled) return []
+  return [
+    {
+      title: 'Alben und Diashow',
+      col: 1,
+      items: [
+        { type: 'toggle', label: 'Album startet als Diashow', key: 'phSlideStart', help: 'Für die Kleinsten: ohne Bildübersicht direkt los.' },
+        { type: 'seg', label: 'Tempo der Diashow', key: 'phTempo', options: PHOTO_TEMPO.map(([l]) => l) },
+        { type: 'select', label: 'Reihenfolge', key: 'phOrder', options: PHOTO_ORDER.map(([l]) => l), help: 'Gemischt · Neueste zuerst · Nach Aufnahmedatum' },
+      ],
+    },
+    {
+      title: 'Videos',
+      col: 2,
+      items: [{ type: 'toggle', label: 'Videos anzeigen', key: 'phVideos', help: 'Clips laufen im Album mit Ton, in der Diashow stumm. Live-Fotos zeigen nur das Standbild.' }],
+    },
+    {
+      title: 'Bildschirmschoner',
+      col: 2,
+      items: [
+        { type: 'toggle', label: 'Bildschirmschoner', key: 'phSaver', help: 'Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.' },
+        { type: 'slider', label: 'Startet nach', key: 'phSaverMin', min: 1, max: 30, step: 1, unit: ' Min.', dep: 'phSaver' },
+        { type: 'toggle', label: 'Auch während der Wiedergabe', key: 'phSaverPlay', help: 'Läuft auch, wenn ein Hörspiel spielt.', dep: 'phSaver' },
+        {
+          type: 'note',
+          text: 'Der Bildschirmschoner endet, wenn das Display wie gewohnt ausschaltet (Display & Bedienung › Display). Er zählt nicht als Bildzeit und läuft nicht in Ruhezeiten.',
+          dep: 'phSaver',
+        },
+      ],
+    },
+  ]
+}
+
+async function savePhotoSettings(patch, done = 'Gespeichert') {
+  const r = await api(`${API}/photos/settings`, { method: 'POST', body: patch })
+  if (!r.ok || !r.body?.settings) {
+    toast('Nicht gespeichert', 'info')
+    return false
+  }
+  setPhotoState(r.body)
+  toast(done)
+  return true
+}
+
+function mountPhotoSettings(root, page) {
+  const again = () => currentPage()?.id === page.id && renderPage(page, false)
+  $('#ph-on', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (on) {
+      if (await savePhotoSettings({ enabled: true }, 'Fotoanzeige eingeschaltet')) again()
+      else e.target.checked = false
+      return
+    }
+    // (switching off asks first: the display loses its tab, the app its photo pages - nothing is deleted)
+    e.target.checked = true
+    const yes = await ask(
+      'Fotoanzeige ausschalten?',
+      'Alben, Fotos und Verbindungen bleiben auf der Box gespeichert. Sie sind am Display und in der App ausgeblendet, bis du die Fotoanzeige wieder einschaltest. Der Abgleich mit NAS und Immich pausiert.',
+      'Ausschalten',
+    )
+    if (yes && (await savePhotoSettings({ enabled: false }, 'Fotoanzeige ausgeschaltet'))) again()
+  })
+  $('#ph-install', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/install`, { method: 'POST', body: {} })
+    if (r.ok && r.body?.settings) setPhotoState(r.body)
+    again()
+  })
+  // a program being installed: its state again in a while (the note goes when it is there)
+  const t = photoState.data?.tools ?? {}
+  if (t.heif?.installing || t.video?.installing) {
+    every(5000, async () => {
+      const r = await api(`${API}/photos/settings`)
+      if (!r.ok || !r.body?.settings) return
+      const was = JSON.stringify(photoState.data?.tools)
+      setPhotoState(r.body)
+      if (JSON.stringify(r.body.tools) !== was) again()
+    })
+  }
+}
+
+async function changePhotoSetting(key, v, page) {
+  const patch =
+    key === 'phSlideStart'
+      ? { startAsSlideshow: v }
+      : key === 'phTempo'
+        ? { slideshowSeconds: (PHOTO_TEMPO.find(([l]) => l === v) ?? PHOTO_TEMPO[1])[1] }
+        : key === 'phOrder'
+          ? { order: (PHOTO_ORDER.find(([l]) => l === v) ?? PHOTO_ORDER[0])[1] }
+          : key === 'phVideos'
+            ? { showVideos: v }
+            : key === 'phSaver'
+              ? { screensaver: { enabled: v } }
+              : key === 'phSaverMin'
+                ? { screensaver: { afterMinutes: Number(v) } }
+                : key === 'phSaverPlay'
+                  ? { screensaver: { duringPlayback: v } }
+                  : null
+  if (!patch) return
+  const ok = await savePhotoSettings(patch)
+  // (videos on: ffmpeg is installed - its note shows on the page)
+  if (ok && key === 'phVideos' && v && currentPage()?.id === page.id) renderPage(page, false)
+  // (not saved: the switch goes back)
+  return ok
+}
+
 /* TIDAL (backend-api app-api/tidal.ts, unofficial: python-tidal): switched on with a hint, the sign-in with a code */
 
 const tidalState = { data: null }
@@ -13356,6 +13528,7 @@ const CONTROLLERS = {
   telegram: { load: loadTelegram, top: tgTop, sections: () => [], mount: mountTelegram },
   homeassistant: { load: loadHa, top: haTop, sections: () => [], mount: mountHa },
   tidal: { load: loadTidal, top: tidalTop, sections: () => [], mount: mountTidal },
+  'g-fotos': { load: loadPhotoSettings, top: photoSettingsTop, sections: photoSettingsSections, mount: mountPhotoSettings, change: changePhotoSetting },
   mqtt: {
     load: loadMqtt,
     // the connection (broker and login), the box's names in MQTT, how often, Home Assistant - saved together

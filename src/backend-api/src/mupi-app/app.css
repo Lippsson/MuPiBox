@@ -271,6 +271,11 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .note { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: var(--mp-r); background: var(--mp-primary-soft); font-size: 14px; }
 .note.warn { background: var(--mp-warn-soft); }
 .note .ic { color: var(--mp-primary-text); margin-top: 1px; }
+/* Einstellungen › Fotos, switched off: what the photo display is (a circle with its picture, the name, a line) */
+.photo-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 8px 4px 14px; }
+.photo-hero-ic { width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; background: var(--mp-primary-soft); color: var(--mp-primary-text); }
+.photo-hero h2 { margin: 6px 0 0; font-family: var(--mp-font-display); }
+.photo-hero .help { margin: 0; max-width: 34em; }
 .note.warn .ic { color: var(--mp-warn); }
 
 /* list entries (devices, networks, chats, profiles) */

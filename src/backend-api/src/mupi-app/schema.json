@@ -50,6 +50,12 @@
    "description": "Helligkeit, Drehung, Haltezeiten, Display live"
   },
   {
+   "id": "g-fotos",
+   "title": "Fotos",
+   "icon": "image",
+   "description": "Fotoanzeige, Diashow, Videos, Bildschirmschoner"
+  },
+  {
    "id": "g-audio",
    "title": "Audio",
    "icon": "vol",
@@ -4554,6 +4560,16 @@
    ]
   },
   {
+   "id": "g-fotos",
+   "slug": "photos",
+   "area": "einstellungen",
+   "parent": "einstellungen",
+   "title": "Fotos",
+   "description": "Fotoanzeige, Diashow, Videos, Bildschirmschoner",
+   "icon": "image",
+   "sections": []
+  },
+  {
    "id": "g-audio",
    "slug": "audio",
    "area": "einstellungen",
@@ -6534,6 +6550,41 @@
    "l": "System",
    "where": "System",
    "id": "g-system"
+  },
+  {
+   "l": "Fotoanzeige",
+   "where": "Einstellungen › Fotos",
+   "id": "g-fotos"
+  },
+  {
+   "l": "Fotos am Display",
+   "where": "Einstellungen › Fotos",
+   "id": "g-fotos"
+  },
+  {
+   "l": "Diashow",
+   "where": "Einstellungen › Fotos",
+   "id": "g-fotos"
+  },
+  {
+   "l": "Tempo der Diashow",
+   "where": "Einstellungen › Fotos",
+   "id": "g-fotos"
+  },
+  {
+   "l": "Album startet als Diashow",
+   "where": "Einstellungen › Fotos",
+   "id": "g-fotos"
+  },
+  {
+   "l": "Videos anzeigen",
+   "where": "Einstellungen › Fotos",
+   "id": "g-fotos"
+  },
+  {
+   "l": "Bildschirmschoner",
+   "where": "Einstellungen › Fotos",
+   "id": "g-fotos"
   }
  ],
  "themes": [
