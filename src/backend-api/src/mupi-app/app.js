@@ -11464,7 +11464,10 @@ function photoToolNotes(d) {
   const busy = (x, what) => x?.installing && notes.push(`<div class="status-line"><span class="dot"></span><span>${esc(tr(what))}</span></div>`)
   busy(t.heif, 'Die Box richtet die Umwandlung von iPhone-Fotos (HEIC) ein …')
   if (d.settings.showVideos) busy(t.video, 'Die Box richtet die Wiedergabe von Videos ein (ffmpeg, braucht Internet) …')
-  const failed = (t.heif?.failed && !t.heif.installed) || (d.settings.showVideos && t.video?.failed && !t.video.installed)
+  // (missing and not being installed: a try that failed now, or one before a restart, or the update's - the state of
+  // the box counts, not only what this server tried)
+  const missing = (x) => x && !x.installed && !x.installing
+  const failed = missing(t.heif) || (d.settings.showVideos && missing(t.video))
   if (failed) {
     notes.push(
       `<div class="note warn">${icon('info', 18)}<span>${esc(tr('Ein Programm für die Fotoanzeige ließ sich nicht installieren (kein Internet?). Fotos ohne HEIC und ohne Video gehen trotzdem.'))}</span></div><div class="btns"><button class="btn" id="ph-install">Erneut versuchen</button></div>`,
