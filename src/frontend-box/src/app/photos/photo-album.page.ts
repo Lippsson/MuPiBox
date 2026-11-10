@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, inject, type OnDestroy, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { ActivatedRoute } from '@angular/router'
 import {
@@ -175,7 +175,7 @@ import { type PhotoAlbumDetail, PhotosService } from './photos.service'
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PhotoAlbumPage {
+export class PhotoAlbumPage implements OnDestroy {
   protected readonly photos = inject(PhotosService)
   protected readonly texts = inject(DisplayTextsService)
   protected readonly r2 = inject(KmThemeService).roundTwo
@@ -191,23 +191,62 @@ export class PhotoAlbumPage {
     return n === 1 ? this.texts.text('photosCountOne') : this.texts.text('photosCount', { n })
   })
 
+  private albumId = ''
+  // the page is on the screen (Ionic keeps it when the player comes over it - started from the app, for one)
+  private visible = false
+  private leaving = false
+  private checkTimer = 0
+
   constructor() {
     addIcons({ arrowBackOutline, playOutline })
     inject(ActivatedRoute)
       .queryParamMap.pipe(takeUntilDestroyed())
       .subscribe((params) => {
-        const id = params.get('album') ?? ''
+        this.albumId = params.get('album') ?? ''
         this.direct.set(params.get('show') === '1')
-        this.photos
-          .album(id)
-          .pipe(catchError(() => of(null)))
-          .subscribe((a) => {
-            // (gone meanwhile - hidden in the app, the display switched off: back to the albums)
-            if (!a || a.assets.length === 0) return this.back()
-            this.album.set(a)
-            if (this.direct()) this.viewer.set({ start: 0, play: true })
-          })
+        this.load(true)
       })
+  }
+
+  /**
+   * The album from the box: at the start, and every 30 s while the page shows - hidden in the app, deleted, the photo
+   * display switched off: back to the albums; pictures added or deleted: the grid and the slideshow take the new list.
+   */
+  private load(first: boolean): void {
+    const id = this.albumId
+    this.photos
+      .album(id)
+      .pipe(catchError((err: { status?: number }) => of(err?.status === 404 ? null : undefined)))
+      .subscribe((a) => {
+        if (id !== this.albumId || this.leaving) return
+        // (no answer at all - the server restarts: it stays as it is, asked again in 30 s)
+        if (a === undefined) return first ? this.back() : undefined
+        if (!a || a.assets.length === 0) return this.back()
+        const before = this.album()
+        // (the same pictures - in the order "Zufällig" they come in another order each time: the grid stays as it is)
+        const same = before?.id === a.id && before.title === a.title && sameIds(before.assets, a.assets)
+        if (!same) this.album.set(a)
+        if (first && this.direct()) this.viewer.set({ start: 0, play: true })
+      })
+  }
+
+  ionViewWillEnter(): void {
+    this.visible = true
+    window.clearInterval(this.checkTimer)
+    this.checkTimer = window.setInterval(() => this.load(false), 30_000)
+    // back from the player over the slideshow that started at once: it starts again
+    if (this.direct() && this.album() && !this.viewer()) this.viewer.set({ start: 0, play: true })
+  }
+
+  // (another page comes over this one: the full view goes - its slideshow and its timers do not run on below)
+  ionViewWillLeave(): void {
+    this.visible = false
+    window.clearInterval(this.checkTimer)
+    this.viewer.set(null)
+  }
+
+  ngOnDestroy(): void {
+    window.clearInterval(this.checkTimer)
   }
 
   protected openAt(i: number): void {
@@ -224,8 +263,19 @@ export class PhotoAlbumPage {
   }
 
   protected back(): void {
+    if (this.leaving) return
+    this.leaving = true
+    window.clearInterval(this.checkTimer)
+    this.viewer.set(null)
     this.photos.backToTab.set(true)
+    this.photos.refresh(true)
     if (this.outlet?.canGoBack()) this.nav.pop()
     else this.nav.navigateRoot('/home', { animationDirection: 'back' })
   }
+}
+
+const sameIds = (a: { id: string }[], b: { id: string }[]): boolean => {
+  if (a.length !== b.length) return false
+  const ids = new Set(a.map((x) => x.id))
+  return b.every((x) => ids.has(x.id))
 }

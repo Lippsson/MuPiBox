@@ -8,6 +8,7 @@ import {
   OnDestroy,
   output,
   signal,
+  untracked,
 } from '@angular/core'
 import { DisplayTextsService } from '../display-texts.service'
 import { StatusComponent } from '../status/status.component'
@@ -348,7 +349,9 @@ export class PhotoViewerComponent implements OnDestroy {
   protected readonly slides = computed(() => {
     const list = this.assets()
     if (list.length === 0) return []
-    const cur = { key: this.slideKey(), index: this.index(), asset: list[this.index()], fresh: this.slideKey() > 0 }
+    // (the album got fewer pictures while it is shown - deleted in the app: the last one there is)
+    const i = Math.min(this.index(), list.length - 1)
+    const cur = { key: this.slideKey(), index: i, asset: list[i], fresh: this.slideKey() > 0 }
     const prev = this.previous()
     return prev && list[prev.index]
       ? [{ key: prev.key, index: prev.index, asset: list[prev.index], fresh: false }, cur]
@@ -372,6 +375,14 @@ export class PhotoViewerComponent implements OnDestroy {
       this.speed.set(this.photos.slideshowSeconds() as Speed)
       if (this.autoplay()) this.play()
       this.preload()
+    })
+    // a new list of pictures (added or deleted in the app): the place stays within it, the slideshow goes on with it
+    effect(() => {
+      const n = this.assets().length
+      untracked(() => {
+        if (this.index() >= n) this.index.set(Math.max(0, n - 1))
+        if (this.playing()) this.schedule()
+      })
     })
   }
 

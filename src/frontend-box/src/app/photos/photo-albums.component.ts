@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, output, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal, untracked } from '@angular/core'
 import { DisplayTextsService } from '../display-texts.service'
 import { type PhotoAlbumSummary, PhotosService } from './photos.service'
 
@@ -192,6 +192,11 @@ export class PhotoAlbumsComponent {
   protected readonly pages = computed(() => Math.max(1, Math.ceil(this.albums().length / PER_PAGE)))
   protected readonly pageList = computed(() => Array.from({ length: this.pages() }, (_, i) => i))
   protected readonly page = signal(0)
+  // fewer albums than before (one hidden in the app) and the display stood on a page that is gone: the last one there is
+  private readonly pageInRange = effect(() => {
+    const last = this.pages() - 1
+    if (untracked(() => this.page()) > last) this.page.set(last)
+  })
 
   // a sideways swipe turns the page; it does not open the album the finger started on
   private startX = 0
