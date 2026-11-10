@@ -3427,5 +3427,6 @@
  "Hochladen abgebrochen – {} übernommen": "Opplasting avbrutt – {} lagt til",
  "Fotos wählen": "Velg bilder",
  "Oder Fotos hierher ziehen.": "Eller dra bilder hit.",
- "{} {} gewählt": "{} {} valgt"
+ "{} {} gewählt": "{} {} valgt",
+ "Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.": "Boksen bekreftet ikke avbruddet – det siste bildet kan likevel dukke opp i albumet."
 }

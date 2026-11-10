@@ -3427,5 +3427,6 @@
  "Hochladen abgebrochen – {} übernommen": "Envoi interrompu – ajoutées : {}",
  "Fotos wählen": "Choisir des photos",
  "Oder Fotos hierher ziehen.": "Ou fais glisser les photos ici.",
- "{} {} gewählt": "Choisies : {} {}"
+ "{} {} gewählt": "Choisies : {} {}",
+ "Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.": "La box n'a pas confirmé l'interruption – la dernière photo peut quand même apparaître dans l'album."
 }

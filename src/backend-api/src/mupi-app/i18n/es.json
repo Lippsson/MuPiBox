@@ -3427,5 +3427,6 @@
  "Hochladen abgebrochen – {} übernommen": "Subida cancelada – añadidas: {}",
  "Fotos wählen": "Elegir fotos",
  "Oder Fotos hierher ziehen.": "O arrastra las fotos aquí.",
- "{} {} gewählt": "Elegidas: {} {}"
+ "{} {} gewählt": "Elegidas: {} {}",
+ "Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.": "La caja no confirmó la cancelación: la última foto puede aparecer igualmente en el álbum."
 }

@@ -3427,5 +3427,6 @@
  "Hochladen abgebrochen – {} übernommen": "Przesyłanie przerwane – dodano: {}",
  "Fotos wählen": "Wybierz zdjęcia",
  "Oder Fotos hierher ziehen.": "Lub przeciągnij zdjęcia tutaj.",
- "{} {} gewählt": "Wybrano: {} {}"
+ "{} {} gewählt": "Wybrano: {} {}",
+ "Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.": "Box nie potwierdził przerwania – ostatnie zdjęcie może mimo to pojawić się w albumie."
 }

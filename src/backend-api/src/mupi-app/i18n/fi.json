@@ -3427,5 +3427,6 @@
  "Hochladen abgebrochen – {} übernommen": "Lataus keskeytetty – lisätty: {}",
  "Fotos wählen": "Valitse kuvat",
  "Oder Fotos hierher ziehen.": "Tai vedä kuvat tähän.",
- "{} {} gewählt": "Valittu: {} {}"
+ "{} {} gewählt": "Valittu: {} {}",
+ "Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.": "Laatikko ei vahvistanut keskeytystä – viimeinen kuva voi silti näkyä albumissa."
 }

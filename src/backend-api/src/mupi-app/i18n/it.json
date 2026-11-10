@@ -3427,5 +3427,6 @@
  "Hochladen abgebrochen – {} übernommen": "Caricamento interrotto – aggiunte: {}",
  "Fotos wählen": "Scegli foto",
  "Oder Fotos hierher ziehen.": "Oppure trascina qui le foto.",
- "{} {} gewählt": "Scelte: {} {}"
+ "{} {} gewählt": "Scelte: {} {}",
+ "Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.": "Il box non ha confermato l’interruzione – l’ultima foto potrebbe comunque comparire nell’album."
 }

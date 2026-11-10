@@ -75,19 +75,31 @@ async function sumOf(file: string): Promise<string> {
   return hash.digest('hex')
 }
 
-// An upload's ticket (made by the app, one per file): to stop it from the app (POST /photos/upload/cancel). Kept two
-// minutes after its last use - a cancel may come late, or before its upload.
+// An upload's ticket (made by the app, one per file): to stop it from the app (POST /photos/upload/cancel). Kept as
+// long as its upload runs (a big photo over a weak WLAN takes long), then two minutes more - a cancel may come late; a
+// cancel before its upload: two minutes for the upload to come.
 interface UploadTicket {
   stop: AbortController
   /** set when the upload placed its picture (in the list's turn) */
   placed?: { album: string; asset: string }
+  /** its upload runs now: never forgotten meanwhile */
+  active?: boolean
   timer?: NodeJS.Timeout
 }
 const TICKET = /^[a-f0-9]{16}$/
 const tickets = new Map<string, UploadTicket>()
-function keepTicket(ticket: string, entry: UploadTicket): void {
+function holdTicket(ticket: string, entry: UploadTicket): void {
   if (entry.timer) clearTimeout(entry.timer)
-  entry.timer = setTimeout(() => tickets.delete(ticket), 2 * 60_000)
+  entry.timer = undefined
+  entry.active = true
+  tickets.set(ticket, entry)
+}
+function releaseTicket(ticket: string, entry: UploadTicket): void {
+  entry.active = false
+  if (entry.timer) clearTimeout(entry.timer)
+  entry.timer = setTimeout(() => {
+    if (tickets.get(ticket) === entry && !entry.active) tickets.delete(ticket)
+  }, 2 * 60_000)
   entry.timer.unref()
   tickets.set(ticket, entry)
 }
@@ -216,7 +228,8 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     const ticket = String((req.body as { ticket?: unknown } | undefined)?.ticket ?? '')
     if (!TICKET.test(ticket)) return void res.status(400).json({ error: 'ticket' })
     const entry = tickets.get(ticket) ?? { stop: new AbortController() }
-    keepTicket(ticket, entry)
+    // (its upload still runs: kept until it ends - its own end starts the two minutes)
+    if (!entry.active) releaseTicket(ticket, entry)
     entry.stop.abort()
     // (in the list's turn, after the upload's own: what it placed is known by then)
     const removed = await update((lib) => {
@@ -262,7 +275,7 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     // ticket (lighttpd on port 80 keeps the way to the server open when the browser lets go), or seen directly.
     const ticket = TICKET.test(String(req.query.ticket ?? '')) ? String(req.query.ticket) : null
     const entry: UploadTicket = (ticket && tickets.get(ticket)) || { stop: new AbortController() }
-    if (ticket) keepTicket(ticket, entry)
+    if (ticket) holdTicket(ticket, entry)
     const gone = entry.stop
     res.on('close', () => {
       if (!res.writableFinished) gone.abort()
@@ -308,6 +321,7 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
       if (!res.headersSent && !res.destroyed) res.status(message === 'heif-convert missing' ? 503 : 500).json({ error: message === 'heif-convert missing' ? 'heif_missing' : 'upload failed' })
     } finally {
       await fsp.rm(part, { force: true })
+      if (ticket) releaseTicket(ticket, entry)
     }
   })
 

@@ -3427,5 +3427,6 @@
  "Hochladen abgebrochen – {} übernommen": "Nahrávání zrušeno – přidáno: {}",
  "Fotos wählen": "Vybrat fotky",
  "Oder Fotos hierher ziehen.": "Nebo sem přetáhněte fotky.",
- "{} {} gewählt": "Vybráno: {} {}"
+ "{} {} gewählt": "Vybráno: {} {}",
+ "Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.": "Box zrušení nepotvrdil – poslední fotka se v albu přesto může objevit."
 }

@@ -11583,7 +11583,7 @@ const PHOTO_SKIP = { format: 'Format wird nicht unterstützt', duplicate: 'Schon
 function photoUploadSheet(albumId, after) {
   const uploads = (photoLib.overview?.albums ?? []).filter((a) => a.source === 'upload')
   const chosen = albumId ?? uploads[0]?.id ?? ''
-  const upload = { stopped: false, running: false, current: null, ticket: null }
+  const upload = { stopped: false, running: false, current: null, ticket: null, cancelling: null }
   openSheet(
     `<h2>Fotos hochladen</h2>
      ${albumId ? '' : `<div class="field"><label for="ph-up-album">Wohin?</label><select class="input" id="ph-up-album">${uploads.map((a) => `<option value="${esc(a.id)}"${a.id === chosen ? ' selected' : ''}>${esc(a.title)}</option>`).join('')}<option value="">${esc(tr('Neues Album'))}</option></select></div>
@@ -11671,8 +11671,12 @@ function photoUploadSheet(albumId, after) {
         // (stopped before the end - the file on its way is not placed by the box either, see the upload's route)
         const aborted = upload.stopped
         close()
-        if (aborted) toast(ok ? tr(`Hochladen abgebrochen – ${ok} übernommen`) : 'Hochladen abgebrochen', 'info')
-        else toast(skipped.length ? tr(`${ok} übernommen, ${skipped.length} übersprungen`) : tr(`${ok} übernommen`), skipped.length ? 'info' : 'ok')
+        if (aborted) {
+          // (the box has to confirm it - without, the photo on its way may still turn up: said so)
+          const confirmed = upload.cancelling ? await upload.cancelling : true
+          if (!confirmed) toast('Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.', 'info')
+          else toast(ok ? tr(`Hochladen abgebrochen – ${ok} übernommen`) : 'Hochladen abgebrochen', 'info')
+        } else toast(skipped.length ? tr(`${ok} übernommen, ${skipped.length} übersprungen`) : tr(`${ok} übernommen`), skipped.length ? 'info' : 'ok')
         if (skipped.length) console.warn('[photos] skipped', skipped)
         after?.(target)
       }
@@ -11686,9 +11690,18 @@ function photoUploadSheet(albumId, after) {
   // the file on its way: the browser lets go, and the box is told (lighttpd keeps the way to the server open, so the
   // server would not notice) - it does not make the picture, or takes it out again when it was just placed
   function stopPhotoUpload() {
-    if (upload.ticket) void api(`${API}/photos/upload/cancel`, { method: 'POST', body: { ticket: upload.ticket } })
+    if (upload.ticket) upload.cancelling = cancelPhotoUpload(upload.ticket)
     upload.current?.abort()
   }
+}
+// a few tries (the phone's WLAN may be gone for a moment): true when the box confirmed it
+async function cancelPhotoUpload(ticket) {
+  for (let i = 0; i < 4; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 2000))
+    const r = await api(`${API}/photos/upload/cancel`, { method: 'POST', body: { ticket }, timeoutMs: 8000 }).catch(() => null)
+    if (r?.ok && r.body?.ok) return true
+  }
+  return false
 }
 const PHOTO_UPLOAD_EXT = /\.(jpe?g|png|hei[cf]|webp)$/i
 const photoTicket = () => [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('')

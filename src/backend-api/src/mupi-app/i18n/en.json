@@ -3443,5 +3443,6 @@
  "Hochladen abgebrochen – {} übernommen": "Upload stopped – {} added",
  "Fotos wählen": "Choose photos",
  "Oder Fotos hierher ziehen.": "Or drag photos here.",
- "{} {} gewählt": "{} {} chosen"
+ "{} {} gewählt": "{} {} chosen",
+ "Abbruch von der Box nicht bestätigt – das letzte Foto kann trotzdem im Album erscheinen.": "The box did not confirm the stop – the last photo may still appear in the album."
 }
