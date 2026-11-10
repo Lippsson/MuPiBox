@@ -126,6 +126,33 @@ export async function photoBytes(): Promise<number> {
   return total
 }
 
+/**
+ * What an upload left behind when the box went off in the middle (once at the server's start, before an upload is
+ * taken): the originals on their way in (incoming/ - they may still carry the place where a photo was taken) and the
+ * half-made sizes of a picture (*.tmp, *.heic.jpg). Pictures that are made are never touched here - a list that could
+ * not be read must not cost a single photo.
+ */
+export async function sweepLeftovers(): Promise<void> {
+  await fsp.rm(INCOMING_DIR, { recursive: true, force: true }).catch(() => undefined)
+  for (const f of await fsp.readdir(PHOTOS_DIR).catch(() => [] as string[])) {
+    if (/^library\.json\.\d+\.tmp$/.test(f)) await fsp.rm(path.join(PHOTOS_DIR, f), { force: true }).catch(() => undefined)
+  }
+  let dirs: import('node:fs').Dirent[]
+  try {
+    dirs = await fsp.readdir(UPLOAD_DIR, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const d of dirs) {
+    if (!d.isDirectory() || !isId(d.name)) continue
+    const dir = path.join(UPLOAD_DIR, d.name)
+    const files = await fsp.readdir(dir).catch(() => [] as string[])
+    for (const f of files) {
+      if (f.endsWith('.tmp') || f.endsWith('.heic.jpg')) await fsp.rm(path.join(dir, f), { force: true }).catch(() => undefined)
+    }
+  }
+}
+
 /** Space on the card: all, free (what a user may still write) */
 export async function cardSpace(): Promise<{ total: number; free: number } | null> {
   try {

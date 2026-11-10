@@ -86,7 +86,10 @@ export function processPhoto(src: string, out: string, ext: string): Promise<Pro
       if (ext === '.heic' || ext === '.heif') {
         converted = `${out}.heic.jpg`
         await execFileAsync('nice', ['-n', '10', 'heif-convert', '-q', '92', src, converted], { timeout: 120_000 }).catch((err) => {
-          throw /ENOENT/.test(String(err)) ? new Error('heif-convert missing') : new NotAPicture()
+          // (started through nice: a missing heif-convert is nice's exit code 127, not an ENOENT - the photo is fine,
+          // the box is still setting HEIC up or that failed; the app says so instead of "Datei beschädigt")
+          const code = (err as { code?: unknown }).code
+          throw code === 127 || code === 'ENOENT' ? new Error('heif-convert missing') : new NotAPicture()
         })
         input = converted
       }

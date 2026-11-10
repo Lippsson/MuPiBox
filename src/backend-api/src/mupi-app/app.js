@@ -11583,6 +11583,7 @@ const PHOTO_SKIP = { format: 'Format wird nicht unterstützt', duplicate: 'Schon
 function photoUploadSheet(albumId, after) {
   const uploads = (photoLib.overview?.albums ?? []).filter((a) => a.source === 'upload')
   const chosen = albumId ?? uploads[0]?.id ?? ''
+  const upload = { stopped: false, current: null }
   openSheet(
     `<h2>Fotos hochladen</h2>
      ${albumId ? '' : `<div class="field"><label for="ph-up-album">Wohin?</label><select class="input" id="ph-up-album">${uploads.map((a) => `<option value="${esc(a.id)}"${a.id === chosen ? ' selected' : ''}>${esc(a.title)}</option>`).join('')}<option value="">${esc(tr('Neues Album'))}</option></select></div>
@@ -11592,13 +11593,9 @@ function photoUploadSheet(albumId, after) {
      <p class="help" id="ph-up-state" style="margin:0" hidden></p>
      <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Hochladen</button></div>`,
     (sheet, close) => {
-      let stop = false
       const sel = sheet.querySelector('#ph-up-album')
       sel?.addEventListener('change', () => (sheet.querySelector('#ph-up-new').hidden = sel.value !== ''))
-      sheet.querySelector('[data-close]').onclick = () => {
-        stop = true
-        close()
-      }
+      sheet.querySelector('[data-close]').onclick = close
       sheet.querySelector('[data-ok]').onclick = async (e) => {
         const files = [...(sheet.querySelector('#ph-up-files').files ?? [])]
         if (!files.length) return toast('Bitte Fotos wählen', 'info')
@@ -11618,23 +11615,34 @@ function photoUploadSheet(albumId, after) {
         let ok = 0
         const skipped = []
         for (const [i, f] of files.entries()) {
-          if (stop) break
+          if (upload.stopped) break
           line.textContent = tr(`${i + 1} von ${files.length} Dateien …`)
+          // (one file at most 5 minutes - a slow WLAN and the Pi's work on a big picture; then the next one)
+          upload.current = new AbortController()
+          const timer = setTimeout(() => upload.current?.abort(), 5 * 60_000)
           const r = await fetch(`${API}/photos/upload?album=${encodeURIComponent(target)}&name=${encodeURIComponent(f.name)}`, {
             method: 'PUT',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/octet-stream', 'x-mupibox-csrf': state.csrf },
             body: f,
+            signal: upload.current.signal,
           }).catch(() => null)
           const body = r ? await r.json().catch(() => ({})) : {}
+          clearTimeout(timer)
+          upload.current = null
           if (r?.ok && body.ok) ok++
-          else skipped.push(`${f.name}: ${tr(PHOTO_SKIP[body.skipped] ?? (body.error === 'heif_missing' ? 'HEIC wird gerade eingerichtet' : 'Hochladen fehlgeschlagen'))}`)
+          else if (!upload.stopped) skipped.push(`${f.name}: ${tr(PHOTO_SKIP[body.skipped] ?? (body.error === 'heif_missing' ? 'HEIC wird gerade eingerichtet' : 'Hochladen fehlgeschlagen'))}`)
         }
         close()
         toast(skipped.length ? tr(`${ok} übernommen, ${skipped.length} übersprungen`) : tr(`${ok} übernommen`), skipped.length ? 'info' : 'ok')
         if (skipped.length) console.warn('[photos] skipped', skipped)
         after?.(target)
       }
+    },
+    // (closed in any way - Abbrechen, swiped away, Escape, another page: no further file, the one on its way is stopped)
+    () => {
+      upload.stopped = true
+      upload.current?.abort()
     },
   )
 }

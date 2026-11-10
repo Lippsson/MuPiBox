@@ -10,7 +10,7 @@ import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
 import { extOf, NotAPicture, PHOTO_EXTENSIONS, photoFiles, processPhoto } from './process'
 import { photoSettings, type PhotoOrder } from './settings'
-import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, INCOMING_DIR, isId, newId, type PhotoAlbum, type PhotoAsset, photoBytes, update } from './store'
+import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, INCOMING_DIR, isId, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
 
 export interface PhotoAlbumDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -76,6 +76,9 @@ async function sumOf(file: string): Promise<string> {
 }
 
 export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): void {
+  // (once at the start: what an upload left when the box went off - an upload waits for it)
+  const swept = sweepLeftovers().catch((err) => console.warn(`${new Date().toLocaleString()}: [photos] cleanup: ${(err as Error).message}`))
+
   /** GET /api/app/photos/overview - the albums (with their state), the numbers and the card's space */
   // (?light=1: without the card's space - the library's line asks only for the numbers, counting the pictures' bytes
   // takes a while with thousands of them)
@@ -207,6 +210,7 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     const space = await cardSpace()
     if (space && space.free - size - STORED_BYTES_PER_PHOTO < RESERVE_BYTES) return void res.json({ skipped: 'space' })
 
+    await swept
     await fsp.mkdir(INCOMING_DIR, { recursive: true })
     const part = path.join(INCOMING_DIR, `${randomBytes(6).toString('hex')}${ext}.part`)
     const id = newId()
@@ -242,7 +246,8 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
       for (const f of photoFiles(out)) await fsp.rm(f, { force: true })
       const message = (err as Error).message
       console.warn(`${new Date().toLocaleString()}: [photos] upload ${name}: ${message}`)
-      if (!res.headersSent && !req.destroyed) res.status(message === 'heif-convert missing' ? 503 : 500).json({ error: message === 'heif-convert missing' ? 'heif_missing' : 'upload failed' })
+      // (the request is read to its end by now - whether the app still waits shows the answer's side)
+      if (!res.headersSent && !res.destroyed) res.status(message === 'heif-convert missing' ? 503 : 500).json({ error: message === 'heif-convert missing' ? 'heif_missing' : 'upload failed' })
     } finally {
       await fsp.rm(part, { force: true })
     }
