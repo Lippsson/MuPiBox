@@ -3422,5 +3422,10 @@
  "Umbenennen": "Renommer",
  "Video": "Vidéo",
  "Voriges Bild": "Image précédente",
- "frei": "libre"
+ "frei": "libre",
+ "Hochladen abgebrochen": "Envoi interrompu",
+ "Hochladen abgebrochen – {} übernommen": "Envoi interrompu – ajoutées : {}",
+ "Fotos wählen": "Choisir des photos",
+ "Oder Fotos hierher ziehen.": "Ou fais glisser les photos ici.",
+ "{} {} gewählt": "Choisies : {} {}"
 }

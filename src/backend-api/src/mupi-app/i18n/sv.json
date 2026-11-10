@@ -3422,5 +3422,10 @@
  "Umbenennen": "Byt namn",
  "Video": "Video",
  "Voriges Bild": "Föregående bild",
- "frei": "ledigt"
+ "frei": "ledigt",
+ "Hochladen abgebrochen": "Uppladdningen avbröts",
+ "Hochladen abgebrochen – {} übernommen": "Uppladdningen avbröts – {} tillagda",
+ "Fotos wählen": "Välj foton",
+ "Oder Fotos hierher ziehen.": "Eller dra foton hit.",
+ "{} {} gewählt": "{} {} valda"
 }

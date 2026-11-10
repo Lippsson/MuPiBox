@@ -3422,5 +3422,10 @@
  "Umbenennen": "Μετονομασία",
  "Video": "Βίντεο",
  "Voriges Bild": "Προηγούμενη εικόνα",
- "frei": "ελεύθερα"
+ "frei": "ελεύθερα",
+ "Hochladen abgebrochen": "Η μεταφόρτωση ακυρώθηκε",
+ "Hochladen abgebrochen – {} übernommen": "Η μεταφόρτωση ακυρώθηκε – προστέθηκαν: {}",
+ "Fotos wählen": "Επιλογή φωτογραφιών",
+ "Oder Fotos hierher ziehen.": "Ή σύρε φωτογραφίες εδώ.",
+ "{} {} gewählt": "Επιλέχθηκαν: {} {}"
 }

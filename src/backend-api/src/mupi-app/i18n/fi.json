@@ -3422,5 +3422,10 @@
  "Umbenennen": "Nimeä uudelleen",
  "Video": "Video",
  "Voriges Bild": "Edellinen kuva",
- "frei": "vapaana"
+ "frei": "vapaana",
+ "Hochladen abgebrochen": "Lataus keskeytetty",
+ "Hochladen abgebrochen – {} übernommen": "Lataus keskeytetty – lisätty: {}",
+ "Fotos wählen": "Valitse kuvat",
+ "Oder Fotos hierher ziehen.": "Tai vedä kuvat tähän.",
+ "{} {} gewählt": "Valittu: {} {}"
 }

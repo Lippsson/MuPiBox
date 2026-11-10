@@ -3422,5 +3422,10 @@
  "Umbenennen": "Zmień nazwę",
  "Video": "Film",
  "Voriges Bild": "Poprzedni obraz",
- "frei": "wolne"
+ "frei": "wolne",
+ "Hochladen abgebrochen": "Przesyłanie przerwane",
+ "Hochladen abgebrochen – {} übernommen": "Przesyłanie przerwane – dodano: {}",
+ "Fotos wählen": "Wybierz zdjęcia",
+ "Oder Fotos hierher ziehen.": "Lub przeciągnij zdjęcia tutaj.",
+ "{} {} gewählt": "Wybrano: {} {}"
 }

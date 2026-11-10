@@ -3422,5 +3422,10 @@
  "Umbenennen": "Переименовать",
  "Video": "Видео",
  "Voriges Bild": "Предыдущее изображение",
- "frei": "свободно"
+ "frei": "свободно",
+ "Hochladen abgebrochen": "Загрузка прервана",
+ "Hochladen abgebrochen – {} übernommen": "Загрузка прервана – добавлено: {}",
+ "Fotos wählen": "Выбрать фото",
+ "Oder Fotos hierher ziehen.": "Или перетащите фото сюда.",
+ "{} {} gewählt": "Выбрано: {} {}"
 }

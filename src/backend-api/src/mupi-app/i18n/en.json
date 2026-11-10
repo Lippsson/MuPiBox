@@ -3438,5 +3438,10 @@
  "Umbenennen": "Rename",
  "Video": "Video",
  "Voriges Bild": "Previous picture",
- "frei": "free"
+ "frei": "free",
+ "Hochladen abgebrochen": "Upload stopped",
+ "Hochladen abgebrochen – {} übernommen": "Upload stopped – {} added",
+ "Fotos wählen": "Choose photos",
+ "Oder Fotos hierher ziehen.": "Or drag photos here.",
+ "{} {} gewählt": "{} {} chosen"
 }

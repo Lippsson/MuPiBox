@@ -3422,5 +3422,10 @@
  "Umbenennen": "Перейменувати",
  "Video": "Відео",
  "Voriges Bild": "Попереднє зображення",
- "frei": "вільно"
+ "frei": "вільно",
+ "Hochladen abgebrochen": "Завантаження перервано",
+ "Hochladen abgebrochen – {} übernommen": "Завантаження перервано – додано: {}",
+ "Fotos wählen": "Вибрати фото",
+ "Oder Fotos hierher ziehen.": "Або перетягни фото сюди.",
+ "{} {} gewählt": "Вибрано: {} {}"
 }

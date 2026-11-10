@@ -3422,5 +3422,10 @@
  "Umbenennen": "Rinomina",
  "Video": "Video",
  "Voriges Bild": "Immagine precedente",
- "frei": "libero"
+ "frei": "libero",
+ "Hochladen abgebrochen": "Caricamento interrotto",
+ "Hochladen abgebrochen – {} übernommen": "Caricamento interrotto – aggiunte: {}",
+ "Fotos wählen": "Scegli foto",
+ "Oder Fotos hierher ziehen.": "Oppure trascina qui le foto.",
+ "{} {} gewählt": "Scelte: {} {}"
 }

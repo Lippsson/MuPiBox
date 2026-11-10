@@ -3422,5 +3422,10 @@
  "Umbenennen": "Yeniden adlandır",
  "Video": "Video",
  "Voriges Bild": "Önceki resim",
- "frei": "boş"
+ "frei": "boş",
+ "Hochladen abgebrochen": "Yükleme durduruldu",
+ "Hochladen abgebrochen – {} übernommen": "Yükleme durduruldu – eklendi: {}",
+ "Fotos wählen": "Fotoğraf seç",
+ "Oder Fotos hierher ziehen.": "Ya da fotoğrafları buraya sürükle.",
+ "{} {} gewählt": "Seçildi: {} {}"
 }

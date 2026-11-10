@@ -3422,5 +3422,10 @@
  "Umbenennen": "Mudar o nome",
  "Video": "Vídeo",
  "Voriges Bild": "Imagem anterior",
- "frei": "livre"
+ "frei": "livre",
+ "Hochladen abgebrochen": "Carregamento interrompido",
+ "Hochladen abgebrochen – {} übernommen": "Carregamento interrompido – adicionadas: {}",
+ "Fotos wählen": "Escolher fotos",
+ "Oder Fotos hierher ziehen.": "Ou arrasta as fotos para aqui.",
+ "{} {} gewählt": "Escolhidas: {} {}"
 }

@@ -3422,5 +3422,10 @@
  "Umbenennen": "Hernoemen",
  "Video": "Video",
  "Voriges Bild": "Vorige afbeelding",
- "frei": "vrij"
+ "frei": "vrij",
+ "Hochladen abgebrochen": "Uploaden afgebroken",
+ "Hochladen abgebrochen – {} übernommen": "Uploaden afgebroken – {} toegevoegd",
+ "Fotos wählen": "Foto’s kiezen",
+ "Oder Fotos hierher ziehen.": "Of sleep foto’s hierheen.",
+ "{} {} gewählt": "{} {} gekozen"
 }

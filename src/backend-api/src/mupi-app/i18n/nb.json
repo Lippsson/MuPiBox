@@ -3422,5 +3422,10 @@
  "Umbenennen": "Gi nytt navn",
  "Video": "Video",
  "Voriges Bild": "Forrige bilde",
- "frei": "ledig"
+ "frei": "ledig",
+ "Hochladen abgebrochen": "Opplasting avbrutt",
+ "Hochladen abgebrochen – {} übernommen": "Opplasting avbrutt – {} lagt til",
+ "Fotos wählen": "Velg bilder",
+ "Oder Fotos hierher ziehen.": "Eller dra bilder hit.",
+ "{} {} gewählt": "{} {} valgt"
 }

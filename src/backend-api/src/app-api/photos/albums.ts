@@ -8,7 +8,7 @@ import { pipeline } from 'node:stream/promises'
 import type { Express, Request, Response, Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
-import { extOf, NotAPicture, PHOTO_EXTENSIONS, photoFiles, processPhoto } from './process'
+import { extOf, NotAPicture, PHOTO_EXTENSIONS, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings, type PhotoOrder } from './settings'
 import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, INCOMING_DIR, isId, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
 
@@ -73,6 +73,23 @@ async function sumOf(file: string): Promise<string> {
   const hash = createHash('sha1')
   await pipeline(createReadStream(file), hash)
   return hash.digest('hex')
+}
+
+// An upload's ticket (made by the app, one per file): to stop it from the app (POST /photos/upload/cancel). Kept two
+// minutes after its last use - a cancel may come late, or before its upload.
+interface UploadTicket {
+  stop: AbortController
+  /** set when the upload placed its picture (in the list's turn) */
+  placed?: { album: string; asset: string }
+  timer?: NodeJS.Timeout
+}
+const TICKET = /^[a-f0-9]{16}$/
+const tickets = new Map<string, UploadTicket>()
+function keepTicket(ticket: string, entry: UploadTicket): void {
+  if (entry.timer) clearTimeout(entry.timer)
+  entry.timer = setTimeout(() => tickets.delete(ticket), 2 * 60_000)
+  entry.timer.unref()
+  tickets.set(ticket, entry)
 }
 
 export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): void {
@@ -192,7 +209,32 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
   })
 
   /**
-   * PUT /api/app/photos/upload?album=<id>&name=<file name>  Body: the file's bytes.
+   * POST /api/app/photos/upload/cancel {ticket} - the app stopped this upload: it is not finished, and when it was placed
+   * just now it is taken out again (the app has said "Abgebrochen"). A cancel before its upload came: that one stops at once.
+   */
+  router.post('/photos/upload/cancel', requireSession, requireCsrf, async (req, res) => {
+    const ticket = String((req.body as { ticket?: unknown } | undefined)?.ticket ?? '')
+    if (!TICKET.test(ticket)) return void res.status(400).json({ error: 'ticket' })
+    const entry = tickets.get(ticket) ?? { stop: new AbortController() }
+    keepTicket(ticket, entry)
+    entry.stop.abort()
+    // (in the list's turn, after the upload's own: what it placed is known by then)
+    const removed = await update((lib) => {
+      const placed = entry.placed
+      if (!placed) return null
+      entry.placed = undefined
+      const a = lib.albums.find((x) => x.id === placed.album)
+      if (!a || !a.assets.some((x) => x.id === placed.asset)) return null
+      a.assets = a.assets.filter((x) => x.id !== placed.asset)
+      if (a.cover === placed.asset) delete a.cover
+      return placed
+    })
+    if (removed) for (const f of photoFiles(assetBase({ id: removed.album }, removed.asset))) await fsp.rm(f, { force: true })
+    res.json({ ok: true, removed: Boolean(removed) })
+  })
+
+  /**
+   * PUT /api/app/photos/upload?album=<id>&name=<file name>&ticket=<16 hex>  Body: the file's bytes.
    * One picture into an uploaded album, made into its sizes at once (no original kept). The answer for the app's list:
    * {ok, asset} or {skipped: 'format' | 'duplicate' | 'broken' | 'space'}.
    */
@@ -215,6 +257,16 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     const part = path.join(INCOMING_DIR, `${randomBytes(6).toString('hex')}${ext}.part`)
     const id = newId()
     const out = assetBase(target, id)
+    // the app stopped the upload (its sheet closed): the picture is not made and not placed - the app has said
+    // "Abgebrochen", a photo turning up afterwards would be one nobody wanted. Said by the app's cancel with the upload's
+    // ticket (lighttpd on port 80 keeps the way to the server open when the browser lets go), or seen directly.
+    const ticket = TICKET.test(String(req.query.ticket ?? '')) ? String(req.query.ticket) : null
+    const entry: UploadTicket = (ticket && tickets.get(ticket)) || { stop: new AbortController() }
+    if (ticket) keepTicket(ticket, entry)
+    const gone = entry.stop
+    res.on('close', () => {
+      if (!res.writableFinished) gone.abort()
+    })
     try {
       await pipeline(req, createWriteStream(part, { flags: 'wx' }))
       if ((await fsp.stat(part)).size !== size) throw new Error('incomplete')
@@ -223,22 +275,28 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
       await fsp.mkdir(albumDir(target), { recursive: true })
       let facts
       try {
-        facts = await processPhoto(part, out, ext)
+        facts = await processPhoto(part, out, ext, gone.signal)
       } catch (err) {
         if (err instanceof NotAPicture) return void res.json({ skipped: 'broken' })
+        if (err instanceof PhotoAborted) return
         throw err
       }
       const asset: PhotoAsset = { id, w: facts.w, h: facts.h, taken: facts.taken, added: new Date().toISOString(), kind: 'photo', sum }
       const placed = await update((lib) => {
+        // (asked once more in the list's turn: the app may have stopped while the list was busy)
+        if (gone.signal.aborted) return 'aborted'
         const a = lib.albums.find((x) => x.id === albumId)
         if (!a) return false
         // (the same picture twice at once - two uploads of it side by side: once)
         if (a.assets.some((x) => x.sum === sum)) return 'duplicate'
         a.assets.push(asset)
+        // (in the list's turn: a cancel after this one takes it out again)
+        entry.placed = { album: albumId, asset: id }
         return true
       })
       if (placed !== true) {
         for (const f of photoFiles(out)) await fsp.rm(f, { force: true })
+        if (placed === 'aborted') return
         return void (placed === 'duplicate' ? res.json({ skipped: 'duplicate' }) : res.status(404).json({ error: 'no such album' }))
       }
       res.json({ ok: true, asset: { id, w: asset.w, h: asset.h } })

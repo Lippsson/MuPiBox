@@ -11583,12 +11583,16 @@ const PHOTO_SKIP = { format: 'Format wird nicht unterstützt', duplicate: 'Schon
 function photoUploadSheet(albumId, after) {
   const uploads = (photoLib.overview?.albums ?? []).filter((a) => a.source === 'upload')
   const chosen = albumId ?? uploads[0]?.id ?? ''
-  const upload = { stopped: false, current: null }
+  const upload = { stopped: false, running: false, current: null, ticket: null }
   openSheet(
     `<h2>Fotos hochladen</h2>
      ${albumId ? '' : `<div class="field"><label for="ph-up-album">Wohin?</label><select class="input" id="ph-up-album">${uploads.map((a) => `<option value="${esc(a.id)}"${a.id === chosen ? ' selected' : ''}>${esc(a.title)}</option>`).join('')}<option value="">${esc(tr('Neues Album'))}</option></select></div>
        <div class="field" id="ph-up-new"${chosen ? ' hidden' : ''}><label for="ph-up-name">Name des Albums</label><input class="input" id="ph-up-name" maxlength="40" autocomplete="off"></div>`}
-     <div class="field"><label for="ph-up-files">Fotos</label><input class="input" id="ph-up-files" type="file" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.heic,.heif"><small>JPEG, PNG, HEIC (iPhone)</small></div>
+     <div class="field"><label>Fotos</label>
+       <div class="btns" style="margin:0"><button type="button" class="btn" id="ph-up-pick">${icon('image', 18)}Fotos wählen</button></div>
+       <input type="file" id="ph-up-files" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp" hidden>
+       <div class="drop" id="ph-up-drop">Oder Fotos hierher ziehen.</div>
+       <small id="ph-up-picked">JPEG, PNG, HEIC (iPhone)</small></div>
      <div class="note">${icon('lock', 18)}<span>Die Box speichert Fotos verkleinert (ca. 1280 px) und entfernt Standortdaten. Die Originale bleiben auf deinem Gerät.</span></div>
      <p class="help" id="ph-up-state" style="margin:0" hidden></p>
      <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Hochladen</button></div>`,
@@ -11596,8 +11600,34 @@ function photoUploadSheet(albumId, after) {
       const sel = sheet.querySelector('#ph-up-album')
       sel?.addEventListener('change', () => (sheet.querySelector('#ph-up-new').hidden = sel.value !== ''))
       sheet.querySelector('[data-close]').onclick = close
+      // the choice: from the button (the phone's picker) or dropped onto the field - a new choice replaces the one before
+      let files = []
+      const input = sheet.querySelector('#ph-up-files')
+      const drop = sheet.querySelector('#ph-up-drop')
+      const picked = sheet.querySelector('#ph-up-picked')
+      const choose = (list) => {
+        files = [...list].filter((f) => PHOTO_UPLOAD_EXT.test(f.name))
+        drop.classList.toggle('chosen', files.length > 0)
+        picked.textContent = files.length
+          ? `${tr(`${files.length} ${files.length === 1 ? 'Foto' : 'Fotos'} gewählt`)} · ${formatBytes(files.reduce((n, f) => n + f.size, 0))}`
+          : 'JPEG, PNG, HEIC (iPhone)'
+      }
+      sheet.querySelector('#ph-up-pick').onclick = () => input.click()
+      input.onchange = () => {
+        choose(input.files ?? [])
+        input.value = ''
+      }
+      drop.ondragover = (ev) => {
+        ev.preventDefault()
+        drop.classList.add('over')
+      }
+      drop.ondragleave = () => drop.classList.remove('over')
+      drop.ondrop = (ev) => {
+        ev.preventDefault()
+        drop.classList.remove('over')
+        if (!upload.running) choose(ev.dataTransfer?.files ?? [])
+      }
       sheet.querySelector('[data-ok]').onclick = async (e) => {
-        const files = [...(sheet.querySelector('#ph-up-files').files ?? [])]
         if (!files.length) return toast('Bitte Fotos wählen', 'info')
         let target = albumId ?? sel?.value ?? ''
         if (!target) {
@@ -11610,6 +11640,8 @@ function photoUploadSheet(albumId, after) {
         const check = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: files.length } })
         if (check.ok && check.body?.enough === false) return toast('Nicht genug Platz auf der Box', 'info')
         e.target.disabled = true
+        upload.running = true
+        sheet.querySelector('#ph-up-pick').disabled = true
         const line = sheet.querySelector('#ph-up-state')
         line.hidden = false
         let ok = 0
@@ -11617,10 +11649,12 @@ function photoUploadSheet(albumId, after) {
         for (const [i, f] of files.entries()) {
           if (upload.stopped) break
           line.textContent = tr(`${i + 1} von ${files.length} Dateien …`)
-          // (one file at most 5 minutes - a slow WLAN and the Pi's work on a big picture; then the next one)
+          // (one file at most 5 minutes - a slow WLAN and the Pi's work on a big picture; then the next one, this one
+          // stopped on the box as well)
           upload.current = new AbortController()
-          const timer = setTimeout(() => upload.current?.abort(), 5 * 60_000)
-          const r = await fetch(`${API}/photos/upload?album=${encodeURIComponent(target)}&name=${encodeURIComponent(f.name)}`, {
+          upload.ticket = photoTicket()
+          const timer = setTimeout(stopPhotoUpload, 5 * 60_000)
+          const r = await fetch(`${API}/photos/upload?album=${encodeURIComponent(target)}&name=${encodeURIComponent(f.name)}&ticket=${upload.ticket}`, {
             method: 'PUT',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/octet-stream', 'x-mupibox-csrf': state.csrf },
@@ -11630,11 +11664,15 @@ function photoUploadSheet(albumId, after) {
           const body = r ? await r.json().catch(() => ({})) : {}
           clearTimeout(timer)
           upload.current = null
+          upload.ticket = null
           if (r?.ok && body.ok) ok++
           else if (!upload.stopped) skipped.push(`${f.name}: ${tr(PHOTO_SKIP[body.skipped] ?? (body.error === 'heif_missing' ? 'HEIC wird gerade eingerichtet' : 'Hochladen fehlgeschlagen'))}`)
         }
+        // (stopped before the end - the file on its way is not placed by the box either, see the upload's route)
+        const aborted = upload.stopped
         close()
-        toast(skipped.length ? tr(`${ok} übernommen, ${skipped.length} übersprungen`) : tr(`${ok} übernommen`), skipped.length ? 'info' : 'ok')
+        if (aborted) toast(ok ? tr(`Hochladen abgebrochen – ${ok} übernommen`) : 'Hochladen abgebrochen', 'info')
+        else toast(skipped.length ? tr(`${ok} übernommen, ${skipped.length} übersprungen`) : tr(`${ok} übernommen`), skipped.length ? 'info' : 'ok')
         if (skipped.length) console.warn('[photos] skipped', skipped)
         after?.(target)
       }
@@ -11642,10 +11680,18 @@ function photoUploadSheet(albumId, after) {
     // (closed in any way - Abbrechen, swiped away, Escape, another page: no further file, the one on its way is stopped)
     () => {
       upload.stopped = true
-      upload.current?.abort()
+      stopPhotoUpload()
     },
   )
+  // the file on its way: the browser lets go, and the box is told (lighttpd keeps the way to the server open, so the
+  // server would not notice) - it does not make the picture, or takes it out again when it was just placed
+  function stopPhotoUpload() {
+    if (upload.ticket) void api(`${API}/photos/upload/cancel`, { method: 'POST', body: { ticket: upload.ticket } })
+    upload.current?.abort()
+  }
 }
+const PHOTO_UPLOAD_EXT = /\.(jpe?g|png|hei[cf]|webp)$/i
+const photoTicket = () => [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('')
 
 async function loadPhotoAlbum() {
   let id = photoLib.albumId

@@ -3422,5 +3422,10 @@
  "Umbenennen": "Cambiar nombre",
  "Video": "Vídeo",
  "Voriges Bild": "Imagen anterior",
- "frei": "libre"
+ "frei": "libre",
+ "Hochladen abgebrochen": "Subida cancelada",
+ "Hochladen abgebrochen – {} übernommen": "Subida cancelada – añadidas: {}",
+ "Fotos wählen": "Elegir fotos",
+ "Oder Fotos hierher ziehen.": "O arrastra las fotos aquí.",
+ "{} {} gewählt": "Elegidas: {} {}"
 }

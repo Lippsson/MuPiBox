@@ -3422,5 +3422,10 @@
  "Umbenennen": "Omdøb",
  "Video": "Video",
  "Voriges Bild": "Forrige billede",
- "frei": "ledigt"
+ "frei": "ledigt",
+ "Hochladen abgebrochen": "Upload afbrudt",
+ "Hochladen abgebrochen – {} übernommen": "Upload afbrudt – {} tilføjet",
+ "Fotos wählen": "Vælg fotos",
+ "Oder Fotos hierher ziehen.": "Eller træk fotos hertil.",
+ "{} {} gewählt": "{} {} valgt"
 }

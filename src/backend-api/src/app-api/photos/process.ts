@@ -72,20 +72,24 @@ function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
 }
 
 export class NotAPicture extends Error {}
+/** The one who sent the picture is gone (the app's upload was stopped): nothing more is done for it */
+export class PhotoAborted extends Error {}
 
 /**
  * The three sizes of `src` as `<out>.jpg`, `<out>.s.jpg`, `<out>.b.jpg` (written next to each other and renamed at the
  * end: never half of them). `ext`: the source's kind (HEIC goes through heif-convert). Throws NotAPicture for a file
- * PIL cannot read.
+ * PIL cannot read, PhotoAborted when `signal` ends it (waiting for its turn or on its way).
  */
-export function processPhoto(src: string, out: string, ext: string): Promise<ProcessedPhoto> {
+export function processPhoto(src: string, out: string, ext: string, signal?: AbortSignal): Promise<ProcessedPhoto> {
   return oneAtATime(async () => {
+    if (signal?.aborted) throw new PhotoAborted()
     let input = src
     let converted: string | undefined
     try {
       if (ext === '.heic' || ext === '.heif') {
         converted = `${out}.heic.jpg`
-        await execFileAsync('nice', ['-n', '10', 'heif-convert', '-q', '92', src, converted], { timeout: 120_000 }).catch((err) => {
+        await execFileAsync('nice', ['-n', '10', 'heif-convert', '-q', '92', src, converted], { timeout: 120_000, signal }).catch((err) => {
+          if (signal?.aborted) throw new PhotoAborted()
           // (started through nice: a missing heif-convert is nice's exit code 127, not an ENOENT - the photo is fine,
           // the box is still setting HEIC up or that failed; the app says so instead of "Datei beschädigt")
           const code = (err as { code?: unknown }).code
@@ -95,11 +99,13 @@ export function processPhoto(src: string, out: string, ext: string): Promise<Pro
       }
       let stdout: string
       try {
-        ;({ stdout } = await execFileAsync('nice', ['-n', '10', 'python3', '-c', SCRIPT, input, out], { timeout: 120_000 }))
+        ;({ stdout } = await execFileAsync('nice', ['-n', '10', 'python3', '-c', SCRIPT, input, out], { timeout: 120_000, signal }))
       } catch (err) {
+        if (signal?.aborted) throw new PhotoAborted()
         if ((err as { code?: number }).code === 2) throw new NotAPicture()
         throw err
       }
+      if (signal?.aborted) throw new PhotoAborted()
       const facts = JSON.parse(stdout) as ProcessedPhoto
       for (const suffix of ['.jpg', '.s.jpg', '.b.jpg']) await fsp.rename(`${out}${suffix}.tmp`, `${out}${suffix}`)
       return { w: Number(facts.w) || 0, h: Number(facts.h) || 0, taken: typeof facts.taken === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(facts.taken) ? facts.taken : null }
