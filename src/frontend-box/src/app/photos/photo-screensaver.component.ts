@@ -10,7 +10,16 @@ import { PhotosService } from './photos.service'
 @Component({
   selector: 'mupi-photo-screensaver',
   template: `
-    <div class="ss" (pointerup)="leave()" (click)="$event.stopPropagation()">
+    <!-- (the tap and the swipe stay here: the document's gestures - back from the bottom edge, the header - do not see
+         them; the screensaver's own watch of touches listens before, in the capture phase) -->
+    <div
+      class="ss"
+      (pointerup)="leave()"
+      (click)="$event.stopPropagation()"
+      (touchstart)="$event.stopPropagation()"
+      (touchmove)="$event.stopPropagation()"
+      (touchend)="$event.stopPropagation()"
+    >
       @for (s of slides(); track s.key) {
         <div class="ss-slide" [class.ss-in]="s.key > 0" [class.ss-alt]="s.key % 2 === 1" [style.--ss-hold]="saver.seconds() + 1.2 + 's'">
           <img class="ss-bg" [src]="photos.fileUrl(s.pic.album, s.pic.id, 'b')" alt="" draggable="false" />

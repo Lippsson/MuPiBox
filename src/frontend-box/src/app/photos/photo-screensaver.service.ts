@@ -76,8 +76,20 @@ export class PhotoScreensaverService {
       .pipe(catchError(() => of(null)))
       .subscribe((a) => {
         // (no answer - the server restarts: what was there stays)
-        if (a) this.answer.set(a)
+        if (!a) return
+        this.answer.set(a)
+        if (this.active()) this.follow(a)
       })
+  }
+
+  // a running screensaver takes the box's new answer: switched off - it ends; pictures hidden or deleted in the app
+  // meanwhile - they leave its list (none left: it ends)
+  private follow(a: SaverAnswer): void {
+    const there = new Set((a.enabled ? (a.pictures ?? []) : []).map((p) => `${p.album}/${p.id}`))
+    const list = this.pictures()
+    const kept = list.filter((p) => there.has(`${p.album}/${p.id}`))
+    if (!kept.length) return this.end()
+    if (kept.length !== list.length) this.pictures.set(kept)
   }
 
   private async tick(): Promise<void> {
