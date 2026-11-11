@@ -333,7 +333,9 @@ export class NasPhotoSync {
         // needs room for both for a moment)
         let oldBytes = 0
         if (old) for (const f of photoFiles(assetBase(album, old.id))) oldBytes += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
-        if (used - oldBytes + (file.size ?? 0) / 4 > limit || (space && space.free - (file.size ?? 0) < RESERVE_BYTES)) {
+        // (a new picture: its sizes guessed from the file before it is fetched; a changed one is checked by what it makes -
+        // it often takes as much as the old one)
+        if ((!old && used + (file.size ?? 0) / 4 > limit) || (space && space.free - (file.size ?? 0) < RESERVE_BYTES)) {
           full = true
           break
         }
@@ -348,6 +350,14 @@ export class NasPhotoSync {
           }
           await fsp.mkdir(albumDir(album), { recursive: true })
           const facts = await processPhoto(part, out, ext, stop.signal)
+          let newBytes = 0
+          for (const f of photoFiles(out)) newBytes += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
+          // (more than the limit takes, with the old ones gone: not taken - a changed picture keeps its old one)
+          if (used - oldBytes + newBytes > limit) {
+            for (const f of photoFiles(out)) await fsp.rm(f, { force: true }).catch(() => undefined)
+            full = true
+            break
+          }
           const asset: PhotoAsset = { id, w: facts.w, h: facts.h, taken: facts.taken, added: new Date().toISOString(), kind: 'photo', ref: file.path, ver: versionOf(file) }
           const placed = await update((lib) => {
             const a = lib.albums.find((x) => x.id === album.id)
@@ -362,7 +372,7 @@ export class NasPhotoSync {
           })
           if (!placed) for (const f of photoFiles(out)) await fsp.rm(f, { force: true }).catch(() => undefined)
           else {
-            for (const f of photoFiles(out)) used += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
+            used += newBytes
             if (old) {
               for (const f of photoFiles(assetBase(album, old.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
               used -= oldBytes
