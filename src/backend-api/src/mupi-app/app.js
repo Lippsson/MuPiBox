@@ -12390,7 +12390,7 @@ function photoImmichSteps() {
       <small>Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.</small></div>`
     next = `<button class="btn primary" id="im-next1">Weiter</button>`
   } else if (s === 2) {
-    const kept = photoImmich.data?.settings.hasKey
+    const kept = photoImmichKeyKept()
     body = `<h2>API-Schlüssel anlegen</h2><p class="help">Damit die Box deine Alben lesen darf.</p>
       <ol class="ph-howto"><li>Immich im Browser öffnen und anmelden.</li><li>Kontoeinstellungen › API-Schlüssel › „Neuer API-Schlüssel“.</li>
       <li>Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.</li><li>Schlüssel kopieren und hier einfügen.</li></ol>
@@ -12433,6 +12433,13 @@ function photoImmichSteps() {
       <div class="wz-foot">${back}<span class="wz-next">${next}</span></div></section>`,
   ]
 }
+
+// a key kept on the box, for the address typed in (another server gets it only typed in anew - see immich.ts)
+const immichUrl = (v) => {
+  const t = String(v ?? '').trim().replace(/\/+$/, '').replace(/\/api$/i, '')
+  return /^https?:\/\//i.test(t) ? t.toLowerCase() : `http://${t}`.toLowerCase()
+}
+const photoImmichKeyKept = () => !!photoImmich.data?.settings.hasKey && immichUrl(photoImmich.url) === immichUrl(photoImmich.data.settings.url)
 
 // the step shown (3, the test, only with a result)
 const photoImmichImmichStep = () => (photoImmich.step === 3 && !photoImmich.test ? 2 : photoImmich.step)
@@ -12528,7 +12535,7 @@ function mountPhotoImmich(root, page) {
   for (const b of root.querySelectorAll('[data-imstep]')) b.onclick = () => goStep(Number(b.dataset.imstep))
   $('#im-test', root)?.addEventListener('click', async () => {
     photoImmich.key = $('#im-key', root).value.trim()
-    if (!photoImmich.key && !d.settings.hasKey) return toast('Bitte den API-Schlüssel einfügen', 'info')
+    if (!photoImmich.key && !photoImmichKeyKept()) return toast('Bitte den API-Schlüssel einfügen', 'info')
     photoImmich.testing = true
     redraw()
     const r = await api(`${API}/photos/immich/test`, { method: 'POST', body: { url: photoImmich.url, apiKey: photoImmich.key }, timeoutMs: 30000 })

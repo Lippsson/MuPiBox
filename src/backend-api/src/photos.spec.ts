@@ -107,7 +107,12 @@ test('photo Immich: address and settings checked, the key kept as given to encry
   assert.equal(applyImmichSettings(cfg, { albumIds: ['nope'] }), 'albumIds')
   assert.equal(applyImmichSettings(cfg, { apiKey: 'short' }), 'apiKey')
   assert.equal(applyImmichSettings(cfg, { url: 'ftp://x' }), 'url')
+  // (another server: the key kept is not handed on to it)
+  assert.equal(applyImmichSettings(cfg, { url: 'http://evil.example:2283' }), 'apiKey')
   assert.equal(JSON.stringify(cfg), before)
+  assert.equal(applyImmichSettings(cfg, { url: 'http://10.0.0.5:2283/' }), null)
+  assert.equal(applyImmichSettings(cfg, { url: 'http://10.0.0.6:2283', apiKey: 'zyxwvutsrqponmlk' }, (x) => `enc:${x}`), null)
+  assert.equal(immichSettings(cfg).apiKey, 'enc:zyxwvutsrqponmlk')
 })
 
 test('photo Immich: the test and an album against a server like Immich (old version, wrong key, assets searched)', async () => {

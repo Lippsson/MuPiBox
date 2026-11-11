@@ -94,6 +94,8 @@ export function applyImmichSettings(cfg: Record<string, unknown>, patch: unknown
   if (p.url !== undefined) {
     const url = cleanImmichUrl(p.url)
     if (!url) return 'url'
+    // (the key kept belongs to the server it was given for: another server gets it only typed in anew)
+    if (url !== cleanImmichUrl(next.url) && next.apiKey && p.apiKey === undefined) return 'apiKey'
     next.url = url
   }
   if (p.apiKey !== undefined) {
@@ -389,6 +391,16 @@ export class ImmichPhotoSync {
     const s = immichSettings(cfg)
     if (!photoSettings(cfg).enabled) return
     const client = this.client(cfg)
+    // (set up, but no key that can be used - the config of another box: its key cannot be read here): nothing on the
+    // box changes, the app asks for the key; taking the albums off is "Verbindung trennen"
+    if (!client) {
+      if (s.url && s.apiKey) {
+        this.state.unauthorized = true
+        this.log('the key cannot be read on this box, the pictures stay - enter it again in the app')
+        await this.save()
+      }
+      return
+    }
     const stop = new AbortController()
     this.stop = stop
     Object.assign(this.state, { running: true, done: 0, total: 0 })
@@ -396,7 +408,7 @@ export class ImmichPhotoSync {
       // the albums chosen as Immich has them now; Immich away: nothing changes on the box
       const found = new Map<string, { name: string; assets: ImmichAsset[] }>()
       let missing = 0
-      if (client) {
+      {
         for (const id of s.albumIds) {
           if (stop.signal.aborted) return
           try {
@@ -505,7 +517,7 @@ export class ImmichPhotoSync {
       let full = false
       await fsp.mkdir(INCOMING_DIR, { recursive: true })
       for (const { album, asset: x, old, fresh } of work) {
-        if (stop.signal.aborted || !client) return
+        if (stop.signal.aborted) return
         const space = await cardSpace()
         let oldBytes = 0
         if (old) for (const f of photoFiles(assetBase(album, old.id))) oldBytes += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
@@ -713,8 +725,9 @@ export function registerPhotoImmichRoutes(router: Router, deps: PhotoImmichDeps)
     if (!url) return void res.status(400).json({ error: 'url' })
     let key = typeof b.apiKey === 'string' ? b.apiKey.trim() : ''
     if (!key) {
+      // (the key kept only for the server it was given for - never to another address)
       const kept = sync.client()
-      if (!kept) return void res.status(400).json({ error: 'apiKey' })
+      if (!kept || kept.url !== url) return void res.status(400).json({ error: 'apiKey' })
       key = kept.key
     }
     res.json(await testImmich(new ImmichClient(url, key)))
