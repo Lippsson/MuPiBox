@@ -31,6 +31,8 @@ export class PhotoTimeService {
   readonly status = computed(() => this.playtime.status().photos ?? null)
   /** the own account is used up: the photos pause (the listening time's lock covers "shared") */
   readonly blocked = computed(() => this.status()?.state === 'blocked')
+  /** the box locks (listening time used up, a quiet time, "Ruhe jetzt") or the display is off: a clip and a slideshow stop */
+  readonly halted = computed(() => this.lockShown() || this.saver.monitorOff())
   private readonly lockShown = computed(() => {
     const p = this.playtime.status()
     return p.enabled === true && p.state === 'blocked'

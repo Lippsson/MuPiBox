@@ -88,7 +88,15 @@ const RESTORE_DIRS = [
   'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/',
   'home/dietpi/.mupibox/data/',
   'home/dietpi/.mupibox/data/library/',
+  'home/dietpi/.mupibox/data/photos/',
+  'home/dietpi/.mupibox/data/photos/upload/',
 ]
+// the photo display's uploaded pictures and clips (5.1, a full backup): the list of the albums and, below upload/, an
+// album's folder and its files - pictures in their sizes, made clips, clips still waiting to be made; nothing else there
+const PHOTO_LIBRARY = 'home/dietpi/.mupibox/data/photos/library.json'
+const PHOTO_UPLOAD = 'home/dietpi/.mupibox/data/photos/upload/'
+const PHOTO_FILE = /^home\/dietpi\/\.mupibox\/data\/photos\/upload\/[a-f0-9]{10}\/[a-f0-9]{10}(\.jpg|\.s\.jpg|\.b\.jpg|\.mp4|\.pending)$/
+const PHOTO_DIR = /^home\/dietpi\/\.mupibox\/data\/photos\/upload\/[a-f0-9]{10}\/$/
 // file types the web server runs or a browser runs as a page: never restored below media/ (see admin.php)
 const FORBIDDEN_MEDIA = /(\.(php\d?|phtml|phar|pht|pl|py|cgi|fcgi|sh|shtml|s?html?|xhtml|xht|svgz?|js|mjs|xml|xsl)|\/\.htaccess|\/\.user\.ini)$/i
 
@@ -419,7 +427,9 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     const zip = `/var/tmp/mupibox-backup-${process.pid}-${Date.now()}.zip`
     const present = (f: string) => fsp.access(f).then(() => true, () => false)
     const extras = (await Promise.all([BACKGROUND, ...BOOT_CUSTOM].map(async (f) => ((await present(f)) ? f : '')))).filter(Boolean)
-    const sources = [full ? '/home/dietpi/MuPiBox/media' : '/home/dietpi/MuPiBox/media/cover', ...BACKUP_FILES, ...extras]
+    // (full: the uploaded photos and clips too - those of NAS and Immich are fetched again)
+    const photos = full ? (await Promise.all([`/${PHOTO_LIBRARY}`, `/${PHOTO_UPLOAD}`].map(async (f) => ((await present(f)) ? f : '')))).filter(Boolean) : []
+    const sources = [full ? '/home/dietpi/MuPiBox/media' : '/home/dietpi/MuPiBox/media/cover', ...BACKUP_FILES, ...extras, ...photos]
     // the library under its name of before (LIBRARY_ENTRY_BEFORE): copied into a folder of its own, the zip made from
     // there (the other sources by their full path, stored without the leading /)
     const stage = `/var/tmp/mupibox-backup-${process.pid}-${Date.now()}.d`
@@ -430,7 +440,7 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         'sh',
         '-c',
         `mkdir -p '${path.dirname(staged)}' && { [ ! -e '${LIBRARY}/data.json' ] || cp '${LIBRARY}/data.json' '${staged}'; } && cd '${stage}' && ` +
-          `zip -q -r '${zip}' $([ -e '${staged}' ] && echo '${LIBRARY_ENTRY_BEFORE}') ${sources.map((s) => `'${s}'`).join(' ')}; ` +
+          `zip -q -r '${zip}' $([ -e '${staged}' ] && echo '${LIBRARY_ENTRY_BEFORE}') ${sources.map((s) => `'${s}'`).join(' ')} -x '*.tmp' '*.part'; ` +
           `chmod 644 '${zip}'; rm -rf '${stage}'`,
       ],
       full ? 3600000 : 120000,
@@ -501,6 +511,7 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     const unpacked = Number(/^\d+ files?, (\d+) bytes uncompressed/.exec(lines[lines.length - 1] ?? '')?.[1] ?? NaN)
     let bad = ''
     let count = 0
+    let photosRestored = false
     const files: { name: string; size: number }[] = []
     for (const line of lines.slice(2, -1)) {
       const m =
@@ -515,10 +526,12 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
       const name = m[3].replace(/^\/+/, '')
       const isDir = type === 'd' || name.endsWith('/')
       const inMedia = name.startsWith('home/dietpi/MuPiBox/media/')
+      const photo = isDir ? PHOTO_DIR.test(name) : name === PHOTO_LIBRARY || PHOTO_FILE.test(name)
+      if (photo) photosRestored = true
       const allowed =
         !name.includes('..') &&
         !name.includes('\\') &&
-        (RESTORE_FILES.includes(name) || (isDir && (RESTORE_DIRS.includes(name) || inMedia)) || (!isDir && inMedia && !FORBIDDEN_MEDIA.test(name)))
+        (photo || RESTORE_FILES.includes(name) || (isDir && (RESTORE_DIRS.includes(name) || inMedia)) || (!isDir && inMedia && !FORBIDDEN_MEDIA.test(name)))
       if (!allowed) {
         bad = name
         break
@@ -586,6 +599,8 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
       res.status(500).json({ error: 'unzip failed' })
       return
     }
+    // (unpacked as root: the photos the server's again - it adds and deletes there)
+    if (photosRestored) await run('sudo', ['chown', '-R', 'dietpi:dietpi', '/home/dietpi/.mupibox/data/photos'], 300000)
     // the restored config brought up to the installed version (as the admin interface), its version kept
     await run('sudo', ['/usr/local/bin/mupibox/conf_update.sh'], 300000)
     await deps.updateMupiboxConfig((cfg) => {

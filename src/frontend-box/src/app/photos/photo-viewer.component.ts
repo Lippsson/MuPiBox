@@ -444,6 +444,14 @@ export class PhotoViewerComponent implements OnDestroy {
   private started = false
 
   constructor() {
+    // the box locks or the display goes off: the clip and the slideshow stop (tapped on again afterwards)
+    effect(() => {
+      if (!this.time.halted()) return
+      untracked(() => {
+        this.host.nativeElement.querySelector<HTMLVideoElement>('video.pv-clip')?.pause()
+        if (this.playing()) this.pause()
+      })
+    })
     void this.checkAudio()
     this.audioTimer = window.setInterval((): void => void this.checkAudio(), 5000)
     // the photo time: the full view counts also untouched; its chip only with the buttons shown
