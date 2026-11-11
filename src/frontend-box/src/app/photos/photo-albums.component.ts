@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal, untracked } from '@angular/core'
 import { DisplayTextsService } from '../display-texts.service'
+import { PlayerService } from '../player.service'
 import { PhotoTimeService } from './photo-time.service'
 import { type PhotoAlbumSummary, PhotosService } from './photos.service'
 
@@ -52,8 +53,9 @@ const PER_PAGE = 3
     <div class="pa" (pointerdown)="down($event)" (pointermove)="move($event)" (pointerup)="up($event)" (pointercancel)="cancel()">
       <div class="pa-track" [style.transform]="'translateX(' + -page() * PAGE + 'px)'">
         @for (a of albums(); track a.id; let i = $index) {
-          <button class="pa-tile" type="button" [style.left.px]="15 + i * STEP" [attr.aria-label]="openLabel(a)" (click)="open(a)">
-            <span class="pa-stack">
+          <!-- the stack opens the album, the name under it is read out (as the names in the other tabs) -->
+          <div class="pa-tile" [style.left.px]="15 + i * STEP">
+            <button class="pa-stack" type="button" [attr.aria-label]="openLabel(a)" (click)="open(a)">
               <span class="pa-back"></span>
               @if (a.pictures[1]) {
                 <img class="pa-mid" [src]="photos.fileUrl(a.id, a.pictures[1], 's')" alt="" draggable="false" />
@@ -62,9 +64,9 @@ const PER_PAGE = 3
               }
               <img class="pa-front" [src]="photos.fileUrl(a.id, a.pictures[0], 's')" alt="" draggable="false" />
               <span class="pa-badge">{{ a.count }}</span>
-            </span>
-            <span class="pa-name">{{ a.title }}</span>
-          </button>
+            </button>
+            <button class="pa-name" type="button" [class.pa-speaking]="speaking() === a.id" (click)="read(a)">{{ a.title }}</button>
+          </div>
         }
       </div>
       @if (pages() > 1) {
@@ -229,6 +231,12 @@ const PER_PAGE = 3
       /* (the covers' top: y 106 on the screen, the page starts below the 72 px header) */
       top: 34px;
       width: 236px;
+    }
+    .pa-stack {
+      position: relative;
+      display: block;
+      width: 236px;
+      height: 236px;
       padding: 0;
       border: 0;
       background: none;
@@ -236,14 +244,8 @@ const PER_PAGE = 3
       -webkit-tap-highlight-color: transparent;
       transition: transform 150ms var(--km-spring, ease-out);
     }
-    .pa-tile:active {
+    .pa-stack:active {
       transform: scale(0.96);
-    }
-    .pa-stack {
-      position: relative;
-      display: block;
-      width: 236px;
-      height: 236px;
     }
     .pa-back,
     .pa-mid,
@@ -292,6 +294,12 @@ const PER_PAGE = 3
     }
     .pa-name {
       display: block;
+      border: 0;
+      font: inherit;
+      -webkit-tap-highlight-color: transparent;
+      transition:
+        transform 150ms var(--km-spring, ease-out),
+        background 150ms;
       margin: 14px 2px 0;
       width: 232px;
       height: 44px;
@@ -307,6 +315,11 @@ const PER_PAGE = 3
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    /* (while it is read out: lit as the name bars of the other tabs) */
+    .pa-name.pa-speaking {
+      background: var(--km-moon, var(--km-apricot, #f7b267));
+      transform: scale(1.05);
     }
     .pa-dots {
       position: absolute;
@@ -347,6 +360,7 @@ export class PhotoAlbumsComponent {
   protected readonly photos = inject(PhotosService)
   protected readonly texts = inject(DisplayTextsService)
   protected readonly time = inject(PhotoTimeService)
+  private readonly player = inject(PlayerService)
   protected readonly STEP = STEP
   protected readonly PAGE = PAGE
 
@@ -411,6 +425,21 @@ export class PhotoAlbumsComponent {
       return
     }
     this.opened.emit(a)
+  }
+
+  // the album's name read out (Einstellungen › Audio › Sprachausgabe, as the names in the other tabs) - not the tap
+  // that ended a swipe
+  protected readonly speaking = signal<string | null>(null)
+  private speakingTimer = 0
+  protected read(a: PhotoAlbumSummary): void {
+    if (this.swiped) {
+      this.swiped = false
+      return
+    }
+    this.player.sayText(a.title)
+    this.speaking.set(a.id)
+    window.clearTimeout(this.speakingTimer)
+    this.speakingTimer = window.setTimeout(() => this.speaking.set(null), 1800)
   }
 
   protected openLabel(a: PhotoAlbumSummary): string {
