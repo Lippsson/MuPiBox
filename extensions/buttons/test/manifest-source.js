@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { BUTTONS, TWINS, ACTIONS } = require('../inputs.js')
 
-const VERSION = '1.1.0'
+const VERSION = '1.2.0'
 
 const ACTION_LABELS = {
   none: 'Keine Aktion',
@@ -35,6 +35,8 @@ const BUTTON_DEFAULTS = [
   ['volDown', 'none', true],
   ['output', 'none', false],
 ]
+// (the volume steps to choose from, and the one that is chosen until the user says otherwise)
+const STEP = 5
 // ... and a twin: [short A, short B, short A+B, long A, long B, long A+B]
 const TWIN_DEFAULTS = [
   ['prev', 'next', 'toggle', 'volDown', 'volUp', 'output'],
@@ -42,10 +44,15 @@ const TWIN_DEFAULTS = [
 ]
 
 function build() {
-  const settings = { volumeStep: { type: 'number', default: 5, options: STEPS } }
-  const items = [{ key: 'volumeStep', label: 'Lautstärke-Schritt', help: 'So viel ändert ein Druck auf „Lauter“ oder „Leiser“.', choices: STEPS.map((v) => ({ value: v, label: `${v} %` })) }]
+  const settings = {}
+  const items = []
   const actionSetting = (def) => ({ type: 'string', default: def, options: ACTIONS })
   const actionChoices = ACTIONS.map((value) => ({ value, label: ACTION_LABELS[value] }))
+  // an action to choose - and beside it, while it is "louder" or "quieter", by how much: every action has its own step
+  const actionItem = (key, label, dep) => {
+    settings[`${key}Step`] = { type: 'number', default: STEP, options: STEPS }
+    return { key, label, dep, choices: actionChoices, extra: { key: `${key}Step`, label: 'Lautstärke-Schritt', when: ['volUp', 'volDown'], choices: STEPS.map((v) => ({ value: v, label: `${v} %` })) } }
+  }
   const holdSetting = { type: 'number', default: 1, options: HOLD }
   const holdChoices = HOLD.map((v) => ({ value: v, label: `${String(v).replace('.', ',')} s` }))
 
@@ -69,8 +76,8 @@ function build() {
         ...(n === 1 ? { help: 'Ein Taster für kurzes und langes Drücken. Ohne lange Aktion wirkt die kurze sofort beim Drücken. Mit langer Aktion wirkt die kurze beim Loslassen und die lange, sobald die Haltezeit erreicht ist.' } : {}),
       },
       { key: `${k}Pin`, label: 'GPIO-Pin' },
-      { key: `${k}Short`, label: 'Kurz drücken', dep: `${k}Pin`, choices: actionChoices },
-      { key: `${k}Long`, label: 'Lang drücken', dep: `${k}Pin`, choices: actionChoices },
+      actionItem(`${k}Short`, 'Kurz drücken', `${k}Pin`),
+      actionItem(`${k}Long`, 'Lang drücken', `${k}Pin`),
       { key: `${k}Hold`, label: 'Haltezeit', dep: `${k}Pin`, choices: holdChoices },
       { key: `${k}Repeat`, label: 'Beim Halten wiederholen', dep: `${k}Pin`, help: 'Die Aktion wiederholt sich, solange der Taster gedrückt bleibt – zum Beispiel für die Lautstärke.' },
     )
@@ -105,7 +112,7 @@ function build() {
       },
       { key: `${k}PinA`, label: 'GPIO-Pin Taster A' },
       { key: `${k}PinB`, label: 'GPIO-Pin Taster B', dep: `${k}PinA` },
-      ...parts.map(([part, label]) => ({ key: `${k}${part}`, label, dep: `${k}PinA`, choices: actionChoices })),
+      ...parts.map(([part, label]) => actionItem(`${k}${part}`, label, `${k}PinA`)),
       { key: `${k}Hold`, label: 'Haltezeit', dep: `${k}PinA`, choices: holdChoices },
       { key: `${k}Repeat`, label: 'Beim Halten wiederholen', dep: `${k}PinA`, help: 'Gilt für A oder B allein, nie für beide zusammen.' },
     )

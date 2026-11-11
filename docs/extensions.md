@@ -149,6 +149,9 @@ Die Nummer 5 (Taster) bringt im Manifest:
   Kerns (Drehregler, LED, Lüfter lehnen einen Pin ab, den eine Extension hält).
 - **`type: "heading"`** in `ui.items`: eine Zwischenüberschrift (`label`, optional `help` und `dep`; ohne `key`). Mit `hostApi` 5 sind bis zu
   80 Einträge erlaubt (vorher 20), und `dep` darf auch auf eine `gpio`-Einstellung zeigen (das Feld erscheint, sobald ein Pin gewählt ist).
+  Ein Feld mit `choices` kann eine zweite Auswahl neben sich haben: **`extra`** = `{ key, label?, when, choices }` – `key` ist eine eigene
+  Einstellung mit `options`, `choices` nennt jede davon, und die Auswahl (eine Liste rechts neben dem Feld) steht nur da, solange das Feld
+  einen der Werte aus `when` hat (bei den Tastern: der Lautstärke-Schritt neben „Lauter“ und „Leiser“).
   Eine Überschrift und die Felder bis zur nächsten sind eine Gruppe. Mit **`rename`** (eine `string`-Einstellung) gibt der Benutzer der Gruppe
   einen Namen: die Überschrift ist dann ein Textfeld, `label` steht als Platzhalter darin. Mit **`optional`** (eine `boolean`-Einstellung) ist
   die Gruppe erst da, wenn man sie hinzufügt: aufeinanderfolgende Gruppen mit demselben `label` sind eine Reihe, unter der rechts ein

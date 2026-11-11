@@ -27,8 +27,9 @@ function isPlaying(meta) {
   return false
 }
 
-function createActions({ playerUrl, apiUrl, volumeStep = 5, log = console, fetchFn = fetch }) {
-  const step = Math.min(10, Math.max(1, Math.round(Number(volumeStep) || 5)))
+function createActions({ playerUrl, apiUrl, log = console, fetchFn = fetch }) {
+  // (the step of "louder" and "quieter" comes with the action: 1 to 10 percent, 5 when nothing sensible is said)
+  const percent = (step) => Math.min(10, Math.max(1, Math.round(Number(step) || 5)))
   const player = async (command) => {
     const response = await fetchFn(`${playerUrl}/${command}?src=buttons`, { signal: AbortSignal.timeout(4000) })
     return response.ok
@@ -43,8 +44,8 @@ function createActions({ playerUrl, apiUrl, volumeStep = 5, log = console, fetch
     next: () => player('next'),
     prev: () => player('previous'),
     replay: () => player('replay'),
-    volUp: () => player(`+${step}`),
-    volDown: () => player(`-${step}`),
+    volUp: (step) => player(`+${percent(step)}`),
+    volDown: (step) => player(`-${percent(step)}`),
     ffwd: () => player('seek+30'),
     rewind: () => player('seek-30'),
     shuffle: async () => player((await meta())?.shuffle === true ? 'shuffleoff' : 'shuffleon'),
@@ -63,13 +64,13 @@ function createActions({ playerUrl, apiUrl, volumeStep = 5, log = console, fetch
   let waiting = 0
   let chain = Promise.resolve()
   return {
-    /** Does the action (a name of ACTIONS); resolves when it is done, never rejects. */
-    do(name) {
+    /** Does the action (a name of ACTIONS; `step`: the percent of a volume action); resolves when it is done, never rejects. */
+    do(name, step) {
       if (!Object.hasOwn(run, name) || name === 'none') return Promise.resolve(false)
       if (waiting >= MAX_WAITING) return Promise.resolve(false)
       waiting++
       chain = chain
-        .then(() => run[name]())
+        .then(() => run[name](step))
         .catch((error) => log.warn(`[buttons] ${name} failed: ${error?.message ?? error}`))
         .then(() => {
           waiting--

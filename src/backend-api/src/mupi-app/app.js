@@ -11768,6 +11768,14 @@ function extGroups(fields) {
 function extFormHtml(e, fields) {
   const type = (it) => e.settingTypes?.[it.key]
   const groups = extGroups(fields)
+  // (a second choice beside a field with choices - by how much, beside "louder": a list, shown while the field has one of the
+  // values of `when`, see dep() in extFormMount)
+  const extra = (it) => {
+    const x = it.extra
+    if (!x) return ''
+    const now = e.settings?.[x.key]
+    return `<select class="input ext-extra" data-xsel="${esc(x.key)}" data-xof="${esc(it.key)}" data-xwhen="${esc(JSON.stringify(x.when.map(String)))}" aria-label="${esc(x.label ?? it.label)}" title="${esc(x.label ?? '')}">${x.choices.map((c) => `<option value="${esc(c.value)}"${c.value === now ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>`
+  }
   const one = (it, index) => {
       const k = esc(it.key)
       const help = it.help ? `<small class="help">${esc(it.help)}</small>` : ''
@@ -11809,11 +11817,13 @@ function extFormHtml(e, fields) {
       if (it.choices && it.choices.length > 5) {
         // (a choice from many: a list to pick from instead of a row of buttons)
         const now = e.settings?.[it.key]
-        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xs-${k}">${esc(it.label)}</label><select class="input" id="xs-${k}" data-xsel="${k}">${it.choices.map((c) => `<option value="${esc(c.value)}"${c.value === now ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>${help}</div>`
+        const select = `<select class="input" id="xs-${k}" data-xsel="${k}">${it.choices.map((c) => `<option value="${esc(c.value)}"${c.value === now ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>`
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xs-${k}">${esc(it.label)}</label>${it.extra ? `<div class="ext-with">${select}${extra(it)}</div>` : select}${help}</div>`
       }
       if (it.choices) {
         const now = e.settings?.[it.key]
-        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><div class="seg" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')}</div>${help}</div>`
+        const seg = `<div class="seg" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')}</div>`
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label>${it.extra ? `<div class="ext-with">${seg}${extra(it)}</div>` : seg}${help}</div>`
       }
       const secret = type(it) === 'secret'
       const kind = secret ? 'password' : type(it) === 'number' ? 'number' : 'text'
@@ -11855,6 +11865,8 @@ function extFormMount(sheet, e, fields, saved) {
       const on = !name ? true : e.settingTypes?.[name] === 'gpio' ? Number(e.settings?.[name] ?? 0) !== 0 : sheet.querySelector(`[data-xk="${CSS.escape(name)}"]`)?.checked !== false
       d.hidden = !on || (g ? !groupOn(g) : false)
     }
+    // (the second choice beside a field: there while the field has one of its values)
+    for (const x of sheet.querySelectorAll('[data-xwhen]')) x.hidden = !JSON.parse(x.dataset.xwhen).includes(String(e.settings?.[x.dataset.xof]))
     // (the "+" of a series, while one of its groups is not there yet)
     for (const row of sheet.querySelectorAll('[data-xaddrow]')) row.hidden = !groups.some((g) => String(g.series) === row.dataset.xaddrow && !groupOn(g))
   }
@@ -11938,6 +11950,7 @@ function extFormMount(sheet, e, fields, saved) {
       const ok = await save({ [key]: value }, false)
       if (ok) e.settings[key] = value
       else select.value = String(e.settings?.[key] ?? '')
+      dep()
     }
   }
   // (GPIO pins: every pin of the header to choose from. A pin something else holds - the box says who - and a pin another field
@@ -12256,6 +12269,7 @@ function extFormMount(sheet, e, fields, saved) {
         if (!ok) return
         e.settings[key] = value
         for (const o of group.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b))
+        dep()
       }
     }
   }

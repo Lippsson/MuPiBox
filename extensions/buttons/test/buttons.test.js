@@ -245,12 +245,14 @@ test('twin: one of both let go early - no long press of both, the short one when
 // ---------- the settings as inputs ----------
 
 test('the settings give the inputs: only buttons with a pin and something to do', () => {
-  const inputs = readInputs({ volumeStep: 3, b1Pin: 17, b1Short: 'toggle', b1Long: 'none', b1Hold: 1, b1Repeat: false, b2Pin: 0, b2Short: 'next', b3Pin: 22, b3Short: 'none', b3Long: 'none', b4Pin: 23, b4Short: 'prev', b4Long: 'replay', b4Hold: 1.5, b4Repeat: true })
-  assert.equal(inputs.volumeStep, 3)
+  const inputs = readInputs({ b1Pin: 17, b1Short: 'volUp', b1ShortStep: 3, b1Long: 'none', b1Hold: 1, b1Repeat: false, b2Pin: 0, b2Short: 'next', b3Pin: 22, b3Short: 'none', b3Long: 'none', b4Pin: 23, b4Short: 'prev', b4Long: 'volDown', b4LongStep: 10, b4Hold: 1.5, b4Repeat: true })
+  // (every action has its own volume step: 5 percent until one is chosen)
   assert.deepEqual(inputs.buttons, [
-    { name: 'button 1', pin: 17, short: 'toggle', long: 'none', holdMs: 1000, repeat: false },
-    { name: 'button 4', pin: 23, short: 'prev', long: 'replay', holdMs: 1500, repeat: true },
+    { name: 'button 1', pin: 17, short: 'volUp', long: 'none', steps: { short: 3, long: 5 }, holdMs: 1000, repeat: false },
+    { name: 'button 4', pin: 23, short: 'prev', long: 'volDown', steps: { short: 5, long: 10 }, holdMs: 1500, repeat: true },
   ])
+  const twin = readInputs({ t1PinA: 5, t1PinB: 6, t1LongA: 'volDown', t1LongAStep: 2, t1LongB: 'volUp', t1LongBStep: 99 }).twins[0]
+  assert.deepEqual(twin.steps, { short_a: 5, short_b: 5, short_ab: 5, long_a: 2, long_b: 5, long_ab: 5 })
   assert.deepEqual(inputs.pins, [17, 23], 'a button that does nothing holds no pin')
   assert.deepEqual(inputs.problems, [])
 })
@@ -280,9 +282,8 @@ test('settings that make no sense are left out and named: a pin twice, half a tw
 
 test('what is not a pin, an action or a time does no harm', () => {
   for (const bad of [null, undefined, 'x', 42, []]) assert.deepEqual(readInputs(bad).pins, [])
-  const inputs = readInputs({ volumeStep: 99, b1Pin: '17', b2Pin: 1, b3Pin: 28, b4Pin: 17.5, b5Pin: 4, b5Short: 'rm -rf', b5Long: '__proto__', b6Pin: 5, b6Short: 'next', b6Hold: 'long', t1PinA: 6, t1PinB: 7, t1ShortAB: 'toggle', t1Hold: 99 })
-  assert.equal(inputs.volumeStep, 5)
-  assert.deepEqual(inputs.buttons.map((b) => [b.pin, b.short, b.long, b.holdMs]), [[5, 'next', 'none', 1000]])
+  const inputs = readInputs({ b6ShortStep: 99, b1Pin: '17', b2Pin: 1, b3Pin: 28, b4Pin: 17.5, b5Pin: 4, b5Short: 'rm -rf', b5Long: '__proto__', b6Pin: 5, b6Short: 'next', b6Hold: 'long', t1PinA: 6, t1PinB: 7, t1ShortAB: 'toggle', t1Hold: 99 })
+  assert.deepEqual(inputs.buttons.map((b) => [b.pin, b.short, b.long, b.holdMs, b.steps.short]), [[5, 'next', 'none', 1000, 5]])
   assert.deepEqual(inputs.twins.map((t) => [t.a, t.b, t.actions.short_ab, t.actions.long_a, t.holdMs]), [[6, 7, 'toggle', 'none', 5000]])
 })
 
@@ -426,9 +427,17 @@ const A = 'http://127.0.0.1:8200'
 
 test('every action asks the player what the display would ask it', async () => {
   const { calls, fetchFn } = fakeBox({ meta: { currentPlayer: 'mplayer', playing: true, shuffle: false } })
-  const actions = createActions({ playerUrl: P, apiUrl: A, volumeStep: 3, log: quiet, fetchFn })
-  for (const name of ['next', 'prev', 'replay', 'volUp', 'volDown', 'ffwd', 'rewind', 'stop', 'shutdown']) await actions.do(name)
-  assert.deepEqual(calls, ['next', 'previous', 'replay', '+3', '-3', 'seek+30', 'seek-30', 'stop', 'shutoff'].map((c) => `GET ${P}/${c}?src=buttons`))
+  const actions = createActions({ playerUrl: P, apiUrl: A, log: quiet, fetchFn })
+  for (const name of ['next', 'prev', 'replay', 'ffwd', 'rewind', 'stop', 'shutdown']) await actions.do(name)
+  assert.deepEqual(calls, ['next', 'previous', 'replay', 'seek+30', 'seek-30', 'stop', 'shutoff'].map((c) => `GET ${P}/${c}?src=buttons`))
+  // louder and quieter by the step that comes with the action: 1 to 10 percent, 5 without one
+  calls.length = 0
+  await actions.do('volUp', 3)
+  await actions.do('volDown', 10)
+  await actions.do('volUp')
+  await actions.do('volDown', 500)
+  await actions.do('volUp', 'x')
+  assert.deepEqual(calls, ['+3', '-10', '+5', '-10', '+5'].map((c) => `GET ${P}/${c}?src=buttons`))
   calls.length = 0
   await actions.do('toggle')
   await actions.do('shuffle')
@@ -487,12 +496,12 @@ test('from an edge of a pin to the action: a button, a dual action button and a 
   const done = []
   const events = []
   let fed = null
-  const inputs = readInputs({ b1Pin: 17, b1Short: 'toggle', b3Pin: 22, b3Short: 'prev', b3Long: 'replay', b3Hold: 1, t1PinA: 5, t1PinB: 6, t1ShortA: 'prev', t1ShortB: 'next', t1ShortAB: 'toggle', t1LongA: 'volDown', t1LongB: 'volUp', t1LongAB: 'output', t1Hold: 1, t1Repeat: true })
+  const inputs = readInputs({ b1Pin: 17, b1Short: 'toggle', b3Pin: 22, b3Short: 'prev', b3Long: 'replay', b3Hold: 1, t1PinA: 5, t1PinB: 6, t1ShortA: 'prev', t1ShortB: 'next', t1ShortAB: 'toggle', t1LongA: 'volDown', t1LongB: 'volUp', t1LongBStep: 3, t1LongAB: 'output', t1Hold: 1, t1Repeat: true })
   const runtime = _test.createRuntime({
     inputs,
     timers,
     log: quiet,
-    actions: { do: (name) => done.push(name) },
+    actions: { do: (name, step) => done.push(name.startsWith('vol') ? `${name} ${step}` : name) },
     onEvent: (e) => events.push(`${e.input} ${e.kind} ${e.action}`),
     makeReader: ({ pins, onEdge }) => {
       fed = { pins, onEdge }
@@ -516,7 +525,7 @@ test('from an edge of a pin to the action: a button, a dual action button and a 
   // the twin: B held is louder, again and again; both short is play/pause
   done.length = 0
   press(6, DEBOUNCE_MS + 1000 + 2 * REPEAT_MS)
-  assert.deepEqual(done, ['volUp', 'volUp', 'volUp'])
+  assert.deepEqual(done, ['volUp 3', 'volUp 3', 'volUp 3'], 'with the step of this action')
   fed.onEdge(5, true)
   fed.onEdge(6, true)
   timers.advance(200)
@@ -548,7 +557,13 @@ test('manifest.json is what test/manifest-source.js writes, and every action has
   for (const [, spec] of pins) assert.equal(spec.default, 0, 'no pin until the user chooses one')
   // every setting the code reads is one the manifest has, with a field in the app
   // (a name and "it was added" belong to the heading of a button, not to a field of their own)
-  for (const key of Object.keys(manifest.settings)) assert.ok(manifest.ui.items.some((i) => i.key === key || i.rename === key || i.optional === key), key)
+  for (const key of Object.keys(manifest.settings)) assert.ok(manifest.ui.items.some((i) => i.key === key || i.rename === key || i.optional === key || i.extra?.key === key), key)
+  // every action has its volume step beside it, shown for "louder" and "quieter" only
+  for (const item of manifest.ui.items.filter((i) => i.choices?.some((c) => c.value === 'volUp'))) {
+    assert.deepEqual(item.extra.when, ['volUp', 'volDown'], item.key)
+    assert.equal(manifest.settings[item.extra.key].default, 5, item.extra.key)
+  }
+  assert.equal(manifest.settings.volumeStep, undefined, 'no step for all of them any more')
   // every button and twin can be named; only button 1 is there from the start, the others are added
   const headings = manifest.ui.items.filter((i) => i.type === 'heading')
   assert.equal(headings.length, BUTTONS + TWINS)

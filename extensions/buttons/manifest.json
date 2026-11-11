@@ -1,24 +1,13 @@
 {
   "id": "buttons",
   "name": "Buttons & GPIO Input",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Physische Taster an den GPIO-Pins steuern die Box: Play/Pause, Titel, Lautstärke und mehr. Mit Tastern für kurzes und langes Drücken (Dual Action) und Doppeltastern mit sechs Funktionen. Die Einstellungen stehen unter System › Buttons & GPIO Input.",
   "hostApi": 5,
   "resources": {},
   "api": "api.js",
   "icon": "icon.svg",
   "settings": {
-    "volumeStep": {
-      "type": "number",
-      "default": 5,
-      "options": [
-        1,
-        2,
-        3,
-        5,
-        10
-      ]
-    },
     "b1Name": {
       "type": "string",
       "default": ""
@@ -79,6 +68,28 @@
     "b1Repeat": {
       "type": "boolean",
       "default": false
+    },
+    "b1ShortStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "b1LongStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
     },
     "b2Name": {
       "type": "string",
@@ -145,6 +156,28 @@
       "type": "boolean",
       "default": false
     },
+    "b2ShortStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "b2LongStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
     "b3Name": {
       "type": "string",
       "default": ""
@@ -209,6 +242,28 @@
     "b3Repeat": {
       "type": "boolean",
       "default": false
+    },
+    "b3ShortStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "b3LongStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
     },
     "b4Name": {
       "type": "string",
@@ -275,6 +330,28 @@
       "type": "boolean",
       "default": true
     },
+    "b4ShortStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "b4LongStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
     "b5Name": {
       "type": "string",
       "default": ""
@@ -340,6 +417,28 @@
       "type": "boolean",
       "default": true
     },
+    "b5ShortStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "b5LongStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
     "b6Name": {
       "type": "string",
       "default": ""
@@ -404,6 +503,28 @@
     "b6Repeat": {
       "type": "boolean",
       "default": false
+    },
+    "b6ShortStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "b6LongStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
     },
     "t1Name": {
       "type": "string",
@@ -550,6 +671,72 @@
       "type": "boolean",
       "default": true
     },
+    "t1ShortAStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t1ShortBStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t1ShortABStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t1LongAStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t1LongBStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t1LongABStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
     "t2Name": {
       "type": "string",
       "default": ""
@@ -694,6 +881,72 @@
     "t2Repeat": {
       "type": "boolean",
       "default": true
+    },
+    "t2ShortAStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t2ShortBStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t2ShortABStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t2LongAStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t2LongBStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
+    },
+    "t2LongABStep": {
+      "type": "number",
+      "default": 5,
+      "options": [
+        1,
+        2,
+        3,
+        5,
+        10
+      ]
     }
   },
   "ui": {
@@ -704,33 +957,6 @@
       "rotary"
     ],
     "items": [
-      {
-        "key": "volumeStep",
-        "label": "Lautstärke-Schritt",
-        "help": "So viel ändert ein Druck auf „Lauter“ oder „Leiser“.",
-        "choices": [
-          {
-            "value": 1,
-            "label": "1 %"
-          },
-          {
-            "value": 2,
-            "label": "2 %"
-          },
-          {
-            "value": 3,
-            "label": "3 %"
-          },
-          {
-            "value": 5,
-            "label": "5 %"
-          },
-          {
-            "value": 10,
-            "label": "10 %"
-          }
-        ]
-      },
       {
         "type": "heading",
         "label": "Taster",
@@ -798,7 +1024,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b1ShortStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b1Long",
@@ -857,7 +1113,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b1LongStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b1Hold",
@@ -959,7 +1245,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b2ShortStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b2Long",
@@ -1018,7 +1334,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b2LongStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b2Hold",
@@ -1120,7 +1466,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b3ShortStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b3Long",
@@ -1179,7 +1555,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b3LongStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b3Hold",
@@ -1281,7 +1687,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b4ShortStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b4Long",
@@ -1340,7 +1776,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b4LongStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b4Hold",
@@ -1442,7 +1908,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b5ShortStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b5Long",
@@ -1501,7 +1997,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b5LongStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b5Hold",
@@ -1603,7 +2129,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b6ShortStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b6Long",
@@ -1662,7 +2218,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "b6LongStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "b6Hold",
@@ -1770,7 +2356,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t1ShortAStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t1ShortB",
@@ -1829,7 +2445,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t1ShortBStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t1ShortAB",
@@ -1888,7 +2534,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t1ShortABStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t1LongA",
@@ -1947,7 +2623,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t1LongAStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t1LongB",
@@ -2006,7 +2712,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t1LongBStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t1LongAB",
@@ -2065,7 +2801,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t1LongABStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t1Hold",
@@ -2172,7 +2938,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t2ShortAStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t2ShortB",
@@ -2231,7 +3027,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t2ShortBStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t2ShortAB",
@@ -2290,7 +3116,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t2ShortABStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t2LongA",
@@ -2349,7 +3205,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t2LongAStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t2LongB",
@@ -2408,7 +3294,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t2LongBStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t2LongAB",
@@ -2467,7 +3383,37 @@
             "value": "shutdown",
             "label": "Box ausschalten"
           }
-        ]
+        ],
+        "extra": {
+          "key": "t2LongABStep",
+          "label": "Lautstärke-Schritt",
+          "when": [
+            "volUp",
+            "volDown"
+          ],
+          "choices": [
+            {
+              "value": 1,
+              "label": "1 %"
+            },
+            {
+              "value": 2,
+              "label": "2 %"
+            },
+            {
+              "value": 3,
+              "label": "3 %"
+            },
+            {
+              "value": 5,
+              "label": "5 %"
+            },
+            {
+              "value": 10,
+              "label": "10 %"
+            }
+          ]
+        }
       },
       {
         "key": "t2Hold",

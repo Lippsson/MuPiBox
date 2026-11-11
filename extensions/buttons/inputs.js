@@ -13,18 +13,19 @@ const ACTIONS = ['none', 'toggle', 'next', 'prev', 'replay', 'volUp', 'volDown',
 
 const isPin = (v) => Number.isInteger(v) && v >= 2 && v <= 27
 const action = (v) => (ACTIONS.includes(v) ? v : 'none')
+// (how much "louder" and "quieter" change the volume, in percent: every action has its own step)
+const step = (v) => (Number.isInteger(v) && v >= 1 && v <= 10 ? v : 5)
 // (the hold time in seconds: half a second to five)
 const holdMs = (v) => Math.round(Math.min(5, Math.max(0.3, Number.isFinite(v) ? v : 1)) * 1000)
 
 /**
- * settings -> { buttons: [{ name, pin, short, long, holdMs, repeat }], twins: [{ name, a, b, actions: { short_a ... }, holdMs, repeat }],
- *               pins: [every pin once], volumeStep, problems: [what was left out and why] }
+ * settings -> { buttons: [{ name, pin, short, long, steps: { short, long }, holdMs, repeat }],
+ *               twins: [{ name, a, b, actions: { short_a ... }, steps: { short_a ... }, holdMs, repeat }],
+ *               pins: [every pin once], problems: [what was left out and why] }
  */
 function readInputs(settings) {
   const s = settings && typeof settings === 'object' ? settings : {}
-  const out = { buttons: [], twins: [], pins: [], volumeStep: 5, problems: [] }
-  const step = Number(s.volumeStep)
-  if (Number.isInteger(step) && step >= 1 && step <= 10) out.volumeStep = step
+  const out = { buttons: [], twins: [], pins: [], problems: [] }
   const take = (pin, name) => {
     if (out.pins.includes(pin)) {
       out.problems.push(`${name}: GPIO ${pin} is used twice`)
@@ -42,7 +43,7 @@ function readInputs(settings) {
     // (a button that does nothing holds no pin)
     if (short === 'none' && long === 'none') continue
     if (!take(pin, name)) continue
-    out.buttons.push({ name, pin, short, long, holdMs: holdMs(s[`b${n}Hold`]), repeat: s[`b${n}Repeat`] === true })
+    out.buttons.push({ name, pin, short, long, steps: { short: step(s[`b${n}ShortStep`]), long: step(s[`b${n}LongStep`]) }, holdMs: holdMs(s[`b${n}Hold`]), repeat: s[`b${n}Repeat`] === true })
   }
   for (let n = 1; n <= TWINS; n++) {
     const a = s[`t${n}PinA`]
@@ -71,7 +72,15 @@ function readInputs(settings) {
       continue
     }
     out.pins.push(a, b)
-    out.twins.push({ name, a, b, actions, holdMs: holdMs(s[`t${n}Hold`]), repeat: s[`t${n}Repeat`] === true })
+    const steps = {
+      short_a: step(s[`t${n}ShortAStep`]),
+      short_b: step(s[`t${n}ShortBStep`]),
+      short_ab: step(s[`t${n}ShortABStep`]),
+      long_a: step(s[`t${n}LongAStep`]),
+      long_b: step(s[`t${n}LongBStep`]),
+      long_ab: step(s[`t${n}LongABStep`]),
+    }
+    out.twins.push({ name, a, b, actions, steps, holdMs: holdMs(s[`t${n}Hold`]), repeat: s[`t${n}Repeat`] === true })
   }
   return out
 }

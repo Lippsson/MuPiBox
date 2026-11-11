@@ -72,7 +72,7 @@ export interface Manifest {
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
-  ui?: { title: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; rename?: string; optional?: string; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
+  ui?: { title: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -378,7 +378,7 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
       if (item.dep !== undefined && depType !== 'boolean' && !(x.hostApi >= 5 && depType === GPIO_SETTING)) return `ui: dep must be a switch: ${item.key}`
       if (item.type === 'heading') {
         // a line that starts a group of fields (hostApi 5): text only
-        if (x.hostApi < 5 || item.key !== undefined || item.choices !== undefined) return `ui: a heading needs hostApi 5 and has no setting: ${item.label}`
+        if (x.hostApi < 5 || item.key !== undefined || item.choices !== undefined || item.extra !== undefined) return `ui: a heading needs hostApi 5 and has no setting: ${item.label}`
         // (a group the user names: `rename` is the text setting that holds the name, the label is what stands there without one.
         // A group that is added and removed: `optional` is the switch that says it is there - the app shows a group only then,
         // or while one of its pins is chosen)
@@ -414,6 +414,17 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
         const options = settings[item.key].options
         if (!options || !Array.isArray(item.choices) || item.choices.length !== options.length) return `ui: choices must name every option: ${item.key}`
         if (item.choices.some((c) => !options.includes(c?.value as never) || typeof c.label !== 'string' || c.label.length > 60)) return `ui: bad choices: ${item.key}`
+      }
+      if (item.extra !== undefined) {
+        // (hostApi 5) a second choice beside a field with choices, shown while the field has one of the values of `when`:
+        // by how much, beside "louder". It is a setting with options of its own, and its choices name every one of them.
+        const extra = item.extra
+        const options = settings[item.key].options
+        if (x.hostApi < 5 || item.type !== undefined || !Array.isArray(item.choices) || !options) return `ui: extra needs hostApi 5 and a field with choices: ${item.key}`
+        const spec = typeof extra?.key === 'string' && extra.key !== item.key && Object.hasOwn(settings, extra.key) ? settings[extra.key] : undefined
+        if (!spec?.options || spec.type === 'secret' || (extra.label !== undefined && (typeof extra.label !== 'string' || extra.label.length > 100))) return `ui: bad extra: ${item.key}`
+        if (!Array.isArray(extra.when) || extra.when.length < 1 || extra.when.some((v) => !options.includes(v as never))) return `ui: extra is shown for values of the field (when): ${item.key}`
+        if (!Array.isArray(extra.choices) || extra.choices.length !== spec.options.length || extra.choices.some((c) => !spec.options?.includes(c?.value as never) || typeof c.label !== 'string' || c.label.length > 60)) return `ui: bad extra choices: ${item.key}`
       }
     }
   }

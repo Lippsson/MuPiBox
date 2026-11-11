@@ -1259,6 +1259,13 @@ textarea[hidden] { display: none; }
 .ext-group-name { flex: 1 1 auto; min-width: 0; max-width: 420px; font-weight: 600; }
 .ext-group-del { margin-left: auto; flex: 0 0 auto; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--mp-border); border-radius: var(--mp-r); background: var(--mp-surface); color: var(--mp-muted); cursor: pointer; }
 .ext-group-del:hover, .ext-group-del:focus-visible { color: var(--mp-text); border-color: var(--mp-primary); }
+/* (a second choice beside a field - by how much, beside "louder") */
+.ext-with { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ext-with > select.input:first-child { flex: 1 1 220px; min-width: 0; }
+.ext-with > .seg { flex: 1 1 auto; min-width: 0; }
+.ext-with > select.ext-extra { flex: 0 0 auto; width: auto; min-width: 96px; }
+/* (a switch of an extension: its explanation a little under its name) */
+.row[data-ext-dep] .lbl small { margin-top: 5px; }
 /* (the "+" of a series of groups, on the right) */
 .ext-add { display: flex; justify-content: flex-end; margin-top: 10px; }
 /* (a GPIO pin: the label left of the list, not above it) */

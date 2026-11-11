@@ -21,9 +21,9 @@ const { createActions } = require('./actions.js')
 function createRuntime({ inputs, actions, makeReader, timers, log = console, onEvent = () => undefined }) {
   const debouncers = new Map()
   const machines = []
-  const fire = (input, kind, action) => {
+  const fire = (input, kind, action, step) => {
     onEvent({ at: Date.now(), input, kind, action })
-    if (action !== 'none') actions.do(action)
+    if (action !== 'none') actions.do(action, step)
   }
   for (const b of inputs.buttons) {
     const machine = createButton({
@@ -31,13 +31,13 @@ function createRuntime({ inputs, actions, makeReader, timers, log = console, onE
       repeat: b.repeat,
       hasLong: b.long !== 'none',
       timers,
-      fire: (kind) => fire(b.name, kind, kind === 'long' ? b.long : b.short),
+      fire: (kind) => fire(b.name, kind, kind === 'long' ? b.long : b.short, b.steps[kind === 'long' ? 'long' : 'short']),
     })
     machines.push(machine)
     debouncers.set(b.pin, createDebouncer({ timers, onChange: (pressed) => (pressed ? machine.press() : machine.release()) }))
   }
   for (const t of inputs.twins) {
-    const machine = createTwin({ holdMs: t.holdMs, repeat: t.repeat, timers, fire: (kind) => fire(t.name, kind, t.actions[kind]) })
+    const machine = createTwin({ holdMs: t.holdMs, repeat: t.repeat, timers, fire: (kind) => fire(t.name, kind, t.actions[kind], t.steps[kind]) })
     machines.push(machine)
     for (const which of ['a', 'b']) {
       debouncers.set(t[which], createDebouncer({ timers, onChange: (pressed) => (pressed ? machine.press(which) : machine.release(which)) }))
@@ -76,7 +76,7 @@ exports.activate = (host) => {
         if (inputs.pins.length === 0) return
         runtime = createRuntime({
           inputs,
-          actions: createActions({ playerUrl: host.playerUrl, apiUrl: host.apiUrl, volumeStep: inputs.volumeStep, log }),
+          actions: createActions({ playerUrl: host.playerUrl, apiUrl: host.apiUrl, log }),
           makeReader: createReader,
           log,
           onEvent: (event) => {

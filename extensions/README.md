@@ -79,7 +79,9 @@ settings card from what the manifest declares.
   the wiring is the user's decision, and read the pins again when the settings change: `host.onSettings(fn)` calls `fn(settings)` in the API
   part after every save (`host.apiUrl` is the address of the box's own server). Also with `hostApi` 5: a `ui` item `{ "type": "heading",
   "label": "…" }` (no `key`) puts a headline between groups of fields, up to 80 items are allowed, and `dep` may name a `gpio` setting (the
-  field appears once a pin is chosen). A heading and the fields up to the next one are a group: `"rename": "<a string setting>"` lets the user
+  field appears once a pin is chosen). A field with `choices` can have a second choice beside it: `"extra": { "key": "<a setting with options>", "label": "…", "when": [values of
+  the field], "choices": [...] }` is a list shown right of the field while the field has one of the values of `when` (by how much, beside
+  "louder"). A heading and the fields up to the next one are a group: `"rename": "<a string setting>"` lets the user
   name the group (the heading becomes a text field with the label as its placeholder), `"optional": "<a boolean setting>"` makes it a group
   the user adds with a "+" and removes again (groups in a row with the same label share one "+"; removing clears the group's pins and name).
   `"place": "system"` in `ui` gives the extension a page of its own under Settings › System › "The box";

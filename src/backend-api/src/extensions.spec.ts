@@ -255,6 +255,30 @@ describe('GPIO pins the user chooses, and a page of its own (hostApi 5)', () => 
     assert.match(String(checkManifest(ui({}, { optional: 'on' }), files())), /only a heading/)
   })
 
+  it('a field with choices can have a second choice beside it, shown for some of its values', () => {
+    const settings = { act: { type: 'string', default: 'next', options: ['next', 'up', 'down'] }, step: { type: 'number', default: 5, options: [1, 5, 10] }, free: { type: 'number', default: 5 }, p: pin }
+    const choices = [{ value: 'next', label: 'Weiter' }, { value: 'up', label: 'Lauter' }, { value: 'down', label: 'Leiser' }]
+    const steps = [{ value: 1, label: '1 %' }, { value: 5, label: '5 %' }, { value: 10, label: '10 %' }]
+    const ui = (extra: unknown, hostApi = 5) => manifest(settings, { items: [{ key: 'act', label: 'Aktion', choices, extra }] }, hostApi)
+    assert.strictEqual(checkManifest(ui({ key: 'step', label: 'Schritt', when: ['up', 'down'], choices: steps }), files()), null)
+    assert.strictEqual(checkManifest(ui({ key: 'step', when: ['up'], choices: steps }), files()), null)
+    assert.ok(checkManifest(ui({ key: 'step', when: ['up'], choices: steps }, 4), files()), 'needs hostApi 5')
+    assert.match(String(checkManifest(ui({ key: 'free', when: ['up'], choices: steps }), files())), /bad extra/, 'a setting without options')
+    assert.match(String(checkManifest(ui({ key: 'act', when: ['up'], choices }), files())), /bad extra/, 'not the field itself')
+    assert.match(String(checkManifest(ui({ key: '__proto__', when: ['up'], choices: steps }), files())), /bad extra/)
+    assert.match(String(checkManifest(ui({ key: 'step', when: ['loud'], choices: steps }), files())), /when/)
+    assert.match(String(checkManifest(ui({ key: 'step', when: [], choices: steps }), files())), /when/)
+    assert.match(String(checkManifest(ui({ key: 'step', when: ['up'], choices: steps.slice(1) }), files())), /bad extra choices/)
+    assert.match(String(checkManifest(ui({ key: 'step', when: ['up'], choices: [...steps.slice(1), { value: 7, label: '7 %' }] }), files())), /bad extra choices/)
+    // (only beside a field with choices: not beside a pin, not on a heading)
+    assert.ok(checkManifest(manifest(settings, { items: [{ key: 'p', label: 'Pin', extra: { key: 'step', when: ['up'], choices: steps } }] }), files()))
+    assert.ok(checkManifest(manifest(settings, { items: [{ type: 'heading', label: 'H', extra: { key: 'step', when: ['up'], choices: steps } }] }), files()))
+    // the extra setting is saved as any setting with options
+    const m = ui({ key: 'step', when: ['up'], choices: steps }) as unknown as Manifest
+    assert.deepStrictEqual(checkSettings(m, { step: 10 }), { ok: true, clean: { step: 10 } })
+    assert.strictEqual(checkSettings(m, { step: 7 }).ok, false)
+  })
+
   it('a pin is a header pin or 0 for none', () => {
     const m = manifest({ p: pin, on: { type: 'boolean' } }) as unknown as Manifest
     for (const ok of [0, 2, 17, 27]) assert.deepStrictEqual(checkSettings(m, { p: ok }), { ok: true, clean: { p: ok } })
@@ -322,7 +346,9 @@ describe('the buttons extension of this repository', () => {
     assert.deepStrictEqual(buttons.resources, {}, 'no pin of its own: the user chooses them')
   })
   it('takes the settings the app sends: a pin, an action, a hold time', () => {
-    assert.strictEqual(checkSettings(buttons, { b1Pin: 17, b1Short: 'toggle', b1Long: 'replay', b1Hold: 1.5, b1Repeat: true, volumeStep: 3 }).ok, true)
+    assert.strictEqual(checkSettings(buttons, { b1Pin: 17, b1Short: 'toggle', b1Long: 'replay', b1Hold: 1.5, b1Repeat: true, b1ShortStep: 3 }).ok, true)
+    assert.strictEqual(checkSettings(buttons, { b1ShortStep: 4 }).ok, false)
+    assert.strictEqual(checkSettings(buttons, { volumeStep: 3 }).ok, false, 'the step for all is gone: every action has its own')
     assert.strictEqual(checkSettings(buttons, { b1Short: 'reboot' }).ok, false)
     assert.strictEqual(checkSettings(buttons, { b1Hold: 0.1 }).ok, false)
     assert.strictEqual(checkSettings(buttons, { b1Pin: 40 }).ok, false)
