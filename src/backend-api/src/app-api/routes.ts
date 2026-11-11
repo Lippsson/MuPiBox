@@ -122,6 +122,8 @@ export interface ElternRouterDeps {
   podcastOffline?: PodcastOffline
   /** The NAS for the photo display's NAS folders (see photos/nas.ts). */
   photoNas?: PhotoNasAccess
+  /** How the box keeps a secret in the config (the Immich key - see photos/immich.ts). */
+  photoSecret?: { encrypt(plain: string): string; decrypt(stored: string): string | undefined }
 }
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
@@ -441,7 +443,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   registerServicesRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerTidalRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   // (the photo display, Einstellungen › Fotos - off by default)
-  registerPhotoRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig, nas: deps.photoNas })
+  registerPhotoRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig, nas: deps.photoNas, secret: deps.photoSecret })
   registerSystemRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   // (pm2 runs server.js from its folder: templates/ lies next to it)
   registerAdminRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig, serverDir: process.cwd() })

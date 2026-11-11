@@ -338,6 +338,15 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .ph-nas-state.ok { color: var(--mp-success); }
 .ph-nas-state.accent { color: var(--mp-primary-text, var(--mp-primary)); }
 .ph-nas-state.danger { color: var(--mp-danger); }
+/* Bibliothek › Fotos › Immich: the assistant's steps and how-to, the albums to tick */
+.ph-steps { height: 6px; border-radius: 3px; background: var(--mp-track); overflow: hidden; margin: 6px 0 12px; }
+.ph-steps i { display: block; height: 100%; width: var(--w, 0%); background: var(--mp-primary); border-radius: 3px; }
+.ph-howto { margin: 0 0 12px; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.ph-im-album { display: flex; align-items: center; gap: 12px; }
+.ph-im-album .ph-thumb { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 10px; overflow: hidden; display: grid; place-items: center; background: var(--mp-track); }
+.ph-im-album .ph-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ph-im-album .lbl { flex: 1; min-width: 0; }
+.input.bad { border-color: var(--mp-danger); }
 .note.danger b { display: block; margin-bottom: 2px; }
 .note.danger span { color: var(--mp-text); }
 .note.danger span b { color: var(--mp-text); }

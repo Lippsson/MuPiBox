@@ -1700,6 +1700,16 @@
    "sections": []
   },
   {
+   "id": "fotoimmich",
+   "slug": "photo-immich",
+   "area": "bibliothek",
+   "parent": "fotos",
+   "title": "Immich",
+   "description": "",
+   "icon": "grid",
+   "sections": []
+  },
+  {
    "id": "theme",
    "slug": "theme",
    "area": "einstellungen",

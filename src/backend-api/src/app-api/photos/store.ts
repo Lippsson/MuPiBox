@@ -14,6 +14,10 @@ export const UPLOAD_DIR = path.join(PHOTOS_DIR, 'upload')
 export const INCOMING_DIR = path.join(PHOTOS_DIR, 'incoming')
 /** The pictures of NAS folders, in their sizes: fetched again when gone (cache/ - may be emptied any time) */
 export const NAS_PHOTO_DIR = path.join(CACHE_DIR, 'photos', 'nas')
+/** The pictures of Immich albums kept on the box (Fotos auf der Box speichern), the same way */
+export const IMMICH_PHOTO_DIR = path.join(CACHE_DIR, 'photos', 'immich')
+/** Immich shown live: the pictures shown last (a small cache with a limit) */
+export const IMMICH_LIVE_DIR = path.join(CACHE_DIR, 'photos', 'immich-live')
 
 export type PhotoSource = 'upload' | 'nas' | 'immich'
 
@@ -28,7 +32,8 @@ export interface PhotoAsset {
   kind: 'photo'
   /** a fingerprint of the file as it came (sha1): the same picture twice in an album is left out */
   sum?: string
-  /** a NAS album's picture: its file on the NAS, and the file's version there (ETag / date / size) */
+  /** a NAS album's picture: its file on the NAS, and the file's version there (ETag / date / size); an Immich
+   * album's: the asset's id there and its checksum */
   ref?: string
   ver?: string
 }
@@ -45,8 +50,10 @@ export interface PhotoAlbum {
   cover?: string
   created: string
   assets: PhotoAsset[]
-  /** a NAS album: its folder on the NAS */
+  /** a NAS album: its folder on the NAS; an Immich album: its id there */
   ref?: string
+  /** an Immich album shown live: its pictures are not kept on the box, they come from Immich when shown */
+  live?: boolean
 }
 
 interface Library {
@@ -106,7 +113,8 @@ export function update<T>(mutate: (lib: Library) => T): Promise<T> {
   return run
 }
 
-export const albumDir = (a: Pick<PhotoAlbum, 'id'> & { source?: PhotoSource }): string => path.join(a.source === 'nas' ? NAS_PHOTO_DIR : UPLOAD_DIR, a.id)
+const SOURCE_DIR: Record<PhotoSource, string> = { upload: UPLOAD_DIR, nas: NAS_PHOTO_DIR, immich: IMMICH_PHOTO_DIR }
+export const albumDir = (a: Pick<PhotoAlbum, 'id'> & { source?: PhotoSource }): string => path.join(SOURCE_DIR[a.source ?? 'upload'] ?? UPLOAD_DIR, a.id)
 /** The path of an asset's files without their size suffix (see process.ts) */
 export const assetBase = (a: Pick<PhotoAlbum, 'id'> & { source?: PhotoSource }, assetId: string): string => path.join(albumDir(a), assetId)
 
@@ -144,7 +152,7 @@ export async function sweepLeftovers(): Promise<void> {
   for (const f of await fsp.readdir(PHOTOS_DIR).catch(() => [] as string[])) {
     if (/^library\.json\.\d+\.tmp$/.test(f)) await fsp.rm(path.join(PHOTOS_DIR, f), { force: true }).catch(() => undefined)
   }
-  for (const root of [UPLOAD_DIR, NAS_PHOTO_DIR]) {
+  for (const root of [UPLOAD_DIR, NAS_PHOTO_DIR, IMMICH_PHOTO_DIR]) {
     let dirs: import('node:fs').Dirent[]
     try {
       dirs = await fsp.readdir(root, { withFileTypes: true })

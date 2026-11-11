@@ -8671,6 +8671,8 @@ app.use(
     nasSelected: nasPathSelected,
     podcastOffline,
     photoNas,
+    // (the Immich key kept as the NAS password: encrypted with this box's own key)
+    photoSecret: { encrypt: nasEncrypt, decrypt: nasDecrypt },
     localLibrary: {
       root: libraryRoot,
       categories: libraryCategories,

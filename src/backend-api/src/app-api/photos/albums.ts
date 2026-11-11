@@ -8,9 +8,10 @@ import { pipeline } from 'node:stream/promises'
 import type { Express, Request, Response, Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
+import { sendImmichLive } from './immich'
 import { extOf, NotAPicture, PHOTO_EXTENSIONS, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings, type PhotoOrder } from './settings'
-import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, INCOMING_DIR, isId, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
+import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, IMMICH_PHOTO_DIR, INCOMING_DIR, isId, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
 
 export interface PhotoAlbumDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -55,8 +56,9 @@ const summary = (a: PhotoAlbum) => ({
   count: a.assets.length,
   videos: 0,
   cover: coverOf(a) ?? null,
-  // (a NAS album: its folder)
-  ...(a.source === 'nas' ? { ref: a.ref ?? null } : {}),
+  // (a NAS album: its folder; an Immich album: its id there, and whether it is shown live)
+  ...(a.source === 'nas' || a.source === 'immich' ? { ref: a.ref ?? null } : {}),
+  ...(a.source === 'immich' ? { live: a.live === true } : {}),
 })
 
 /** Sends one size of a picture of an album (s: grid, f: full, b: background) - only one the list knows */
@@ -65,7 +67,10 @@ async function sendPicture(req: Request, res: Response, onlyShown: boolean): Pro
   const suffix = SIZE_SUFFIX[size]
   if (!isId(albumId) || !isId(assetId) || !suffix) return void res.status(400).end()
   const a = await findAlbum(albumId)
-  if (!a || (onlyShown && !a.display) || !a.assets.some((x) => x.id === assetId)) return void res.status(404).end()
+  const asset = a?.assets.find((x) => x.id === assetId)
+  if (!a || (onlyShown && !a.display) || !asset) return void res.status(404).end()
+  // (an Immich album shown live: the picture comes from Immich)
+  if (a.source === 'immich' && a.live) return void sendImmichLive(res, asset.ref ?? '', size)
   // (an id is never used for another picture: kept by the browser for long)
   // (dotfiles: the data folder is below /home/dietpi/.mupibox - express refuses a path with a dot folder by default)
   res.sendFile(`${assetBase(a, assetId)}${suffix}`, { dotfiles: 'allow', headers: { 'Cache-Control': 'private, max-age=31536000, immutable' } }, (err) => {
@@ -119,12 +124,12 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     res.setHeader('Cache-Control', 'no-store')
     const list = await albums()
     // (the pictures on the card: the uploaded ones and those of the NAS folders in the cache)
-    const [space, used, nasUsed] = req.query.light ? [null, 0, 0] : await Promise.all([cardSpace(), photoBytes(), photoBytes(NAS_PHOTO_DIR)])
+    const [space, used, nasUsed, immichUsed] = req.query.light ? [null, 0, 0, 0] : await Promise.all([cardSpace(), photoBytes(), photoBytes(NAS_PHOTO_DIR), photoBytes(IMMICH_PHOTO_DIR)])
     res.json({
       enabled: photoSettings(deps.getMupiboxConfig()).enabled,
       albums: list.map(summary),
       totals: { photos: list.reduce((n, a) => n + a.assets.length, 0), videos: 0, albums: list.length },
-      storage: space ? { total: space.total, free: space.free, photos: used + nasUsed } : null,
+      storage: space ? { total: space.total, free: space.free, photos: used + nasUsed + immichUsed } : null,
     })
   })
 

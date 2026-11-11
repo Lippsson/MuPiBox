@@ -11581,28 +11581,42 @@ function mountHa(root, page) {
    its numbers and the card's space, an album with its pictures, uploading into it. A part of its own, beside the
    radio plays and the music: never in their lists, filters or "Hören". */
 
-const photoLib = { overview: null, nas: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
+const photoLib = { overview: null, nas: null, immich: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
 const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'] }
 const photoFile = (albumId, assetId, size) => `${API}/photos/file/${albumId}/${assetId}/${size}`
 
 async function loadPhotoOverview() {
-  const [r, nas] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`)])
+  const [r, nas, immich] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`), api(`${API}/photos/immich`)])
   if (!r.ok) throw new Error(`photos ${r.status}`)
   photoLib.overview = r.body
-  // (the photo services: the NAS folders - their line in the overview)
+  // (the photo services: the NAS folders and Immich - their lines in the overview)
   photoLib.nas = nas.ok ? nas.body : null
+  photoLib.immich = immich.ok ? immich.body : null
   photoLib.stale = false
 }
 
-// "Foto-Dienste": the NAS folders (Immich comes later) - a line with their state, or the way to choose some
+// "Foto-Dienste": the NAS folders and Immich - a line each with its state (Immich only once connected; before, the
+// button "Foto-Dienst verbinden" leads there)
 function photoServicesCard() {
   const n = photoLib.nas
-  if (!n) return ''
-  const folders = n.settings.folders.length
-  let sub = folders ? tr(`${folders} Ordner · ${n.albums} ${n.albums === 1 ? 'Album' : 'Alben'}`) : tr('Ordner vom NAS als Alben')
-  if (!n.nas.connected) sub = tr('Noch kein NAS verbunden')
-  else if (folders && n.sync.offlineSince) sub = tr(`Nicht erreichbar seit ${relTime(n.sync.offlineSince).replace(/^vor /, '')}`)
-  return `<section class="card wide"><h2>Foto-Dienste</h2><div class="navlist">${navRow('fotonas', 'NAS-Ordner', sub, 'server')}</div></section>`
+  const im = photoLib.immich
+  const rows = []
+  if (n) {
+    const folders = n.settings.folders.length
+    let sub = folders ? tr(`${folders} Ordner · ${n.albums} ${n.albums === 1 ? 'Album' : 'Alben'}`) : tr('Ordner vom NAS als Alben')
+    if (!n.nas.connected) sub = tr('Noch kein NAS verbunden')
+    else if (folders && n.sync.offlineSince) sub = tr(`Nicht erreichbar seit ${relTime(n.sync.offlineSince).replace(/^vor /, '')}`)
+    rows.push(navRow('fotonas', 'NAS-Ordner', sub, 'server'))
+  }
+  if (im?.connected) rows.push(navRow('fotoimmich', 'Immich', immichLine(im), 'grid'))
+  return rows.length ? `<section class="card wide"><h2>Foto-Dienste</h2><div class="navlist">${rows.join('')}</div></section>` : ''
+}
+
+// Immich's line: connected with its albums, or why not
+function immichLine(im) {
+  if (im.sync.unauthorized) return tr('Schlüssel abgelehnt')
+  if (im.sync.offlineSince) return tr(`Nicht erreichbar seit ${relTime(im.sync.offlineSince).replace(/^vor /, '')}`)
+  return tr(`Verbunden · ${im.settings.albumIds.length} ${im.settings.albumIds.length === 1 ? 'Album' : 'Alben'}`)
 }
 
 function photoAlbumRow(a, { toggle = true, sub = '' } = {}) {
@@ -11632,7 +11646,7 @@ function photoOverviewTop() {
   if (!o.enabled) {
     return [`<section class="card wide"><p class="help" style="margin:0">Die Fotoanzeige ist aus.</p><div class="navlist">${navRow('g-fotos', 'Fotoanzeige einschalten', 'Einstellungen › Fotos', 'image')}</div></section>`]
   }
-  const buttons = `<div class="btns wide ph-actions"><button class="btn primary" id="ph-upload">${icon('up', 18)}Fotos hochladen</button></div>`
+  const buttons = `<div class="btns wide ph-actions"><button class="btn primary" id="ph-upload">${icon('up', 18)}Fotos hochladen</button><button class="btn" id="ph-connect">${icon('link', 18)}Foto-Dienst verbinden</button></div>`
   if (!o.albums.length) {
     return [
       buttons,
@@ -11673,6 +11687,22 @@ function mountPhotoOverview(root, page) {
   for (const b of root.querySelectorAll('[data-open]')) b.onclick = () => openPhotoAlbum(b.dataset.open)
   for (const s of root.querySelectorAll('[data-show]')) s.onchange = () => photoShowSwitch(s, again)
   $('#ph-upload', root)?.addEventListener('click', () => openPhotoUpload(null))
+  // (which service: the NAS folders, or Immich - its assistant)
+  $('#ph-connect', root)?.addEventListener('click', () =>
+    openSheet(
+      `<h2>Foto-Dienst verbinden</h2><p class="help" style="margin:0">Fotos werden nur aus deinem Heimnetz geladen.</p>
+       <div class="navlist"><button class="navrow" data-svc="fotonas"><span class="tile">${icon('server', 18)}</span><span class="lbl"><b>NAS-Ordner</b><small>Ordner vom verbundenen NAS als Alben</small></span><span class="chev">${icon('chevron', 18)}</span></button>
+       <button class="navrow" data-svc="fotoimmich"><span class="tile">${icon('grid', 18)}</span><span class="lbl"><b>Immich</b><small>Dein eigener Fotodienst, per API-Schlüssel</small></span><span class="chev">${icon('chevron', 18)}</span></button></div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-svc]')) {
+          b.onclick = () => {
+            close()
+            go(b.dataset.svc)
+          }
+        }
+      },
+    ),
+  )
   $('#ph-order', root)?.addEventListener('click', () => photoOrderSheet(again))
 }
 
@@ -12303,6 +12333,281 @@ function mountPhotoNas(root, page) {
   )
 }
 
+/* Bibliothek › Fotos › Immich (5.1): the assistant (address, key, test, albums) and, once connected, the service's page
+   (state, keep the pictures on the box or show them live, sync, cache, access, disconnect). The key goes to the box
+   once and is never shown again. */
+
+const photoImmich = { data: null, step: 0, url: '', key: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+
+async function loadPhotoImmich() {
+  const r = await api(`${API}/photos/immich`)
+  if (!r.ok) throw new Error(`photos immich ${r.status}`)
+  photoImmich.data = r.body
+  // (a new visit: the service's page when connected, else the assistant from its start)
+  photoImmich.step = r.body.connected ? 0 : 1
+  photoImmich.url = r.body.settings.url || ''
+  photoImmich.key = ''
+  photoImmich.test = null
+  photoImmich.albums = null
+}
+
+const IMMICH_ERRORS = {
+  unreachable: ['Server nicht erreichbar', 'Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.'],
+  unauthorized: ['Schlüssel ungültig', 'Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.'],
+  unsupportedVersion: ['Immich-Version zu alt', 'Diese Version wird nicht unterstützt. Bitte Immich aktualisieren (ab Version {}).'],
+}
+
+function photoImmichSteps() {
+  const s = photoImmich.step
+  const bar = `<p class="help" style="margin:0">${esc(tr(`Schritt ${s} von 4`))}</p><div class="track ph-steps"><i style="--w:${s * 25}%"></i></div>`
+  if (s === 1) {
+    return [
+      `<section class="card wide">${bar}<h2>Wo läuft dein Immich?</h2>
+        <div class="field"><label for="im-url">Server-Adresse</label><input class="input mono" id="im-url" placeholder="http://192.168.1.20:2283" value="${esc(photoImmich.url)}" ${NO_PW_MANAGER}>
+        <small>Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.</small></div>
+        <div class="btns"><button class="btn" id="im-cancel">Abbrechen</button><button class="btn primary" id="im-next1">Weiter</button></div></section>`,
+    ]
+  }
+  if (s === 2 || s === 3) {
+    const t = photoImmich.test
+    const kept = photoImmich.data?.settings.hasKey
+    let result = ''
+    if (t?.ok) {
+      result = `<div class="ph-nas-state ok">${icon('check', 16)}${esc(tr('Verbindung steht – Die Box kann deine Alben lesen.'))}</div>
+        <dl class="kv">${t.account ? `<div><dt>Konto</dt><dd translate="no">${esc(t.account)}</dd></div>` : ''}<div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.assets))}</dd></div><div><dt>Version</dt><dd>${esc(t.version)}</dd></div></dl>`
+    } else if (t) {
+      const [head, text] = IMMICH_ERRORS[t.error] ?? IMMICH_ERRORS.unreachable
+      result = `<div class="ph-nas-state danger">${icon('info', 16)}${esc(tr(head))}</div><div class="note danger">${icon('info', 18)}<span>${esc(tr(text.replace('{}', photoImmich.data?.minVersion ?? '1.106')))}</span></div>`
+    }
+    return [
+      `<section class="card wide">${bar}<h2>API-Schlüssel anlegen</h2><p class="help">Damit die Box deine Alben lesen darf.</p>
+        <ol class="ph-howto"><li>Immich im Browser öffnen und anmelden.</li><li>Kontoeinstellungen › API-Schlüssel › „Neuer API-Schlüssel“.</li>
+        <li>Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.</li><li>Schlüssel kopieren und hier einfügen.</li></ol>
+        <div class="field"><label for="im-key">API-Schlüssel</label><div class="input-wrap"><input class="input mono has-eye${t && !t.ok && t.error === 'unauthorized' ? ' bad' : ''}" id="im-key" type="password" value="${esc(photoImmich.key)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um ihn zu behalten') : '')}" ${NO_PW_MANAGER}><button class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
+        <small>Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>
+        ${result}
+        <div class="btns"><button class="btn" id="im-back2">Zurück</button><button class="btn${t?.ok ? '' : ' primary'}" id="im-test" ${photoImmich.testing ? 'disabled' : ''}>${esc(tr(photoImmich.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>${t?.ok ? '<button class="btn primary" id="im-next3">Weiter</button>' : ''}</div></section>`,
+    ]
+  }
+  // 4: the albums to show
+  const list = photoImmich.albums
+  const rows = !list
+    ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+    : list.error
+      ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+      : list.albums.length
+        ? `<div class="rows">${list.albums
+            .map(
+              (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/immich/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+              <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}</small></span>
+              <button class="ph-check-box" role="checkbox" aria-checked="${photoImmich.chosen.has(a.id)}" data-im="${esc(a.id)}" aria-label="${esc(a.name)}">${photoImmich.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
+            )
+            .join('')}</div>`
+        : `<p class="help" style="margin:0">In Immich gibt es noch keine Alben.</p>`
+  return [
+    `<section class="card wide">${bar}<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Immich` : 'Alben in Immich'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="im-all">Alle wählen</button>' : ''}</div>
+      ${rows}
+      <p class="help" style="margin:0">${esc(tr(`${photoImmich.chosen.size} ${photoImmich.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>
+      <div class="btns"><button class="btn" id="im-back4">Zurück</button><button class="btn primary" id="im-done">Fertig</button></div></section>`,
+  ]
+}
+
+function photoImmichTop() {
+  const d = photoImmich.data
+  if (!d) return []
+  if (photoImmich.step) return photoImmichSteps()
+  const s = d.sync
+  const st = d.settings
+  let status
+  if (s.running) status = [`${icon('sync', 16)}${esc(s.total ? tr(`Abgleich läuft · ${s.done} von ${s.total} Fotos`) : tr('Abgleich läuft …'))}`, 'accent']
+  else if (s.unauthorized) status = [`${icon('info', 16)}${esc(tr('Schlüssel abgelehnt'))}`, 'danger']
+  else if (s.offlineSince) status = [`${icon('info', 16)}${esc(tr(`Nicht erreichbar seit ${relTime(s.offlineSince).replace(/^vor /, '')}`))}`, 'danger']
+  else if (s.lastSync) status = [`${icon('check', 16)}${esc(tr(`Abgeglichen ${relTime(s.lastSync)}`))}`, 'ok']
+  else status = [esc(tr('Noch nicht abgeglichen')), '']
+  const limit = st.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
+      <div class="ph-nas-state ${status[1]}">${status[0]}</div>
+      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.</span></div>` : ''}
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob Immich läuft und die Adresse stimmt.</span></div>` : ''}
+      ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es in Immich nicht mehr.') : tr(`${s.missing} gewählte Alben gibt es in Immich nicht mehr.`))}</span></div>` : ''}
+      ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="im-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="im-albums">Alben ändern</button></div></section>`,
+    `<section class="card wide"><h2>Fotos</h2>
+      <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert die Fotos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live von Immich – ohne Netz sind diese Alben gerade nicht da.</small></span>
+        <label class="switch"><input type="checkbox" id="im-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="im-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(st.keepCopy && limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${st.keepCopy && limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      ${st.keepCopy
+        ? `<p class="help">Fotos aus Immich liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="im-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === st.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
+        : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
+    `<section class="card wide"><h2>Zugang</h2>
+      <dl class="kv"><div><dt>Server-Adresse</dt><dd translate="no">${esc(st.url)}</dd></div><div><dt>API-Schlüssel</dt><dd>${esc(tr(st.hasKey ? 'gesetzt' : 'fehlt'))}</dd></div></dl>
+      <p class="help">Der Schlüssel wird aus Sicherheitsgründen nicht mehr angezeigt.</p>
+      <div class="btns"><button class="btn" id="im-url-change">Adresse ändern</button><button class="btn" id="im-key-change">Schlüssel ersetzen</button></div></section>`,
+    `<section class="card wide"><div class="navlist"><button class="navrow" id="im-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Die Alben aus Immich und ihre Fotos werden von der Box entfernt. In Immich bleibt alles erhalten.</small></span></button></div></section>`,
+  ]
+}
+
+async function photoImmichLoadAlbums() {
+  photoImmich.albums = null
+  const r = await api(`${API}/photos/immich/albums`)
+  photoImmich.albums = r.ok ? r.body : { error: true }
+}
+
+function mountPhotoImmich(root, page) {
+  const d = photoImmich.data
+  window.clearTimeout(photoImmich.timer)
+  if (!d) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const take = (body) => {
+    photoImmich.data = body
+    photoLib.stale = true
+  }
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/immich`, { method: 'POST', body })
+    if (!r.ok) {
+      toast('Nicht gespeichert', 'info')
+      return false
+    }
+    take(r.body)
+    if (done) toast(done)
+    return true
+  }
+  // the assistant
+  $('#im-cancel', root)?.addEventListener('click', () => (d.connected ? ((photoImmich.step = 0), redraw()) : go('fotos')))
+  $('#im-next1', root)?.addEventListener('click', () => {
+    const v = $('#im-url', root).value.trim()
+    if (!/^(https?:\/\/)?[^\s/:]+(:\d+)?(\/\S*)?$/i.test(v)) return toast('Bitte die Adresse von Immich eintragen, z. B. http://192.168.1.20:2283', 'info')
+    photoImmich.url = v
+    photoImmich.test = null
+    photoImmich.step = 2
+    redraw()
+  })
+  $('#im-back2', root)?.addEventListener('click', () => {
+    photoImmich.key = $('#im-key', root).value
+    photoImmich.step = 1
+    redraw()
+  })
+  $('#im-test', root)?.addEventListener('click', async () => {
+    photoImmich.key = $('#im-key', root).value.trim()
+    if (!photoImmich.key && !d.settings.hasKey) return toast('Bitte den API-Schlüssel einfügen', 'info')
+    photoImmich.testing = true
+    redraw()
+    const r = await api(`${API}/photos/immich/test`, { method: 'POST', body: { url: photoImmich.url, apiKey: photoImmich.key }, timeoutMs: 30000 })
+    photoImmich.testing = false
+    photoImmich.test = r.ok ? r.body : { ok: false, error: 'unreachable' }
+    photoImmich.step = 3
+    redraw()
+  })
+  $('#im-next3', root)?.addEventListener('click', async () => {
+    // (address and key are saved now - the album list comes from the box with them)
+    const body = { url: photoImmich.url, account: photoImmich.test?.account ?? null }
+    if (photoImmich.key) body.apiKey = photoImmich.key
+    if (!(await save(body))) return
+    photoImmich.key = ''
+    photoImmich.chosen = new Set(photoImmich.data.settings.albumIds)
+    photoImmich.step = 4
+    redraw()
+    await photoImmichLoadAlbums()
+    redraw()
+  })
+  for (const b of root.querySelectorAll('[data-im]')) {
+    b.onclick = () => {
+      const id = b.dataset.im
+      if (photoImmich.chosen.has(id)) photoImmich.chosen.delete(id)
+      else photoImmich.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#im-all', root)?.addEventListener('click', () => {
+    for (const a of photoImmich.albums?.albums ?? []) photoImmich.chosen.add(a.id)
+    redraw()
+  })
+  $('#im-back4', root)?.addEventListener('click', () => {
+    photoImmich.step = d.connected && !photoImmich.test ? 0 : 2
+    redraw()
+  })
+  $('#im-done', root)?.addEventListener('click', async () => {
+    if (!(await save({ albumIds: [...photoImmich.chosen] }, photoImmich.chosen.size ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
+    photoImmich.step = 0
+    redraw()
+  })
+  if (photoImmich.step) return
+  // the service's page
+  if (d.sync.running) photoImmich.timer = window.setTimeout(async () => {
+    if (currentPage()?.id !== page.id || photoImmich.step) return
+    const r = await api(`${API}/photos/immich`)
+    if (r.ok) take(r.body)
+    redraw()
+  }, 3000)
+  $('#im-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/immich/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    take(r.body)
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  $('#im-albums', root)?.addEventListener('click', async () => {
+    photoImmich.chosen = new Set(d.settings.albumIds)
+    photoImmich.test = null
+    photoImmich.step = 4
+    redraw()
+    await photoImmichLoadAlbums()
+    redraw()
+  })
+  $('#im-keep', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (!(await save({ keepCopy: on }, on ? 'Fotos werden auf der Box gespeichert' : 'Fotos kommen live von Immich'))) e.target.checked = !on
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = async () => {
+            close()
+            if (await save({ [key]: Number(b.dataset.v) }, 'Gespeichert')) redraw()
+          }
+        }
+      },
+    )
+  $('#im-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#im-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#im-url-change', root)?.addEventListener('click', () => {
+    photoImmich.url = d.settings.url
+    photoImmich.test = null
+    photoImmich.step = 1
+    redraw()
+  })
+  $('#im-key-change', root)?.addEventListener('click', () => {
+    photoImmich.url = d.settings.url
+    photoImmich.key = ''
+    photoImmich.test = null
+    photoImmich.step = 2
+    redraw()
+  })
+  $('#im-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Verbindung trennen', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} aus Immich und ihre Fotos werden von der Box entfernt. In Immich bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/immich/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoLib.stale = true
+      toast('Immich getrennt')
+      go('fotos')
+    }),
+  )
+}
+
 async function loadPhotoAlbum() {
   let id = photoLib.albumId
   if (!id) {
@@ -12316,10 +12621,14 @@ async function loadPhotoAlbum() {
   if (o?.ok) Object.assign(photoLib, { overview: o.body, stale: false })
   photoLib.albumId = id
   photoLib.album = a.body
-  // (a NAS album: the sync's state for its card "Quelle")
+  // (a NAS or Immich album: the sync's state for its card "Quelle")
   if (a.body.source === 'nas') {
     const nas = await api(`${API}/photos/nas`)
     if (nas.ok) photoLib.nas = nas.body
+  }
+  if (a.body.source === 'immich') {
+    const im = await api(`${API}/photos/immich`)
+    if (im.ok) photoLib.immich = im.body
   }
 }
 
@@ -12340,7 +12649,7 @@ function photoAlbumTop() {
   return [
     `<section class="card wide">${photoAlbumRow(a, { sub: a.display ? 'Am Display sichtbar' : 'Am Display ausgeblendet' })}
       ${upload ? `<div class="btns"><button class="btn primary" id="ph-add">${icon('plus', 18)}Fotos hinzufügen</button>${a.assets.length ? `<button class="btn" id="ph-select">${icon('check', 18)}${sel ? 'Fertig' : 'Auswählen'}</button>` : ''}</div>` : ''}</section>`,
-    a.source === 'nas' ? photoNasAlbumCard(a) : '',
+    a.source === 'nas' ? photoNasAlbumCard(a) : a.source === 'immich' ? photoImmichAlbumCard(a) : '',
     upload
       ? `<section class="card wide"><h2>Album</h2><div class="navlist">
           <button class="navrow" id="ph-rename"><span class="tile">${icon('text', 18)}</span><span class="lbl"><b>Umbenennen</b></span><span class="chev">${icon('chevron', 18)}</span></button>
@@ -12365,9 +12674,29 @@ function photoNasAlbumCard(a) {
     <div class="navlist">${navRow('fotonas', 'NAS-Ordner', 'Ordner, Abgleich, Zwischenspeicher', 'server')}</div></section>`
 }
 
+// An Immich album: only looked at here - kept on the box or shown live, the last sync, "Jetzt abgleichen"
+function photoImmichAlbumCard(a) {
+  const im = photoLib.immich
+  const running = !!im?.sync.running
+  const last = im?.sync.lastSync ? relTime(im.sync.lastSync) : '–'
+  return `<section class="card wide"><h2>Quelle</h2>
+    <div class="note">${icon('info', 18)}<span>Dieses Album wird in Immich verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.</span></div>
+    <dl class="kv"><div><dt>Dienst</dt><dd>Immich</dd></div><div><dt>Fotos</dt><dd>${esc(tr(a.live ? 'Live von Immich' : 'Auf der Box gespeichert'))}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
+    <div class="btns"><button class="btn" id="ph-immich-sync" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>
+    <div class="navlist">${navRow('fotoimmich', 'Immich', 'Alben, Abgleich, Zugang', 'grid')}</div></section>`
+}
+
 function mountPhotoAlbum(root, page) {
   const a = photoLib.album
   if (!a) return
+  $('#ph-immich-sync', root)?.addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true
+    const r = await api(`${API}/photos/immich/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    photoLib.immich = r.body
+    toast('Abgleich gestartet')
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  })
   $('#ph-nas-sync', root)?.addEventListener('click', async (e) => {
     e.currentTarget.disabled = true
     const r = await api(`${API}/photos/nas/sync`, { method: 'POST', body: {} })
@@ -14640,6 +14969,7 @@ const CONTROLLERS = {
   fotoalbum: { load: loadPhotoAlbum, top: photoAlbumTop, sections: () => [], mount: mountPhotoAlbum },
   fotoupload: { load: loadPhotoUpload, top: photoUploadTop, sections: () => [], mount: mountPhotoUpload },
   fotonas: { load: loadPhotoNas, top: photoNasTop, sections: () => [], mount: mountPhotoNas },
+  fotoimmich: { load: loadPhotoImmich, top: photoImmichTop, sections: () => [], mount: mountPhotoImmich },
   'g-fotos': { load: loadPhotoSettings, top: photoSettingsTop, sections: photoSettingsSections, mount: mountPhotoSettings, change: changePhotoSetting },
   mqtt: {
     load: loadMqtt,

@@ -87,3 +87,67 @@ test('photo NAS folders: paths cleaned, settings checked, defaults on a box from
   assert.equal(applyNasPhotoSettings(cfg, { cacheLimitMb: 3000 }), 'cacheLimitMb')
   assert.equal(JSON.stringify(cfg), before)
 })
+
+test('photo Immich: address and settings checked, the key kept as given to encrypt', async () => {
+  const { applyImmichSettings, cleanImmichUrl, immichSettings } = await import('./app-api/photos/immich')
+  assert.equal(cleanImmichUrl('192.168.1.20:2283'), 'http://192.168.1.20:2283')
+  assert.equal(cleanImmichUrl('https://photos.example.lan/api/'), 'https://photos.example.lan')
+  assert.equal(cleanImmichUrl('ftp://x'), null)
+  assert.equal(cleanImmichUrl('http://user:pw@x'), null)
+  const cfg: Record<string, unknown> = { photos: { sources: { nas: { folders: ['/a'] } } } }
+  const id = '0f2b8c1e-1234-4abc-9def-0123456789ab'
+  assert.equal(applyImmichSettings(cfg, { url: 'http://10.0.0.5:2283', apiKey: 'abcdefghijklmnop', albumIds: [id, id], keepCopy: false }, (x) => `enc:${x}`), null)
+  const s = immichSettings(cfg)
+  assert.equal(s.url, 'http://10.0.0.5:2283')
+  assert.equal(s.apiKey, 'enc:abcdefghijklmnop')
+  assert.deepEqual(s.albumIds, [id])
+  assert.equal(s.keepCopy, false)
+  assert.deepEqual((cfg.photos as { sources: Record<string, unknown> }).sources.nas, { folders: ['/a'] })
+  const before = JSON.stringify(cfg)
+  assert.equal(applyImmichSettings(cfg, { albumIds: ['nope'] }), 'albumIds')
+  assert.equal(applyImmichSettings(cfg, { apiKey: 'short' }), 'apiKey')
+  assert.equal(applyImmichSettings(cfg, { url: 'ftp://x' }), 'url')
+  assert.equal(JSON.stringify(cfg), before)
+})
+
+test('photo Immich: the test and an album against a server like Immich (old version, wrong key, assets searched)', async () => {
+  const { ImmichClient, testImmich } = await import('./app-api/photos/immich')
+  const http = await import('node:http')
+  const A = '0f2b8c1e-1234-4abc-9def-0123456789ab'
+  const P = '11111111-2222-4333-8444-555555555555'
+  let version: unknown = { major: 1, minor: 120, patch: 2 }
+  const server = http.createServer((req, res) => {
+    const json = (code: number, body: unknown) => {
+      res.writeHead(code, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(body))
+    }
+    const url = req.url ?? ''
+    if (url === '/api/server/version') return version ? json(200, version) : json(404, {})
+    if (req.headers['x-api-key'] !== 'good-key-0123') return json(401, { message: 'Invalid API key' })
+    if (url.startsWith('/api/albums?shared=true')) return json(200, [])
+    if (url === '/api/albums') return json(200, [{ id: A, albumName: 'Urlaub', assetCount: 2, albumThumbnailAssetId: P }])
+    if (url.startsWith(`/api/albums/${A}`)) return json(200, { id: A, albumName: 'Urlaub', assetCount: 2 })
+    if (url === '/api/users/me') return json(200, { name: 'Familie' })
+    if (url === '/api/search/metadata' && req.method === 'POST') {
+      return json(200, { assets: { items: [{ id: P, type: 'IMAGE', checksum: 'c1' }, { id: A, type: 'VIDEO' }], nextPage: null } })
+    }
+    json(404, {})
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()))
+  const port = (server.address() as { port: number }).port
+  try {
+    const base = `http://127.0.0.1:${port}`
+    assert.deepEqual(await testImmich(new ImmichClient(base, 'good-key-0123')), { ok: true, version: '1.120.2', account: 'Familie', albums: 1, assets: 2 })
+    assert.deepEqual(await testImmich(new ImmichClient(base, 'wrong-key-0123')), { ok: false, error: 'unauthorized' })
+    const album = await new ImmichClient(base, 'good-key-0123').album(A)
+    assert.equal(album.name, 'Urlaub')
+    assert.deepEqual(album.assets.map((x) => x.id), [P])
+    version = { major: 1, minor: 105, patch: 0 }
+    assert.deepEqual(await testImmich(new ImmichClient(base, 'good-key-0123')), { ok: false, error: 'unsupportedVersion' })
+    version = null
+    assert.deepEqual(await testImmich(new ImmichClient(base, 'good-key-0123')), { ok: false, error: 'unsupportedVersion' })
+  } finally {
+    server.close()
+  }
+  assert.deepEqual(await testImmich(new ImmichClient('http://127.0.0.1:1', 'good-key-0123')), { ok: false, error: 'unreachable' })
+})
