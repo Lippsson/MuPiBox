@@ -10,6 +10,8 @@ export interface PhotoAlbumSummary {
   count: number
   /** the first two pictures (the stack): its own picture first */
   pictures: string[]
+  /** shown live from Immich, and Immich is away: "Gerade nicht da" */
+  away?: boolean
 }
 
 export interface PhotoAsset {
@@ -49,6 +51,8 @@ export class PhotosService {
   readonly loaded = computed(() => this.answer() !== null)
   /** the tab "Fotos": switched on, and at least one album with pictures shown on the display */
   readonly available = computed(() => this.answer()?.enabled === true && this.albums().length > 0)
+  /** every album there is away (all live from an Immich that is not there): the tab's own page */
+  readonly allAway = computed(() => this.albums().length > 0 && this.albums().every((a) => a.away === true))
   readonly startAsSlideshow = computed(() => this.answer()?.startAsSlideshow === true)
   readonly slideshowSeconds = computed(() => {
     const s = this.answer()?.slideshowSeconds

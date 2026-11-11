@@ -325,6 +325,11 @@ export class ImmichPhotoSync {
     return { ...this.state }
   }
 
+  /** A live picture came from Immich: it is back (the albums show again before the next sync) */
+  reachable(): void {
+    if (this.state.offlineSince) this.state.offlineSince = null
+  }
+
   /** The client with the key as kept; null: none set up (or the key cannot be read on this box) */
   client(cfg = this.deps.getMupiboxConfig()): ImmichClient | null {
     const s = immichSettings(cfg)
@@ -597,6 +602,17 @@ export class ImmichPhotoSync {
 
 let liveSync: ImmichPhotoSync | null = null
 let pruning = 0
+// the last time a live picture could not come from Immich (0: the last one came)
+let liveFailedAt = 0
+
+/**
+ * Immich is away for the albums shown live (the display shows them as "Gerade nicht da"): the last sync did not reach
+ * it or the key was refused - or a picture asked for just now did not come.
+ */
+export function immichLiveAway(): boolean {
+  const s = liveSync?.status()
+  return !!s && (!!s.offlineSince || s.unauthorized || Date.now() - liveFailedAt < 2 * 60_000)
+}
 
 // what a picture is by its first bytes (Immich's thumbnails are WebP or JPEG)
 const typeOf = (b: Buffer) => (b.subarray(0, 4).toString('latin1') === 'RIFF' ? 'image/webp' : b[0] === 0x89 ? 'image/png' : 'image/jpeg')
@@ -628,12 +644,16 @@ export async function sendImmichLive(res: Response, assetRef: string, size: stri
     const r = await client.picture(assetRef, kind)
     const buf = Buffer.from(await r.arrayBuffer())
     if (buf.length > FILE_MAX_BYTES) return void res.status(404).end()
+    liveFailedAt = 0
+    liveSync?.reachable()
     send(buf)
     await fsp.mkdir(IMMICH_LIVE_DIR, { recursive: true })
     await fsp.writeFile(`${file}.tmp`, buf)
     await fsp.rename(`${file}.tmp`, file)
     void pruneLive()
-  } catch {
+  } catch (err) {
+    // (Immich away or the key refused - not a single picture it does not have)
+    if (err instanceof ImmichAway || (err instanceof ImmichRefused && (err.status === 401 || err.status === 403))) liveFailedAt = Date.now()
     if (!res.headersSent) res.status(404).end()
   }
 }

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal, untracked } from '@angular/core'
-import { DisplayTextsService } from '../display-texts.service'
+import { type DisplayTextKey, DisplayTextsService } from '../display-texts.service'
 import { PlayerService } from '../player.service'
 import { PhotoTimeService } from './photo-time.service'
 import { type PhotoAlbumSummary, PhotosService } from './photos.service'
@@ -42,19 +42,28 @@ const PER_PAGE = 3
             </button>
           </div>
         </div>
-        @if (hint()) {
-          <div class="pp-hint" role="status">
-            <span class="pp-hint-ic">i</span>
-            <span>{{ texts.text('photosParentsHint') }}</span>
+      </div>
+    } @else if (photos.allAway()) {
+      <!-- no album there (handoff 10_nichts-erreichbar.png): all live from an Immich that is away -->
+      <div class="pp">
+        <svg class="pp-fig" viewBox="0 0 220 220" aria-hidden="true">
+          <path d="M62 150h96a34 34 0 0 0 0-68 50 50 0 0 0-96 10 29 29 0 0 0 0 58z" class="pp-cloud" />
+          <path d="M60 60l100 100" class="pp-cross" />
+        </svg>
+        <div class="pp-text">
+          <h2>{{ texts.text('photosAllAwayTitle') }}</h2>
+          <p>{{ texts.text('photosAllAwayText') }}</p>
+          <div class="pp-btns">
+            <button type="button" class="pp-go" (click)="retry()">{{ texts.text('photosRetry') }}</button>
           </div>
-        }
+        </div>
       </div>
     } @else {
     <div class="pa" (pointerdown)="down($event)" (pointermove)="move($event)" (pointerup)="up($event)" (pointercancel)="cancel()">
       <div class="pa-track" [style.transform]="'translateX(' + -page() * PAGE + 'px)'">
         @for (a of albums(); track a.id; let i = $index) {
           <!-- the stack opens the album, the name under it is read out (as the names in the other tabs) -->
-          <div class="pa-tile" [style.left.px]="15 + i * STEP">
+          <div class="pa-tile" [class.pa-away]="a.away" [style.left.px]="15 + i * STEP">
             <button class="pa-stack" type="button" [attr.aria-label]="openLabel(a)" (click)="open(a)">
               <span class="pa-back"></span>
               @if (a.pictures[1]) {
@@ -64,6 +73,9 @@ const PER_PAGE = 3
               }
               <img class="pa-front" [src]="photos.fileUrl(a.id, a.pictures[0], 's')" alt="" draggable="false" />
               <span class="pa-badge">{{ a.count }}</span>
+              @if (a.away) {
+                <span class="pa-away-pill">{{ texts.text('photosAway') }}</span>
+              }
             </button>
             <button class="pa-name" type="button" [class.pa-speaking]="speaking() === a.id" (click)="read(a)">{{ a.title }}</button>
           </div>
@@ -77,6 +89,12 @@ const PER_PAGE = 3
         </div>
       }
     </div>
+    }
+    @if (hint(); as h) {
+      <div class="pp-hint" role="status">
+        <span class="pp-hint-ic">i</span>
+        <span>{{ texts.text(h) }}</span>
+      </div>
     }
   `,
   styles: `
@@ -94,6 +112,37 @@ const PER_PAGE = 3
       width: 220px;
       height: 220px;
       overflow: visible;
+    }
+    /* (an album not there: grey, with its note) */
+    .pa-away .pa-back,
+    .pa-away .pa-mid,
+    .pa-away .pa-front {
+      filter: grayscale(1);
+      opacity: 0.55;
+    }
+    .pa-away-pill {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 8px 16px;
+      border-radius: 20px;
+      background: var(--km-cream, #fff6e5);
+      color: var(--km-ink, #2b2240);
+      font-size: 17px;
+      font-weight: 700;
+      white-space: nowrap;
+      box-shadow: 0 3px 0 var(--km-shadow, rgba(0, 0, 0, 0.25));
+    }
+    .pp-cloud {
+      fill: var(--km-night-3, #3b3456);
+      stroke: var(--km-ring, var(--km-cream, #fff6e5));
+      stroke-width: 6;
+    }
+    .pp-cross {
+      stroke: var(--km-apricot, #f7b267);
+      stroke-width: 10;
+      stroke-linecap: round;
     }
     .pp-back {
       fill: var(--km-cream, #fff6e5);
@@ -368,13 +417,21 @@ export class PhotoAlbumsComponent {
   /** the photos pause: "Zu den Hörspielen" */
   readonly toListening = output<void>()
 
-  // "Eltern" on the pause page: only the hint that more photo time comes from the parents' app (nothing to unlock here)
-  protected readonly hint = signal(false)
+  // a note at the bottom for a few seconds: "Eltern" on the pause page (more photo time comes from the parents' app -
+  // nothing to unlock here), an album that is not there
+  protected readonly hint = signal<DisplayTextKey | null>(null)
   private hintTimer = 0
-  protected parents(): void {
-    this.hint.set(true)
+  private showHint(key: DisplayTextKey): void {
+    this.hint.set(key)
     window.clearTimeout(this.hintTimer)
-    this.hintTimer = window.setTimeout(() => this.hint.set(false), 5000)
+    this.hintTimer = window.setTimeout(() => this.hint.set(null), 5000)
+  }
+  protected parents(): void {
+    this.showHint('photosParentsHint')
+  }
+  // "Nochmal": the box is asked again at once
+  protected retry(): void {
+    this.photos.refresh(true)
   }
 
   protected readonly albums = this.photos.albums
@@ -424,6 +481,7 @@ export class PhotoAlbumsComponent {
       this.swiped = false
       return
     }
+    if (a.away) return this.showHint('photosAwayHint')
     this.opened.emit(a)
   }
 

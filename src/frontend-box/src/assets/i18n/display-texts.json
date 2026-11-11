@@ -87,7 +87,12 @@
         "photosPauseText": "Picture time is over for today. Audio books and music still work.",
         "photosToListening": "To the audio books",
         "photosParents": "Parents",
-        "photosParentsHint": "More picture time comes from the parents' app."
+        "photosParentsHint": "More picture time comes from the parents' app.",
+        "photosAway": "Not there right now",
+        "photosAwayHint": "These pictures are not there right now. Try again later.",
+        "photosAllAwayTitle": "The pictures are not there right now",
+        "photosAllAwayText": "Maybe the WiFi is gone. Try again in a moment.",
+        "photosRetry": "Try again"
       }
     },
     "de": {
@@ -176,7 +181,12 @@
         "photosPauseText": "Für heute ist die Bildzeit um. Hörspiele und Musik gehen noch.",
         "photosToListening": "Zu den Hörspielen",
         "photosParents": "Eltern",
-        "photosParentsHint": "Mehr Bildzeit gibt es über die Eltern-App."
+        "photosParentsHint": "Mehr Bildzeit gibt es über die Eltern-App.",
+        "photosAway": "Gerade nicht da",
+        "photosAwayHint": "Diese Bilder sind gerade nicht da. Probier es später nochmal.",
+        "photosAllAwayTitle": "Die Bilder sind gerade nicht da",
+        "photosAllAwayText": "Vielleicht ist das WLAN weg. Probier es gleich nochmal.",
+        "photosRetry": "Nochmal"
       }
     },
     "fr": {
@@ -251,7 +261,12 @@
         "photosPauseText": "Le temps d’images est fini pour aujourd’hui. Les histoires et la musique marchent encore.",
         "photosToListening": "Vers les histoires",
         "photosParents": "Parents",
-        "photosParentsHint": "Plus de temps d’images via l’application des parents."
+        "photosParentsHint": "Plus de temps d’images via l’application des parents.",
+        "photosAway": "Pas là pour le moment",
+        "photosAwayHint": "Ces images ne sont pas là pour le moment. Réessaie plus tard.",
+        "photosAllAwayTitle": "Les images ne sont pas là pour le moment",
+        "photosAllAwayText": "Le WiFi est peut-être coupé. Réessaie dans un instant.",
+        "photosRetry": "Réessayer"
       }
     },
     "es": {
@@ -326,7 +341,12 @@
         "photosPauseText": "Por hoy se acabó el tiempo de fotos. Los cuentos y la música siguen.",
         "photosToListening": "A los cuentos",
         "photosParents": "Padres",
-        "photosParentsHint": "Más tiempo de fotos desde la app de los padres."
+        "photosParentsHint": "Más tiempo de fotos desde la app de los padres.",
+        "photosAway": "Ahora no está",
+        "photosAwayHint": "Estas fotos no están ahora. Inténtalo más tarde.",
+        "photosAllAwayTitle": "Las fotos no están ahora",
+        "photosAllAwayText": "Quizá no hay WiFi. Inténtalo de nuevo en un momento.",
+        "photosRetry": "Otra vez"
       }
     },
     "it": {
@@ -401,7 +421,12 @@
         "photosPauseText": "Per oggi il tempo delle foto è finito. Racconti e musica vanno ancora.",
         "photosToListening": "Ai racconti",
         "photosParents": "Genitori",
-        "photosParentsHint": "Altro tempo foto dall’app dei genitori."
+        "photosParentsHint": "Altro tempo foto dall’app dei genitori.",
+        "photosAway": "Ora non c’è",
+        "photosAwayHint": "Queste foto ora non ci sono. Riprova più tardi.",
+        "photosAllAwayTitle": "Le foto ora non ci sono",
+        "photosAllAwayText": "Forse il WiFi non c’è. Riprova tra poco.",
+        "photosRetry": "Riprova"
       }
     },
     "nl": {
@@ -476,7 +501,12 @@
         "photosPauseText": "De fototijd is voor vandaag om. Luisterboeken en muziek gaan nog.",
         "photosToListening": "Naar de luisterboeken",
         "photosParents": "Ouders",
-        "photosParentsHint": "Meer fototijd via de ouder-app."
+        "photosParentsHint": "Meer fototijd via de ouder-app.",
+        "photosAway": "Nu niet beschikbaar",
+        "photosAwayHint": "Deze foto’s zijn er nu niet. Probeer het later nog eens.",
+        "photosAllAwayTitle": "De foto’s zijn er nu niet",
+        "photosAllAwayText": "Misschien is de wifi weg. Probeer het zo nog eens.",
+        "photosRetry": "Nog eens"
       }
     },
     "sv": {
@@ -551,7 +581,12 @@
         "photosPauseText": "Bildtiden är slut för i dag. Ljudböcker och musik går fortfarande.",
         "photosToListening": "Till ljudböckerna",
         "photosParents": "Föräldrar",
-        "photosParentsHint": "Mer bildtid finns i föräldraappen."
+        "photosParentsHint": "Mer bildtid finns i föräldraappen.",
+        "photosAway": "Inte här just nu",
+        "photosAwayHint": "De här bilderna finns inte just nu. Försök igen senare.",
+        "photosAllAwayTitle": "Bilderna finns inte just nu",
+        "photosAllAwayText": "Kanske är wifi borta. Försök igen om en stund.",
+        "photosRetry": "Igen"
       }
     },
     "da": {
@@ -626,7 +661,12 @@
         "photosPauseText": "Billedtiden er slut for i dag. Lydbøger og musik virker stadig.",
         "photosToListening": "Til lydbøgerne",
         "photosParents": "Forældre",
-        "photosParentsHint": "Mere billedtid fås i forældre-appen."
+        "photosParentsHint": "Mere billedtid fås i forældre-appen.",
+        "photosAway": "Ikke her lige nu",
+        "photosAwayHint": "Disse billeder er her ikke lige nu. Prøv igen senere.",
+        "photosAllAwayTitle": "Billederne er her ikke lige nu",
+        "photosAllAwayText": "Måske er wifi væk. Prøv igen om lidt.",
+        "photosRetry": "Igen"
       }
     },
     "nb": {
@@ -701,7 +741,12 @@
         "photosPauseText": "Bildetiden er over for i dag. Lydbøker og musikk går fortsatt.",
         "photosToListening": "Til lydbøkene",
         "photosParents": "Foreldre",
-        "photosParentsHint": "Mer bildetid får du i foreldreappen."
+        "photosParentsHint": "Mer bildetid får du i foreldreappen.",
+        "photosAway": "Ikke her akkurat nå",
+        "photosAwayHint": "Disse bildene er ikke her akkurat nå. Prøv igjen senere.",
+        "photosAllAwayTitle": "Bildene er ikke her akkurat nå",
+        "photosAllAwayText": "Kanskje er wifi borte. Prøv igjen om litt.",
+        "photosRetry": "Igjen"
       }
     },
     "fi": {
@@ -776,7 +821,12 @@
         "photosPauseText": "Kuva-aika on tältä päivältä lopussa. Äänikirjat ja musiikki toimivat vielä.",
         "photosToListening": "Äänikirjoihin",
         "photosParents": "Vanhemmat",
-        "photosParentsHint": "Lisää kuva-aikaa saa vanhempien sovelluksesta."
+        "photosParentsHint": "Lisää kuva-aikaa saa vanhempien sovelluksesta.",
+        "photosAway": "Ei juuri nyt saatavilla",
+        "photosAwayHint": "Nämä kuvat eivät ole juuri nyt saatavilla. Yritä myöhemmin uudelleen.",
+        "photosAllAwayTitle": "Kuvat eivät ole juuri nyt saatavilla",
+        "photosAllAwayText": "Ehkä wifi on poissa. Yritä hetken päästä uudelleen.",
+        "photosRetry": "Uudelleen"
       }
     },
     "pl": {
@@ -851,7 +901,12 @@
         "photosPauseText": "Na dziś czas zdjęć się skończył. Słuchowiska i muzyka nadal działają.",
         "photosToListening": "Do słuchowisk",
         "photosParents": "Rodzice",
-        "photosParentsHint": "Więcej czasu zdjęć daje aplikacja rodziców."
+        "photosParentsHint": "Więcej czasu zdjęć daje aplikacja rodziców.",
+        "photosAway": "Teraz niedostępne",
+        "photosAwayHint": "Tych zdjęć teraz nie ma. Spróbuj później.",
+        "photosAllAwayTitle": "Zdjęć teraz nie ma",
+        "photosAllAwayText": "Może nie ma Wi‑Fi. Spróbuj za chwilę.",
+        "photosRetry": "Jeszcze raz"
       }
     },
     "pt": {
@@ -926,7 +981,12 @@
         "photosPauseText": "O tempo de fotos acabou por hoje. Histórias e música ainda funcionam.",
         "photosToListening": "Para as histórias",
         "photosParents": "Pais",
-        "photosParentsHint": "Mais tempo de fotos na app dos pais."
+        "photosParentsHint": "Mais tempo de fotos na app dos pais.",
+        "photosAway": "Agora não está",
+        "photosAwayHint": "Estas imagens não estão agora. Tenta mais tarde.",
+        "photosAllAwayTitle": "As imagens não estão agora",
+        "photosAllAwayText": "Talvez o Wi‑Fi tenha ido. Tenta daqui a pouco.",
+        "photosRetry": "Outra vez"
       }
     },
     "tr": {
@@ -1001,7 +1061,12 @@
         "photosPauseText": "Bugünlük resim zamanı bitti. Sesli kitaplar ve müzik hâlâ çalışıyor.",
         "photosToListening": "Sesli kitaplara",
         "photosParents": "Ebeveynler",
-        "photosParentsHint": "Daha fazla resim zamanı ebeveyn uygulamasından."
+        "photosParentsHint": "Daha fazla resim zamanı ebeveyn uygulamasından.",
+        "photosAway": "Şu an yok",
+        "photosAwayHint": "Bu resimler şu an yok. Daha sonra tekrar dene.",
+        "photosAllAwayTitle": "Resimler şu an yok",
+        "photosAllAwayText": "Belki Wi‑Fi gitti. Birazdan tekrar dene.",
+        "photosRetry": "Tekrar"
       }
     },
     "uk": {
@@ -1076,7 +1141,12 @@
         "photosPauseText": "Час фото на сьогодні закінчився. Аудіокниги й музика ще працюють.",
         "photosToListening": "До аудіокниг",
         "photosParents": "Батьки",
-        "photosParentsHint": "Більше часу фото — через застосунок для батьків."
+        "photosParentsHint": "Більше часу фото — через застосунок для батьків.",
+        "photosAway": "Зараз немає",
+        "photosAwayHint": "Цих зображень зараз немає. Спробуй пізніше.",
+        "photosAllAwayTitle": "Зображень зараз немає",
+        "photosAllAwayText": "Можливо, зник Wi‑Fi. Спробуй трохи згодом.",
+        "photosRetry": "Ще раз"
       }
     },
     "ru": {
@@ -1151,7 +1221,12 @@
         "photosPauseText": "Время фото на сегодня закончилось. Аудиокниги и музыка ещё работают.",
         "photosToListening": "К аудиокнигам",
         "photosParents": "Родители",
-        "photosParentsHint": "Больше времени фото — через приложение для родителей."
+        "photosParentsHint": "Больше времени фото — через приложение для родителей.",
+        "photosAway": "Сейчас нет",
+        "photosAwayHint": "Этих изображений сейчас нет. Попробуй позже.",
+        "photosAllAwayTitle": "Изображений сейчас нет",
+        "photosAllAwayText": "Может быть, пропал Wi‑Fi. Попробуй чуть позже.",
+        "photosRetry": "Ещё раз"
       }
     },
     "cs": {
@@ -1226,7 +1301,12 @@
         "photosPauseText": "Čas obrázků pro dnešek skončil. Pohádky a hudba ještě jdou.",
         "photosToListening": "K pohádkám",
         "photosParents": "Rodiče",
-        "photosParentsHint": "Víc času obrázků přidáš v aplikaci pro rodiče."
+        "photosParentsHint": "Víc času obrázků přidáš v aplikaci pro rodiče.",
+        "photosAway": "Teď tu není",
+        "photosAwayHint": "Tyto obrázky tu teď nejsou. Zkus to později.",
+        "photosAllAwayTitle": "Obrázky tu teď nejsou",
+        "photosAllAwayText": "Možná vypadla Wi‑Fi. Zkus to za chvíli.",
+        "photosRetry": "Znovu"
       }
     },
     "el": {
@@ -1301,7 +1381,12 @@
         "photosPauseText": "Ο χρόνος εικόνων τελείωσε για σήμερα. Ακουστικά βιβλία και μουσική παίζουν ακόμη.",
         "photosToListening": "Στα ακουστικά βιβλία",
         "photosParents": "Γονείς",
-        "photosParentsHint": "Περισσότερος χρόνος εικόνων από την εφαρμογή των γονιών."
+        "photosParentsHint": "Περισσότερος χρόνος εικόνων από την εφαρμογή των γονιών.",
+        "photosAway": "Δεν είναι εδώ τώρα",
+        "photosAwayHint": "Αυτές οι εικόνες δεν είναι εδώ τώρα. Δοκίμασε αργότερα.",
+        "photosAllAwayTitle": "Οι εικόνες δεν είναι εδώ τώρα",
+        "photosAllAwayText": "Ίσως χάθηκε το Wi‑Fi. Δοκίμασε σε λίγο.",
+        "photosRetry": "Ξανά"
       }
     }
   }

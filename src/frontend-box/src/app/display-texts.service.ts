@@ -110,6 +110,12 @@ export const DEFAULT_DISPLAY_TEXTS = {
   photosToListening: 'To the audio books',
   photosParents: 'Parents',
   photosParentsHint: "More picture time comes from the parents' app.",
+  // an album shown live from Immich while Immich is away: its stack, the note on a tap, the tab's page when none is there
+  photosAway: 'Not there right now',
+  photosAwayHint: 'These pictures are not there right now. Try again later.',
+  photosAllAwayTitle: 'The pictures are not there right now',
+  photosAllAwayText: 'Maybe the WiFi is gone. Try again in a moment.',
+  photosRetry: 'Try again',
 }
 export type DisplayTextKey = keyof typeof DEFAULT_DISPLAY_TEXTS
 type TextSet = Partial<Record<DisplayTextKey, string>>

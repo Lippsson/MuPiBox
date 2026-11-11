@@ -8,7 +8,7 @@ import { pipeline } from 'node:stream/promises'
 import type { Express, Request, Response, Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
-import { sendImmichLive } from './immich'
+import { immichLiveAway, sendImmichLive } from './immich'
 import { extOf, NotAPicture, PHOTO_EXTENSIONS, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings, type PhotoOrder } from './settings'
 import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, IMMICH_PHOTO_DIR, INCOMING_DIR, isId, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
@@ -357,6 +357,8 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
     const s = photoSettings(deps.getMupiboxConfig())
     if (!s.enabled) return void res.json({ enabled: false, albums: [] })
     const list = (await albums()).filter((a) => a.display && a.assets.length > 0)
+    // (albums shown live from Immich while it is away: "Gerade nicht da" on the display)
+    const away = immichLiveAway()
     res.json({
       enabled: true,
       startAsSlideshow: s.startAsSlideshow,
@@ -364,7 +366,7 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
       albums: list.map((a) => {
         const first = coverOf(a)
         const second = a.assets.find((x) => x.id !== first)?.id ?? null
-        return { id: a.id, title: a.title, count: a.assets.length, pictures: [first, second].filter(Boolean) }
+        return { id: a.id, title: a.title, count: a.assets.length, pictures: [first, second].filter(Boolean), ...(away && a.source === 'immich' && a.live ? { away: true } : {}) }
       }),
     })
   })
