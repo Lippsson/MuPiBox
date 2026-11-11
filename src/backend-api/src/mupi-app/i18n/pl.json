@@ -3534,5 +3534,12 @@
  "Zuletzt abgeglichen": "Ostatnia synchronizacja",
  "Zwischenspeicher": "Pamięć podręczna",
  "{} Ordner · {} {}": "Foldery: {} · {} {}",
- "{} von {} belegt": "Zajęte {} z {}"
+ "{} von {} belegt": "Zajęte {} z {}",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Błędny użytkownik lub hasło – albo użytkownik nie może używać WebDAV.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "NAS odpowiada HTTP {}. Czy to adres WebDAV z portem?",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "NAS odpowiada, ale nie pokazuje folderów. Sprawdź port WebDAV (Synology: 5006 dla HTTPS, 5005 dla HTTP) i czy użytkownik może używać WebDAV.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS jest nieosiągalny. Sprawdź adres (z portem WebDAV) i czy urządzenie może łączyć się z NAS w sieci.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS używa certyfikatu z własnym podpisem. Sprawdź odcisk i potwierdź go – albo użyj HTTP.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Certyfikat NAS nie jest tym potwierdzonym wcześniej. Jeśli odnowiono go na NAS, porównaj nowy odcisk i potwierdź go.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Pod tym adresem nie działa WebDAV. Sprawdź adres i port oraz czy WebDAV jest włączony na NAS."
 }

@@ -3534,5 +3534,12 @@
  "Zuletzt abgeglichen": "Остання синхронізація",
  "Zwischenspeicher": "Кеш",
  "{} Ordner · {} {}": "Папок: {} · {} {}",
- "{} von {} belegt": "Зайнято {} з {}"
+ "{} von {} belegt": "Зайнято {} з {}",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Неправильний користувач або пароль — або користувачеві не можна використовувати WebDAV.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "NAS відповідає HTTP {}. Це адреса WebDAV з портом?",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "NAS відповідає, але не показує папок. Перевір порт WebDAV (Synology: 5006 для HTTPS, 5005 для HTTP) і чи може користувач використовувати WebDAV.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS недоступний. Перевір адресу (з портом WebDAV) і чи може пристрій звертатися до NAS у мережі.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS використовує самопідписаний сертифікат. Перевір відбиток і підтверди його — або використай HTTP.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Сертифікат NAS не той, що був підтверджений. Якщо його оновлено на NAS, порівняй новий відбиток і підтверди його.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "За цією адресою немає WebDAV. Перевір адресу й порт і чи увімкнено WebDAV на NAS."
 }

@@ -3534,5 +3534,12 @@
  "Zuletzt abgeglichen": "Laatst gesynchroniseerd",
  "Zwischenspeicher": "Cache",
  "{} Ordner · {} {}": "{} mappen · {} {}",
- "{} von {} belegt": "{} van {} gebruikt"
+ "{} von {} belegt": "{} van {} gebruikt",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Verkeerde gebruiker of wachtwoord – of de gebruiker mag WebDAV niet gebruiken.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "De NAS antwoordt met HTTP {}. Is dit het WebDAV-adres met poort?",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "De NAS antwoordt maar toont geen mappen. Controleer de WebDAV-poort (Synology: 5006 voor HTTPS, 5005 voor HTTP) en of de gebruiker WebDAV mag gebruiken.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "De NAS is niet bereikbaar. Controleer het adres (met WebDAV-poort) en of de box de NAS in het netwerk mag bereiken.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "De NAS gebruikt een zelfondertekend certificaat. Controleer de vingerafdruk en bevestig die – of gebruik HTTP.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Het certificaat van de NAS is niet het eerder bevestigde. Is het op de NAS vernieuwd, vergelijk dan de nieuwe vingerafdruk en bevestig die.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Op dit adres draait geen WebDAV. Controleer adres en poort en of WebDAV op de NAS aanstaat."
 }

@@ -6689,7 +6689,21 @@ async function nasLogin(root, page, fingerprint) {
       },
     )
   }
-  toast(r.body?.error ? `Anmeldung fehlgeschlagen: ${r.body.error}` : 'Anmeldung fehlgeschlagen', 'info')
+  toast(r.body?.error ? tr(`Anmeldung fehlgeschlagen: ${nasLoginError(r.body.error)}`) : 'Anmeldung fehlgeschlagen', 'info')
+}
+
+// The server's reasons for a failed NAS sign-in (English, also for the admin interface) in the app's words
+function nasLoginError(msg) {
+  const m = String(msg)
+  const status = /HTTP (d+)/.exec(m)
+  if (/^Could not reach the NAS/.test(m)) return tr('Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.')
+  if (/^Wrong account name or password/.test(m)) return tr('Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.')
+  if (/lists no folders/.test(m)) return tr('Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.')
+  if (/^WebDAV service not found/.test(m)) return tr('Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.')
+  if (/not the one confirmed before/.test(m)) return tr('Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.')
+  if (/not signed by a known authority/.test(m)) return tr('Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.')
+  if (status) return tr(`Das NAS antwortet mit HTTP ${status[1]}. Ist das die WebDAV-Adresse mit Port?`)
+  return m
 }
 
 function mountNas(root, page) {

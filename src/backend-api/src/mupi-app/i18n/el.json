@@ -3534,5 +3534,12 @@
  "Zuletzt abgeglichen": "Τελευταίος συγχρονισμός",
  "Zwischenspeicher": "Προσωρινή μνήμη",
  "{} Ordner · {} {}": "{} φάκελοι · {} {}",
- "{} von {} belegt": "{} από {} σε χρήση"
+ "{} von {} belegt": "{} από {} σε χρήση",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Λάθος χρήστης ή κωδικός – ή ο χρήστης δεν επιτρέπεται να χρησιμοποιεί WebDAV.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "Το NAS απαντά με HTTP {}. Είναι αυτή η διεύθυνση WebDAV με θύρα;",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "Το NAS απαντά, αλλά δεν δείχνει φακέλους. Έλεγξε τη θύρα WebDAV (Synology: 5006 για HTTPS, 5005 για HTTP) και αν ο χρήστης μπορεί να χρησιμοποιεί WebDAV.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "Το NAS δεν είναι προσβάσιμο. Έλεγξε τη διεύθυνση (με θύρα WebDAV) και αν το κουτί επιτρέπεται να φτάσει το NAS στο δίκτυο.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "Το NAS χρησιμοποιεί αυτουπογεγραμμένο πιστοποιητικό. Έλεγξε το αποτύπωμα και επιβεβαίωσέ το – ή χρησιμοποίησε HTTP.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Το πιστοποιητικό του NAS δεν είναι αυτό που επιβεβαιώθηκε. Αν ανανεώθηκε στο NAS, σύγκρινε το νέο αποτύπωμα και επιβεβαίωσέ το.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Σε αυτή τη διεύθυνση δεν τρέχει WebDAV. Έλεγξε διεύθυνση και θύρα και αν το WebDAV είναι ενεργό στο NAS."
 }

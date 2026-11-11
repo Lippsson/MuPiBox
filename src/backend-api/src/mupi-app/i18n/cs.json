@@ -3534,5 +3534,12 @@
  "Zuletzt abgeglichen": "Naposledy synchronizováno",
  "Zwischenspeicher": "Mezipaměť",
  "{} Ordner · {} {}": "Složky: {} · {} {}",
- "{} von {} belegt": "Obsazeno {} z {}"
+ "{} von {} belegt": "Obsazeno {} z {}",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Špatný uživatel nebo heslo – nebo uživatel nesmí používat WebDAV.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "NAS odpovídá HTTP {}. Je to adresa WebDAV s portem?",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "NAS odpovídá, ale neukazuje žádné složky. Zkontroluj port WebDAV (Synology: 5006 pro HTTPS, 5005 pro HTTP) a zda uživatel smí používat WebDAV.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS není dostupný. Zkontroluj adresu (s portem WebDAV) a zda box smí NAS v síti dosáhnout.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS používá vlastní certifikát. Zkontroluj otisk a potvrď ho – nebo použij HTTP.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Certifikát NAS je jiný než potvrzený. Pokud byl na NAS obnoven, porovnej nový otisk a potvrď ho.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Na této adrese neběží WebDAV. Zkontroluj adresu a port a zda je WebDAV na NAS zapnutý."
 }

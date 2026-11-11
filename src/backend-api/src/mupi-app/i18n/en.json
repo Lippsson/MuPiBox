@@ -3550,5 +3550,12 @@
  "Zuletzt abgeglichen": "Last synced",
  "Zwischenspeicher": "Cache",
  "{} Ordner · {} {}": "{} folders · {} {}",
- "{} von {} belegt": "{} of {} used"
+ "{} von {} belegt": "{} of {} used",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Wrong user or password – or the user may not use WebDAV.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "The NAS answers with HTTP {}. Is this the WebDAV address with port?",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "The NAS answers but shows no folders. Check the WebDAV port (Synology: 5006 for HTTPS, 5005 for HTTP) and that the user may use WebDAV.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "The NAS cannot be reached. Check the address (with WebDAV port) and that the box may reach the NAS in the network.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "The NAS uses a self-signed certificate. Check the fingerprint and confirm it – or use HTTP.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "The NAS certificate is not the one confirmed before. If it was renewed on the NAS, compare the new fingerprint and confirm it.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "There is no WebDAV at this address. Check address and port and that WebDAV is switched on on the NAS."
 }

@@ -3534,5 +3534,12 @@
  "Zuletzt abgeglichen": "Senast synkroniserad",
  "Zwischenspeicher": "Cache",
  "{} Ordner · {} {}": "{} mappar · {} {}",
- "{} von {} belegt": "{} av {} använt"
+ "{} von {} belegt": "{} av {} använt",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Fel användare eller lösenord – eller så får användaren inte använda WebDAV.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "NAS:en svarar med HTTP {}. Är detta WebDAV-adressen med port?",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "NAS:en svarar men visar inga mappar. Kontrollera WebDAV-porten (Synology: 5006 för HTTPS, 5005 för HTTP) och att användaren får använda WebDAV.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS:en går inte att nå. Kontrollera adressen (med WebDAV-port) och att boxen får nå NAS:en i nätverket.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS:en använder ett självsignerat certifikat. Kontrollera fingeravtrycket och bekräfta det – eller använd HTTP.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "NAS:ens certifikat är inte det som bekräftades tidigare. Om det förnyats på NAS:en, jämför det nya fingeravtrycket och bekräfta det.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Det finns ingen WebDAV på den här adressen. Kontrollera adress och port och att WebDAV är påslaget på NAS:en."
 }

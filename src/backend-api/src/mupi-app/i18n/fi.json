@@ -3534,5 +3534,12 @@
  "Zuletzt abgeglichen": "Viimeksi synkronoitu",
  "Zwischenspeicher": "Välimuisti",
  "{} Ordner · {} {}": "{} kansiota · {} {}",
- "{} von {} belegt": "{} / {} käytössä"
+ "{} von {} belegt": "{} / {} käytössä",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Väärä käyttäjä tai salasana – tai käyttäjä ei saa käyttää WebDAVia.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "NAS vastaa HTTP {}. Onko tämä WebDAV-osoite porttineen?",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "NAS vastaa, mutta ei näytä kansioita. Tarkista WebDAV-portti (Synology: 5006 HTTPS:lle, 5005 HTTP:lle) ja saako käyttäjä käyttää WebDAVia.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS:ia ei tavoiteta. Tarkista osoite (WebDAV-portin kanssa) ja saako laite yhteyden NAS:iin verkossa.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS käyttää itse allekirjoitettua varmennetta. Tarkista sormenjälki ja vahvista se – tai käytä HTTP:tä.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "NAS:n varmenne ei ole aiemmin vahvistettu. Jos se uusittiin NAS:ssa, vertaa uutta sormenjälkeä ja vahvista se.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Tässä osoitteessa ei ole WebDAVia. Tarkista osoite ja portti sekä onko WebDAV päällä NAS:ssa."
 }

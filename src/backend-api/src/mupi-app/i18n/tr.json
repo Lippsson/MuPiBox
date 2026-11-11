@@ -3534,5 +3534,12 @@
  "Zuletzt abgeglichen": "Son eşitleme",
  "Zwischenspeicher": "Önbellek",
  "{} Ordner · {} {}": "{} klasör · {} {}",
- "{} von {} belegt": "{} / {} kullanıldı"
+ "{} von {} belegt": "{} / {} kullanıldı",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Kullanıcı veya parola yanlış – ya da kullanıcı WebDAV kullanamıyor.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "NAS HTTP {} ile yanıt veriyor. Bu, portuyla birlikte WebDAV adresi mi?",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "NAS yanıt veriyor ama klasör göstermiyor. WebDAV portunu (Synology: HTTPS için 5006, HTTP için 5005) ve kullanıcının WebDAV kullanabildiğini kontrol et.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS’a ulaşılamıyor. Adresi (WebDAV portuyla) ve kutunun ağda NAS’a ulaşmasına izin verildiğini kontrol et.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS kendinden imzalı bir sertifika kullanıyor. Parmak izini kontrol edip onayla – ya da HTTP kullan.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "NAS’ın sertifikası daha önce onaylanan değil. NAS’ta yenilendiyse yeni parmak izini karşılaştırıp onayla.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Bu adreste WebDAV çalışmıyor. Adresi, portu ve NAS’ta WebDAV’ın açık olduğunu kontrol et."
 }

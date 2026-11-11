@@ -3534,5 +3534,12 @@
  "Zuletzt abgeglichen": "Última sincronização",
  "Zwischenspeicher": "Cache",
  "{} Ordner · {} {}": "{} pastas · {} {}",
- "{} von {} belegt": "{} de {} ocupados"
+ "{} von {} belegt": "{} de {} ocupados",
+ "Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.": "Utilizador ou palavra-passe errados – ou o utilizador não pode usar WebDAV.",
+ "Das NAS antwortet mit HTTP {}. Ist das die WebDAV-Adresse mit Port?": "O NAS responde com HTTP {}. Este é o endereço WebDAV com porta?",
+ "Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.": "O NAS responde mas não mostra pastas. Verifica a porta WebDAV (Synology: 5006 para HTTPS, 5005 para HTTP) e se o utilizador pode usar WebDAV.",
+ "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "O NAS não está acessível. Verifica o endereço (com porta WebDAV) e se a caixa pode chegar ao NAS na rede.",
+ "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "O NAS usa um certificado autoassinado. Verifica a impressão digital e confirma-a – ou usa HTTP.",
+ "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "O certificado do NAS não é o confirmado antes. Se foi renovado no NAS, compara a nova impressão digital e confirma-a.",
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Neste endereço não há WebDAV. Verifica endereço e porta e se o WebDAV está ligado no NAS."
 }
