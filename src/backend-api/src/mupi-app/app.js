@@ -12781,13 +12781,16 @@ function mountPhotoAlbum(root, page) {
   window.clearTimeout(photoPrepTimer)
   if (!a) return
   if (a.assets.some((x) => x.ready === false)) {
-    photoPrepTimer = window.setTimeout(async () => {
-      if (currentPage()?.id !== page.id || photoLib.album !== a) return
-      await loadPhotoAlbum().catch(() => undefined)
-      // (not under an open sheet - the full view, a question: drawn when it is closed, at the next round)
-      if (currentPage()?.id === page.id && $('#sheet').hidden) renderPage(page, false)
-      else if (currentPage()?.id === page.id) mountPhotoAlbum(root, page)
-    }, 5000)
+    const ask = () => {
+      photoPrepTimer = window.setTimeout(async () => {
+        if (currentPage()?.id !== page.id || photoLib.album !== a) return
+        // (not under an open sheet - the full view, a question: asked again in 5 s)
+        if (!$('#sheet').hidden) return ask()
+        await loadPhotoAlbum().catch(() => undefined)
+        if (currentPage()?.id === page.id) renderPage(page, false)
+      }, 5000)
+    }
+    ask()
   }
   $('#ph-immich-sync', root)?.addEventListener('click', async (e) => {
     e.currentTarget.disabled = true
