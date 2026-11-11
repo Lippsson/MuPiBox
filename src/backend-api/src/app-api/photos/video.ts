@@ -16,6 +16,8 @@ const execFileAsync = promisify(execFile)
 
 export const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.m4v']
 export const VIDEO_MAX_SECONDS = 180
+/** a clip as it comes (upload, NAS, Immich): up to 1 GB - made smaller on the box */
+export const VIDEO_MAX_BYTES = 1024 * 1024 * 1024
 export const FFMPEG = '/usr/bin/ffmpeg'
 const FFPROBE = '/usr/bin/ffprobe'
 

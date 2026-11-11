@@ -12,6 +12,7 @@ import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
 import { extOf, NotAPicture, PHOTO_EXTENSIONS, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings } from './settings'
+import { VIDEO_EXTENSIONS, VIDEO_MAX_BYTES, videoQueue } from './video'
 import { albumDir, albums, assetBase, cardSpace, INCOMING_DIR, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, PHOTOS_DIR, photoBytes, update } from './store'
 
 /** A file or folder on the NAS as the server's WebDAV listing gives it */
@@ -112,6 +113,9 @@ export function applyNasPhotoSettings(cfg: Record<string, unknown>, patch: unkno
 }
 
 const isPicture = (e: PhotoNasEntry) => !e.isdir && PHOTO_EXTENSIONS.includes(extOf(e.name)) && !e.name.startsWith('.')
+const isClip = (e: PhotoNasEntry) => !e.isdir && VIDEO_EXTENSIONS.includes(extOf(e.name)) && !e.name.startsWith('.')
+// (clips only with "Videos anzeigen": they are big, and nobody would see them)
+const isMedia = (videos: boolean) => (e: PhotoNasEntry) => isPicture(e) || (videos && isClip(e))
 const byName = (a: PhotoNasEntry, b: PhotoNasEntry) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
 const titleOf = (folder: string) => (folder.split('/').filter(Boolean).pop() ?? folder).slice(0, 40)
 const under = (p: string, folder: string) => p === folder || p.startsWith(`${folder}/`)
@@ -221,6 +225,7 @@ export class NasPhotoSync {
     try {
       // the albums the folders give: with "Unterordner als eigene Alben" every folder with pictures, else one per folder
       // chosen with all pictures below it. A folder the NAS did not list: its albums stay as they are.
+      const videos = photoSettings(cfg).showVideos
       const targets = new Map<string, { title: string; files: PhotoNasEntry[] }>()
       const failed: string[] = []
       let away = false
@@ -239,7 +244,7 @@ export class NasPhotoSync {
           away = true
           return
         }
-        const pictures = entries.filter(isPicture).sort(byName).slice(0, PICTURES_MAX - count)
+        const pictures = entries.filter(isMedia(videos)).sort(byName).slice(0, PICTURES_MAX - count)
         count += pictures.length
         const album = into ?? folder
         if (pictures.length) {
@@ -311,7 +316,9 @@ export class NasPhotoSync {
             if (!(x.ref && unread(x.ref))) drop.push(x)
             continue
           }
-          const there = x.ver === versionOf(f) && (await fsp.access(`${assetBase(album, x.id)}.jpg`).then(() => true, () => false))
+          // (a clip still waiting to be made: its file as it came is there)
+          const file = x.kind === 'video' && x.ready === false ? `${assetBase(album, x.id)}.pending` : `${assetBase(album, x.id)}.jpg`
+          const there = x.ver === versionOf(f) && (await fsp.access(file).then(() => true, () => false))
           if (there) wanted.delete(f.path)
           else replace.set(f.path, x)
         }
@@ -352,12 +359,15 @@ export class NasPhotoSync {
         const id = newId()
         const out = assetBase(album, id)
         try {
-          if (!(await nas.download(file.path, part, FILE_MAX_BYTES, stop.signal))) {
+          const clip = isClip(file)
+          if (!(await nas.download(file.path, part, clip ? VIDEO_MAX_BYTES : FILE_MAX_BYTES, stop.signal))) {
             if (stop.signal.aborted) return
             continue
           }
           await fsp.mkdir(albumDir(album), { recursive: true })
-          const facts = await processPhoto(part, out, ext, stop.signal)
+          // (a clip: kept as it came, made in the background - video.ts; its picture and video come then)
+          if (clip) await fsp.rename(part, `${out}.pending`)
+          const facts = clip ? { w: 0, h: 0, taken: null } : await processPhoto(part, out, ext, stop.signal)
           let newBytes = 0
           for (const f of photoFiles(out)) newBytes += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
           // (more than the limit takes, with the old ones gone: not taken - a changed picture keeps its old one)
@@ -366,7 +376,9 @@ export class NasPhotoSync {
             full = true
             break
           }
-          const asset: PhotoAsset = { id, w: facts.w, h: facts.h, taken: facts.taken, added: new Date().toISOString(), kind: 'photo', ref: file.path, ver: versionOf(file) }
+          const asset: PhotoAsset = clip
+            ? { id, w: 0, h: 0, taken: null, added: new Date().toISOString(), kind: 'video', ready: false, duration: 0, ref: file.path, ver: versionOf(file) }
+            : { id, w: facts.w, h: facts.h, taken: facts.taken, added: new Date().toISOString(), kind: 'photo', ref: file.path, ver: versionOf(file) }
           const placed = await update((lib) => {
             let a = lib.albums.find((x) => x.id === album.id)
             // (a new album: in the list with its first picture, at the end)
@@ -386,6 +398,7 @@ export class NasPhotoSync {
           if (!placed) for (const f of photoFiles(out)) await fsp.rm(f, { force: true }).catch(() => undefined)
           else {
             used += newBytes
+            if (clip) void videoQueue.kick()
             if (old) {
               for (const f of photoFiles(assetBase(album, old.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
               used -= oldBytes
@@ -475,19 +488,20 @@ export function registerPhotoNasRoutes(router: Router, deps: PhotoNasDeps): NasP
     }
     if (entries === undefined) return void res.status(502).json({ error: 'nas_unreachable' })
     const dirs = entries.filter((e) => e.isdir).sort(byName).slice(0, 200)
+    const videos = photoSettings(deps.getMupiboxConfig()).showVideos
     // (the number of pictures in each subfolder - its own, not those further below; for the first 60, 4 at a time)
     const counts = new Map<string, { pictures: number; folders: number }>()
     let next = 0
     const worker = async () => {
       for (let i = next++; i < Math.min(dirs.length, 60); i = next++) {
         const inner = await nas.list(dirs[i].path).catch(() => undefined)
-        if (inner) counts.set(dirs[i].path, { pictures: inner.filter(isPicture).length, folders: inner.filter((e) => e.isdir).length })
+        if (inner) counts.set(dirs[i].path, { pictures: inner.filter(isMedia(videos)).length, folders: inner.filter((e) => e.isdir).length })
       }
     }
     await Promise.all([worker(), worker(), worker(), worker()])
     res.json({
       path: folder,
-      pictures: entries.filter(isPicture).length,
+      pictures: entries.filter(isMedia(videos)).length,
       folders: dirs.map((d) => ({ name: d.name, path: d.path, pictures: counts.get(d.path)?.pictures ?? null, folders: counts.get(d.path)?.folders ?? null })),
     })
   })

@@ -156,3 +156,11 @@ test('photo Immich: the test and an album against a server like Immich (old vers
   }
   assert.deepEqual(await testImmich(new ImmichClient('http://127.0.0.1:1', 'good-key-0123')), { ok: false, error: 'unreachable' })
 })
+
+test('photo Immich: a clip length from its duration', async () => {
+  const { clipSeconds } = await import('./app-api/photos/immich')
+  assert.equal(clipSeconds('0:00:24.533000'), 25)
+  assert.equal(clipSeconds('1:02:03.000000'), 3723)
+  assert.equal(clipSeconds(null), 0)
+  assert.equal(clipSeconds('nonsense'), 0)
+})

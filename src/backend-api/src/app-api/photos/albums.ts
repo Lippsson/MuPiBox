@@ -78,11 +78,11 @@ async function sendPicture(req: Request, res: Response, onlyShown: boolean): Pro
   // (an Immich album shown live: the picture comes from Immich; one kept on the box whose picture is not there yet -
   // switched from live a moment ago, the cache's limit reached - too)
   if (a.source === 'immich' && (a.live || !(await fsp.access(`${assetBase(a, assetId)}${suffix}`).then(() => true, () => false)))) {
-    return void sendImmichLive(res, asset.ref ?? '', size)
+    return void sendImmichLive(req, res, asset.ref ?? '', size)
   }
   // (an id is never used for another picture: kept by the browser for long)
   // (dotfiles: the data folder is below /home/dietpi/.mupibox - express refuses a path with a dot folder by default)
-  res.sendFile(`${assetBase(a, assetId)}${suffix}`, { dotfiles: 'allow', headers: { 'Cache-Control': 'private, max-age=31536000, immutable' } }, (err) => {
+  res.sendFile(`${assetBase(a, assetId)}${suffix}`, { dotfiles: 'allow', headers: { 'Cache-Control': 'private, max-age=31536000, immutable', ...(size === 'v' ? { 'Content-Type': 'video/mp4' } : {}) } }, (err) => {
     if (err && !res.headersSent) res.status(404).end()
   })
 }

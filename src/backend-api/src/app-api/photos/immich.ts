@@ -11,11 +11,14 @@
 import { randomBytes } from 'node:crypto'
 import { promises as fsp } from 'node:fs'
 import path from 'node:path'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import type { Request, Response, Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
 import { NotAPicture, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings } from './settings'
+import { VIDEO_MAX_BYTES, videoQueue } from './video'
 import { albumDir, albums, assetBase, cardSpace, IMMICH_LIVE_DIR, IMMICH_PHOTO_DIR, INCOMING_DIR, newId, type PhotoAlbum, type PhotoAsset, PHOTOS_DIR, photoBytes, update } from './store'
 
 export interface PhotoImmichDeps {
@@ -147,6 +150,8 @@ interface ImmichAlbum {
 export interface ImmichAsset {
   id: string
   type: string
+  /** a clip's length, "0:00:24.000000" */
+  duration?: string | null
   isTrashed?: boolean
   fileCreatedAt?: string
   localDateTime?: string
@@ -161,11 +166,14 @@ export class ImmichClient {
     readonly key: string,
   ) {}
 
-  private async call(p: string, init: { method?: string; body?: unknown; signal?: AbortSignal; auth?: boolean } = {}): Promise<globalThis.Response> {
-    const headers: Record<string, string> = { Accept: 'application/json' }
+  private async call(
+    p: string,
+    init: { method?: string; body?: unknown; signal?: AbortSignal; auth?: boolean; headers?: Record<string, string>; timeoutMs?: number } = {},
+  ): Promise<globalThis.Response> {
+    const headers: Record<string, string> = { Accept: 'application/json', ...init.headers }
     if (init.auth !== false) headers['x-api-key'] = this.key
     if (init.body !== undefined) headers['Content-Type'] = 'application/json'
-    const timeout = AbortSignal.timeout(20_000)
+    const timeout = AbortSignal.timeout(init.timeoutMs ?? 20_000)
     try {
       return await fetch(`${this.url}${p}`, {
         method: init.method ?? 'GET',
@@ -213,7 +221,7 @@ export class ImmichClient {
   }
 
   /** An album with its pictures (not trashed); newer Immich versions leave the assets out of the album: searched then */
-  async album(id: string, signal?: AbortSignal): Promise<{ name: string; assets: ImmichAsset[] }> {
+  async album(id: string, signal?: AbortSignal, videos = false): Promise<{ name: string; assets: ImmichAsset[] }> {
     const a = await this.json<ImmichAlbum>(`/api/albums/${id}?withoutAssets=false`, { signal })
     let assets = Array.isArray(a.assets) ? a.assets : null
     if (!assets || (assets.length === 0 && a.assetCount > 0)) {
@@ -228,7 +236,22 @@ export class ImmichClient {
         page = r.assets?.nextPage ? Number(r.assets.nextPage) : 0
       }
     }
-    return { name: String(a.albumName ?? ''), assets: assets.filter((x) => x && x.type === 'IMAGE' && !x.isTrashed && UUID.test(x.id)) }
+    // (clips only with "Videos anzeigen"; a live photo's movie is no asset of its own in the album - its still is)
+    return { name: String(a.albumName ?? ''), assets: assets.filter((x) => x && (x.type === 'IMAGE' || (videos && x.type === 'VIDEO')) && !x.isTrashed && UUID.test(x.id)) }
+  }
+
+  /** A clip as Immich plays it (made by Immich for browsers - H.264 most often); range: a part of it (the display seeking) */
+  async clip(assetId: string, init: { signal?: AbortSignal; range?: string; timeoutMs?: number } = {}): Promise<globalThis.Response> {
+    const r = await this.call(`/api/assets/${assetId}/video/playback`, {
+      signal: init.signal,
+      headers: { Accept: '*/*', ...(init.range ? { Range: init.range } : {}) },
+      timeoutMs: init.timeoutMs ?? 30 * 60_000,
+    })
+    if (!(r.ok || r.status === 206) || !r.body) {
+      await r.body?.cancel().catch(() => undefined)
+      throw new ImmichRefused(r.status)
+    }
+    return r
   }
 
   /** A picture of Immich's (preview: its display size, JPEG; thumbnail: small, WebP or JPEG) */
@@ -298,6 +321,11 @@ function dims(x: ImmichAsset): { w: number; h: number } {
   return o >= 5 && o <= 8 ? { w: h, h: w } : { w, h }
 }
 const versionOf = (x: ImmichAsset) => String(x.checksum ?? x.updatedAt ?? '')
+// a clip's length in seconds from Immich's "H:MM:SS.ffffff"
+export const clipSeconds = (d: string | null | undefined): number => {
+  const m = /^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/.exec(String(d ?? ''))
+  return m ? Math.round(Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])) : 0
+}
 const takenOf = (x: ImmichAsset) => {
   const t = x.localDateTime ?? x.fileCreatedAt
   return typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(t) ? t.slice(0, 19) : null
@@ -409,6 +437,7 @@ export class ImmichPhotoSync {
     this.stop = stop
     Object.assign(this.state, { running: true, done: 0, total: 0 })
     try {
+      const videos = photoSettings(cfg).showVideos
       // the albums chosen as Immich has them now; Immich away: nothing changes on the box
       const found = new Map<string, { name: string; assets: ImmichAsset[] }>()
       let missing = 0
@@ -416,7 +445,7 @@ export class ImmichPhotoSync {
         for (const id of s.albumIds) {
           if (stop.signal.aborted) return
           try {
-            found.set(id, await client.album(id, stop.signal))
+            found.set(id, await client.album(id, stop.signal, videos))
           } catch (err) {
             if (stop.signal.aborted) return
             if (err instanceof ImmichRefused && err.status === 404) {
@@ -473,7 +502,9 @@ export class ImmichPhotoSync {
             const before = new Map(a.assets.map((x) => [x.ref, x]))
             a.assets = assets.slice(0, PICTURES_MAX).map((x) => {
               const old = before.get(x.id)
-              return old && old.ver === versionOf(x) ? old : { id: newId(), ...dims(x), taken: takenOf(x), added: new Date().toISOString(), kind: 'photo' as const, ref: x.id, ver: versionOf(x) }
+              if (old && old.ver === versionOf(x)) return old
+              const base = { id: newId(), ...dims(x), taken: takenOf(x), added: new Date().toISOString(), ref: x.id, ver: versionOf(x) }
+              return x.type === 'VIDEO' ? { ...base, kind: 'video' as const, ready: true, duration: clipSeconds(x.duration) } : { ...base, kind: 'photo' as const }
             })
             if (a.cover && !a.assets.some((x) => x.id === a?.cover)) delete a.cover
           }
@@ -498,7 +529,9 @@ export class ImmichPhotoSync {
             drop.push(x)
             continue
           }
-          const there = x.ver === versionOf(f) && (await fsp.access(`${assetBase(album, x.id)}.jpg`).then(() => true, () => false))
+          // (a clip still waiting to be made: its file as it came is there)
+          const file = x.kind === 'video' && x.ready === false ? `${assetBase(album, x.id)}.pending` : `${assetBase(album, x.id)}.jpg`
+          const there = x.ver === versionOf(f) && (await fsp.access(file).then(() => true, () => false))
           if (there) wanted.delete(f.id)
           else replace.set(f.id, x)
         }
@@ -533,16 +566,24 @@ export class ImmichPhotoSync {
         const part = path.join(INCOMING_DIR, `immich-${randomBytes(6).toString('hex')}.jpg.part`)
         const id = newId()
         const out = assetBase(album, id)
+        const clip = x.type === 'VIDEO'
         try {
-          const r = await client.picture(x.id, 'preview', stop.signal)
-          const size = Number(r.headers.get('content-length'))
-          if (Number.isFinite(size) && size > FILE_MAX_BYTES) {
-            await r.body?.cancel().catch(() => undefined)
-            continue
+          if (clip) {
+            const r = await client.clip(x.id, { signal: stop.signal })
+            if (!(await streamTo(r, part, VIDEO_MAX_BYTES))) continue
+          } else {
+            const r = await client.picture(x.id, 'preview', stop.signal)
+            const size = Number(r.headers.get('content-length'))
+            if (Number.isFinite(size) && size > FILE_MAX_BYTES) {
+              await r.body?.cancel().catch(() => undefined)
+              continue
+            }
+            await fsp.writeFile(part, Buffer.from(await r.arrayBuffer()))
           }
-          await fsp.writeFile(part, Buffer.from(await r.arrayBuffer()))
           await fsp.mkdir(albumDir(album), { recursive: true })
-          const facts = await processPhoto(part, out, '.jpg', stop.signal)
+          // (a clip: kept as it came, made in the background - video.ts)
+          if (clip) await fsp.rename(part, `${out}.pending`)
+          const facts = clip ? { w: 0, h: 0, taken: null } : await processPhoto(part, out, '.jpg', stop.signal)
           let newBytes = 0
           for (const f of photoFiles(out)) newBytes += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
           if (used - oldBytes + newBytes > limit) {
@@ -551,7 +592,9 @@ export class ImmichPhotoSync {
             break
           }
           // (the preview carries no date: the one Immich knows)
-          const asset: PhotoAsset = { id, w: facts.w, h: facts.h, taken: takenOf(x) ?? facts.taken, added: new Date().toISOString(), kind: 'photo', ref: x.id, ver: versionOf(x) }
+          const asset: PhotoAsset = clip
+            ? { id, w: 0, h: 0, taken: takenOf(x), added: new Date().toISOString(), kind: 'video', ready: false, duration: clipSeconds(x.duration), ref: x.id, ver: versionOf(x) }
+            : { id, w: facts.w, h: facts.h, taken: takenOf(x) ?? facts.taken, added: new Date().toISOString(), kind: 'photo', ref: x.id, ver: versionOf(x) }
           const placed = await update((lib) => {
             let a = lib.albums.find((y) => y.id === album.id)
             if (!a && fresh && !lib.albums.some((y) => y.source === 'immich' && y.ref === album.ref)) {
@@ -568,6 +611,7 @@ export class ImmichPhotoSync {
           if (!placed) for (const f of photoFiles(out)) await fsp.rm(f, { force: true }).catch(() => undefined)
           else {
             used += newBytes
+            if (clip) void videoQueue.kick()
             if (old) {
               for (const f of photoFiles(assetBase(album, old.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
               used -= oldBytes
@@ -656,9 +700,33 @@ const typeOf = (b: Buffer) => (b.subarray(0, 4).toString('latin1') === 'RIFF' ? 
  * A picture of an Immich album shown live (albums.ts sendPicture): from the small cache, else from Immich - the grid and
  * the background its thumbnail, the full view its preview. Immich away: 404 (the display shows the album as not there).
  */
-export async function sendImmichLive(res: Response, assetRef: string, size: string): Promise<void> {
+export async function sendImmichLive(req: Request, res: Response, assetRef: string, size: string): Promise<void> {
   const client = liveSync?.client()
   if (!UUID.test(assetRef)) return void res.status(404).end()
+  // a clip: passed on as it comes, a part of it when the player asks for one (not kept - too big for the live cache)
+  if (size === 'v') {
+    if (!client) return void res.status(404).end()
+    const stop = new AbortController()
+    res.on('close', () => stop.abort())
+    try {
+      const range = typeof req.headers.range === 'string' && /^bytes=\d*-\d*$/.test(req.headers.range) ? req.headers.range : undefined
+      const r = await client.clip(assetRef, { signal: stop.signal, range })
+      liveFailedAt = 0
+      liveSync?.reachable()
+      res.status(r.status)
+      for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
+        const v = r.headers.get(h)
+        if (v) res.setHeader(h, v)
+      }
+      res.setHeader('Cache-Control', 'private, no-store')
+      await pipeline(Readable.fromWeb(r.body as import('node:stream/web').ReadableStream), res)
+    } catch (err) {
+      if (err instanceof ImmichAway || (err instanceof ImmichRefused && (err.status === 401 || err.status === 403))) liveFailedAt = Date.now()
+      if (!res.headersSent) res.status(404).end()
+      else res.destroy()
+    }
+    return
+  }
   const kind = size === 'f' ? 'preview' : 'thumbnail'
   const file = path.join(IMMICH_LIVE_DIR, `${assetRef}.${kind}`)
   const send = (buf: Buffer) => {
@@ -690,6 +758,28 @@ export async function sendImmichLive(res: Response, assetRef: string, size: stri
     // (Immich away or the key refused - not a single picture it does not have)
     if (err instanceof ImmichAway || (err instanceof ImmichRefused && (err.status === 401 || err.status === 403))) liveFailedAt = Date.now()
     if (!res.headersSent) res.status(404).end()
+  }
+}
+
+// a response's body into a file, at most maxBytes (false: too big - nothing kept)
+async function streamTo(r: globalThis.Response, file: string, maxBytes: number): Promise<boolean> {
+  const announced = Number(r.headers.get('content-length'))
+  if (Number.isFinite(announced) && announced > maxBytes) {
+    await r.body?.cancel().catch(() => undefined)
+    return false
+  }
+  const out = await fsp.open(file, 'w')
+  let n = 0
+  try {
+    for await (const chunk of Readable.fromWeb(r.body as import('node:stream/web').ReadableStream)) {
+      n += (chunk as Buffer).length
+      if (n > maxBytes) return false
+      await out.write(chunk as Buffer)
+    }
+    return true
+  } finally {
+    await out.close()
+    if (n > maxBytes) await fsp.rm(file, { force: true })
   }
 }
 
