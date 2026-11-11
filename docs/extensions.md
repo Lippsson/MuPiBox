@@ -158,7 +158,8 @@ Die Nummer 5 (Taster) bringt im Manifest:
   „+ label“ steht, und jede hinzugefügte hat einen Knopf zum Entfernen (setzt den Schalter zurück, die Pins der Gruppe auf `0` und den Namen
   auf leer). Eine Gruppe mit gewähltem Pin wird immer gezeigt.
 - **`ui.place: "system"`**: die Einstellungen sind eine eigene Seite unter Einstellungen › System › „Die Box“ (statt nur der Karte auf der Seite
-  „Erweiterungen“; `GET /api/app/extensions/pages` nennt der Webapp die Seiten der eingeschalteten Extensions). Dazu **`ui.adopt`**: Seiten des
+  „Erweiterungen“; `GET /api/app/extensions/pages` nennt der Webapp die Seiten der eingeschalteten Extensions; `ui.heading` ist, was dort über
+  der Karte der Einstellungen steht, wenn es nicht der Titel sein soll). Dazu **`ui.adopt`**: Seiten des
   Kerns, die auf dieser Seite mit erscheinen und an ihrem alten Ort verschwinden, solange die Extension eingeschaltet ist. Erlaubt ist bisher nur
   `"rotary"` („Drehregler und Taster“, sonst unter Einstellungen › Audio).
 - im API-Teil `host.apiUrl` und `host.onSettings(fn)` (unten).

@@ -72,7 +72,7 @@ export interface Manifest {
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
-  ui?: { title: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
+  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -367,6 +367,8 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
     if (typeof ui?.title !== 'string' || ui.title.length > 60 || (ui.help !== undefined && (typeof ui.help !== 'string' || ui.help.length > 800)) || !Array.isArray(ui.items) || ui.items.length > maxItems) return 'bad ui'
     // (hostApi 5) a page of its own under Einstellungen > System, and pages of the core that are shown on it while the extension is on
     if (ui.place !== undefined && (x.hostApi < 5 || ui.place !== 'system')) return 'ui: bad place'
+    // (what stands over the card of the settings on that page - and in the list of the page's cards - when it is not the title)
+    if (ui.heading !== undefined && (ui.place === undefined || typeof ui.heading !== 'string' || ui.heading.length < 1 || ui.heading.length > 60)) return 'ui: bad heading'
     if (ui.adopt !== undefined && (ui.place === undefined || !Array.isArray(ui.adopt) || ui.adopt.some((a) => !ADOPTABLE.has(a)) || new Set(ui.adopt).size !== ui.adopt.length)) return 'ui: bad adopt'
     const settings = x.settings ?? {}
     for (const item of ui.items) {

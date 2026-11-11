@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { BUTTONS, TWINS, ACTIONS } = require('../inputs.js')
 
-const VERSION = '1.2.0'
+const VERSION = '1.2.1'
 
 const ACTION_LABELS = {
   none: 'Keine Aktion',
@@ -130,6 +130,7 @@ function build() {
     settings,
     ui: {
       title: 'Buttons & GPIO Input',
+      heading: 'Buttons',
       help: 'Jeder Taster verbindet seinen GPIO-Pin mit GND (Masse); ein Widerstand ist nicht nötig. Wähle für jeden Taster einen freien Pin und was er tun soll. Pins, die schon belegt sind (Netzschalter, LED, Lüfter, Soundkarte, Drehregler, andere Erweiterungen), lassen sich nicht wählen.',
       place: 'system',
       adopt: ['rotary'],

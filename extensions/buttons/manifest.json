@@ -1,7 +1,7 @@
 {
   "id": "buttons",
   "name": "Buttons & GPIO Input",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Physische Taster an den GPIO-Pins steuern die Box: Play/Pause, Titel, Lautstärke und mehr. Mit Tastern für kurzes und langes Drücken (Dual Action) und Doppeltastern mit sechs Funktionen. Die Einstellungen stehen unter System › Buttons & GPIO Input.",
   "hostApi": 5,
   "resources": {},
@@ -951,6 +951,7 @@
   },
   "ui": {
     "title": "Buttons & GPIO Input",
+    "heading": "Buttons",
     "help": "Jeder Taster verbindet seinen GPIO-Pin mit GND (Masse); ein Widerstand ist nicht nötig. Wähle für jeden Taster einen freien Pin und was er tun soll. Pins, die schon belegt sind (Netzschalter, LED, Lüfter, Soundkarte, Drehregler, andere Erweiterungen), lassen sich nicht wählen.",
     "place": "system",
     "adopt": [

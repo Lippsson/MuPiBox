@@ -279,6 +279,14 @@ describe('GPIO pins the user chooses, and a page of its own (hostApi 5)', () => 
     assert.strictEqual(checkSettings(m, { step: 7 }).ok, false)
   })
 
+  it('the card on the page of an extension can have a heading of its own', () => {
+    assert.strictEqual(checkManifest(manifest({}, { place: 'system', heading: 'Buttons' }), files()), null)
+    assert.match(String(checkManifest(manifest({}, { heading: 'Buttons' }), files())), /bad heading/, 'only on a page of its own')
+    assert.match(String(checkManifest(manifest({}, { place: 'system', heading: '' }), files())), /bad heading/)
+    assert.match(String(checkManifest(manifest({}, { place: 'system', heading: 'x'.repeat(61) }), files())), /bad heading/)
+    assert.match(String(checkManifest(manifest({}, { place: 'system', heading: 7 }), files())), /bad heading/)
+  })
+
   it('a pin is a header pin or 0 for none', () => {
     const m = manifest({ p: pin, on: { type: 'boolean' } }) as unknown as Manifest
     for (const ok of [0, 2, 17, 27]) assert.deepStrictEqual(checkSettings(m, { p: ok }), { ok: true, clean: { p: ok } })

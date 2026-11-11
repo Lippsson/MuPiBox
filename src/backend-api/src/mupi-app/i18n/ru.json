@@ -3386,5 +3386,6 @@
  "Taster": "Кнопка",
  "Doppeltaster": "Двойная кнопка",
  "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "«{}» будет удалён; его пины снова освободятся.",
- "Drehregler (ausgeschaltet)": "Поворотный регулятор (выключен)"
+ "Drehregler (ausgeschaltet)": "Поворотный регулятор (выключен)",
+ "Drehregler": "Поворотный регулятор"
 }

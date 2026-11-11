@@ -3402,5 +3402,6 @@
  "Taster": "Button",
  "Doppeltaster": "Twin button",
  "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "“{}” will be removed; its pins are free again afterwards.",
- "Drehregler (ausgeschaltet)": "Rotary knob (switched off)"
+ "Drehregler (ausgeschaltet)": "Rotary knob (switched off)",
+ "Drehregler": "Rotary knob"
 }

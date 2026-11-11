@@ -12331,6 +12331,8 @@ function extensionDetails(e, installed) {
 const GPIO_HEADER = { 2: 3, 3: 5, 4: 7, 5: 29, 6: 31, 7: 26, 8: 24, 9: 21, 10: 19, 11: 23, 12: 32, 13: 33, 14: 8, 15: 10, 16: 36, 17: 11, 18: 12, 19: 35, 20: 38, 21: 40, 22: 15, 23: 16, 24: 18, 25: 22, 26: 37, 27: 13 }
 // what an extension may take over: the name in its manifest -> the page of the core
 const EXT_ADOPTABLE = { rotary: 'drehregler' }
+// (what the first card of such a page is called on the page of the extension: short, beside the extension's own card)
+const EXT_ADOPTED_TITLE = { drehregler: 'Drehregler' }
 // list: the pages there are now; adopted: page of the core -> the page of the extension that shows it
 const extPages = { list: [], adopted: new Map() }
 
@@ -12386,13 +12388,13 @@ function extPageController(entry) {
       if (!e?.ui) return []
       const { form, hasText } = extFormHtml(e, e.enabled ? e.ui.items : [])
       return [
-        `<section class="card wide ext-page" id="ext-page-card"><h2>${esc(e.ui.title)}</h2><p class="help" style="margin:0">${esc(e.ui.help ?? '')}</p>
+        `<section class="card wide ext-page" id="ext-page-card"><h2>${esc(e.ui.heading ?? e.ui.title)}</h2><p class="help" style="margin:0">${esc(e.ui.help ?? '')}</p>
          ${e.enabled ? form : '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>'}
          ${hasText ? '<div class="btns"><button class="btn primary" data-xsave>Speichern</button></div>' : ''}</section>`,
       ]
     },
     // (the pages of the core that moved here: their cards under the extension's own, the first with the title of its page)
-    sections: () => adopted().flatMap((a) => (a.ctrl.sections?.(a.page) ?? a.page.sections ?? []).map((sec, i) => ({ ...sec, title: sec.title || (i === 0 ? a.page.title : '') }))),
+    sections: () => adopted().flatMap((a) => (a.ctrl.sections?.(a.page) ?? a.page.sections ?? []).map((sec, i) => ({ ...sec, title: i === 0 ? (EXT_ADOPTED_TITLE[a.page.id] ?? (sec.title || a.page.title)) : sec.title || '' }))),
     change(key, v, page) {
       const owner = adopted().find((a) => (a.page.sections || []).some((sec) => (sec.items || []).some((it) => it.key === key)))
       return owner?.ctrl.change?.(key, v, page)
