@@ -7,7 +7,7 @@ import path from 'node:path'
 import { describe, it } from 'node:test'
 import { deflateRawSync } from 'node:zlib'
 import { readZip } from './app-api/winamp-skin'
-import { verifyPackage, checkManifest, checkSettings, checkUdevRules, checkUnitFile, type Manifest } from './app-api/extensions'
+import { HOST_API, verifyPackage, checkManifest, checkSettings, checkUdevRules, checkUnitFile, chosenGpio, gpioSettingError, type Manifest } from './app-api/extensions'
 
 const files = (...names: string[]) => new Set(['manifest.json', ...names])
 const base = (extra: Record<string, unknown> = {}) => ({ id: 'cd', name: 'CD', version: '1.0.0', hostApi: 1, resources: {}, ...extra })
@@ -47,7 +47,7 @@ describe('manifest of an extension', () => {
   it('refuses a bad id, a missing part and a newer host', () => {
     assert.ok(checkManifest(base({ id: '../x' }), files()))
     assert.ok(checkManifest(base({ player: 'player.js' }), files()))
-    assert.ok(checkManifest(base({ hostApi: 5 }), files()))
+    assert.ok(checkManifest(base({ hostApi: HOST_API + 1 }), files()))
     assert.ok(checkManifest(base({ version: '1.0' }), files()))
   })
   it('counts what really unpacks, not the sizes the archive names', () => {
@@ -219,6 +219,106 @@ describe('the users extension of this repository', () => {
   it('has a manifest the installer accepts, with a roster of four routes of its own', () => {
     assert.strictEqual(checkManifest(users, files('api.js', 'display.js', 'icon.svg')), null)
     assert.strictEqual(users.ui?.items[0].type, 'roster')
+  })
+})
+
+describe('GPIO pins the user chooses, and a page of its own (hostApi 5)', () => {
+  const manifest = (settings: unknown, ui: Record<string, unknown> = {}, hostApi = 5) => base({ id: 'xy', hostApi, settings, ui: { title: 'T', items: [], ...ui } })
+  const pin = { type: 'gpio', default: 0 }
+
+  it('a gpio setting starts without a pin and has nothing to choose from in the manifest', () => {
+    assert.strictEqual(checkManifest(manifest({ p: pin }, { items: [{ key: 'p', label: 'Pin' }] }), files()), null)
+    assert.strictEqual(checkManifest(manifest({ p: { type: 'gpio' } }), files()), null)
+    assert.ok(checkManifest(manifest({ p: pin }, {}, 4), files()), 'needs hostApi 5')
+    assert.ok(checkManifest(manifest({ p: { type: 'gpio', default: 17 } }), files()), 'a pin named in the manifest could be one that is taken')
+    assert.ok(checkManifest(manifest({ p: { type: 'gpio', options: [17, 27] } }), files()))
+    assert.ok(checkManifest(manifest({ p: { type: 'gpio', min: 2 } }), files()))
+    assert.ok(checkManifest(manifest({ p: { type: 'gpio', legacy: 'fan.fan_gpio' } }), files()))
+    assert.ok(checkManifest(manifest({ p: pin }, { items: [{ key: 'p', label: 'Pin', choices: [{ value: 17, label: 'x' }] }] }), files()), 'the app draws the choice')
+    assert.ok(checkManifest(manifest({ p: pin }, { items: [{ key: 'p', label: 'Pin', type: 'lookup', search: '/api/ext/xy/pins' }] }), files()))
+    const many = Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`p${i}`, pin]))
+    assert.match(String(checkManifest(manifest(many), files())), /too many gpio settings/)
+  })
+
+  it('a pin is a header pin or 0 for none', () => {
+    const m = manifest({ p: pin, on: { type: 'boolean' } }) as unknown as Manifest
+    for (const ok of [0, 2, 17, 27]) assert.deepStrictEqual(checkSettings(m, { p: ok }), { ok: true, clean: { p: ok } })
+    for (const bad of [1, 28, -17, 17.5, '17', null, true, Number.NaN, [17]]) assert.strictEqual(checkSettings(m, { p: bad }).ok, false, String(bad))
+    // (names every object has are no settings)
+    for (const key of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) assert.strictEqual(checkSettings(m, { [key]: 17 }).ok, false, key)
+  })
+
+  it('the chosen pins are what the extension holds: each once, in range, none for 0', () => {
+    const m = manifest({ a: pin, b: pin, c: pin, d: pin, n: { type: 'number' } }, { items: [{ key: 'a', label: 'Taster 1' }] }) as unknown as Manifest
+    assert.deepStrictEqual(chosenGpio(m, { a: 17, b: 0, c: 17, d: 27, n: 22 }), [
+      { pin: 17, purpose: 'Taster 1' },
+      { pin: 27, purpose: 'd' },
+    ])
+    assert.deepStrictEqual(chosenGpio(m, { a: '17', b: 99, c: 1, d: 2.5 }), [])
+    assert.deepStrictEqual(chosenGpio(base() as unknown as Manifest, { a: 17 }), [])
+  })
+
+  it('a pin is refused when another field of the extension has it or something else holds it', () => {
+    const m = manifest({ a: pin, b: pin, n: { type: 'number' } }) as unknown as Manifest
+    const taken = new Map([[13, ['MuPiBox (power LED)']], [26, ['MuPiBox (rotary encoder)']]])
+    assert.strictEqual(gpioSettingError(m, { a: 17, b: 27 }, ['a', 'b'], taken), null)
+    assert.deepStrictEqual(gpioSettingError(m, { a: 17, b: 17 }, ['b'], taken), { error: 'gpio_twice', key: 'b', pin: 17 })
+    assert.deepStrictEqual(gpioSettingError(m, { a: 13, b: 0 }, ['a'], taken), { error: 'gpio_taken', key: 'a', pin: 13, holders: ['MuPiBox (power LED)'] })
+    // (two fields without a pin are not "the same pin"; a number that is no pin setting is not looked at)
+    assert.strictEqual(gpioSettingError(m, { a: 0, b: 0, n: 13 }, ['a', 'b', 'n'], taken), null)
+    // (only what changes is tested: a pin saved before that something took since does not block the other fields)
+    assert.strictEqual(gpioSettingError(m, { a: 26, b: 5 }, ['b'], taken), null)
+  })
+
+  it('headings, many fields and a field that depends on a pin', () => {
+    const settings = { p: pin, on: { type: 'boolean' }, t: { type: 'string' } }
+    const items = [{ type: 'heading', label: 'Taster 1', help: 'x' }, { key: 'p', label: 'Pin' }, { key: 't', label: 'Text', dep: 'p' }, { type: 'heading', label: 'Mehr', dep: 'on' }]
+    assert.strictEqual(checkManifest(manifest(settings, { items }), files()), null)
+    assert.ok(checkManifest(manifest(settings, { items }, 4), files()))
+    assert.ok(checkManifest(manifest(settings, { items: [{ type: 'heading', label: 'H', key: 't' }] }), files()), 'a heading has no setting')
+    assert.ok(checkManifest(manifest(settings, { items: [{ key: 't', label: 'T', dep: 't' }] }), files()), 'a text is nothing to depend on')
+    assert.ok(checkManifest(manifest(settings, { items: [{ key: 'toString', label: 'T' }] }), files()), 'a name every object has is no setting')
+    assert.ok(checkManifest(manifest(settings, { items: [{ key: 't', label: 'T', dep: 'constructor' }] }), files()))
+    const field = { key: 't', label: 'T' }
+    assert.strictEqual(checkManifest(manifest(settings, { items: Array.from({ length: 80 }, () => field) }), files()), null)
+    assert.ok(checkManifest(manifest(settings, { items: Array.from({ length: 81 }, () => field) }), files()))
+    assert.ok(checkManifest(base({ id: 'xy', hostApi: 4, settings, ui: { title: 'T', items: Array.from({ length: 21 }, () => field) } }), files()), 'twenty before hostApi 5')
+  })
+
+  it('a page of its own under System, and the pages of the core it may take over', () => {
+    assert.strictEqual(checkManifest(manifest({}, { place: 'system' }), files()), null)
+    assert.strictEqual(checkManifest(manifest({}, { place: 'system', adopt: ['rotary'] }), files()), null)
+    assert.ok(checkManifest(manifest({}, { place: 'system' }, 4), files()), 'needs hostApi 5')
+    assert.ok(checkManifest(manifest({}, { place: 'audio' }), files()))
+    assert.ok(checkManifest(manifest({}, { adopt: ['rotary'] }), files()), 'only on a page of its own')
+    assert.ok(checkManifest(manifest({}, { place: 'system', adopt: ['passwort'] }), files()), 'only what the core lets go')
+    assert.ok(checkManifest(manifest({}, { place: 'system', adopt: ['rotary', 'rotary'] }), files()))
+    assert.ok(checkManifest(manifest({}, { place: 'system', adopt: 'rotary' }), files()))
+  })
+})
+
+describe('the buttons extension of this repository', () => {
+  const extDir = path.join(process.cwd(), '..', '..', 'extensions')
+  const buttons = JSON.parse(readFileSync(path.join(extDir, 'buttons', 'manifest.json'), 'utf8')) as Manifest
+  it('has a manifest the installer accepts: pins to choose, a page under System, the rotary encoder on it', () => {
+    assert.strictEqual(checkManifest(buttons, files('api.js', 'icon.svg')), null)
+    assert.strictEqual(buttons.ui?.place, 'system')
+    assert.deepStrictEqual(buttons.ui?.adopt, ['rotary'])
+    assert.deepStrictEqual(buttons.resources, {}, 'no pin of its own: the user chooses them')
+  })
+  it('takes the settings the app sends: a pin, an action, a hold time', () => {
+    assert.strictEqual(checkSettings(buttons, { b1Pin: 17, b1Short: 'toggle', b1Long: 'replay', b1Hold: 1.5, b1Repeat: true, volumeStep: 3 }).ok, true)
+    assert.strictEqual(checkSettings(buttons, { b1Short: 'reboot' }).ok, false)
+    assert.strictEqual(checkSettings(buttons, { b1Hold: 0.1 }).ok, false)
+    assert.strictEqual(checkSettings(buttons, { b1Pin: 40 }).ok, false)
+  })
+  it('is packed as the catalog says', () => {
+    const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'buttons')
+    const bytes = readFileSync(path.join(extDir, 'dist', `buttons-${entry.version}.mpx`))
+    assert.strictEqual(createHash('sha256').update(bytes).digest('hex'), entry.sha256)
+    const checked = verifyPackage(bytes)
+    assert.strictEqual(checked.ok, true)
+    if (checked.ok) assert.deepStrictEqual(checked.pkg.manifest, buttons, 'the package holds the manifest of the repository')
   })
 })
 

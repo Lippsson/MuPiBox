@@ -1,5 +1,23 @@
 [
   {
+    "id": "buttons",
+    "name": "Buttons & GPIO Input",
+    "version": "1.0.0",
+    "description": "Physische Taster an den GPIO-Pins steuern die Box: Play/Pause, Titel, Lautstärke und mehr. Mit Tastern für kurzes und langes Drücken (Dual Action) und Doppeltastern mit sechs Funktionen. Die Einstellungen stehen unter System › Buttons & GPIO Input.",
+    "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB4PSI3NiIgeT0iMzAwIiB3aWR0aD0iMzYwIiBoZWlnaHQ9IjEyMCIgcng9IjI4IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIvPjxwYXRoIGQ9Ik0xNTYgMzAwdi02NGExMDAgMTAwIDAgMCAxIDIwMCAwdjY0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIvPjxwYXRoIGQ9Ik0yNTYgOTJWNDRNMTUwIDEyNGwtMzAtMzZNMzYyIDEyNGwzMC0zNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPgo=",
+    "hostApi": 5,
+    "url": "https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/dist/buttons-1.0.0.mpx",
+    "sha256": "3511bcc7997741faf57e3d3d950fbd904de7626a5bbd43e086ca4e6ca1a9ea58",
+    "size": 12237,
+    "resources": {},
+    "system": {
+      "udev": 0,
+      "units": [],
+      "groups": [],
+      "packages": []
+    }
+  },
+  {
     "id": "cd",
     "name": "USB-CD-Laufwerk",
     "version": "1.0.1",

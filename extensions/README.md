@@ -62,7 +62,7 @@ settings card from what the manifest declares.
 - **`id`**: lowercase letters, digits and `-`, 2–31 characters, starting with a letter. It never changes.
 - **`version`**: `major.minor.patch`. Raise it with every change you publish; the box offers an update when the catalog has a higher
   number than the installed one.
-- **`hostApi`**: the number of the interface you wrote the extension for (`1` to `4`; `3` is needed for an `order` field, `4` for a `roster`, see below). A box does not load an extension made for a
+- **`hostApi`**: the number of the interface you wrote the extension for (`1` to `5`; `3` is needed for an `order` field, `4` for a `roster`, `5` for a `gpio` setting, a `heading` or a page of your own, see below). A box does not load an extension made for a
   newer interface than its own.
 - **`resources`** is **required** (`{}` means "needs nothing"), see section 4.
 - **`settings`** and **`ui`**: what the extension stores and how the settings card looks. Types are `boolean`, `string`, `number`
@@ -73,6 +73,14 @@ settings card from what the manifest declares.
   addresses of the extension's own API part, `list` (GET, `{ current, users: [{ id, name }], busy }`), `add` (`{ name }`), `remove` (`{ id }`) and `select` (`{ id }`), and optionally `color` (`{ id, color }`: the entries have a colour, `#RRGGBB`, that can be changed from a list of `colors` that `list` gives);
   the app shows the entries with buttons to switch and delete, and a field to add one. With `hostApi` 4 the API part also gets `host.updateConfig(mutate)`,
   `host.paths` (`{ library, data, extensions }`) and `host.restartServices()`.
+  With `hostApi` 5 a setting can be a **pin the user chooses**: `"type": "gpio"`, default `0` (none), otherwise the BCM number 2–27 (at most 16
+  such settings, no `options`, `min`/`max` or `pattern`). The app shows a list of the pins and disables those in use, naming who holds them;
+  the box checks again when the value is saved, and a chosen pin counts as taken for everyone else. Use this instead of `resources.gpio` when
+  the wiring is the user's decision, and read the pins again when the settings change: `host.onSettings(fn)` calls `fn(settings)` in the API
+  part after every save (`host.apiUrl` is the address of the box's own server). Also with `hostApi` 5: a `ui` item `{ "type": "heading",
+  "label": "…" }` (no `key`) puts a headline between groups of fields, up to 80 items are allowed, and `dep` may name a `gpio` setting (the
+  field appears once a pin is chosen). `"place": "system"` in `ui` gives the extension a page of its own under Settings › System › "The box";
+  `"adopt": ["rotary"]` shows the core's "rotary encoder and buttons" page there and hides it in its old place while the extension is on.
 - **`system`**: what the box sets up as root, see section 5.
 - Texts in the manifest are shown as written. The app translates a text only if it knows it exactly, so write yours in English
   unless the extension is meant for one language only. (The extensions shipped in this repository are written in German, the source

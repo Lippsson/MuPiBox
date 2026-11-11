@@ -234,11 +234,15 @@ export function parseBootGpio(text: string): { pin: number; by: string }[] {
   return out
 }
 
-/** `gpioinfo` (libgpiod): the header pins that a program or the kernel holds right now. */
+/**
+ * `gpioinfo` (libgpiod): the header pins that a program or the kernel holds right now. libgpiod 2 (Debian 13) writes
+ * `"GPIO17" input consumer="gpiomon"`, libgpiod 1 (Debian 12) `"GPIO17" "gpiomon" input active-high [used]` - a free line has
+ * the word unused there, without quotes.
+ */
 export function parseGpioInfo(text: string): { pin: number; consumer: string }[] {
   const out: { pin: number; consumer: string }[] = []
   for (const line of text.split('\n')) {
-    const m = /"GPIO(\d+)"[^\n]*?consumer="([^"]+)"/.exec(line)
+    const m = /"GPIO(\d+)"[^\n]*?consumer="([^"]+)"/.exec(line) ?? /"GPIO(\d+)"\s+"([^"]+)"\s+(?:input|output)\b/.exec(line)
     if (!m) continue
     out.push({ pin: Number(m[1]), consumer: m[2] })
   }

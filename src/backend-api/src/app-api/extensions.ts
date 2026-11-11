@@ -14,7 +14,7 @@ import path from 'node:path'
 import express, { type NextFunction, type Request, type RequestHandler, type Response, type Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { DATA_DIR, EXTENSIONS_DIR, EXTENSIONS_DIR_BEFORE, LIBRARY_DIR } from '../paths'
-import { checkResources, type Conflict, describeResources, findConflicts, gatherTaken, realProbe, type Resources, sameResources } from './extension-resources'
+import { checkResources, type Conflict, describeResources, findConflicts, type GpioUse, gatherTaken, realProbe, type Resources, sameResources } from './extension-resources'
 import { localNetworkOnly, requireCsrf, requireSession } from './middleware'
 import { readZip } from './winamp-skin'
 
@@ -32,7 +32,7 @@ if (!process.env.MUPIBOX_EXT_DIR && process.env.NODE_ENV !== 'test' && process.e
     // (the other process was faster, or it is not possible: then they stay where they are and are not found - logged by the load)
   }
 }
-export const HOST_API = 4
+export const HOST_API = 5
 // (the catalog of the MuPiBox, in its repository: what is in it is trusted - an extension can do everything on the box; while 5.1
 // is not with splitti yet, the 5.1 branch of the fork that builds it)
 const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/catalog.json'
@@ -52,6 +52,13 @@ const GROUPS = new Set(['cdrom', 'audio', 'video', 'plugdev'])
 // (a Debian package name; never one that ends in - : apt-get reads "name-" as "remove name" - "g++" is a real one)
 const PACKAGE = /^[a-z0-9][a-z0-9+.-]{0,59}[a-z0-9+]$/
 const SECRET_SETTING = 'secret'
+// (hostApi 5) a setting that is a GPIO pin the user chooses in the app: 0 for none, else the BCM number of a header pin. The box
+// offers only pins nothing else holds, and what is chosen counts as taken for everything else.
+const GPIO_SETTING = 'gpio'
+const MAX_GPIO_SETTINGS = 16
+// (hostApi 5) pages of the core an extension's own page may take over while the extension is on (ui.adopt): the app shows their
+// settings on the page of the extension and no longer where they were
+const ADOPTABLE = new Set(['rotary'])
 
 export interface Manifest {
   id: string
@@ -64,8 +71,9 @@ export interface Manifest {
   display?: string
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
-  ui?: { title: string; help?: string; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster'; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
-  settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
+  // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
+  ui?: { title: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
+  settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
   resources?: Resources
@@ -144,16 +152,64 @@ async function installedManifests(): Promise<Manifest[]> {
  * taken on the box - the core, the boot configuration, the other extensions, what runs now. Nothing is changed.
  */
 async function testResources(manifest: Manifest, deps: ExtensionDeps): Promise<Conflict[]> {
+  const taken = await takenByOthers(manifest.id, deps)
+  // (the pins chosen in its settings are wanted too: something else may have taken one while the extension was off)
+  return findConflicts(await heldResources(manifest), taken)
+}
+
+/** Everything on the box that is taken by something else than the extension `id` (see gatherTaken). */
+async function takenByOthers(id: string, deps: ExtensionDeps) {
   const installed = await installedManifests()
-  const self = installed.find((m) => m.id === manifest.id)
-  const taken = await gatherTaken({
-    self: manifest.id,
-    selfDeclared: self?.resources,
+  const self = installed.find((m) => m.id === id)
+  return gatherTaken({
+    self: id,
+    selfDeclared: self ? await heldResources(self) : undefined,
     config: deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined,
-    others: installed.map((m) => ({ id: m.id, resources: m.resources })),
+    others: await Promise.all(installed.map(async (m) => ({ id: m.id, resources: await heldResources(m) }))),
     probe: realProbe((cmd, args) => run(cmd, args, 15000)),
   })
-  return findConflicts(manifest.resources, taken)
+}
+
+/** The GPIO pins chosen in the settings of an extension (its settings of the type "gpio"; 0 is "none"), each once. */
+export function chosenGpio(manifest: Manifest, settings: Record<string, unknown>): GpioUse[] {
+  const out: GpioUse[] = []
+  for (const [key, spec] of Object.entries(manifest.settings ?? {})) {
+    const pin = settings[key]
+    if (spec?.type !== GPIO_SETTING || typeof pin !== 'number' || !Number.isInteger(pin) || pin < 2 || pin > 27 || out.some((g) => g.pin === pin)) continue
+    out.push({ pin, purpose: String(manifest.ui?.items?.find((i) => i.key === key)?.label ?? key).slice(0, 100) })
+  }
+  return out
+}
+
+/** What an extension holds: what its manifest declares, and the pins chosen in its settings. */
+async function heldResources(manifest: Manifest): Promise<Resources> {
+  const chosen = chosenGpio(manifest, await readJson<Record<string, unknown>>(settingsFile(manifest.id), {}))
+  if (chosen.length === 0) return manifest.resources ?? {}
+  const declared = manifest.resources?.gpio ?? []
+  return { ...manifest.resources, gpio: [...declared, ...chosen.filter((c) => !declared.some((d) => d.pin === c.pin))] }
+}
+
+/** The GPIO pins the installed extensions hold (declared or chosen), for the core's own pin choices: the fan, the LED, the rotary encoder. */
+export async function extensionGpio(): Promise<{ pin: number; by: string }[]> {
+  const out: { pin: number; by: string }[] = []
+  for (const m of await installedManifests()) for (const g of (await heldResources(m)).gpio ?? []) out.push({ pin: g.pin, by: m.name })
+  return out
+}
+
+/**
+ * What is wrong with GPIO pins that are to be saved (null: nothing): a pin twice in the settings of the extension, or one that
+ * something else holds. `merged`: the settings as they would be, `keys`: the ones that change, `taken`: pin -> who holds it.
+ */
+export function gpioSettingError(manifest: Manifest, merged: Record<string, unknown>, keys: string[], taken: Map<number, string[]>): { error: 'gpio_twice' | 'gpio_taken'; key: string; pin: number; holders?: string[] } | null {
+  const gpioKeys = Object.entries(manifest.settings ?? {}).filter(([, spec]) => spec?.type === GPIO_SETTING).map(([k]) => k)
+  for (const key of keys) {
+    const pin = merged[key]
+    if (!gpioKeys.includes(key) || typeof pin !== 'number' || pin === 0) continue
+    if (gpioKeys.some((other) => other !== key && merged[other] === pin)) return { error: 'gpio_twice', key, pin }
+    const holders = taken.get(pin)
+    if (holders?.length) return { error: 'gpio_taken', key, pin, holders }
+  }
+  return null
 }
 
 const settingsFile = (id: string) => path.join(EXT_DIR, 'settings', `${id}.json`)
@@ -285,7 +341,14 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
     if (!files.has(file)) return `${part} is named but not in the package`
   }
   for (const [key, spec] of Object.entries(x.settings ?? {})) {
-    if (!/^[A-Za-z][A-Za-z0-9]{0,40}$/.test(key) || !['boolean', 'string', 'number', 'secret'].includes(spec?.type)) return `bad setting: ${key}`
+    if (!/^[A-Za-z][A-Za-z0-9]{0,40}$/.test(key) || !['boolean', 'string', 'number', 'secret', GPIO_SETTING].includes(spec?.type)) return `bad setting: ${key}`
+    if (spec.type === GPIO_SETTING) {
+      // a pin the user chooses (hostApi 5): nothing to choose from in the manifest, and it starts without a pin - a pin named
+      // here could be one that is taken on the box
+      if (x.hostApi < 5) return `a gpio setting needs hostApi 5: ${key}`
+      if (spec.options !== undefined || spec.pattern !== undefined || spec.min !== undefined || spec.max !== undefined || spec.legacy !== undefined) return `bad gpio setting: ${key}`
+      if (spec.default !== undefined && spec.default !== 0) return `a gpio setting starts without a pin (default 0): ${key}`
+    }
     if (spec.options !== undefined && (!Array.isArray(spec.options) || spec.options.length < 2 || spec.options.length > 20 || spec.type === 'boolean' || spec.options.some((o) => (spec.type === 'number' ? typeof o !== 'number' : typeof o !== 'string')))) return `bad options: ${key}`
     if ((spec.min !== undefined || spec.max !== undefined) && (spec.type !== 'number' || (spec.min !== undefined && !Number.isFinite(spec.min)) || (spec.max !== undefined && !Number.isFinite(spec.max)))) return `bad range: ${key}`
     if (spec.pattern !== undefined) {
@@ -296,15 +359,30 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
       }
     }
   }
+  if (Object.values(x.settings ?? {}).filter((spec) => spec.type === GPIO_SETTING).length > MAX_GPIO_SETTINGS) return 'too many gpio settings'
   if (x.ui !== undefined) {
     const ui = x.ui
-    if (typeof ui?.title !== 'string' || ui.title.length > 60 || (ui.help !== undefined && (typeof ui.help !== 'string' || ui.help.length > 800)) || !Array.isArray(ui.items) || ui.items.length > 20) return 'bad ui'
+    // (hostApi 5: more fields, in groups under headings - a card of twenty fields was the limit before)
+    const maxItems = x.hostApi >= 5 ? 80 : 20
+    if (typeof ui?.title !== 'string' || ui.title.length > 60 || (ui.help !== undefined && (typeof ui.help !== 'string' || ui.help.length > 800)) || !Array.isArray(ui.items) || ui.items.length > maxItems) return 'bad ui'
+    // (hostApi 5) a page of its own under Einstellungen > System, and pages of the core that are shown on it while the extension is on
+    if (ui.place !== undefined && (x.hostApi < 5 || ui.place !== 'system')) return 'ui: bad place'
+    if (ui.adopt !== undefined && (ui.place === undefined || !Array.isArray(ui.adopt) || ui.adopt.some((a) => !ADOPTABLE.has(a)) || new Set(ui.adopt).size !== ui.adopt.length)) return 'ui: bad adopt'
     const settings = x.settings ?? {}
     for (const item of ui.items) {
-      // (a roster is a list of things the extension keeps itself - users, say - and needs no setting)
-      if (item?.type !== 'roster' && !settings[item?.key]) return `ui: no such setting: ${item?.key}`
+      // (a roster is a list of things the extension keeps itself - users, say - and needs no setting; a heading is only a line of text)
+      if (item?.type !== 'roster' && item?.type !== 'heading' && !Object.hasOwn(settings, String(item?.key))) return `ui: no such setting: ${item?.key}`
       if (typeof item.label !== 'string' || item.label.length > 100 || (item.help !== undefined && (typeof item.help !== 'string' || item.help.length > 800))) return `ui: bad text: ${item.key}`
-      if (item.dep !== undefined && settings[item.dep]?.type !== 'boolean') return `ui: dep must be a switch: ${item.key}`
+      // (a field that depends on another: shown while a switch is on, or - hostApi 5 - while a pin is chosen)
+      const depType = item.dep !== undefined && Object.hasOwn(settings, String(item.dep)) ? settings[item.dep].type : undefined
+      if (item.dep !== undefined && depType !== 'boolean' && !(x.hostApi >= 5 && depType === GPIO_SETTING)) return `ui: dep must be a switch: ${item.key}`
+      if (item.type === 'heading') {
+        // a line that starts a group of fields (hostApi 5): text only
+        if (x.hostApi < 5 || item.key !== undefined || item.choices !== undefined) return `ui: a heading needs hostApi 5 and has no setting: ${item.label}`
+        continue
+      }
+      // (a pin is chosen from the pins of the box: the app draws the choice, the manifest has no say in it)
+      if (item.type !== 'roster' && settings[item.key].type === GPIO_SETTING && (item.type !== undefined || item.choices !== undefined)) return `ui: a gpio setting is a plain field: ${item.key}`
       if (item.type === 'roster') {
         // a list to look at, to add to, to take from and to choose from (hostApi 4): four routes of the extension's own API part
         if (x.hostApi < 4 || item.choices !== undefined) return `ui: a roster needs hostApi 4: ${item.label}`
@@ -363,10 +441,13 @@ export function isOrderOf(value: unknown, names: string[]): boolean {
 export function checkSettings(manifest: Manifest, values: Record<string, unknown>): { ok: true; clean: Record<string, unknown> } | { ok: false; error: string } {
   const clean: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(values)) {
-    const spec = manifest.settings?.[key]
+    const spec = Object.hasOwn(manifest.settings ?? {}, key) ? manifest.settings?.[key] : undefined
     if (!spec) return { ok: false, error: `unknown setting: ${key}` }
     if (spec.type === 'boolean') {
       if (typeof value !== 'boolean') return { ok: false, error: `${key}: true or false` }
+    } else if (spec.type === GPIO_SETTING) {
+      // (whether the pin is free is tested against the box when it is saved, see gpioSettingError)
+      if (typeof value !== 'number' || !Number.isInteger(value) || (value !== 0 && (value < 2 || value > 27))) return { ok: false, error: `${key}: a GPIO pin (BCM 2-27) or 0 for none` }
     } else if (spec.type === 'number') {
       if (typeof value !== 'number' || !Number.isFinite(value)) return { ok: false, error: `${key}: a number` }
       if ((spec.min !== undefined && value < spec.min) || (spec.max !== undefined && value > spec.max)) return { ok: false, error: `${key}: out of range` }
@@ -731,14 +812,63 @@ async function removeExtension(id: string): Promise<void> {
 
 // ---------- the routes ----------
 
+/** An installed extension as the app shows it: what it is, what it sets up, its settings page and its settings (no secrets). */
+async function installedEntry(m: Manifest, enabled: boolean) {
+  return {
+    id: m.id,
+    name: m.name,
+    version: m.version,
+    description: m.description ?? '',
+    icon: m.icon ? `/api/ext-files/${m.id}/${m.icon}` : null,
+    enabled,
+    system: m.system ?? {},
+    resources: describeResources(m.resources),
+    ui: m.ui ?? null,
+    settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])),
+    settings: await publicSettings(m),
+    job: jobs.get(m.id) ?? null,
+  }
+}
+
+// What the API parts want to hear after their settings were saved (host.onSettings, hostApi 5)
+const settingsListeners = new Map<string, ((settings: Record<string, unknown>) => unknown)[]>()
+
+/** Tells the API part of an extension that its settings changed; waits for it a moment (it frees pins, say), never fails. */
+async function notifySettings(manifest: Manifest): Promise<void> {
+  const listeners = settingsListeners.get(manifest.id) ?? []
+  if (listeners.length === 0) return
+  const settings = await readSettings(manifest)
+  const all = Promise.all(
+    listeners.map(async (fn) => {
+      try {
+        await fn(settings)
+      } catch (error) {
+        console.warn(`${new Date().toLocaleString()}: [Extension ${manifest.id}] settings listener failed: ${error}`)
+      }
+    }),
+  )
+  await Promise.race([all, new Promise((resolve) => setTimeout(resolve, 3000))])
+}
+
 /** The app's routes (behind the session): the catalog, install, on and off, remove, the settings of an extension. */
 export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): void {
+  // The extensions that are on and have a page of their own in the app (ui.place, hostApi 5): read when the app starts - without
+  // the catalog, so it does not wait for GitHub
+  router.get('/extensions/pages', requireSession, async (_req, res) => {
+    const out = []
+    for (const m of await enabledManifests()) {
+      if (m.ui?.place !== 'system') continue
+      out.push({ id: m.id, name: m.name, title: m.ui.title, description: m.description ?? '', icon: m.icon ? `/api/ext-files/${m.id}/${m.icon}` : null, adopt: m.ui.adopt ?? [] })
+    }
+    res.json(out)
+  })
+
   router.get('/extensions', requireSession, async (_req, res) => {
     const state = await readState()
     const installed = []
     for (const [id, s] of Object.entries(state)) {
       const m = await readManifest(id)
-      if (m) installed.push({ id, name: m.name, version: m.version, description: m.description ?? '', icon: m.icon ? `/api/ext-files/${id}/${m.icon}` : null, enabled: s.enabled !== false, system: m.system ?? {}, resources: describeResources(m.resources), ui: m.ui ?? null, settingTypes: Object.fromEntries(Object.entries(m.settings ?? {}).map(([k, d]) => [k, d.type])), settings: await publicSettings(m), job: jobs.get(id) ?? null })
+      if (m) installed.push(await installedEntry(m, s.enabled !== false))
     }
     let catalog: unknown[] = []
     let catalogError: string | null = null
@@ -891,6 +1021,31 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     res.json(await publicSettings(manifest))
   })
 
+  // One installed extension, as in the list (for its own page in the app)
+  router.get('/ext/:id/info', requireSession, async (req, res) => {
+    const id = String(req.params.id)
+    const manifest = await readManifest(id)
+    const state = await readState()
+    if (!manifest || !Object.hasOwn(state, id)) {
+      res.status(404).json({ error: 'not installed' })
+      return
+    }
+    res.json(await installedEntry(manifest, state[id].enabled !== false))
+  })
+
+  // The GPIO pins the extension cannot have (hostApi 5, for its settings of the type "gpio"): held by the core, the boot
+  // configuration, another extension or a program that runs. The pins chosen in its own settings are its own.
+  router.get('/ext/:id/gpio', requireSession, async (req, res) => {
+    const manifest = await readManifest(String(req.params.id))
+    if (!manifest) {
+      res.status(404).json({ error: 'not installed' })
+      return
+    }
+    const taken = await takenByOthers(manifest.id, deps)
+    const pins = [...taken.gpio.entries()].filter(([pin]) => pin >= 2 && pin <= 27).map(([pin, holders]) => ({ pin, holders })).sort((a, b) => a.pin - b.pin)
+    res.json({ pins, blind: taken.blind })
+  })
+
   router.post('/ext/:id/settings', requireSession, requireCsrf, async (req, res) => {
     const manifest = await readManifest(String(req.params.id))
     if (!manifest) {
@@ -902,8 +1057,19 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
       res.status(400).json({ error: checked.error })
       return
     }
+    // (a pin: not one that is chosen twice, not one that something else holds)
+    const pinKeys = Object.keys(checked.clean).filter((k) => manifest.settings?.[k]?.type === GPIO_SETTING && checked.clean[k] !== 0)
+    if (pinKeys.length > 0) {
+      const bad = gpioSettingError(manifest, { ...(await readSettings(manifest)), ...checked.clean }, pinKeys, (await takenByOthers(manifest.id, deps)).gpio)
+      if (bad) {
+        res.status(409).json(bad)
+        return
+      }
+    }
     await fsp.mkdir(path.dirname(settingsFile(manifest.id)), { recursive: true })
     await fsp.writeFile(settingsFile(manifest.id), JSON.stringify({ ...(await readJson(settingsFile(manifest.id), {})), ...checked.clean }))
+    // (the API part hears of it - it may hold pins or timers that follow the settings)
+    await notifySettings(manifest)
     // (the display reads the settings of its part when its page loads)
     if (manifest.display) reloadDisplay()
     res.json({ ok: true, ...(await publicSettings(manifest)) })
@@ -1023,6 +1189,12 @@ export function mountExtensions(app: express.Express, deps: ExtensionDeps): void
           },
           paths: { library: LIBRARY_DIR, data: DATA_DIR, extensions: EXT_DIR },
           restartServices,
+          // (hostApi 5) the server itself, for its routes the display uses too (/api/audio-output ...); and what is called after
+          // the settings of the extension were saved in the app, with the settings as they are then
+          apiUrl: 'http://127.0.0.1:8200',
+          onSettings: (fn: (settings: Record<string, unknown>) => unknown) => {
+            if (typeof fn === 'function') settingsListeners.set(manifest.id, [...(settingsListeners.get(manifest.id) ?? []), fn])
+          },
           route: (method: 'get' | 'post', sub: string, handler: RequestHandler, options?: { session?: boolean }) => {
             const chain: RequestHandler[] = options?.session ? [requireSession, ...(method === 'post' ? [requireCsrf] : []), guarded(handler)] : [guarded(handler)]
             router[method](sub, ...chain)
