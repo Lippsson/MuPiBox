@@ -1342,15 +1342,31 @@ async function loadStatus(root) {
     plus.hidden = !p.enabled
     $('#quick', root)?.classList.toggle('three', !p.enabled)
   }
+  // (what was listened: with the limit "42 / 120 min" and its bar, else the minutes)
+  let hear
   if (p.enabled && Number.isFinite(p.limitMinutes)) {
     const used = Math.floor((p.usedSeconds ?? 0) / 60)
-    setTile(root, 'tile-spielzeit', `${used} / ${p.limitMinutes} min`, p.limitMinutes > 0 ? Math.min(100, (used / p.limitMinutes) * 100) : 100, p.state === 'blocked' ? 'danger' : 'accent')
+    hear = { text: `${used} / ${p.limitMinutes} min`, short: `${used}/${p.limitMinutes}`, pct: p.limitMinutes > 0 ? Math.min(100, (used / p.limitMinutes) * 100) : 100, kind: p.state === 'blocked' ? 'danger' : 'accent' }
   } else if (Number.isFinite(p.usedSeconds)) {
-    setTile(root, 'tile-spielzeit', `${Math.floor(p.usedSeconds / 60)} min`, null)
+    hear = { text: `${Math.floor(p.usedSeconds / 60)} min`, short: `${Math.floor(p.usedSeconds / 60)} min`, pct: null }
   } else {
     // (limit and quiet times off: the player keeps no count - the listening history has it)
     const log = await api(`${API}/playlog?range=today`)
-    setTile(root, 'tile-spielzeit', Number.isFinite(log.body?.totalMinutes) ? `${log.body.totalMinutes} min` : 'Kein Limit', null)
+    const m = log.body?.totalMinutes
+    hear = Number.isFinite(m) ? { text: `${m} min`, short: `${m} min`, pct: null } : { text: 'Kein Limit', short: '–', pct: null }
+  }
+  // the photo display with a picture time of its own (5.1): the tile is "Heute" with two small bars, listening and
+  // pictures (handoff §3.7); counted on the listening time, or no photos: as before
+  const ph = pt.body?.photos
+  if (ph?.enabled && ph.mode === 'separate') {
+    const used = Math.floor((ph.usedSeconds ?? 0) / 60)
+    const pics = ph.limited
+      ? { short: `${used}/${ph.limitMinutes}`, pct: ph.limitMinutes > 0 ? Math.min(100, (used / ph.limitMinutes) * 100) : 100, kind: ph.state === 'blocked' ? 'danger' : 'primary' }
+      : { short: ph.free ? tr(`${used} min · frei`) : `${used} min`, pct: null }
+    setTodayTile(root, hear, pics)
+  } else {
+    setTodayTile(root, null)
+    setTile(root, 'tile-spielzeit', hear.text, hear.pct, hear.kind)
   }
   // quiet time
   // (a parent's "Ruhe sofort" or "Sperren aufheben" comes before the planned times)
@@ -1389,6 +1405,33 @@ function setTile(root, id, text, pct, kind) {
     bar.querySelector('i').style.width = `${pct}%`
     bar.dataset.kind = kind ?? 'ok'
   }
+}
+
+// The tile "Heute gehört" as "Heute" with a small bar each for listening and pictures (the photo time of its own), or
+// back as it was (hear null)
+function setTodayTile(root, hear, pics) {
+  const el = $('#tile-spielzeit', root)
+  if (!el) return
+  const head = el.querySelector('.tile-head')
+  const label = [...head.childNodes].find((n) => n.nodeType === 3)
+  let two = el.querySelector('.tile-two')
+  if (!hear) {
+    if (label) label.textContent = tr('Heute gehört')
+    two?.remove()
+    el.querySelector('.tile-val').hidden = false
+    return
+  }
+  if (label) label.textContent = tr('Heute')
+  el.querySelector('.tile-val').hidden = true
+  el.querySelector('.tile-bar').hidden = true
+  if (!two) {
+    two = document.createElement('span')
+    two.className = 'tile-two'
+    el.append(two)
+  }
+  const row = (ic, name, x) =>
+    `<span class="tile-mini" data-kind="${x.kind ?? ''}">${icon(ic, 13)}<span class="tile-mini-name">${esc(tr(name))}</span><b>${esc(x.short)}</b>${x.pct == null ? '' : `<span class="tile-mini-bar"><i style="width:${x.pct}%"></i></span>`}</span>`
+  two.innerHTML = row('music', 'Hören', hear) + row('image', 'Bilder', pics)
 }
 
 // The next start of a quiet-time window, e.g. "ab 20:00" today or "Di ab 20:00"

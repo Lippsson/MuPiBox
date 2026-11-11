@@ -474,6 +474,17 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .tile-bar { height: 5px; border-radius: 3px; background: var(--mp-track); overflow: hidden; margin-top: auto; }
 .tile-bar i { display: block; height: 100%; border-radius: 3px; background: var(--mp-success); }
 .tile-bar[data-kind="accent"] i { background: var(--mp-accent); }
+/* "Heute" with the picture time of its own: a small row each for listening (accent) and pictures (primary) */
+.tile-two { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.tile-mini { display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 5px; row-gap: 3px; font-size: 13px; }
+.tile-mini .tile-mini-name { color: var(--mp-muted); font-weight: 600; }
+.tile-mini b { font-size: 14px; white-space: nowrap; }
+.tile-mini-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--mp-track); overflow: hidden; }
+.tile-mini-bar i { display: block; height: 100%; border-radius: 2px; background: var(--mp-accent); }
+.tile-mini[data-kind="primary"] .tile-mini-bar i { background: var(--mp-primary); }
+.tile-mini[data-kind="danger"] .tile-mini-bar i { background: var(--mp-danger); }
+.tile-mini > svg { color: var(--mp-accent-text); }
+.tile-mini:last-child > svg { color: var(--mp-primary-text); }
 .tile-bar[data-kind="warn"] i { background: var(--mp-warn); }
 .tile-bar[data-kind="danger"] i { background: var(--mp-danger); }
 .section-label { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--mp-muted); margin: 4px 2px -4px; }
