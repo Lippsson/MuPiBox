@@ -44,8 +44,8 @@ type Speed = (typeof SPEEDS)[number]
               [src]="photos.fileUrl(albumId(), s.asset.id, 'v')"
               [poster]="photos.fileUrl(albumId(), s.asset.id, 'f')"
               [muted]="playing() || audioPlays()"
-              autoplay
               playsinline
+              (loadeddata)="clipReady($event)"
               (play)="clipPaused.set(false)"
               (pause)="clipPaused.set(true)"
               (ended)="clipEnded()"
@@ -407,19 +407,36 @@ export class PhotoViewerComponent implements OnDestroy {
   private audioTimer = 0
   // (in the slideshow only a short clip plays, to its end - a long one shows its picture there)
   protected isClip(a: PhotoAsset): boolean {
-    // (the box locked or the display off: no clip starts - its picture shows)
-    return !this.time.halted() && a.kind === 'video' && (!this.playing() || (a.duration ?? 0) <= CLIP_IN_SLIDESHOW)
+    return a.kind === 'video' && (!this.playing() || (a.duration ?? 0) <= CLIP_IN_SLIDESHOW)
   }
   protected readonly clipShown = computed(() => {
     const list = this.assets()
     const a = list[Math.min(this.index(), list.length - 1)]
     return !!a && this.isClip(a)
   })
+  // a clip held: stopped by the lock or the display going off - it stays stopped until it is tapped on (also when it
+  // is made anew meanwhile), no clip starts by itself under the lock
+  private clipHold = false
+  // a clip on the screen ready to play: it starts - not while the box is locked or the display is off, not when held
+  protected clipReady(e: Event): void {
+    const v = e.target as HTMLVideoElement
+    if (this.time.halted() || this.clipHold) {
+      v.pause()
+      this.clipPaused.set(true)
+      return
+    }
+    void v.play().catch((): void => {
+      if (this.playing()) this.clipEnded()
+      else this.clipPaused.set(true)
+    })
+  }
   protected clipToggle(): void {
     const v = this.host.nativeElement.querySelector<HTMLVideoElement>('video.pv-clip')
     if (!v) return
-    if (v.paused) void v.play().catch((): void => undefined)
-    else v.pause()
+    if (v.paused) {
+      this.clipHold = false
+      void v.play().catch((): void => undefined)
+    } else v.pause()
     this.touched()
   }
   // the slideshow goes on when a clip has come to its end; in the full view it stays on its last picture
@@ -449,6 +466,7 @@ export class PhotoViewerComponent implements OnDestroy {
     effect(() => {
       if (!this.time.halted()) return
       untracked(() => {
+        this.clipHold = true
         this.host.nativeElement.querySelector<HTMLVideoElement>('video.pv-clip')?.pause()
         if (this.playing()) this.pause()
       })
@@ -526,6 +544,7 @@ export class PhotoViewerComponent implements OnDestroy {
   }
 
   private play(): void {
+    this.clipHold = false
     this.playing.set(true)
     const v = this.host.nativeElement.querySelector<HTMLVideoElement>('video.pv-clip')
     if (v && this.clipShown()) {
@@ -556,6 +575,8 @@ export class PhotoViewerComponent implements OnDestroy {
   }
 
   private show(i: number): void {
+    // (another picture: a clip on it starts by itself again - unless the box is locked)
+    this.clipHold = false
     this.clipPaused.set(false)
     this.previous.set({ key: this.slideKey(), index: this.index() })
     this.slideKey.update((k) => k + 1)
