@@ -8,6 +8,7 @@ import type { Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { requireCsrf, requireSession } from './middleware'
 import { bootConfigPath } from './boot-paths'
+import { extensionGpio } from './extensions'
 import { hdmiAudioWritten, onboardAudioWritten, reapplyOnboardAudio, setHdmiAudio, setOnboardAudio } from '../audio-output'
 
 export interface HardwareDeps {
@@ -17,6 +18,17 @@ export interface HardwareDeps {
 
 // the GPIO pins the admin interface offers for the LED and the fan
 const PINS = ['4', '12', '13', '17', '18', '21', '22', '23', '24', '25', '27']
+// the pins of the rotary encoder and its push button (rotary_control.py)
+const ROTARY_PINS = [26, 24, 10]
+
+/** The GPIO pins extensions hold (declared in their manifest or chosen in their settings): not for the LED, the fan or the rotary encoder. */
+async function extensionPins(): Promise<{ pin: number; by: string }[]> {
+  try {
+    return await extensionGpio()
+  } catch {
+    return []
+  }
+}
 // the I2S driver of the MAX98357A amplifier, as enable_mupihat.sh writes it
 const AMP_DRIVER = ['dtoverlay=max98357a,sdmode-pin=16', 'dtoverlay=i2s-mmap']
 
@@ -182,6 +194,8 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
         t25: Number(fan.fan_temp_25 ?? 45),
       },
       pins: PINS,
+      // (pins an extension holds: the app does not offer them for the LED and the fan, see pinsInUse)
+      extPins: (await extensionPins()).map((g) => String(g.pin)),
     })
   })
 
@@ -279,6 +293,9 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
     const values: Record<string, unknown> = {}
     if (body.active !== undefined) {
       if (typeof body.active !== 'boolean') return void res.status(400).json({ error: 'invalid active' })
+      // (its pins are fixed: switched on only while no extension has one of them - a button of the buttons extension, say)
+      const held = body.active ? (await extensionPins()).find((g) => ROTARY_PINS.includes(g.pin)) : undefined
+      if (held) return void res.status(409).json({ error: 'gpio_taken', pin: held.pin, by: held.by })
       values.active = body.active
     }
     if (body.step !== undefined) {
@@ -366,7 +383,7 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
     }
     if (body.ledPin !== undefined) {
       const pin = String(body.ledPin)
-      const reserved = ['poweroffPin', 'triggerPin', 'cutPin'].map((k) => String(section(deps, 'shim')[k] ?? ''))
+      const reserved = [...['poweroffPin', 'triggerPin', 'cutPin'].map((k) => String(section(deps, 'shim')[k] ?? '')), ...(await extensionPins()).map((g) => String(g.pin))]
       if (!PINS.includes(pin) || reserved.includes(pin)) return void res.status(400).json({ error: 'pin not allowed' })
       shim.ledPin = pin
       reboot = true
@@ -397,7 +414,7 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
     const body = (req.body ?? {}) as Record<string, unknown>
     if (typeof body.active !== 'boolean') return void res.status(400).json({ error: 'active must be true or false' })
     const gpio = String(body.gpio ?? '')
-    const reserved = ['poweroffPin', 'triggerPin', 'cutPin', 'ledPin'].map((k) => String(section(deps, 'shim')[k] ?? ''))
+    const reserved = [...['poweroffPin', 'triggerPin', 'cutPin', 'ledPin'].map((k) => String(section(deps, 'shim')[k] ?? '')), ...(await extensionPins()).map((g) => String(g.pin))]
     // (a pin the OnOffShim or its LED uses only matters for a running fan: some boxes have both on 13 from the template)
     if (!PINS.includes(gpio) || (body.active && reserved.includes(gpio))) return void res.status(400).json({ error: 'pin not allowed' })
     const t = ['t100', 't75', 't50', 't25'].map((k) => int(body[k], 20, 90))

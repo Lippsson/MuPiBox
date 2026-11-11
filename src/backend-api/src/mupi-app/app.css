@@ -1369,10 +1369,47 @@ textarea[hidden] { display: none; }
 .ext-sub { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--mp-muted); }
 .ext-list { margin: 2px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.45; }
 .ext-list li { margin: 2px 0; overflow-wrap: anywhere; }
+/* a heading that starts a group of fields in the settings of an extension (button 1, button 2 ...), and its own page */
+.ext-group { margin-top: 14px; padding-top: 18px; border-top: 1px solid var(--mp-border); display: flex; flex-direction: column; gap: 12px; }
+/* (lines stand between the groups only - the buttons - not between the fields of one) */
+.field[data-xgroup]:not([data-xgroup=""]), .row[data-xgroup]:not([data-xgroup=""]) { border-top: 0; padding-top: 0; }
+.ext-group h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.ext-page select.input { max-width: 420px; }
+/* (a group the user names: the name is a field, the label of the group its placeholder; right of it the button that removes the group) */
+.ext-group-head { display: flex; align-items: center; gap: 8px; }
+.ext-group-name { flex: 1 1 auto; min-width: 0; max-width: 420px; font-weight: 600; }
+.ext-group-del { margin-left: auto; flex: 0 0 auto; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--mp-border); border-radius: var(--mp-r); background: var(--mp-surface); color: var(--mp-muted); cursor: pointer; }
+.ext-group-del:hover, .ext-group-del:focus-visible { color: var(--mp-text); border-color: var(--mp-primary); }
+/* (a second choice beside a field - by how much, beside "louder") */
+.ext-with { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ext-with > select.input:first-child { flex: 1 1 220px; min-width: 0; }
+.ext-with > .seg { flex: 1 1 auto; min-width: 0; }
+.ext-with > select.ext-extra { flex: 0 0 auto; width: auto; min-width: 96px; }
+/* (a switch of an extension: its explanation a little under its name) */
+.row[data-ext-dep] .lbl small { margin-top: 5px; }
+/* (the "+" of a series of groups, on the right) */
+.ext-add { display: flex; justify-content: flex-end; margin-top: 10px; }
+/* (a GPIO pin: the label left of the list, not above it) */
+.field.ext-pin { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.field.ext-pin > label { flex: 0 0 auto; }
+.field.ext-pin > select { flex: 1 1 200px; min-width: 0; }
+.field.ext-pin > small { flex-basis: 100%; }
 /* a list to put in order by dragging (an "order" field of an extension) */
 .ext-order { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ext-order li { display: flex; align-items: center; gap: 12px; padding: 4px 12px 4px 4px; border: 1px solid var(--mp-border); border-radius: var(--mp-r); background: var(--mp-surface); font-size: 15px; font-weight: 600; user-select: none; }
 .ext-order li.dragging { position: relative; z-index: 2; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); border-color: var(--mp-primary); }
+.ext-roster { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ext-roster li { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--mp-border); border-radius: var(--mp-r); background: var(--mp-surface); font-size: 15px; font-weight: 600; }
+.ext-roster li.current { border-color: var(--mp-primary); }
+.ext-roster .ext-roster-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-roster .ext-roster-dot { flex: none; width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(128, 128, 128, .6); }
+.ext-roster button.ext-roster-dot { padding: 0; border: 0; cursor: pointer; width: 28px; height: 28px; background-clip: content-box; border: 6px solid transparent; box-sizing: border-box; box-shadow: none; }
+.ext-roster li.ext-roster-palette { flex-wrap: wrap; gap: 6px; padding: 4px 8px; border-style: dashed; }
+.ext-roster .ext-roster-palette button.ext-roster-dot { width: 34px; height: 34px; border-width: 4px; border-radius: 50%; }
+.ext-roster .ext-roster-palette button.ext-roster-dot[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--mp-primary); }
+.ext-roster .ext-roster-mark { font-size: 13px; color: var(--mp-primary); padding: 0 8px; }
+.ext-roster .btn { min-height: 36px; padding: 0 12px; }
+.ext-roster .btn:disabled { opacity: .4; }
 .ext-order .ext-grip { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: var(--mp-r-sm); background: transparent; cursor: grab; touch-action: none; }
 .ext-order .ext-grip::before { content: ''; width: 12px; height: 18px; background: radial-gradient(circle, var(--mp-muted) 1.6px, transparent 2px) 0 0 / 6px 6px; }
 .ext-order .ext-grip:focus-visible { outline: 2px solid var(--mp-primary); }

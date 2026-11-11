@@ -62,13 +62,30 @@ settings card from what the manifest declares.
 - **`id`**: lowercase letters, digits and `-`, 2–31 characters, starting with a letter. It never changes.
 - **`version`**: `major.minor.patch`. Raise it with every change you publish; the box offers an update when the catalog has a higher
   number than the installed one.
-- **`hostApi`**: the number of the interface you wrote the extension for (`1`, `2` or `3`; `3` is needed for an `order` field, see below). A box does not load an extension made for a
+- **`hostApi`**: the number of the interface you wrote the extension for (`1` to `5`; `3` is needed for an `order` field, `4` for a `roster`, `5` for a `gpio` setting, a `heading` or a page of your own, see below). A box does not load an extension made for a
   newer interface than its own.
 - **`resources`** is **required** (`{}` means "needs nothing"), see section 4.
 - **`settings`** and **`ui`**: what the extension stores and how the settings card looks. Types are `boolean`, `string`, `number`
   and `secret` (a token or password: the box never sends it back to the app, only whether one is set).
   A `ui` item can also be a list the user puts in order by dragging (`hostApi` 3): `"type": "order"` with `choices` (the names and
   labels), for a `string` setting whose value is the names, comma separated, in the chosen order (the default must name every choice once).
+  A `ui` item can also be a `roster` (`hostApi` 4): a list the extension keeps itself, such as the users of the box. It has no setting and no `key`, but four
+  addresses of the extension's own API part, `list` (GET, `{ current, users: [{ id, name }], busy }`), `add` (`{ name }`), `remove` (`{ id }`) and `select` (`{ id }`), and optionally `color` (`{ id, color }`: the entries have a colour, `#RRGGBB`, that can be changed from a list of `colors` that `list` gives);
+  the app shows the entries with buttons to switch and delete, and a field to add one. With `hostApi` 4 the API part also gets `host.updateConfig(mutate)`,
+  `host.paths` (`{ library, data, extensions }`) and `host.restartServices()`.
+  With `hostApi` 5 a setting can be a **pin the user chooses**: `"type": "gpio"`, default `0` (none), otherwise the BCM number 2–27 (at most 16
+  such settings, no `options`, `min`/`max` or `pattern`). The app shows a list of the pins and disables those in use, naming who holds them;
+  the box checks again when the value is saved, and a chosen pin counts as taken for everyone else. Use this instead of `resources.gpio` when
+  the wiring is the user's decision, and read the pins again when the settings change: `host.onSettings(fn)` calls `fn(settings)` in the API
+  part after every save (`host.apiUrl` is the address of the box's own server). Also with `hostApi` 5: a `ui` item `{ "type": "heading",
+  "label": "…" }` (no `key`) puts a headline between groups of fields, up to 80 items are allowed, and `dep` may name a `gpio` setting (the
+  field appears once a pin is chosen). A field with `choices` can have a second choice beside it: `"extra": { "key": "<a setting with options>", "label": "…", "when": [values of
+  the field], "choices": [...] }` is a list shown right of the field while the field has one of the values of `when` (by how much, beside
+  "louder"). A heading and the fields up to the next one are a group: `"rename": "<a string setting>"` lets the user
+  name the group (the heading becomes a text field with the label as its placeholder), `"optional": "<a boolean setting>"` makes it a group
+  the user adds with a "+" and removes again (groups in a row with the same label share one "+"; removing clears the group's pins and name).
+  `"place": "system"` in `ui` gives the extension a page of its own under Settings › System › "The box";
+  `"adopt": ["rotary"]` shows the core's "rotary encoder and buttons" page there and hides it in its old place while the extension is on.
 - **`system`**: what the box sets up as root, see section 5.
 - Texts in the manifest are shown as written. The app translates a text only if it knows it exactly, so write yours in English
   unless the extension is meant for one language only. (The extensions shipped in this repository are written in German, the source
