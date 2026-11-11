@@ -409,7 +409,11 @@ function renderPageNav(page) {
 }
 
 // The pages a settings group's page leads to (its nav rows, card after card)
-const groupNav = (g) => (g?.sections || []).flatMap((s) => (s.items || []).filter((i) => i.type === 'nav' && !extPages.adopted.has(i.target)).map((i) => i.target))
+// (the pages of extensions - they have no card in the schema - stand after "Erweiterungen", as on the page of the group itself)
+const groupNav = (g) =>
+  (g?.sections || [])
+    .flatMap((s) => (s.items || []).filter((i) => i.type === 'nav' && !extPages.adopted.has(i.target)).map((i) => i.target))
+    .flatMap((id) => (id === 'erweiterungen' ? [id, ...extPages.list.filter((e) => state.pages.get(e.pageId)?.parent === g.id).map((e) => e.pageId)] : [id]))
 // The settings group of a page: the one it belongs to, or - a page of another area - the one listing it (Spotify and
 // the NAS are pages of the library that Dienste lists too)
 function groupOf(page) {
