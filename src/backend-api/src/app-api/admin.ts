@@ -14,6 +14,7 @@ import { withLock } from '../file-lock'
 import { requireCsrf, requireSession } from './middleware'
 import { bootConfigPath } from './boot-paths'
 import { LIBRARY_DIR, SERVER_CONFIG_DIR } from '../paths'
+import { freezeLibrary, thawLibrary } from './photos/store'
 
 export interface AdminDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -440,7 +441,7 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         'sh',
         '-c',
         `mkdir -p '${path.dirname(staged)}' && { [ ! -e '${LIBRARY}/data.json' ] || cp '${LIBRARY}/data.json' '${staged}'; } && cd '${stage}' && ` +
-          `zip -q -r '${zip}' $([ -e '${staged}' ] && echo '${LIBRARY_ENTRY_BEFORE}') ${sources.map((s) => `'${s}'`).join(' ')} -x '*.tmp' '*.part'; ` +
+          `zip -q -r '${zip}' $([ -e '${staged}' ] && echo '${LIBRARY_ENTRY_BEFORE}') ${sources.map((s) => `'${s}'`).join(' ')} -x '*.tmp' '*.part' '*.heic.jpg' '*.poster.jpg'; ` +
           `chmod 644 '${zip}'; rm -rf '${stage}'`,
       ],
       full ? 3600000 : 120000,
@@ -585,6 +586,8 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         if (!readable) return { ok: false }
       }
       const rest = files.some((f) => !LIBRARY_ENTRIES.includes(f.name))
+      // (the photos' list comes from the backup: nothing on the box writes it meanwhile - a sync, a clip being made)
+      if (photosRestored) await freezeLibrary()
       const r = rest ? await run('sudo', ['unzip', '-o', file, '-d', '/', '-x', ...LIBRARY_ENTRIES], 3600000) : { ok: true }
       if (!r.ok || !libraryEntry) return r
       return { ok: await withDataLock(() => installFileAs(`${LIBRARY}/data.json`, library)).then((done) => done === true) }
@@ -595,6 +598,10 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         if (libraryDir) await fsp.rm(libraryDir, { recursive: true, force: true }).catch(() => undefined)
       })
     await cleanup()
+    // (the list as it is on the card now: read anew - after a failed restore changes go on, after one that worked the
+    // box restarts)
+    if (photosRestored) thawLibrary()
+    if (photosRestored && unzip.ok) await freezeLibrary()
     if (!unzip.ok) {
       res.status(500).json({ error: 'unzip failed' })
       return

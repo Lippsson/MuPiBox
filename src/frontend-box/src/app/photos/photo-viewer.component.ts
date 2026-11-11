@@ -407,7 +407,8 @@ export class PhotoViewerComponent implements OnDestroy {
   private audioTimer = 0
   // (in the slideshow only a short clip plays, to its end - a long one shows its picture there)
   protected isClip(a: PhotoAsset): boolean {
-    return a.kind === 'video' && (!this.playing() || (a.duration ?? 0) <= CLIP_IN_SLIDESHOW)
+    // (the box locked or the display off: no clip starts - its picture shows)
+    return !this.time.halted() && a.kind === 'video' && (!this.playing() || (a.duration ?? 0) <= CLIP_IN_SLIDESHOW)
   }
   protected readonly clipShown = computed(() => {
     const list = this.assets()

@@ -101,9 +101,23 @@ export async function album(id: string): Promise<PhotoAlbum | undefined> {
   return (await load()).albums.find((a) => a.id === id)
 }
 
+// a backup being restored: no change of the list any more (a sync or a clip finishing would write the list of before
+// over the restored one) - the box restarts after it; a failed restore lets go again
+let frozen = false
+export async function freezeLibrary(): Promise<void> {
+  frozen = true
+  await chain.catch(() => undefined)
+}
+export function thawLibrary(): void {
+  frozen = false
+  cache = null
+}
+
 /** A change of the list, one after the other; `mutate` gets a copy and returns what the caller wants back. */
 export function update<T>(mutate: (lib: Library) => T): Promise<T> {
+  if (frozen) return Promise.reject(new Error('photo library frozen (a backup is being restored)'))
   const run = chain.then(async () => {
+    if (frozen) throw new Error('photo library frozen (a backup is being restored)')
     const current = await load()
     const copy = JSON.parse(JSON.stringify(current)) as Library
     const result = mutate(copy)
