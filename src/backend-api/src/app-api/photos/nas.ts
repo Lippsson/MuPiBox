@@ -258,9 +258,11 @@ export class NasPhotoSync {
       this.state.offlineSince = null
       this.state.failed = failed
       // a folder the NAS did not list: what came from it stays - an album at or below it, and (one album per folder chosen)
-      // the album above it with the pictures of it
+      // the album of the folder chosen above it with the pictures of it; only within what is chosen now (an album of a
+      // folder no longer chosen goes, whatever the NAS answered)
       const unread = (p: string) => failed.some((f) => under(p, f))
-      const kept = (ref: string | undefined) => !!ref && (unread(ref) || (!s.subfoldersAsAlbums && failed.some((f) => under(f, ref))))
+      const chosen = (ref: string) => s.folders.some((f) => under(ref, f))
+      const kept = (ref: string | undefined) => !!ref && chosen(ref) && (unread(ref) || (!s.subfoldersAsAlbums && failed.some((f) => under(f, ref))))
 
       // the albums: made for new folders, taken out for folders no longer chosen or gone (not for a folder not listed)
       const gone: PhotoAlbum[] = []
@@ -269,7 +271,7 @@ export class NasPhotoSync {
         const nasAlbums = lib.albums.filter((a) => a.source === 'nas')
         for (const a of nasAlbums) {
           if (a.ref && targets.has(a.ref)) continue
-          if (kept(a.ref) && s.folders.some((f) => a.ref && (under(a.ref, f) || under(f, a.ref)))) continue
+          if (kept(a.ref)) continue
           gone.push(a)
         }
         lib.albums = lib.albums.filter((a) => !gone.includes(a))
@@ -327,7 +329,11 @@ export class NasPhotoSync {
       for (const { album, file, old } of work) {
         if (stop.signal.aborted) return
         const space = await cardSpace()
-        if (used + (file.size ?? 0) / 4 > limit || (space && space.free - (file.size ?? 0) < RESERVE_BYTES)) {
+        // (a changed picture: its old files go when the new ones are there - they count as freed for the limit; the card
+        // needs room for both for a moment)
+        let oldBytes = 0
+        if (old) for (const f of photoFiles(assetBase(album, old.id))) oldBytes += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
+        if (used - oldBytes + (file.size ?? 0) / 4 > limit || (space && space.free - (file.size ?? 0) < RESERVE_BYTES)) {
           full = true
           break
         }
@@ -357,7 +363,10 @@ export class NasPhotoSync {
           if (!placed) for (const f of photoFiles(out)) await fsp.rm(f, { force: true }).catch(() => undefined)
           else {
             for (const f of photoFiles(out)) used += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
-            if (old) for (const f of photoFiles(assetBase(album, old.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
+            if (old) {
+              for (const f of photoFiles(assetBase(album, old.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
+              used -= oldBytes
+            }
           }
         } catch (err) {
           if (err instanceof PhotoAborted) return
