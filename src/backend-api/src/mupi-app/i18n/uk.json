@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "30 секунд назад",
  "Zufallswiedergabe an/aus": "Перемішування увімк./вимк.",
  "Ausgabe wechseln": "Змінити вихід",
- "Box ausschalten": "Вимкнути бокс"
+ "Box ausschalten": "Вимкнути бокс",
+ "Taster": "Кнопка",
+ "Doppeltaster": "Подвійна кнопка",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "«{}» буде вилучено; його піни знову стануть вільними.",
+ "Drehregler (ausgeschaltet)": "Поворотний регулятор (вимкнено)"
 }

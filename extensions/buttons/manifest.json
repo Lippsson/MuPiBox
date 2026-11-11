@@ -1,7 +1,7 @@
 {
   "id": "buttons",
   "name": "Buttons & GPIO Input",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Physische Taster an den GPIO-Pins steuern die Box: Play/Pause, Titel, Lautstärke und mehr. Mit Tastern für kurzes und langes Drücken (Dual Action) und Doppeltastern mit sechs Funktionen. Die Einstellungen stehen unter System › Buttons & GPIO Input.",
   "hostApi": 5,
   "resources": {},
@@ -18,6 +18,10 @@
         5,
         10
       ]
+    },
+    "b1Name": {
+      "type": "string",
+      "default": ""
     },
     "b1Pin": {
       "type": "gpio",
@@ -73,6 +77,14 @@
       ]
     },
     "b1Repeat": {
+      "type": "boolean",
+      "default": false
+    },
+    "b2Name": {
+      "type": "string",
+      "default": ""
+    },
+    "b2On": {
       "type": "boolean",
       "default": false
     },
@@ -133,6 +145,14 @@
       "type": "boolean",
       "default": false
     },
+    "b3Name": {
+      "type": "string",
+      "default": ""
+    },
+    "b3On": {
+      "type": "boolean",
+      "default": false
+    },
     "b3Pin": {
       "type": "gpio",
       "default": 0
@@ -187,6 +207,14 @@
       ]
     },
     "b3Repeat": {
+      "type": "boolean",
+      "default": false
+    },
+    "b4Name": {
+      "type": "string",
+      "default": ""
+    },
+    "b4On": {
       "type": "boolean",
       "default": false
     },
@@ -247,6 +275,14 @@
       "type": "boolean",
       "default": true
     },
+    "b5Name": {
+      "type": "string",
+      "default": ""
+    },
+    "b5On": {
+      "type": "boolean",
+      "default": false
+    },
     "b5Pin": {
       "type": "gpio",
       "default": 0
@@ -304,6 +340,14 @@
       "type": "boolean",
       "default": true
     },
+    "b6Name": {
+      "type": "string",
+      "default": ""
+    },
+    "b6On": {
+      "type": "boolean",
+      "default": false
+    },
     "b6Pin": {
       "type": "gpio",
       "default": 0
@@ -358,6 +402,14 @@
       ]
     },
     "b6Repeat": {
+      "type": "boolean",
+      "default": false
+    },
+    "t1Name": {
+      "type": "string",
+      "default": ""
+    },
+    "t1On": {
       "type": "boolean",
       "default": false
     },
@@ -497,6 +549,14 @@
     "t1Repeat": {
       "type": "boolean",
       "default": true
+    },
+    "t2Name": {
+      "type": "string",
+      "default": ""
+    },
+    "t2On": {
+      "type": "boolean",
+      "default": false
     },
     "t2PinA": {
       "type": "gpio",
@@ -673,7 +733,8 @@
       },
       {
         "type": "heading",
-        "label": "Taster 1",
+        "label": "Taster",
+        "rename": "b1Name",
         "help": "Ein Taster für kurzes und langes Drücken. Ohne lange Aktion wirkt die kurze sofort beim Drücken. Mit langer Aktion wirkt die kurze beim Loslassen und die lange, sobald die Haltezeit erreicht ist."
       },
       {
@@ -833,7 +894,9 @@
       },
       {
         "type": "heading",
-        "label": "Taster 2"
+        "label": "Taster",
+        "rename": "b2Name",
+        "optional": "b2On"
       },
       {
         "key": "b2Pin",
@@ -992,7 +1055,9 @@
       },
       {
         "type": "heading",
-        "label": "Taster 3"
+        "label": "Taster",
+        "rename": "b3Name",
+        "optional": "b3On"
       },
       {
         "key": "b3Pin",
@@ -1151,7 +1216,9 @@
       },
       {
         "type": "heading",
-        "label": "Taster 4"
+        "label": "Taster",
+        "rename": "b4Name",
+        "optional": "b4On"
       },
       {
         "key": "b4Pin",
@@ -1310,7 +1377,9 @@
       },
       {
         "type": "heading",
-        "label": "Taster 5"
+        "label": "Taster",
+        "rename": "b5Name",
+        "optional": "b5On"
       },
       {
         "key": "b5Pin",
@@ -1469,7 +1538,9 @@
       },
       {
         "type": "heading",
-        "label": "Taster 6"
+        "label": "Taster",
+        "rename": "b6Name",
+        "optional": "b6On"
       },
       {
         "key": "b6Pin",
@@ -1628,7 +1699,9 @@
       },
       {
         "type": "heading",
-        "label": "Doppeltaster 1",
+        "label": "Doppeltaster",
+        "rename": "t1Name",
+        "optional": "t1On",
         "help": "Zwei Taster, sechs Aktionen: jeder allein und beide zusammen, jeweils kurz oder lang gedrückt. Die kurzen Aktionen wirken beim Loslassen."
       },
       {
@@ -2029,7 +2102,9 @@
       },
       {
         "type": "heading",
-        "label": "Doppeltaster 2"
+        "label": "Doppeltaster",
+        "rename": "t2Name",
+        "optional": "t2On"
       },
       {
         "key": "t2PinA",

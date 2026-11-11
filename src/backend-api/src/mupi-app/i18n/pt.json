@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "Recuar 30 segundos",
  "Zufallswiedergabe an/aus": "Aleatório ligado/desligado",
  "Ausgabe wechseln": "Mudar saída",
- "Box ausschalten": "Desligar a caixa"
+ "Box ausschalten": "Desligar a caixa",
+ "Taster": "Botão",
+ "Doppeltaster": "Botão duplo",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "“{}” será removido; os seus pinos ficam novamente livres.",
+ "Drehregler (ausgeschaltet)": "Botão rotativo (desligado)"
 }

@@ -3398,5 +3398,9 @@
  "30 Sekunden zurück": "30 seconds back",
  "Zufallswiedergabe an/aus": "Shuffle on/off",
  "Ausgabe wechseln": "Switch output",
- "Box ausschalten": "Switch off the box"
+ "Box ausschalten": "Switch off the box",
+ "Taster": "Button",
+ "Doppeltaster": "Twin button",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "“{}” will be removed; its pins are free again afterwards.",
+ "Drehregler (ausgeschaltet)": "Rotary knob (switched off)"
 }

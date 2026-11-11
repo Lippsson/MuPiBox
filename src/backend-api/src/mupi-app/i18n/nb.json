@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "30 sekunder tilbake",
  "Zufallswiedergabe an/aus": "Tilfeldig på/av",
  "Ausgabe wechseln": "Bytt utgang",
- "Box ausschalten": "Slå av boksen"
+ "Box ausschalten": "Slå av boksen",
+ "Taster": "Knapp",
+ "Doppeltaster": "Dobbeltknapp",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "«{}» fjernes; pinnene er deretter ledige igjen.",
+ "Drehregler (ausgeschaltet)": "Dreiebryter (slått av)"
 }

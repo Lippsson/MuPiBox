@@ -141,13 +141,19 @@ Die Nummer 5 (Taster) bringt im Manifest:
 
 - den Einstellungstyp **`gpio`**: ein Pin, den der Benutzer wählt (`0` = keiner, sonst die BCM-Nummer 2–27; der Standardwert ist `0`, ohne
   `options`, `pattern`, `min`/`max`, `legacy`; höchstens 16 je Extension). Die Webapp zeigt eine Auswahl mit der Nummer am Pfostenstecker und
-  sperrt, was schon belegt ist, mit dem Namen dessen, der den Pin hält (`GET /api/app/ext/<id>/gpio` → `{ pins: [{ pin, holders }], blind }`:
+  sperrt, was schon belegt ist, mit dem Namen dessen, der den Pin hält (`GET /api/app/ext/<id>/gpio` → `{ pins: [{ pin, holders }], hints, blind }`;
+  `hints` sind freie Pins, die ein ausgeschalteter Teil des Kerns bräuchte, die 26/24/10 des Drehreglers: wählbar, mit einem Hinweis in der Liste;
   der Kern, die Boot-Konfiguration, die anderen Extensions mit ihren `resources` und ihren gewählten Pins, und was `gpioinfo` als belegt meldet).
   Der Kern prüft beim Speichern noch einmal und antwortet mit 409 `gpio_taken` (`{ key, pin, holders }`) oder `gpio_twice` (derselbe Pin in zwei
   Feldern der Extension). Ein gewählter Pin zählt für alle anderen als belegt: im Ressourcentest anderer Extensions und in der Hardware-Seite des
   Kerns (Drehregler, LED, Lüfter lehnen einen Pin ab, den eine Extension hält).
 - **`type: "heading"`** in `ui.items`: eine Zwischenüberschrift (`label`, optional `help` und `dep`; ohne `key`). Mit `hostApi` 5 sind bis zu
   80 Einträge erlaubt (vorher 20), und `dep` darf auch auf eine `gpio`-Einstellung zeigen (das Feld erscheint, sobald ein Pin gewählt ist).
+  Eine Überschrift und die Felder bis zur nächsten sind eine Gruppe. Mit **`rename`** (eine `string`-Einstellung) gibt der Benutzer der Gruppe
+  einen Namen: die Überschrift ist dann ein Textfeld, `label` steht als Platzhalter darin. Mit **`optional`** (eine `boolean`-Einstellung) ist
+  die Gruppe erst da, wenn man sie hinzufügt: aufeinanderfolgende Gruppen mit demselben `label` sind eine Reihe, unter der rechts ein
+  „+ label“ steht, und jede hinzugefügte hat einen Knopf zum Entfernen (setzt den Schalter zurück, die Pins der Gruppe auf `0` und den Namen
+  auf leer). Eine Gruppe mit gewähltem Pin wird immer gezeigt.
 - **`ui.place: "system"`**: die Einstellungen sind eine eigene Seite unter Einstellungen › System › „Die Box“ (statt nur der Karte auf der Seite
   „Erweiterungen“; `GET /api/app/extensions/pages` nennt der Webapp die Seiten der eingeschalteten Extensions). Dazu **`ui.adopt`**: Seiten des
   Kerns, die auf dieser Seite mit erscheinen und an ihrem alten Ort verschwinden, solange die Extension eingeschaltet ist. Erlaubt ist bisher nur
@@ -223,7 +229,8 @@ Extension (`extensions/clock/`, `api.header` im Display); sie ist nicht mehr im 
 (BSD-2, im Paket mitgeliefert). Die vierte sind die Benutzer (`extensions/users/`, `hostApi` 4): jeder Benutzer hat seine Einstellungen und seine Bibliothek, gewechselt wird am Display (rundes Zeichen in der Kopfzeile) oder in der Webapp; der Spotify-Login, WLAN, NAS und die Hardware sind für alle gleich. Beim Wechsel sichert die Extension den Stand des bisherigen Benutzers in ihrem Ordner, lädt den des neuen, und die Box startet neu.
 
 Die fünfte sind die Taster (`extensions/buttons/`, „Buttons & GPIO Input“, `hostApi` 5, nur ein API-Teil): bis zu sechs einzelne Taster und zwei
-Tasterpaare an frei wählbaren GPIO-Pins (gegen Masse, der interne Pull-up ist eingeschaltet). Ein Taster hat eine Aktion für kurzes Drücken
+Tasterpaare an frei wählbaren GPIO-Pins (gegen Masse, der interne Pull-up ist eingeschaltet). Am Anfang steht nur ein Taster da, weitere und die
+Paare kommen mit „+“ dazu, und jeder kann einen eigenen Namen bekommen. Ein Taster hat eine Aktion für kurzes Drücken
 (beim Loslassen) und wahlweise eine zweite für langes Drücken (sobald die Haltezeit erreicht ist: „Dual Action“). Ein Paar aus zwei Tastern a und b
 hat sechs: kurz und lang, je für a, b und beide zusammen; mit „Wiederholen“ wiederholt sich die lange Aktion eines einzelnen Tasters, solange er
 gehalten wird (nie die für beide). Die Aktionen: Play/Pause, weiter, zurück, von vorn (`replay`, neu im Player), lauter/leiser in wählbaren

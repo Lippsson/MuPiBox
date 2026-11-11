@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "Reculer de 30 secondes",
  "Zufallswiedergabe an/aus": "Lecture aléatoire oui/non",
  "Ausgabe wechseln": "Changer de sortie",
- "Box ausschalten": "Éteindre la Box"
+ "Box ausschalten": "Éteindre la Box",
+ "Taster": "Bouton",
+ "Doppeltaster": "Double bouton",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "« {} » sera supprimé ; ses broches seront de nouveau libres.",
+ "Drehregler (ausgeschaltet)": "Molette (désactivée)"
 }

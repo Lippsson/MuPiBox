@@ -79,7 +79,10 @@ settings card from what the manifest declares.
   the wiring is the user's decision, and read the pins again when the settings change: `host.onSettings(fn)` calls `fn(settings)` in the API
   part after every save (`host.apiUrl` is the address of the box's own server). Also with `hostApi` 5: a `ui` item `{ "type": "heading",
   "label": "…" }` (no `key`) puts a headline between groups of fields, up to 80 items are allowed, and `dep` may name a `gpio` setting (the
-  field appears once a pin is chosen). `"place": "system"` in `ui` gives the extension a page of its own under Settings › System › "The box";
+  field appears once a pin is chosen). A heading and the fields up to the next one are a group: `"rename": "<a string setting>"` lets the user
+  name the group (the heading becomes a text field with the label as its placeholder), `"optional": "<a boolean setting>"` makes it a group
+  the user adds with a "+" and removes again (groups in a row with the same label share one "+"; removing clears the group's pins and name).
+  `"place": "system"` in `ui` gives the extension a page of its own under Settings › System › "The box";
   `"adopt": ["rotary"]` shows the core's "rotary encoder and buttons" page there and hides it in its old place while the extension is on.
 - **`system`**: what the box sets up as root, see section 5.
 - Texts in the manifest are shown as written. The app translates a text only if it knows it exactly, so write yours in English

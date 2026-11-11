@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "30 sekund do tyłu",
  "Zufallswiedergabe an/aus": "Losowo wł./wył.",
  "Ausgabe wechseln": "Zmień wyjście",
- "Box ausschalten": "Wyłącz Box"
+ "Box ausschalten": "Wyłącz Box",
+ "Taster": "Przycisk",
+ "Doppeltaster": "Przycisk podwójny",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "„{}” zostanie usunięty; jego piny będą znów wolne.",
+ "Drehregler (ausgeschaltet)": "Pokrętło (wyłączone)"
 }

@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { BUTTONS, TWINS, ACTIONS } = require('../inputs.js')
 
-const VERSION = '1.0.0'
+const VERSION = '1.1.0'
 
 const ACTION_LABELS = {
   none: 'Keine Aktion',
@@ -52,6 +52,9 @@ function build() {
   for (let n = 1; n <= BUTTONS; n++) {
     const [short, long, repeat] = BUTTON_DEFAULTS[n - 1]
     const k = `b${n}`
+    // (the name the user gives the button, and - from the second on - whether it was added: only button 1 is there from the start)
+    settings[`${k}Name`] = { type: 'string', default: '' }
+    if (n > 1) settings[`${k}On`] = { type: 'boolean', default: false }
     settings[`${k}Pin`] = { type: 'gpio', default: 0 }
     settings[`${k}Short`] = actionSetting(short)
     settings[`${k}Long`] = actionSetting(long)
@@ -60,7 +63,9 @@ function build() {
     items.push(
       {
         type: 'heading',
-        label: `Taster ${n}`,
+        label: 'Taster',
+        rename: `${k}Name`,
+        ...(n > 1 ? { optional: `${k}On` } : {}),
         ...(n === 1 ? { help: 'Ein Taster für kurzes und langes Drücken. Ohne lange Aktion wirkt die kurze sofort beim Drücken. Mit langer Aktion wirkt die kurze beim Loslassen und die lange, sobald die Haltezeit erreicht ist.' } : {}),
       },
       { key: `${k}Pin`, label: 'GPIO-Pin' },
@@ -73,6 +78,8 @@ function build() {
   for (let n = 1; n <= TWINS; n++) {
     const d = TWIN_DEFAULTS[n - 1]
     const k = `t${n}`
+    settings[`${k}Name`] = { type: 'string', default: '' }
+    settings[`${k}On`] = { type: 'boolean', default: false }
     settings[`${k}PinA`] = { type: 'gpio', default: 0 }
     settings[`${k}PinB`] = { type: 'gpio', default: 0 }
     const parts = [
@@ -91,7 +98,9 @@ function build() {
     items.push(
       {
         type: 'heading',
-        label: `Doppeltaster ${n}`,
+        label: 'Doppeltaster',
+        rename: `${k}Name`,
+        optional: `${k}On`,
         ...(n === 1 ? { help: 'Zwei Taster, sechs Aktionen: jeder allein und beide zusammen, jeweils kurz oder lang gedrückt. Die kurzen Aktionen wirken beim Loslassen.' } : {}),
       },
       { key: `${k}PinA`, label: 'GPIO-Pin Taster A' },

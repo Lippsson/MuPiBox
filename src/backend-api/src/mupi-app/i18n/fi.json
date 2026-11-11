@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "30 sekuntia taaksepäin",
  "Zufallswiedergabe an/aus": "Satunnaistoisto päälle/pois",
  "Ausgabe wechseln": "Vaihda ulostuloa",
- "Box ausschalten": "Sammuta laatikko"
+ "Box ausschalten": "Sammuta laatikko",
+ "Taster": "Painike",
+ "Doppeltaster": "Kaksoispainike",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "”{}” poistetaan; sen pinnit vapautuvat.",
+ "Drehregler (ausgeschaltet)": "Kiertosäädin (pois päältä)"
 }

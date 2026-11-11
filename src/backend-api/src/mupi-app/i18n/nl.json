@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "30 seconden terug",
  "Zufallswiedergabe an/aus": "Shuffle aan/uit",
  "Ausgabe wechseln": "Uitvoer wisselen",
- "Box ausschalten": "Box uitschakelen"
+ "Box ausschalten": "Box uitschakelen",
+ "Taster": "Knop",
+ "Doppeltaster": "Dubbele knop",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "„{}” wordt verwijderd; de pinnen zijn daarna weer vrij.",
+ "Drehregler (ausgeschaltet)": "Draairegelaar (uitgeschakeld)"
 }

@@ -14,7 +14,7 @@ import path from 'node:path'
 import express, { type NextFunction, type Request, type RequestHandler, type Response, type Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { DATA_DIR, EXTENSIONS_DIR, EXTENSIONS_DIR_BEFORE, LIBRARY_DIR } from '../paths'
-import { checkResources, type Conflict, describeResources, findConflicts, type GpioUse, gatherTaken, realProbe, type Resources, sameResources } from './extension-resources'
+import { checkResources, type Conflict, describeResources, findConflicts, idleCoreGpio, type GpioUse, gatherTaken, realProbe, type Resources, sameResources } from './extension-resources'
 import { localNetworkOnly, requireCsrf, requireSession } from './middleware'
 import { readZip } from './winamp-skin'
 
@@ -72,7 +72,7 @@ export interface Manifest {
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
-  ui?: { title: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
+  ui?: { title: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; rename?: string; optional?: string; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -379,9 +379,15 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
       if (item.type === 'heading') {
         // a line that starts a group of fields (hostApi 5): text only
         if (x.hostApi < 5 || item.key !== undefined || item.choices !== undefined) return `ui: a heading needs hostApi 5 and has no setting: ${item.label}`
+        // (a group the user names: `rename` is the text setting that holds the name, the label is what stands there without one.
+        // A group that is added and removed: `optional` is the switch that says it is there - the app shows a group only then,
+        // or while one of its pins is chosen)
+        if (item.rename !== undefined && !(Object.hasOwn(settings, String(item.rename)) && settings[item.rename].type === 'string' && settings[item.rename].options === undefined)) return `ui: rename must be a text setting: ${item.label}`
+        if (item.optional !== undefined && !(Object.hasOwn(settings, String(item.optional)) && settings[item.optional].type === 'boolean')) return `ui: optional must be a switch: ${item.label}`
         continue
       }
       // (a pin is chosen from the pins of the box: the app draws the choice, the manifest has no say in it)
+      if (item.rename !== undefined || item.optional !== undefined) return `ui: only a heading is renamed or optional: ${item.key}`
       if (item.type !== 'roster' && settings[item.key].type === GPIO_SETTING && (item.type !== undefined || item.choices !== undefined)) return `ui: a gpio setting is a plain field: ${item.key}`
       if (item.type === 'roster') {
         // a list to look at, to add to, to take from and to choose from (hostApi 4): four routes of the extension's own API part
@@ -1043,7 +1049,9 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     }
     const taken = await takenByOthers(manifest.id, deps)
     const pins = [...taken.gpio.entries()].filter(([pin]) => pin >= 2 && pin <= 27).map(([pin, holders]) => ({ pin, holders })).sort((a, b) => a.pin - b.pin)
-    res.json({ pins, blind: taken.blind })
+    // (hints: pins that are free, but that a part of the core would want once it is switched on - the app says so in its list)
+    const hints = idleCoreGpio(deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined).map((g) => ({ pin: g.pin, holders: [g.by] }))
+    res.json({ pins, hints, blind: taken.blind })
   })
 
   router.post('/ext/:id/settings', requireSession, requireCsrf, async (req, res) => {

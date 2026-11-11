@@ -258,6 +258,18 @@ export function parseUnitFiles(text: string): string[] {
 }
 
 /** What the core of the box holds, from its configuration (the same file the scripts read). */
+// (the rotary encoder has its pins fixed: the two of the knob and the one of its button)
+const ROTARY_GPIO = [26, 24, 10]
+function rotaryOn(config: Record<string, unknown> | undefined): boolean {
+  const rotary = config?.rotary && typeof config.rotary === 'object' ? (config.rotary as Record<string, unknown>) : {}
+  return rotary.active === true || rotary.active === 'true' || rotary.rotary_active === true
+}
+
+/** Pins a part of the core would use once it is switched on: free now, but worth a word to whoever chooses a pin. */
+export function idleCoreGpio(config: Record<string, unknown> | undefined): { pin: number; by: string }[] {
+  return rotaryOn(config) ? [] : ROTARY_GPIO.map((pin) => ({ pin, by: 'MuPiBox (rotary encoder, switched off)' }))
+}
+
 export function coreResources(config: Record<string, unknown> | undefined): { ports: { proto: 'tcp' | 'udp'; port: number; by: string }[]; gpio: { pin: number; by: string }[] } {
   const ports: { proto: 'tcp' | 'udp'; port: number; by: string }[] = [
     { proto: 'tcp', port: 80, by: 'MuPiBox (web server)' },
@@ -284,8 +296,7 @@ export function coreResources(config: Record<string, unknown> | undefined): { po
   take(shim.ledPin, 'MuPiBox (power LED)')
   const fan = section('fan')
   if (fan.fan_active === true || fan.fan_active === 'true') take(fan.fan_gpio, 'MuPiBox (fan)')
-  const rotary = section('rotary')
-  if (rotary.active === true || rotary.active === 'true' || rotary.rotary_active === true) for (const p of [26, 24, 10]) take(p, 'MuPiBox (rotary encoder)')
+  if (rotaryOn(config)) for (const p of ROTARY_GPIO) take(p, 'MuPiBox (rotary encoder)')
   const hat = section('mupihat')
   if (hat.hat_active === true || hat.hat_active === 'true') for (const p of [2, 3]) take(p, 'MuPiBox (MuPiHAT, I2C)')
   return { ports, gpio }

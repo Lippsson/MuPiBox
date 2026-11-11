@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "30 saniye geri",
  "Zufallswiedergabe an/aus": "Karıştırma açık/kapalı",
  "Ausgabe wechseln": "Çıkışı değiştir",
- "Box ausschalten": "Kutuyu kapat"
+ "Box ausschalten": "Kutuyu kapat",
+ "Taster": "Buton",
+ "Doppeltaster": "Çift buton",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "“{}” kaldırılacak; pinleri yeniden boşalır.",
+ "Drehregler (ausgeschaltet)": "Döner düğme (kapalı)"
 }

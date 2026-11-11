@@ -11587,6 +11587,7 @@ const EXT_WHO = {
   'MuPiBox (power LED)': 'MuPiBox (Betriebs-LED)',
   'MuPiBox (fan)': 'MuPiBox (Lüfter)',
   'MuPiBox (rotary encoder)': 'MuPiBox (Drehgeber)',
+  'MuPiBox (rotary encoder, switched off)': 'Drehregler (ausgeschaltet)',
   'MuPiBox (MuPiHAT, I2C)': 'MuPiBox (MuPiHAT, I²C)',
   'the boot configuration (spi: SPI bus)': 'die Boot-Konfiguration (spi: SPI-Bus)',
   'the boot configuration (enable_uart: serial port)': 'die Boot-Konfiguration (enable_uart: serielle Schnittstelle)',
@@ -11742,19 +11743,41 @@ async function extensionAction(path, id, askTitle, askText, askOk, doneText) {
 
 // The fields of an extension's settings as its manifest declares them (ui.items): the HTML of the form, and whether it has text
 // fields - they are saved with a "Speichern" button (data-xsave), everything else at once
+// The groups of a form: a heading and the fields after it, up to the next heading. Groups that follow each other with the same
+// label, the later ones optional ("Taster", "Taster", "Taster" ...), are a series: one "+" adds the next of them.
+function extGroups(fields) {
+  const groups = []
+  fields.forEach((it, index) => {
+    if (it.type === 'heading') {
+      const before = groups[groups.length - 1]
+      const follows = before && it.optional && before.heading.label === it.label
+      groups.push({ index, heading: it, keys: [], last: index, series: follows ? before.series : index, nr: follows ? before.nr + 1 : 1 })
+    } else if (groups.length) {
+      const g = groups[groups.length - 1]
+      if (it.key) g.keys.push(it.key)
+      g.last = index
+    }
+  })
+  return groups
+}
+
 function extFormHtml(e, fields) {
   const type = (it) => e.settingTypes?.[it.key]
-  const form = fields
-    .map((it, index) => {
+  const groups = extGroups(fields)
+  const one = (it, index) => {
       const k = esc(it.key)
       const help = it.help ? `<small class="help">${esc(it.help)}</small>` : ''
       if (it.type === 'heading') {
-        // a line that starts a group of fields (button 1, button 2 ...)
-        return `<div class="ext-group" data-ext-dep="${esc(it.dep ?? '')}"><h3>${esc(it.label)}</h3>${help}</div>`
+        // a line that starts a group of fields (button 1, button 2 ...): a name the user gives it (rename: the label stands there
+        // while it has none), and a button that takes the group away again (optional)
+        const name = it.rename ? `<input class="input ext-group-name" type="text" maxlength="30" data-xname="${esc(it.rename)}" value="${esc(e.settings?.[it.rename] ?? '')}" placeholder="${esc(it.label)}" aria-label="Name" autocomplete="off" ${NO_PW_MANAGER}>` : `<h3>${esc(it.label)}</h3>`
+        const del = it.optional ? `<button type="button" class="ext-group-del" data-xdel="${index}" aria-label="Entfernen" title="Entfernen"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : ''
+        return `<div class="ext-group" data-ext-dep="${esc(it.dep ?? '')}"><div class="ext-group-head">${name}${del}</div>${help}</div>`
       }
       if (type(it) === 'gpio') {
-        // a GPIO pin: chosen from the pins of the box - the ones that are taken cannot be chosen (filled in by extFormMount)
-        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xg-${k}">${esc(it.label)}</label><select class="input" id="xg-${k}" data-xgpio="${k}" translate="no"><option value="0">–</option></select>${help}</div>`
+        // a GPIO pin: chosen from the pins of the box - the ones that are taken cannot be chosen (filled in by extFormMount).
+        // The label stands left of the list.
+        return `<div class="field ext-pin" data-ext-dep="${esc(it.dep ?? '')}"><label for="xg-${k}">${esc(it.label)}</label><select class="input" id="xg-${k}" data-xgpio="${k}" translate="no"><option value="0">–</option></select>${help}</div>`
       }
       if (it.type === 'roster') {
         // a list the extension keeps itself (the users of the box, say): to look at, to add to, to take from and to choose from
@@ -11788,6 +11811,14 @@ function extFormHtml(e, fields) {
       const secret = type(it) === 'secret'
       const kind = secret ? 'password' : type(it) === 'number' ? 'number' : 'text'
       return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xk-${k}">${esc(it.label)}</label><input class="input" id="xk-${k}" type="${kind}" data-xk="${k}" data-secret="${secret}" value="${secret ? '' : esc(e.settings?.[it.key] ?? '')}" placeholder="${secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : ''}" ${NO_PW_MANAGER}>${help}</div>`
+  }
+  const form = fields
+    .map((it, index) => {
+      // (every field knows its group, data-xgroup: the index of its heading; after the last field of a series stands its "+")
+      const g = groups.findLast((x) => x.index <= index)
+      const html = one(it, index).replace('<div ', `<div data-xgroup="${g ? g.index : ''}" `)
+      const lastOfSeries = g && g.last === index && groups.findLast((x) => x.series === g.series) === g && groups.some((x) => x.series === g.series && x.heading.optional)
+      return lastOfSeries ? `${html}<div class="ext-add" data-xaddrow="${g.series}"><button type="button" class="btn" data-xadd="${g.series}"><span aria-hidden="true">+</span> <span>${esc(g.heading.label)}</span></button></div>` : html
     })
     .join('')
   const hasText = fields.some((it) => type(it) !== 'boolean' && type(it) !== 'gpio' && !it.choices && it.type !== 'lookup' && it.type !== 'roster' && it.type !== 'heading')
@@ -11798,15 +11829,25 @@ function extFormHtml(e, fields) {
 // page), saved() is called after the "Speichern" button stored its fields
 function extFormMount(sheet, e, fields, saved) {
   const type = (it) => e.settingTypes?.[it.key]
-  // (a field that depends on a switch is shown while the switch is on, one that depends on a pin while a pin is chosen)
+  // (a group that is optional is there when its switch says so - or while one of its pins is chosen: settings from before the
+  // switch existed)
+  const groups = extGroups(fields)
+  const groupOn = (g) => !g.heading.optional || e.settings?.[g.heading.optional] === true || g.keys.some((k) => e.settingTypes?.[k] === 'gpio' && Number(e.settings?.[k] ?? 0) !== 0)
+  // (a field that depends on a switch is shown while the switch is on, one that depends on a pin while a pin is chosen - and
+  // only while its group is there)
   const dep = () => {
-    for (const d of sheet.querySelectorAll('[data-ext-dep]')) {
+    for (const d of sheet.querySelectorAll('[data-xgroup]')) {
       const name = d.dataset.extDep
+      const g = d.dataset.xgroup === '' ? null : groups.find((x) => String(x.index) === d.dataset.xgroup)
       const on = !name ? true : e.settingTypes?.[name] === 'gpio' ? Number(e.settings?.[name] ?? 0) !== 0 : sheet.querySelector(`[data-xk="${CSS.escape(name)}"]`)?.checked !== false
-      d.hidden = !on
+      d.hidden = !on || (g ? !groupOn(g) : false)
     }
+    // (the "+" of a series, while one of its groups is not there yet)
+    for (const row of sheet.querySelectorAll('[data-xaddrow]')) row.hidden = !groups.some((g) => String(g.series) === row.dataset.xaddrow && !groupOn(g))
   }
   dep()
+  // (the list of the pins is drawn again when a name or a group changes: it names the groups)
+  let redrawPins = () => {}
   const save = async (values, quiet) => {
     const r = await api(`${API}/ext/${e.id}/settings`, { method: 'POST', body: { values } })
     if (!r.ok) {
@@ -11827,6 +11868,55 @@ function extFormMount(sheet, e, fields, saved) {
       else input.checked = !input.checked
     }
   }
+  // (the name of a group: saved when the field is left or with Enter)
+  for (const input of sheet.querySelectorAll('input[data-xname]')) {
+    const key = input.dataset.xname
+    input.onchange = async () => {
+      const value = input.value.trim()
+      if (value === (e.settings?.[key] ?? '')) return
+      const ok = await save({ [key]: value }, false)
+      if (ok) e.settings[key] = value
+      input.value = e.settings?.[key] ?? ''
+      redrawPins()
+    }
+    input.onkeydown = (ev) => {
+      if (ev.key === 'Enter') input.blur()
+    }
+  }
+  // (one more of a series: the first that is not there yet)
+  for (const button of sheet.querySelectorAll('button[data-xadd]')) {
+    button.onclick = async () => {
+      const g = groups.find((x) => String(x.series) === button.dataset.xadd && !groupOn(x))
+      if (!g) return
+      const ok = await save({ [g.heading.optional]: true }, true)
+      if (!ok) return
+      e.settings[g.heading.optional] = true
+      dep()
+      const head = sheet.querySelector(`.ext-group[data-xgroup="${g.index}"]`)
+      head?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      head?.querySelector('input[data-xname]')?.focus({ preventScroll: true })
+    }
+  }
+  // (a group taken away: its pins are free again and its name is gone; what its presses do stays as it was set)
+  for (const button of sheet.querySelectorAll('button[data-xdel]')) {
+    button.onclick = async () => {
+      const g = groups.find((x) => String(x.index) === button.dataset.xdel)
+      if (!g) return
+      const pins = g.keys.filter((k) => e.settingTypes?.[k] === 'gpio')
+      const name = g.heading.rename ? String(e.settings?.[g.heading.rename] ?? '') : ''
+      const used = name !== '' || pins.some((k) => Number(e.settings?.[k] ?? 0) !== 0)
+      if (used && !(await ask('Entfernen', `„${name || tr(g.heading.label)}“ wird entfernt, seine Pins sind danach wieder frei.`, 'Entfernen'))) return
+      const values = { [g.heading.optional]: false, ...Object.fromEntries(pins.map((k) => [k, 0])) }
+      if (g.heading.rename) values[g.heading.rename] = ''
+      const ok = await save(values, true)
+      if (!ok) return
+      Object.assign(e.settings, values)
+      const input = g.heading.rename ? sheet.querySelector(`input[data-xname="${CSS.escape(g.heading.rename)}"]`) : null
+      if (input) input.value = ''
+      redrawPins()
+      dep()
+    }
+  }
   // (a choice from many: saved at once, as a switch is)
   for (const select of sheet.querySelectorAll('select[data-xsel]')) {
     const key = select.dataset.xsel
@@ -11842,14 +11932,16 @@ function extFormMount(sheet, e, fields, saved) {
   const pinSelects = [...sheet.querySelectorAll('select[data-xgpio]')]
   if (pinSelects.length) {
     let taken = new Map()
-    // (what a field is called in the list of another one: the heading it stands under, "Taster 2")
+    // (pins that are free but meant for something that is switched off, the rotary encoder: they can be chosen, with a word)
+    let hints = new Map()
+    // (what a field is called in the list of another one: the name of its group - the one the user gave it, else its heading
+    // with its number in the series, "Taster 2")
     const groupOf = (key) => {
-      let heading = ''
-      for (const it of fields) {
-        if (it.type === 'heading') heading = it.label
-        if (it.key === key) return tr(heading || it.label)
-      }
-      return key
+      const g = groups.find((x) => x.keys.includes(key))
+      if (!g) return tr(fields.find((it) => it.key === key)?.label ?? key)
+      const named = g.heading.rename ? String(e.settings?.[g.heading.rename] ?? '') : ''
+      const many = groups.filter((x) => x.series === g.series).length > 1
+      return named || (many ? `${tr(g.heading.label)} ${g.nr}` : tr(g.heading.label))
     }
     const draw = () => {
       for (const select of pinSelects) {
@@ -11868,13 +11960,15 @@ function extFormMount(sheet, e, fields, saved) {
           const other = pinSelects.find((o) => o !== select && Number(e.settings?.[o.dataset.xgpio] ?? 0) === pin)
           // (its own pin stays its own, whatever holds it right now - the extension itself reads it)
           const who = pin === now ? '' : other ? groupOf(other.dataset.xgpio) : (taken.get(pin) ?? []).map(extWho).join(', ')
-          add(pin, `GPIO ${pin} (Pin ${GPIO_HEADER[pin]})${who ? ` – ${tr('belegt')}: ${who}` : ''}`, !!who)
+          const hint = who ? '' : (hints.get(pin) ?? []).map(extWho).join(', ')
+          add(pin, `GPIO ${pin} (Pin ${GPIO_HEADER[pin]})${who ? ` – ${tr('belegt')}: ${who}` : hint ? ` – ${hint}` : ''}`, !!who)
         }
       }
     }
     const loadTaken = async () => {
       const r = await api(`${API}/ext/${e.id}/gpio`, { timeoutMs: 20000 })
       if (r.ok && Array.isArray(r.body?.pins)) taken = new Map(r.body.pins.map((p) => [Number(p.pin), p.holders ?? []]))
+      if (r.ok) hints = new Map((r.body?.hints ?? []).map((p) => [Number(p.pin), p.holders ?? []]))
       draw()
     }
     for (const select of pinSelects) {
@@ -11889,6 +11983,7 @@ function extFormMount(sheet, e, fields, saved) {
         dep()
       }
     }
+    redrawPins = draw
     draw()
     loadTaken()
   }

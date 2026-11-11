@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "30 δευτερόλεπτα πίσω",
  "Zufallswiedergabe an/aus": "Τυχαία σειρά ναι/όχι",
  "Ausgabe wechseln": "Αλλαγή εξόδου",
- "Box ausschalten": "Απενεργοποίηση του κουτιού"
+ "Box ausschalten": "Απενεργοποίηση του κουτιού",
+ "Taster": "Κουμπί",
+ "Doppeltaster": "Διπλό κουμπί",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "Το «{}» θα αφαιρεθεί· οι ακίδες του θα είναι ξανά ελεύθερες.",
+ "Drehregler (ausgeschaltet)": "Περιστροφικός διακόπτης (ανενεργός)"
 }

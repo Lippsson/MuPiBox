@@ -3382,5 +3382,9 @@
  "30 Sekunden zurück": "Retroceder 30 segundos",
  "Zufallswiedergabe an/aus": "Aleatorio sí/no",
  "Ausgabe wechseln": "Cambiar salida",
- "Box ausschalten": "Apagar la caja"
+ "Box ausschalten": "Apagar la caja",
+ "Taster": "Botón",
+ "Doppeltaster": "Botón doble",
+ "„{}“ wird entfernt, seine Pins sind danach wieder frei.": "«{}» se eliminará; sus pines volverán a quedar libres.",
+ "Drehregler (ausgeschaltet)": "Mando giratorio (apagado)"
 }

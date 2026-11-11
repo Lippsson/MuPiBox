@@ -547,7 +547,14 @@ test('manifest.json is what test/manifest-source.js writes, and every action has
   assert.equal(pins.length, BUTTONS + 2 * TWINS)
   for (const [, spec] of pins) assert.equal(spec.default, 0, 'no pin until the user chooses one')
   // every setting the code reads is one the manifest has, with a field in the app
-  for (const key of Object.keys(manifest.settings)) assert.ok(manifest.ui.items.some((i) => i.key === key), key)
+  // (a name and "it was added" belong to the heading of a button, not to a field of their own)
+  for (const key of Object.keys(manifest.settings)) assert.ok(manifest.ui.items.some((i) => i.key === key || i.rename === key || i.optional === key), key)
+  // every button and twin can be named; only button 1 is there from the start, the others are added
+  const headings = manifest.ui.items.filter((i) => i.type === 'heading')
+  assert.equal(headings.length, BUTTONS + TWINS)
+  for (const h of headings) assert.equal(manifest.settings[h.rename].default, '', h.rename)
+  assert.deepEqual(headings.filter((h) => h.optional === undefined).map((h) => h.rename), ['b1Name'])
+  for (const h of headings.filter((x) => x.optional)) assert.equal(manifest.settings[h.optional].default, false, h.optional)
   // the defaults are a set of inputs that works once the pins are chosen
   const defaults = Object.fromEntries(Object.entries(manifest.settings).map(([k, s]) => [k, s.default]))
   let pin = 2

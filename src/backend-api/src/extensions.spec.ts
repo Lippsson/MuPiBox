@@ -240,6 +240,21 @@ describe('GPIO pins the user chooses, and a page of its own (hostApi 5)', () => 
     assert.match(String(checkManifest(manifest(many), files())), /too many gpio settings/)
   })
 
+  it('a heading can be named by the user and be one that is added: a text setting and a switch', () => {
+    const settings = { p: pin, name: { type: 'string', default: '' }, on: { type: 'boolean', default: false }, kind: { type: 'string', default: 'a', options: ['a', 'b'] } }
+    const ui = (heading: Record<string, unknown>, field: Record<string, unknown> = {}) => manifest(settings, { items: [{ type: 'heading', label: 'Taster', ...heading }, { key: 'p', label: 'Pin', ...field }] })
+    assert.strictEqual(checkManifest(ui({ rename: 'name', optional: 'on' }), files()), null)
+    assert.strictEqual(checkManifest(ui({ rename: 'name' }), files()), null)
+    assert.match(String(checkManifest(ui({ rename: 'on' }), files())), /rename must be a text setting/)
+    assert.match(String(checkManifest(ui({ rename: 'kind' }), files())), /rename must be a text setting/, 'a text with options is a choice, not a name')
+    assert.match(String(checkManifest(ui({ rename: 'nothing' }), files())), /rename must be a text setting/)
+    assert.match(String(checkManifest(ui({ rename: '__proto__' }), files())), /rename must be a text setting/)
+    assert.match(String(checkManifest(ui({ optional: 'name' }), files())), /optional must be a switch/)
+    assert.match(String(checkManifest(ui({ optional: 'p' }), files())), /optional must be a switch/)
+    assert.match(String(checkManifest(ui({}, { rename: 'name' }), files())), /only a heading/)
+    assert.match(String(checkManifest(ui({}, { optional: 'on' }), files())), /only a heading/)
+  })
+
   it('a pin is a header pin or 0 for none', () => {
     const m = manifest({ p: pin, on: { type: 'boolean' } }) as unknown as Manifest
     for (const ok of [0, 2, 17, 27]) assert.deepStrictEqual(checkSettings(m, { p: ok }), { ok: true, clean: { p: ok } })
