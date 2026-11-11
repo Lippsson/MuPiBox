@@ -6,8 +6,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-// (the same as the API's, app-api/extensions.ts: an extension the API installed for hostApi 2 or 3 lost its player part here)
-const HOST_API = 3
+// (the same as the API's, app-api/extensions.ts - test/compat.test.js checks it: an extension the API installed for a newer host lost its player part here)
+const HOST_API = 4
 // Since 5.1 below data/ (what the box keeps); a box that came over from before has them in ~/.mupibox/extensions: moved once
 // (the API's extensions.ts does the same - whoever is first wins). In development the player's config folder.
 const MUPI_HOME = '/home/dietpi/.mupibox'
@@ -42,6 +42,8 @@ function redactSecrets(value) {
   return value
 }
 
+const tooNewSaid = new Set()
+
 const readJson = (file, fallback) => {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'))
@@ -55,7 +57,16 @@ function readManifest(extDir, id) {
   if (!ID.test(id)) return null
   const manifest = readJson(path.join(extDir, id, 'manifest.json'), null)
   if (!manifest || manifest.id !== id || typeof manifest.version !== 'string') return null
-  if (!Number.isInteger(manifest.hostApi) || manifest.hostApi < 1 || manifest.hostApi > HOST_API) return null
+  if (!Number.isInteger(manifest.hostApi) || manifest.hostApi < 1) return null
+  if (manifest.hostApi > HOST_API) {
+    // (said once per extension and version: the player part of an extension for a newer host is left out, and no one would see why)
+    const key = `${id}@${manifest.version}`
+    if (!tooNewSaid.has(key)) {
+      tooNewSaid.add(key)
+      console.warn(`${new Date().toLocaleString()}: [Extensions] ${id} ${manifest.version} is made for host API ${manifest.hostApi}, this player has ${HOST_API} - its player part is not loaded`)
+    }
+    return null
+  }
   return manifest
 }
 

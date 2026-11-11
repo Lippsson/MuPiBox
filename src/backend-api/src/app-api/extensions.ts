@@ -602,41 +602,50 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
     await fsp.rm(previous, { recursive: true, force: true })
     if (existsSync(target)) await fsp.rename(target, previous)
     await fsp.rename(staging, target)
-
-    // the settings an older version of the box kept in its own configuration come along once
-    const config = deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined
-    const have = await readJson<Record<string, unknown>>(settingsFile(id), {})
-    let imported = false
-    for (const [key, spec] of Object.entries(manifest.settings ?? {})) {
-      if (!spec.legacy || key in have) continue
-      const value = spec.legacy.split('.').reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined), config)
-      if (value !== undefined && value !== null && value !== '' && (!spec.options || spec.options.includes(value as never))) {
-        have[key] = value
-        imported = true
-      }
-    }
-    if (imported) {
-      await fsp.mkdir(path.dirname(settingsFile(id)), { recursive: true })
-      await fsp.writeFile(settingsFile(id), JSON.stringify(have))
+    // (the new files out again and the version before back - for a failure of any kind from here on, not only of the services)
+    const restorePrevious = async () => {
+      await fsp.rm(target, { recursive: true, force: true })
+      if (existsSync(previous)) await fsp.rename(previous, target)
     }
 
-    if ((sys.units ?? []).length > 0 || (before?.system?.units ?? []).length > 0) {
-      job.step = 'services'
-      const problem = await setUpUnits(before?.system?.units ?? [], sys.units ?? [], files, target, id)
-      if (problem) {
-        // back to the version before: its files, and its services as they were (none: the new ones go again)
-        await fsp.rm(target, { recursive: true, force: true })
-        if (existsSync(previous)) await fsp.rename(previous, target)
-        const oldUnits = before?.system?.units ?? []
-        if (oldUnits.length > 0) {
-          const oldFiles = new Map<string, Buffer>()
-          for (const u of oldUnits) oldFiles.set(u.file, await fsp.readFile(path.join(target, u.file)).catch(() => Buffer.alloc(0)))
-          await setUpUnits(sys.units ?? [], oldUnits, oldFiles, target, id)
-        } else {
-          await removeUnits(sys.units ?? [])
+    try {
+      // the settings an older version of the box kept in its own configuration come along once
+      const config = deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined
+      const have = await readJson<Record<string, unknown>>(settingsFile(id), {})
+      let imported = false
+      for (const [key, spec] of Object.entries(manifest.settings ?? {})) {
+        if (!spec.legacy || key in have) continue
+        const value = spec.legacy.split('.').reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined), config)
+        if (value !== undefined && value !== null && value !== '' && (!spec.options || spec.options.includes(value as never))) {
+          have[key] = value
+          imported = true
         }
-        return fail(before ? `${problem} - the version before is back` : problem)
       }
+      if (imported) {
+        await fsp.mkdir(path.dirname(settingsFile(id)), { recursive: true })
+        await fsp.writeFile(settingsFile(id), JSON.stringify(have))
+      }
+
+      if ((sys.units ?? []).length > 0 || (before?.system?.units ?? []).length > 0) {
+        job.step = 'services'
+        const problem = await setUpUnits(before?.system?.units ?? [], sys.units ?? [], files, target, id)
+        if (problem) {
+          // back to the version before: its files, and its services as they were (none: the new ones go again)
+          await restorePrevious()
+          const oldUnits = before?.system?.units ?? []
+          if (oldUnits.length > 0) {
+            const oldFiles = new Map<string, Buffer>()
+            for (const u of oldUnits) oldFiles.set(u.file, await fsp.readFile(path.join(target, u.file)).catch(() => Buffer.alloc(0)))
+            await setUpUnits(sys.units ?? [], oldUnits, oldFiles, target, id)
+          } else {
+            await removeUnits(sys.units ?? [])
+          }
+          return fail(before ? `${problem} - the version before is back` : problem)
+        }
+      }
+    } catch (error) {
+      await restorePrevious().catch(() => undefined)
+      throw error
     }
     await fsp.rm(previous, { recursive: true, force: true })
 
@@ -1029,4 +1038,13 @@ export function mountExtensions(app: express.Express, deps: ExtensionDeps): void
 }
 
 // (kept for the tests: the checks above need no box)
-export const _forTests = { packageFiles, readFileSync }
+export const _forTests = {
+  packageFiles,
+  readFileSync,
+  /** Runs an install (of a package already in hand) as the route does and returns the job as it ended. */
+  install: async (id: string, deps: ExtensionDeps, pkg: Package): Promise<Job> => {
+    jobs.set(id, { running: true, action: 'install', step: 'start' })
+    await installExtension(id, deps, pkg)
+    return jobs.get(id) as Job
+  },
+}
