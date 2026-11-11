@@ -14,7 +14,7 @@ import {
 } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons'
 import { arrowBackOutline, playOutline } from 'ionicons/icons'
-import { catchError, of } from 'rxjs'
+import { catchError, of, type Subscription } from 'rxjs'
 import { DisplayTextsService } from '../display-texts.service'
 import { KmStatusGroupComponent } from '../km-header/km-status-group.component'
 import { StatusComponent } from '../status/status.component'
@@ -192,10 +192,13 @@ export class PhotoAlbumPage implements OnDestroy {
   })
 
   private albumId = ''
-  // the page is on the screen (Ionic keeps it when the player comes over it - started from the app, for one)
+  // the page is on the screen (Ionic keeps it when the player comes over it - started from the app, for one); every
+  // visit has its number: an answer that comes after the page was left belongs to no visit and is dropped
   private visible = false
+  private visit = 0
   private leaving = false
   private checkTimer = 0
+  private asking: Subscription | null = null
 
   constructor() {
     addIcons({ arrowBackOutline, playOutline })
@@ -204,49 +207,59 @@ export class PhotoAlbumPage implements OnDestroy {
       .subscribe((params) => {
         this.albumId = params.get('album') ?? ''
         this.direct.set(params.get('show') === '1')
-        this.load(true)
+        // (the first time the page's coming in asks - see ionViewWillEnter)
+        if (this.visible) this.load(true)
       })
   }
 
   /**
-   * The album from the box: at the start, and every 30 s while the page shows - hidden in the app, deleted, the photo
+   * The album from the box: when the page comes, and every 30 s while it shows - hidden in the app, deleted, the photo
    * display switched off: back to the albums; pictures added or deleted: the grid and the slideshow take the new list.
    */
   private load(first: boolean): void {
     const id = this.albumId
-    this.photos
+    const visit = this.visit
+    this.asking?.unsubscribe()
+    this.asking = this.photos
       .album(id)
       .pipe(catchError((err: { status?: number }) => of(err?.status === 404 ? null : undefined)))
       .subscribe((a) => {
-        if (id !== this.albumId || this.leaving) return
+        if (id !== this.albumId || visit !== this.visit || !this.visible || this.leaving) return
         // (no answer at all - the server restarts: it stays as it is, asked again in 30 s)
-        if (a === undefined) return first ? this.back() : undefined
+        if (a === undefined) return first && !this.album() ? this.back() : undefined
         if (!a || a.assets.length === 0) return this.back()
         const before = this.album()
         // (the same pictures - in the order "Zufällig" they come in another order each time: the grid stays as it is)
         const same = before?.id === a.id && before.title === a.title && sameIds(before.assets, a.assets)
         if (!same) this.album.set(a)
-        if (first && this.direct()) this.viewer.set({ start: 0, play: true })
+        if (first && this.direct() && !this.viewer()) this.viewer.set({ start: 0, play: true })
       })
   }
 
   ionViewWillEnter(): void {
     this.visible = true
+    this.visit++
     window.clearInterval(this.checkTimer)
     this.checkTimer = window.setInterval(() => this.load(false), 30_000)
-    // back from the player over the slideshow that started at once: it starts again
-    if (this.direct() && this.album() && !this.viewer()) this.viewer.set({ start: 0, play: true })
+    // asked at once: the first visit (nothing there yet), or back from the player - the album may have changed
+    // meanwhile; the slideshow that started at once starts again with the answer
+    this.load(true)
   }
 
-  // (another page comes over this one: the full view goes - its slideshow and its timers do not run on below)
+  // (another page comes over this one: the full view goes - its slideshow and its timers do not run on below; a
+  // question still on its way is dropped)
   ionViewWillLeave(): void {
     this.visible = false
+    this.visit++
     window.clearInterval(this.checkTimer)
+    this.asking?.unsubscribe()
+    this.asking = null
     this.viewer.set(null)
   }
 
   ngOnDestroy(): void {
     window.clearInterval(this.checkTimer)
+    this.asking?.unsubscribe()
   }
 
   protected openAt(i: number): void {
