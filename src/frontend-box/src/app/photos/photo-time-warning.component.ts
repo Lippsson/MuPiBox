@@ -10,7 +10,7 @@ import { PhotoTimeService } from './photo-time.service'
   selector: 'mupi-photo-time-warning',
   template: `
     @if (time.warning(); as m) {
-      <div class="ptw" [class.ptw-low]="time.viewer()?.controls" role="status">
+      <div class="ptw" [class.ptw-low]="low()" role="status">
         <span class="ptw-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9" /></svg></span>
         <span>{{ text() }}</span>
       </div>
@@ -38,7 +38,7 @@ import { PhotoTimeService } from './photo-time.service'
       transform: translateX(-50%);
       animation: ptw-in 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
     }
-    /* (the full view's buttons are shown: below their row) */
+    /* (the album's header, or the full view's buttons: below them - top only over a slideshow without buttons) */
     .ptw.ptw-low {
       top: 84px;
     }
@@ -71,6 +71,10 @@ import { PhotoTimeService } from './photo-time.service'
 export class PhotoTimeWarningComponent {
   protected readonly time = inject(PhotoTimeService)
   private readonly texts = inject(DisplayTextsService)
+  protected readonly low = computed(() => {
+    const v = this.time.viewer()
+    return v === null || v.controls
+  })
   protected readonly text = computed(() => {
     const m = this.time.warning() ?? 0
     return m === 1 ? this.texts.text('photosWarnOne') : this.texts.text('photosWarn', { n: m })
