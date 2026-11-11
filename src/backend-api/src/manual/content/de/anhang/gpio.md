@@ -25,6 +25,10 @@ Auf deiner Box zeigt diese Tabelle **nur die Pins, die dort mit den aktuellen Ei
 > [!WARNING]
 > Zwei Geräte dürfen sich **keinen** Pin teilen. Wähle für LED und Lüfter Pins, die oben nicht anderweitig stehen. Die App warnt, wenn du für ein Zubehör einen Pin wählst, den ein aktiviertes anderes Zubehör schon nutzt.
 
+## Pins für eigene Taster
+
+Mit der Erweiterung [Buttons & GPIO Input](../erweiterungen/buttons.md) schließt du eigene Taster an freie GPIO-Pins an. Welche Pins auf deiner Box frei sind, zeigt die Auswahl der Erweiterung selbst: Belegte Pins lassen sich dort nicht wählen, und die Liste nennt, wer sie hält. Auch andere [Erweiterungen](../erweiterungen/index.md) können Pins belegen; die Box prüft das vor der Installation.
+
 ## Wo steht die Pin-Einstellung noch?
 
 Der Pin für das Ausschalten steht an **zwei** Stellen, und beide müssen übereinstimmen:
