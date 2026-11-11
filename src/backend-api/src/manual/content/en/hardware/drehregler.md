@@ -2,6 +2,9 @@
 
 A **rotary knob with button** (rotary encoder in the style of the KY-040) makes the volume easy to reach for children's hands. You switch it on in the app under **Settings › Audio › Rotary knob and button**.
 
+> [!NOTE]
+> If the extension [Buttons & GPIO Input](../erweiterungen/buttons.md) is switched on, this setting is under **Settings › System › Buttons & GPIO Input** instead, as the card **Rotary knob**. With the extension you can also connect any number of further buttons.
+
 ## Connection
 
 | Rotary knob connection | GPIO pin of the Raspberry Pi |
@@ -48,4 +51,5 @@ Track selection also ends by itself: **10 seconds** after the last press or the 
 
 - Is the **Rotary knob for the volume** switch on? The service only starts then.
 - Check the wiring of pins 26, 24 and 10 ([GPIO assignment](../anhang/gpio.md)).
+- If the knob cannot be switched on and the app names a GPIO pin in use, a button of the extension [Buttons & GPIO Input](../erweiterungen/buttons.md) has one of the three pins. Free the pin there.
 - The service is called `mupi_rotary`.

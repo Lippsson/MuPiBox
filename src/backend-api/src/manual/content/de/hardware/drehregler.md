@@ -2,6 +2,9 @@
 
 Ein **Drehregler mit Taster** (Drehgeber im Stil des KY-040) macht die Lautstärke für Kinderhände leicht erreichbar. Er wird in der App unter **Einstellungen › Audio › Drehregler und Taster** eingeschaltet.
 
+> [!NOTE]
+> Ist die Erweiterung [Buttons & GPIO Input](../erweiterungen/buttons.md) eingeschaltet, steht diese Einstellung stattdessen unter **Einstellungen › System › Buttons & GPIO Input**, als Karte **Drehregler**. Mit der Erweiterung lassen sich außerdem beliebige weitere Taster anschließen.
+
 ## Anschluss
 
 | Anschluss des Drehreglers | GPIO-Pin des Raspberry Pi |
@@ -48,4 +51,5 @@ Die Titelwahl endet auch von selbst: **10 Sekunden** nach dem letzten Druck oder
 
 - Ist der Schalter **Drehregler für die Lautstärke** eingeschaltet? Der Dienst startet nur dann.
 - Prüfe die Verkabelung der Pins 26, 24 und 10 ([GPIO-Belegung](../anhang/gpio.md)).
+- Lässt sich der Regler nicht einschalten und die App nennt einen belegten GPIO-Pin, hat ein Taster der Erweiterung [Buttons & GPIO Input](../erweiterungen/buttons.md) einen der drei Pins. Gib den Pin dort frei.
 - Der Dienst heißt `mupi_rotary`.
