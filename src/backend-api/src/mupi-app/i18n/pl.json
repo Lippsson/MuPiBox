@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Zapisywany tylko na urządzeniu i nigdy więcej tu nie pokazywany.",
  "Wo läuft dein Immich?": "Gdzie działa twój Immich?",
  "{} Alben in Immich": "Albumy w Immich: {}",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "Wybranych albumów nie ma już w Immich: {}."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "Wybranych albumów nie ma już w Immich: {}.",
+ "Gewählt": "Wybrane",
+ "Abwählen": "Odznacz"
 }

@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Gemmes kun på boksen og vises aldrig her igen.",
  "Wo läuft dein Immich?": "Hvor kører din Immich?",
  "{} Alben in Immich": "{} album i Immich",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valgte album findes ikke længere i Immich."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valgte album findes ikke længere i Immich.",
+ "Gewählt": "Valgt",
+ "Abwählen": "Fravælg"
 }

@@ -3620,5 +3620,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Kept only on the box and never shown here again.",
  "Wo läuft dein Immich?": "Where does your Immich run?",
  "{} Alben in Immich": "{} albums in Immich",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "{} albums chosen no longer exist in Immich."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "{} albums chosen no longer exist in Immich.",
+ "Gewählt": "Chosen",
+ "Abwählen": "Remove"
 }

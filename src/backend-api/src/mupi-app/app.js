@@ -12214,6 +12214,7 @@ function photoNasTop() {
       ${s.failed?.length ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(`Nicht lesbar: ${s.failed.join(', ')}`))}</span></div>` : ''}
       <div class="btns"><button class="btn primary" id="nas-sync" ${s.running || !saved.length ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div></section>`,
     `<section class="card wide"><h2>Ordner</h2><p class="help">Jeder gewählte Ordner wird ein Album.</p>
+      ${photoNas.chosen.size ? `<div class="ph-chosen"><b>${esc(tr('Gewählt'))}</b>${[...photoNas.chosen].sort().map((f) => `<span class="chip"><span translate="no">${esc(f)}</span><button class="ph-chip-x" data-unpick="${esc(f)}" aria-label="${esc(tr('Abwählen'))}">${icon('close', 14)}</button></span>`).join('')}</div>` : ''}
       <div class="ph-tree">${photoNasFolderRows('/', 0)}</div>
       <div class="row"><span class="lbl"><b>Unterordner als eigene Alben</b><small>An: Jeder Unterordner wird ein eigenes Album. Aus: Fotos aus Unterordnern landen im Album des Ordners.</small></span>
         <label class="switch"><input type="checkbox" id="nas-subs" ${photoNas.subs ? 'checked' : ''} aria-label="${esc(tr('Unterordner als eigene Alben'))}"><span></span></label></div>
@@ -12260,6 +12261,13 @@ function mountPhotoNas(root, page) {
           await photoNasBrowse(p)
         }
       }
+      redraw()
+    }
+  }
+  // (a folder chosen deep in the tree: taken off here without opening the tree down to it)
+  for (const b of root.querySelectorAll('[data-unpick]')) {
+    b.onclick = () => {
+      photoNas.chosen.delete(b.dataset.unpick)
       redraw()
     }
   }

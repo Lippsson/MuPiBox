@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Salvata solo sul box e mai più mostrata qui.",
  "Wo läuft dein Immich?": "Dove gira il tuo Immich?",
  "{} Alben in Immich": "{} album in Immich",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "{} album scelti non esistono più in Immich."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "{} album scelti non esistono più in Immich.",
+ "Gewählt": "Scelte",
+ "Abwählen": "Rimuovi"
 }

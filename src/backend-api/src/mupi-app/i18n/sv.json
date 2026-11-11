@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Sparas bara på boxen och visas aldrig här igen.",
  "Wo läuft dein Immich?": "Var körs din Immich?",
  "{} Alben in Immich": "{} album i Immich",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valda album finns inte längre i Immich."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valda album finns inte längre i Immich.",
+ "Gewählt": "Valda",
+ "Abwählen": "Avmarkera"
 }

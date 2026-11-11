@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Зберігається лише на пристрої й більше тут не показується.",
  "Wo läuft dein Immich?": "Де працює твій Immich?",
  "{} Alben in Immich": "Альбомів в Immich: {}",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "Вибраних альбомів уже немає в Immich: {}."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "Вибраних альбомів уже немає в Immich: {}.",
+ "Gewählt": "Вибрано",
+ "Abwählen": "Прибрати"
 }

@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Yalnızca kutuda saklanır ve burada bir daha gösterilmez.",
  "Wo läuft dein Immich?": "Immich’in nerede çalışıyor?",
  "{} Alben in Immich": "Immich’te {} albüm",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "Seçilen {} albüm artık Immich’te yok."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "Seçilen {} albüm artık Immich’te yok.",
+ "Gewählt": "Seçilenler",
+ "Abwählen": "Kaldır"
 }

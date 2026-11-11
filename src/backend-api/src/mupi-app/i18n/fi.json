@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Tallennetaan vain laitteeseen eikä näytetä täällä enää koskaan.",
  "Wo läuft dein Immich?": "Missä Immichisi toimii?",
  "{} Alben in Immich": "{} albumia Immichissä",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valittua albumia ei enää ole Immichissä."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valittua albumia ei enää ole Immichissä.",
+ "Gewählt": "Valittu",
+ "Abwählen": "Poista valinta"
 }

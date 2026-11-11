@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Αποθηκεύεται μόνο στο κουτί και δεν εμφανίζεται ποτέ ξανά εδώ.",
  "Wo läuft dein Immich?": "Πού τρέχει το Immich σου;",
  "{} Alben in Immich": "{} άλμπουμ στο Immich",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "{} επιλεγμένα άλμπουμ δεν υπάρχουν πια στο Immich."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "{} επιλεγμένα άλμπουμ δεν υπάρχουν πια στο Immich.",
+ "Gewählt": "Επιλεγμένα",
+ "Abwählen": "Αφαίρεση"
 }

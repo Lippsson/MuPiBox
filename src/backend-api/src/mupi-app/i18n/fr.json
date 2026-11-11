@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Enregistrée uniquement sur la box et plus jamais affichée ici.",
  "Wo läuft dein Immich?": "Où tourne ton Immich ?",
  "{} Alben in Immich": "{} albums dans Immich",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "{} albums choisis n’existent plus dans Immich."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "{} albums choisis n’existent plus dans Immich.",
+ "Gewählt": "Choisis",
+ "Abwählen": "Retirer"
 }

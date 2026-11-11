@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Guardada só na caixa e nunca mais mostrada aqui.",
  "Wo läuft dein Immich?": "Onde corre o teu Immich?",
  "{} Alben in Immich": "{} álbuns no Immich",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "{} álbuns escolhidos já não existem no Immich."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "{} álbuns escolhidos já não existem no Immich.",
+ "Gewählt": "Escolhidas",
+ "Abwählen": "Remover"
 }

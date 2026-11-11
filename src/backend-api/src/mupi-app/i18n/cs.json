@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Uloží se jen na boxu a už se tu nikdy nezobrazí.",
  "Wo läuft dein Immich?": "Kde běží tvůj Immich?",
  "{} Alben in Immich": "Alba v Immich: {}",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "Vybraná alba už v Immich neexistují: {}."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "Vybraná alba už v Immich neexistují: {}.",
+ "Gewählt": "Vybráno",
+ "Abwählen": "Zrušit výběr"
 }

@@ -3604,5 +3604,7 @@
  "Wird nur auf der Box gespeichert und hier nie wieder angezeigt.": "Wordt alleen op de box bewaard en hier nooit meer getoond.",
  "Wo läuft dein Immich?": "Waar draait je Immich?",
  "{} Alben in Immich": "{} albums in Immich",
- "{} gewählte Alben gibt es in Immich nicht mehr.": "{} gekozen albums bestaan niet meer in Immich."
+ "{} gewählte Alben gibt es in Immich nicht mehr.": "{} gekozen albums bestaan niet meer in Immich.",
+ "Gewählt": "Gekozen",
+ "Abwählen": "Verwijderen"
 }
