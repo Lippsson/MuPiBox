@@ -185,7 +185,7 @@ export class VideoQueue {
         if (gone || !result) {
           album.assets = album.assets.filter((y) => y.id !== x.id)
           if (album.cover === x.id) delete album.cover
-          if (rejected && asset.ref) album.rejected = [...(album.rejected ?? []), `${asset.ref}|${asset.ver ?? ''}`].slice(-500)
+          if (rejected && asset.ref) lib.rejected = [...(lib.rejected ?? []), `${album.source}:${asset.ref}|${asset.ver ?? ''}`].slice(-1000)
           return false
         }
         Object.assign(asset, { w: result.w, h: result.h, duration: result.duration, taken: result.taken ?? asset.taken, ready: true })

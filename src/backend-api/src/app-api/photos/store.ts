@@ -57,13 +57,14 @@ export interface PhotoAlbum {
   ref?: string
   /** an Immich album shown live: its pictures are not kept on the box, they come from Immich when shown */
   live?: boolean
-  /** NAS/Immich: clips not taken ("<ref>|<version>": longer than 3 minutes, no clip) - not fetched again while unchanged */
-  rejected?: string[]
 }
 
 interface Library {
   version: 1
   albums: PhotoAlbum[]
+  /** clips of NAS and Immich the box would not take ("<source>:<ref>|<version>": longer than 3 minutes, no clip) - not
+   * fetched again while unchanged, also when their album has gone meanwhile */
+  rejected?: string[]
 }
 
 let cache: Library | null = null
@@ -78,7 +79,8 @@ async function load(): Promise<Library> {
   try {
     const raw = JSON.parse(await fsp.readFile(LIBRARY_FILE, 'utf8')) as Partial<Library>
     const albums = Array.isArray(raw.albums) ? raw.albums.filter((a) => a && isId(a.id) && Array.isArray(a.assets)) : []
-    cache = { version: 1, albums }
+    const rejected = Array.isArray(raw.rejected) ? raw.rejected.filter((x): x is string => typeof x === 'string').slice(-1000) : []
+    cache = { version: 1, albums, rejected }
   } catch (err) {
     // (no list yet: none; a broken one is kept beside it for a look - the pictures stay where they are)
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -189,4 +191,9 @@ export async function cardSpace(): Promise<{ total: number; free: number } | nul
 /** For tests: forget the list read before */
 export function forgetCache(): void {
   cache = null
+}
+
+/** The clips of NAS and Immich not taken before ("<source>:<ref>|<version>") */
+export async function rejectedClips(): Promise<Set<string>> {
+  return new Set((await load()).rejected ?? [])
 }

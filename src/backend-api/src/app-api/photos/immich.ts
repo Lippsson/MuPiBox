@@ -19,7 +19,7 @@ import { requireCsrf, requireSession } from '../middleware'
 import { NotAPicture, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings } from './settings'
 import { VIDEO_MAX_BYTES, VIDEO_MAX_SECONDS, videoQueue } from './video'
-import { albumDir, albums, assetBase, cardSpace, IMMICH_LIVE_DIR, IMMICH_PHOTO_DIR, INCOMING_DIR, newId, type PhotoAlbum, type PhotoAsset, PHOTOS_DIR, photoBytes, update } from './store'
+import { albumDir, albums, rejectedClips, assetBase, cardSpace, IMMICH_LIVE_DIR, IMMICH_PHOTO_DIR, INCOMING_DIR, newId, type PhotoAlbum, type PhotoAsset, PHOTOS_DIR, photoBytes, update } from './store'
 
 export interface PhotoImmichDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -520,6 +520,8 @@ export class ImmichPhotoSync {
 
       // kept on the box: as the NAS folders - gone out at once, changed ones replaced when the new one is made, new in
       const work: Array<{ album: PhotoAlbum; asset: ImmichAsset; old?: PhotoAsset; fresh: boolean }> = []
+      // (clips not taken before - too long, no clip - while unchanged)
+      const rejected = await rejectedClips()
       for (const { album, assets, fresh } of plan) {
         const wanted = new Map(assets.map((x) => [x.id, x]))
         const drop: PhotoAsset[] = []
@@ -547,8 +549,7 @@ export class ImmichPhotoSync {
           for (const x of drop) for (const f of photoFiles(assetBase(album, x.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
         }
         // (a clip Immich says is too long, or one not taken before while unchanged: not fetched)
-        const rejected = new Set(album.rejected ?? [])
-        const takes = (x: ImmichAsset) => !rejected.has(`${x.id}|${versionOf(x)}`) && !(x.type === 'VIDEO' && clipSeconds(x.duration) > VIDEO_MAX_SECONDS + 1)
+        const takes = (x: ImmichAsset) => !rejected.has(`immich:${x.id}|${versionOf(x)}`) && !(x.type === 'VIDEO' && clipSeconds(x.duration) > VIDEO_MAX_SECONDS + 1)
         for (const x of assets) if (wanted.has(x.id) && takes(x)) work.push({ album, asset: x, old: replace.get(x.id), fresh })
       }
       this.state.total = work.length

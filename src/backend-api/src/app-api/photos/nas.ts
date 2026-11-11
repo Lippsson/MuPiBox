@@ -13,7 +13,7 @@ import { requireCsrf, requireSession } from '../middleware'
 import { extOf, NotAPicture, PHOTO_EXTENSIONS, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings } from './settings'
 import { VIDEO_EXTENSIONS, VIDEO_MAX_BYTES, videoQueue } from './video'
-import { albumDir, albums, assetBase, cardSpace, INCOMING_DIR, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, PHOTOS_DIR, photoBytes, update } from './store'
+import { albumDir, albums, rejectedClips, assetBase, cardSpace, INCOMING_DIR, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, PHOTOS_DIR, photoBytes, update } from './store'
 
 /** A file or folder on the NAS as the server's WebDAV listing gives it */
 export interface PhotoNasEntry {
@@ -306,6 +306,8 @@ export class NasPhotoSync {
       // replaced only when the new one is made - a failed fetch keeps the old one; new ones in. A picture from a folder
       // the NAS did not list stays as it is.
       const work: Array<{ album: PhotoAlbum; file: PhotoNasEntry; old?: PhotoAsset; fresh: boolean }> = []
+      // (clips not taken before - too long, no clip - while unchanged)
+      const rejected = await rejectedClips()
       for (const { album, files, fresh } of plan) {
         const wanted = new Map(files.map((f) => [f.path, f]))
         const drop: PhotoAsset[] = []
@@ -332,8 +334,7 @@ export class NasPhotoSync {
           })
           for (const x of drop) for (const f of photoFiles(assetBase(album, x.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
         }
-        const rejected = new Set(album.rejected ?? [])
-        for (const file of files) if (wanted.has(file.path) && !rejected.has(`${file.path}|${versionOf(file)}`)) work.push({ album, file, old: replace.get(file.path), fresh })
+        for (const file of files) if (wanted.has(file.path) && !rejected.has(`nas:${file.path}|${versionOf(file)}`)) work.push({ album, file, old: replace.get(file.path), fresh })
       }
       this.state.total = work.length
 
