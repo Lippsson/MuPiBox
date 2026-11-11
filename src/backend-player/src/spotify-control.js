@@ -939,6 +939,13 @@ function loadPlaytimeCheckpoint() {
     if (!fs.existsSync(PLAYTIME_CHECKPOINT_PATH)) return
     const data = JSON.parse(fs.readFileSync(PLAYTIME_CHECKPOINT_PATH, 'utf8'))
     const today = getLogicalDay(new Date(), readPlaytimeConfig().resetHour)
+    // (the photo time's count of the same day, and the last reset of it the parents asked for that was done)
+    photoTimeState.resetApplied = Number(data?.photoResetApplied) || 0
+    if (data && data.photoDate === today.dateStr) {
+      photoTimeState.date = data.photoDate
+      photoTimeState.dayKey = data.photoDayKey || today.dayKey
+      photoTimeState.usedSeconds = Number(data.photoUsedSeconds) || 0
+    }
     if (data && data.date === today.dateStr) {
       playtimeState.date = data.date
       playtimeState.dayKey = data.dayKey || today.dayKey
@@ -962,7 +969,7 @@ function writeCombinedWorking() {
   const inAllowOverride = now < ovr.allowUntil
 
   if (!ptCfg.enabled && !qhCfg.enabled && !inForceBlock && !inAllowOverride) {
-    fs.writeFile(PLAYTIME_WORKING_PATH, JSON.stringify({ enabled: false }), () => {})
+    fs.writeFile(PLAYTIME_WORKING_PATH, JSON.stringify({ enabled: false, photos: photoTimeStatus() }), () => {})
     return
   }
 
@@ -1020,6 +1027,7 @@ function writeCombinedWorking() {
       allowUntil: ovr.allowUntil,
       forceBlockUntil: ovr.forceBlockUntil,
     },
+    photos: photoTimeStatus(),
   }
   fs.writeFile(PLAYTIME_WORKING_PATH, JSON.stringify(payload), () => {})
 }
@@ -1029,6 +1037,10 @@ function writePlaytimeCheckpoint() {
     date: playtimeState.date,
     dayKey: playtimeState.dayKey,
     usedSeconds: playtimeState.usedSeconds,
+    photoDate: photoTimeState.date,
+    photoDayKey: photoTimeState.dayKey,
+    photoUsedSeconds: photoTimeState.usedSeconds,
+    photoResetApplied: photoTimeState.resetApplied,
   }
   // (a file of its own first, then renamed: a power cut mid-write left half a file, and the day's count began at 0)
   const tmp = `${PLAYTIME_CHECKPOINT_PATH}.tmp`
@@ -1043,6 +1055,109 @@ function writePlaytimeCheckpoint() {
   })
   playtimeLastCheckpointAt = Date.now()
   playtimeLastCheckpointSeconds = playtimeState.usedSeconds
+  photoLastCheckpointSeconds = photoTimeState.usedSeconds
+}
+
+// === Photo time ("Bildzeit", 5.1: Einstellungen › Fotoanzeige, Spielzeit › Bildzeit) ===
+// Counted while an album is open on the display (its grid, a picture, the slideshow - not the choice of albums, not
+// with the display off, not in the grid untouched for a while): the display says so every few seconds
+// (POST /photos/active); no word for 12 s and it is closed - a display that hangs does not count on.
+//   'separate': a day's account of its own (limit per weekday, +minutes / free / reset for today from the app); at 0
+//               only the photos pause - the display shows its pause page, listening goes on.
+//   'shared':   no account of its own: the photos use the listening time; a second with both counts once.
+// The day changes with the listening time's reset hour. Kept in the same checkpoint as the listening time.
+const PHOTO_DAY_DEFAULT_MINUTES = 20
+const PHOTO_ACTIVE_MS = 12_000
+const photoTimeState = { date: '', dayKey: 'mon', usedSeconds: 0, resetApplied: 0 }
+let photoActiveUntil = 0
+let photoLastCheckpointSeconds = -1
+
+function readPhotoTimeConfig() {
+  const raw = muPiBoxConfig?.photos || {}
+  const days = raw.dailyMinutes && typeof raw.dailyMinutes === 'object' ? raw.dailyMinutes : {}
+  const dailyMinutes = {}
+  for (const d of PLAYTIME_DAY_KEYS) {
+    const m = Number(days[d])
+    dailyMinutes[d] = Number.isInteger(m) && m >= 0 && m <= 1440 ? m : PHOTO_DAY_DEFAULT_MINUTES
+  }
+  const warn = Number(raw.warnMinutes)
+  const idle = Number(raw.idlePauseSeconds)
+  return {
+    enabled: raw.enabled === true,
+    mode: raw.limitMode === 'shared' ? 'shared' : 'separate',
+    limitEnabled: raw.limitEnabled !== false,
+    dailyMinutes,
+    warnMinutes: [0, 2, 5, 10].includes(warn) ? warn : 5,
+    idlePauseSeconds: [0, 60, 120, 300].includes(idle) ? idle : 120,
+    today: raw.today && typeof raw.today === 'object' ? raw.today : {},
+  }
+}
+
+const photosOpen = () => Date.now() < photoActiveUntil
+// the photos count on the listening time ('shared')
+function photosUseListeningTime() {
+  const cfg = readPhotoTimeConfig()
+  return cfg.enabled && cfg.mode === 'shared' && photosOpen()
+}
+
+function photoTimeTickStep() {
+  const cfg = readPhotoTimeConfig()
+  if (!cfg.enabled) {
+    photoActiveUntil = 0
+    return
+  }
+  const today = getLogicalDay(new Date(), readPlaytimeConfig().resetHour)
+  if (today.dateStr !== photoTimeState.date) {
+    photoTimeState.date = today.dateStr
+    photoTimeState.dayKey = today.dayKey
+    photoTimeState.usedSeconds = 0
+    writePlaytimeCheckpoint()
+  }
+  // "Zurücksetzen" in the app: today's count from 0 again (once per press - the time of the press is kept as done)
+  const reset = Number(cfg.today.reset) || 0
+  if (cfg.today.date === today.dateStr && reset > photoTimeState.resetApplied) {
+    photoTimeState.usedSeconds = 0
+    photoTimeState.resetApplied = reset
+    console.log(`${new Date().toLocaleString()}: [PhotoTime] Reset for today by the parents`)
+    writePlaytimeCheckpoint()
+  }
+  // (also with 'shared' and without a limit: the app shows how long the photos were looked at)
+  if (photosOpen()) photoTimeState.usedSeconds++
+  if (
+    Date.now() - playtimeLastCheckpointAt >= PLAYTIME_CHECKPOINT_INTERVAL_MS &&
+    photoTimeState.usedSeconds !== photoLastCheckpointSeconds
+  ) {
+    writePlaytimeCheckpoint()
+  }
+}
+
+// What the display and the app read (in /tmp/playtime.json, under photos)
+function photoTimeStatus() {
+  const cfg = readPhotoTimeConfig()
+  if (!cfg.enabled) return undefined
+  const t = cfg.today
+  const isToday = t.date === photoTimeState.date
+  const free = isToday && t.free === true
+  const bonusRaw = Number(t.bonusMinutes)
+  const bonusMinutes = isToday && Number.isFinite(bonusRaw) && bonusRaw > 0 ? Math.min(1440, bonusRaw) : 0
+  const limitMinutes = cfg.dailyMinutes[photoTimeState.dayKey] + bonusMinutes
+  const limited = cfg.mode === 'separate' && cfg.limitEnabled && !free
+  const remainingSeconds = limited ? Math.max(0, limitMinutes * 60 - photoTimeState.usedSeconds) : null
+  return {
+    enabled: true,
+    mode: cfg.mode,
+    limitEnabled: cfg.limitEnabled,
+    free,
+    limited,
+    limitMinutes,
+    bonusMinutes,
+    usedSeconds: photoTimeState.usedSeconds,
+    remainingSeconds,
+    state: limited && remainingSeconds <= 0 ? 'blocked' : 'normal',
+    counting: photosOpen(),
+    warnMinutes: cfg.warnMinutes,
+    idlePauseSeconds: cfg.idlePauseSeconds,
+  }
 }
 
 // Used by the catch-all to decide whether to refuse new play/resume/skip commands.
@@ -1311,8 +1426,9 @@ function playtimeTickStep() {
     writePlaytimeCheckpoint()
     console.log(`${now.toLocaleString()}: [Playtime] New day: ${today.dateStr} (${today.dayKey})`)
   }
-  // Increment counter only when actually playing
-  if (isActuallyPlaying()) {
+  // Increment counter only when actually playing - or an album is open on the display and the photos use the listening
+  // time (once, when both)
+  if (isActuallyPlaying() || photosUseListeningTime()) {
     playtimeState.usedSeconds++
   }
   // Effective limit = base + bonus (bonus auto-zeroes when its date doesn't match today)
@@ -1461,6 +1577,7 @@ function combinedTick() {
     console.log(`${new Date().toLocaleString()}: [Override] Force-block ended.`)
     forceBlockWasActive = false
   }
+  photoTimeTickStep()
   playtimeTickStep()
   quietHoursTickStep()
   writeCombinedWorking()
@@ -3562,6 +3679,12 @@ app.post('/display/reload-theme', (_req, res) => {
 })
 app.post('/display/reload-page', (_req, res) => {
   currentMeta.pageReloadAt = Date.now()
+  res.json({ ok: true })
+})
+
+// The display: an album is open and the photo time counts (every few seconds while it does - see photoTimeTickStep)
+app.post('/photos/active', (_req, res) => {
+  photoActiveUntil = readPhotoTimeConfig().enabled ? Date.now() + PHOTO_ACTIVE_MS : 0
   res.json({ ok: true })
 })
 

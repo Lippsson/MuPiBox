@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, type OnDestroy, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, inject, type OnDestroy, signal, untracked } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { ActivatedRoute } from '@angular/router'
 import {
@@ -20,6 +20,7 @@ import { KmStatusGroupComponent } from '../km-header/km-status-group.component'
 import { StatusComponent } from '../status/status.component'
 import { KmThemeService } from '../theme/km-theme.service'
 import { PhotoViewerComponent } from './photo-viewer.component'
+import { PhotoTimeService } from './photo-time.service'
 import { type PhotoAlbumDetail, PhotosService } from './photos.service'
 
 /**
@@ -77,7 +78,7 @@ import { type PhotoAlbumDetail, PhotosService } from './photos.service'
       }
     </ion-header>
 
-    <ion-content class="medialist-content photo-album-content" [scrollY]="false">
+    <ion-content class="medialist-content photo-album-content" [class.pa-going]="fading()" [scrollY]="false">
       <div class="pa-grid-scroll">
         <div class="pa-grid">
           @for (a of album()?.assets ?? []; track a.id; let i = $index) {
@@ -90,7 +91,7 @@ import { type PhotoAlbumDetail, PhotosService } from './photos.service'
     </ion-content>
 
     @if (viewer(); as v) {
-      <mupi-photo-viewer [albumId]="album()!.id" [assets]="album()!.assets" [start]="v.start" [autoplay]="v.play" [fromGrid]="!direct()" (closed)="viewerClosed()"></mupi-photo-viewer>
+      <mupi-photo-viewer [class.pa-going]="fading()" [albumId]="album()!.id" [assets]="album()!.assets" [start]="v.start" [autoplay]="v.play" [fromGrid]="!direct()" (closed)="viewerClosed()"></mupi-photo-viewer>
     }
   `,
   styles: `
@@ -166,6 +167,11 @@ import { type PhotoAlbumDetail, PhotosService } from './photos.service'
     .pa-cell:active {
       transform: scale(0.95);
     }
+    /* (the photo time is up: the album fades, then the pause page - handoff §8) */
+    .pa-going {
+      opacity: 0;
+      transition: opacity 400ms ease-out;
+    }
     .pa-cell img {
       display: block;
       width: 100%;
@@ -181,6 +187,9 @@ export class PhotoAlbumPage implements OnDestroy {
   protected readonly r2 = inject(KmThemeService).roundTwo
   private readonly nav = inject(NavController)
   private readonly outlet = inject(IonRouterOutlet, { optional: true })
+  private readonly time = inject(PhotoTimeService)
+  protected readonly fading = signal(false)
+  private fadeTimer = 0
 
   protected readonly album = signal<PhotoAlbumDetail | null>(null)
   /** "Album startet als Diashow": no grid, the slideshow at once - back from it goes to the albums */
@@ -204,6 +213,15 @@ export class PhotoAlbumPage implements OnDestroy {
 
   constructor() {
     addIcons({ arrowBackOutline, playOutline })
+    // the photo time is used up while the album shows: it fades out, back to the albums - the pause page there
+    effect(() => {
+      if (!this.time.blocked()) return
+      untracked(() => {
+        if (!this.visible || this.leaving || this.fading()) return
+        this.fading.set(true)
+        this.fadeTimer = window.setTimeout(() => this.back(), 400)
+      })
+    })
     inject(ActivatedRoute)
       .queryParamMap.pipe(takeUntilDestroyed())
       .subscribe((params) => {
@@ -243,6 +261,15 @@ export class PhotoAlbumPage implements OnDestroy {
 
   ionViewWillEnter(): void {
     this.visible = true
+    this.leaving = false
+    this.fading.set(false)
+    this.time.albumOpen.set(true)
+    this.time.shown.set(true)
+    // (opened while the photos pause - an old page, a link: straight back to the albums)
+    if (this.time.blocked()) {
+      window.setTimeout(() => this.back())
+      return
+    }
     this.visit++
     this.showPending = this.direct()
     window.clearInterval(this.checkTimer)
@@ -256,6 +283,10 @@ export class PhotoAlbumPage implements OnDestroy {
   // question still on its way is dropped)
   ionViewWillLeave(): void {
     this.visible = false
+    window.clearTimeout(this.fadeTimer)
+    this.time.albumOpen.set(false)
+    this.time.shown.set(false)
+    this.time.viewer.set(null)
     this.visit++
     this.showPending = false
     window.clearInterval(this.checkTimer)
@@ -266,6 +297,11 @@ export class PhotoAlbumPage implements OnDestroy {
 
   ngOnDestroy(): void {
     window.clearInterval(this.checkTimer)
+    window.clearTimeout(this.fadeTimer)
+    if (this.visible) {
+      this.time.albumOpen.set(false)
+      this.time.viewer.set(null)
+    }
     this.asking?.unsubscribe()
   }
 

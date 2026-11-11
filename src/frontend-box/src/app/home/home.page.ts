@@ -43,6 +43,7 @@ import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
 import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
 import { KmThemeService } from '../theme/km-theme.service'
 import { PhotoAlbumsComponent } from '../photos/photo-albums.component'
+import { PhotoTimeService } from '../photos/photo-time.service'
 import { type PhotoAlbumSummary, PhotosService } from '../photos/photos.service'
 
 /** a tab of the start page: a list of the library, or the photo display's albums */
@@ -110,6 +111,7 @@ export class HomePage extends SwiperIonicEventsHelper {
   private readonly extensions = inject(ExtensionHostService)
   // the photo display (5.1): its tab right of radio, while it is switched on and at least one album is shown here
   protected readonly photos = inject(PhotosService)
+  private readonly photoTime = inject(PhotoTimeService)
   protected readonly headerCategories = computed<{ key: string; icon?: string; src?: string }[]>(() => [
     ...this.visibleCategories(),
     ...(this.photos.available() ? [{ key: 'photos', src: 'assets/photos.svg' }] : []),
@@ -296,18 +298,33 @@ export class HomePage extends SwiperIonicEventsHelper {
   // the start page shows again (back from an album, a list or the player): the photo albums are asked for again
   override ionViewWillEnter(): void {
     this.pageVisible = true
+    this.pageShown.set(true)
     super.ionViewWillEnter()
     this.photos.refresh()
   }
 
   override ionViewWillLeave(): void {
     this.pageVisible = false
+    this.pageShown.set(false)
     super.ionViewWillLeave()
   }
 
   // the list's swiper is made afresh when the tab "Fotos" gives way to a list: it has not had the page's "it comes"
   // (Ionic sends it once per visit) and would stay empty - it gets it here
   private pageVisible = false
+  // (the same as a signal: the photo time's chip shows on the tab "Fotos" while this page is on the screen)
+  private readonly pageShown = signal(false)
+  private readonly photoTabShown = effect(() => {
+    const on = this.pageShown() && this.category() === 'photos'
+    untracked(() => this.photoTime.shown.set(on))
+  })
+
+  // the photos pause (the photo time is used up): "Zu den Hörspielen" - that tab, or the first one there is
+  protected photosToListening(): void {
+    const visible = this.visibleCategories()
+    const tab = visible.find((c) => c.key === 'audiobook') ?? visible[0]
+    if (tab) this.category.set(tab.key)
+  }
   private readonly swiperAfterPhotos = effect(() => {
     const swiper = this.swiperComponent()
     if (swiper && untracked(() => this.pageVisible)) untracked(() => swiper.ionViewWillEnter())

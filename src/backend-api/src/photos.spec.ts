@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ordered } from './app-api/photos/albums'
-import { applyPhotoSettings, PHOTO_DEFAULTS, photoSettings } from './app-api/photos/settings'
+import { applyPhotoSettings, applyPhotoTimeAction, logicalDate, PHOTO_DEFAULTS, photoSettings } from './app-api/photos/settings'
 import type { PhotoAsset } from './app-api/photos/store'
 
 test('photo settings: off with its defaults on a box from before, broken values give the default', () => {
@@ -32,4 +32,41 @@ test('photo order: newest first, by the day taken (else the day it came), shuffl
   assert.deepEqual(ordered(list, 'taken').map((x) => x.id), ['c', 'a', 'b'])
   assert.deepEqual(ordered(list, 'shuffle').map((x) => x.id).sort(), ['a', 'b', 'c'])
   assert.deepEqual(list.map((x) => x.id), ['a', 'b', 'c'])
+})
+
+test('photo time settings: mode, limit, minutes per weekday, warning and idle pause - checked, broken ones the default', () => {
+  const s = photoSettings({ photos: { limitMode: 'shared', limitEnabled: false, dailyMinutes: { mon: 0, tue: 45, wed: -1, thu: '30' }, warnMinutes: 3, idlePauseSeconds: 300 } })
+  assert.equal(s.limitMode, 'shared')
+  assert.equal(s.limitEnabled, false)
+  assert.deepEqual(s.dailyMinutes, { mon: 0, tue: 45, wed: 20, thu: 30, fri: 20, sat: 20, sun: 20 })
+  assert.equal(s.warnMinutes, 5)
+  assert.equal(s.idlePauseSeconds, 300)
+  const target: Record<string, unknown> = { dailyMinutes: { mon: 10 } }
+  assert.equal(applyPhotoSettings(target, { limitMode: 'separate', dailyMinutes: { sat: 30 }, warnMinutes: 0, idlePauseSeconds: 60, limitEnabled: true }), null)
+  assert.deepEqual(target, { dailyMinutes: { mon: 10, sat: 30 }, limitMode: 'separate', warnMinutes: 0, idlePauseSeconds: 60, limitEnabled: true })
+  const before = JSON.stringify(target)
+  assert.match(String(applyPhotoSettings(target, { dailyMinutes: { sat: 1441 } })), /dailyMinutes/)
+  assert.match(String(applyPhotoSettings(target, { dailyMinutes: { someday: 5 } })), /weekday/)
+  assert.match(String(applyPhotoSettings(target, { limitMode: 'both' })), /limitMode/)
+  assert.match(String(applyPhotoSettings(target, { warnMinutes: 3 })), /warnMinutes/)
+  assert.match(String(applyPhotoSettings(target, { idlePauseSeconds: 30 })), /idlePauseSeconds/)
+  assert.equal(JSON.stringify(target), before)
+})
+
+test('photo time actions: today by the reset hour, minutes add up, free, reset keeps them; another day starts anew', () => {
+  const now = new Date(2026, 10, 11, 2, 30)
+  assert.equal(logicalDate(now, 4), '2026-11-10')
+  assert.equal(logicalDate(now, 0), '2026-11-11')
+  const cfg: Record<string, unknown> = { playtimeLimit: { resetHour: 4 }, photos: { enabled: true, today: { date: '2026-11-09', free: true } } }
+  assert.equal(applyPhotoTimeAction(cfg, 'extend', 10, now), null)
+  assert.equal(applyPhotoTimeAction(cfg, 'extend', 5, now), null)
+  assert.deepEqual((cfg.photos as Record<string, unknown>).today, { date: '2026-11-10', bonusMinutes: 15 })
+  assert.equal(applyPhotoTimeAction(cfg, 'free', undefined, now), null)
+  assert.equal(applyPhotoTimeAction(cfg, 'reset', undefined, now), null)
+  assert.deepEqual((cfg.photos as Record<string, unknown>).today, { date: '2026-11-10', bonusMinutes: 15, free: true, reset: now.getTime() })
+  assert.equal((cfg.photos as Record<string, unknown>).enabled, true)
+  const before = JSON.stringify(cfg)
+  assert.match(String(applyPhotoTimeAction(cfg, 'extend', 0, now)), /minutes/)
+  assert.match(String(applyPhotoTimeAction(cfg, 'more', 5, now)), /action/)
+  assert.equal(JSON.stringify(cfg), before)
 })

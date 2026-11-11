@@ -11,6 +11,7 @@ import {
   untracked,
 } from '@angular/core'
 import { DisplayTextsService } from '../display-texts.service'
+import { PhotoTimeService } from './photo-time.service'
 import { StatusComponent } from '../status/status.component'
 import { type PhotoAsset, PhotosService } from './photos.service'
 
@@ -327,6 +328,7 @@ type Speed = (typeof SPEEDS)[number]
 export class PhotoViewerComponent implements OnDestroy {
   protected readonly photos = inject(PhotosService)
   protected readonly texts = inject(DisplayTextsService)
+  private readonly time = inject(PhotoTimeService)
 
   readonly albumId = input.required<string>()
   readonly assets = input.required<PhotoAsset[]>()
@@ -366,6 +368,11 @@ export class PhotoViewerComponent implements OnDestroy {
   private started = false
 
   constructor() {
+    // the photo time: the full view counts also untouched; its chip only with the buttons shown
+    effect(() => {
+      const controls = this.controls()
+      untracked(() => this.time.viewer.set({ controls }))
+    })
     effect(() => {
       // (once, when the inputs are there)
       if (this.started) return
@@ -387,6 +394,7 @@ export class PhotoViewerComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.time.viewer.set(null)
     window.clearTimeout(this.advanceTimer)
     window.clearTimeout(this.hideTimer)
     window.clearTimeout(this.dropTimer)

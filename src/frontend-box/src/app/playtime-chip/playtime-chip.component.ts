@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, Signal } from '@a
 import { IonIcon } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons'
 import { timeOutline } from 'ionicons/icons'
+import { PhotoTimeService } from '../photos/photo-time.service'
 import { PlaytimeService } from '../playtime.service'
 import { KmThemeService } from '../theme/km-theme.service'
 
@@ -16,6 +17,8 @@ type ChipLevel = 'normal' | 'warning' | 'critical'
 })
 export class PlaytimeChipComponent {
   private playtimeService = inject(PlaytimeService)
+  // (on the photos' screens the photo time's chip stands here instead)
+  private photoTime = inject(PhotoTimeService)
   // km themes and coverflow: the chip of design round 2
   protected readonly r2 = inject(KmThemeService).roundTwo
 
@@ -23,7 +26,7 @@ export class PlaytimeChipComponent {
     const s = this.playtimeService.status()
     // Show only when playtime is enabled AND nothing is restricting playback
     // (combined state is 'normal'). Quiet-only setups have no countdown to show.
-    return s.enabled === true && s.playtime.enabled && s.state === 'normal'
+    return s.enabled === true && s.playtime.enabled && s.state === 'normal' && !this.photoTime.chipShown()
   })
 
   protected readonly remainingMinutes: Signal<number> = computed(() => {

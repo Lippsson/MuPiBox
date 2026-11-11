@@ -1667,7 +1667,7 @@ function errorText(r, fallback = 'Das hat nicht geklappt') {
 
 /* Spielzeit: ring, instant actions, sleep timer, daily limits, quiet rules */
 
-const caps = { config: null, status: null, sleep: null, listened: null }
+const caps = { config: null, status: null, sleep: null, listened: null, photos: null }
 
 async function saveCaps(body, done = 'Gespeichert') {
   const r = await api(`${API}/caps-config`, { method: 'POST', body })
@@ -1688,7 +1688,16 @@ async function listenedToday() {
 }
 
 async function loadCaps() {
-  const [cfg, st, sleep, power] = await Promise.all([api(`${API}/caps-config`), api('/api/playtime'), api(`${API}/sleeptimer`), api(`${API}/power-config`)])
+  const [cfg, st, sleep, power, photos] = await Promise.all([
+    api(`${API}/caps-config`),
+    api('/api/playtime'),
+    api(`${API}/sleeptimer`),
+    api(`${API}/power-config`),
+    api(`${API}/photos/settings`),
+  ])
+  // (the picture time's card: only while the photo display is on)
+  if (photos.ok && photos.body?.settings?.enabled) setPhotoTimeValues(photos.body.settings)
+  else caps.photos = null
   // (the card "Ausschalten": the same values as the pages Automatisch ausschalten and Display - wish of hyperbit, all
   // the times in one place)
   if (power.ok) {
@@ -1721,6 +1730,7 @@ async function refreshPlaytime() {
   await listenedToday()
   drawRing()
   drawSleep()
+  drawPhotoTime()
 }
 
 // The ring of today: minutes left of the limit, plus what else holds the box right now
@@ -1807,6 +1817,109 @@ function capMinutes() {
 
 async function capAction(path, minutes, done) {
   const r = await api(path, { method: 'POST', body: { minutes } })
+  toast(r.ok ? done : errorText(r), r.ok ? 'ok' : 'info')
+  if (r.ok) setTimeout(() => refreshPlaytime(), 1500)
+}
+
+/* the picture time ("Bildzeit", 5.1): a card of its own on this page while the photo display is on - an account of
+   its own (limit per weekday, +10 min / free / reset for today) or counted on the listening time; the warning on the
+   display and the pause of the time while the grid lies untouched. The player counts (see spotify-control.js). */
+
+const PHOTO_WARN = [
+  ['Aus', 0],
+  ['2 Minuten vorher', 2],
+  ['5 Minuten vorher', 5],
+  ['10 Minuten vorher', 10],
+]
+const PHOTO_IDLE = [
+  ['Aus', 0],
+  ['Nach 1 Minute', 60],
+  ['Nach 2 Minuten', 120],
+  ['Nach 5 Minuten', 300],
+]
+const PHOTO_MODE = [
+  ['Eigenes Limit', 'separate'],
+  ['Zählt auf die Hörzeit', 'shared'],
+]
+const labelOf = (list, v, fallback) => (list.find(([, x]) => x === v) ?? list.find(([, x]) => x === fallback))[0]
+
+function setPhotoTimeValues(s) {
+  caps.photos = s
+  state.values.set('phMode', labelOf(PHOTO_MODE, s.limitMode, 'separate'))
+  state.values.set('phLimitOn', s.limitEnabled !== false)
+  DAY_KEYS.forEach((d, i) => state.values.set(`phl${i}`, Number(s.dailyMinutes?.[d] ?? 20)))
+  state.values.set('phWarn', labelOf(PHOTO_WARN, s.warnMinutes, 5))
+  state.values.set('phIdle', labelOf(PHOTO_IDLE, s.idlePauseSeconds, 120))
+}
+
+function photoTimeSection() {
+  const shared = caps.photos?.limitMode === 'shared'
+  return {
+    title: 'Bildzeit',
+    help: 'Bildzeit zählt nur, wenn am Display ein Album offen ist.',
+    items: [
+      { type: 'html', html: '<div id="ph-time"></div>' },
+      { type: 'seg', label: 'Bildzeit', key: 'phMode', options: PHOTO_MODE.map(([l]) => l) },
+      ...(shared
+        ? [{ type: 'note', text: 'Es gibt kein eigenes Bild-Limit. Ist die Hörzeit aufgebraucht, machen auch die Fotos Pause.' }]
+        : [
+            { type: 'toggle', label: 'Eigenes Tageslimit', key: 'phLimitOn', help: 'Aus: keine Grenze für Fotos.' },
+            {
+              type: 'buttons',
+              dep: 'phLimitOn',
+              buttons: [
+                ['+10 min', 'accent', 'phExtend'],
+                ['Heute frei', 'ghost', 'phFree'],
+                ['Zurücksetzen', 'ghost', 'phReset'],
+              ],
+            },
+            { type: 'days', dep: 'phLimitOn', keyPrefix: 'phl', default: [20, 20, 20, 20, 20, 20, 20] },
+          ]),
+      { type: 'select', label: 'Warnung vor Ablauf', key: 'phWarn', options: PHOTO_WARN.map(([l]) => l) },
+      {
+        type: 'select',
+        label: 'Pause bei Leerlauf im Raster',
+        key: 'phIdle',
+        options: PHOTO_IDLE.map(([l]) => l),
+        help: 'Liegt am Display ein Album offen und niemand tippt, zählt die Zeit nicht weiter.',
+      },
+    ],
+  }
+}
+
+// Today's picture time: what is left, a bar, what was used (from the player's status)
+function drawPhotoTime() {
+  const box = $('#ph-time')
+  if (!box) return
+  const p = caps.status?.photos
+  if (!p) {
+    box.innerHTML = ''
+    return
+  }
+  const used = Math.floor((p.usedSeconds ?? 0) / 60)
+  let html
+  if (p.mode === 'shared') html = `<p class="ring-line">${esc(tr(`Heute ${used} min Bilder angeschaut – sie zählen auf die Hörzeit.`))}</p>`
+  else if (!p.limitEnabled) html = `<p class="ring-line">${esc(tr(`Heute ${used} min Bilder angeschaut – ohne Grenze.`))}</p>`
+  else if (p.free) html = `<p class="ring-line">${esc(tr(`Heute frei – ${used} min Bilder angeschaut.`))}</p>`
+  else {
+    const left = Math.max(0, Math.ceil((p.remainingSeconds ?? 0) / 60))
+    const pct = p.limitMinutes > 0 ? Math.min(100, (used / p.limitMinutes) * 100) : 100
+    html = `<div class="bar"><div class="slider-head"><b>${esc(tr(`${left} min heute übrig`))}</b>${p.state === 'blocked' ? `<span class="chip danger">${esc(tr('Aufgebraucht'))}</span>` : ''}</div>
+      <div class="track"><i style="--w:${pct}%"></i></div><small class="help">${esc(tr(`${used} von ${p.limitMinutes} Minuten genutzt`))}</small></div>`
+  }
+  box.innerHTML = html
+}
+
+async function savePhotoTime(patch, done = 'Gespeichert') {
+  const r = await api(`${API}/photos/settings`, { method: 'POST', body: patch })
+  toast(r.ok ? done : 'Nicht gespeichert – bitte noch einmal versuchen', r.ok ? 'ok' : 'info')
+  if (r.ok && r.body?.settings) caps.photos = r.body.settings
+  if (r.ok) setTimeout(() => refreshPlaytime(), 1500)
+  return r.ok
+}
+
+async function photoTimeAction(action, done) {
+  const r = await api(`${API}/photos/time`, { method: 'POST', body: action === 'extend' ? { action, minutes: 10 } : { action } })
   toast(r.ok ? done : errorText(r), r.ok ? 'ok' : 'info')
   if (r.ok) setTimeout(() => refreshPlaytime(), 1500)
 }
@@ -12817,10 +12930,18 @@ const CONTROLLERS = {
   spielzeit: {
     load: loadCaps,
     // ("Display aus nach" in the steps of its own page)
-    sections: (page) => page.sections.map((sec) => (sec.title === 'Ausschalten' ? { ...sec, items: sec.items.map((it) => (it.key === 'dispOff' ? { ...it, stops: DISPLAY_OFF_STOPS } : it)) } : sec)),
+    sections: (page) => {
+      const list = page.sections.map((sec) => (sec.title === 'Ausschalten' ? { ...sec, items: sec.items.map((it) => (it.key === 'dispOff' ? { ...it, stops: DISPLAY_OFF_STOPS } : it)) } : sec))
+      if (!caps.photos) return list
+      // the picture time after the daily limits; the quiet times say that they hold the photos too
+      const at = list.findIndex((sec) => sec.title === 'Tageslimits')
+      list.splice(at < 0 ? list.length : at + 1, 0, photoTimeSection())
+      return list.map((sec) => (sec.title === 'Ruhezeiten' ? { ...sec, help: `${sec.help} ${tr('Während einer Ruhezeit sind auch die Fotos gesperrt.')}` } : sec))
+    },
     mount(root) {
       drawRing()
       drawSleep()
+      drawPhotoTime()
       bonusButton(root)
       every(20000, refreshPlaytime)
     },
@@ -12847,6 +12968,19 @@ const CONTROLLERS = {
           return saveCaps({ playtimeLimit: { graceMaxMinutes: graceMaxOf(v) } }, `Höchstens ${v} weiter`)
         case 'quietGraceMax':
           return saveCaps({ quietHours: { graceMaxMinutes: graceMaxOf(v) } }, `Höchstens ${v} weiter`)
+        case 'phMode': {
+          const mode = PHOTO_MODE.find(([l]) => l === v)?.[1] ?? 'separate'
+          const ok = await savePhotoTime({ limitMode: mode }, mode === 'shared' ? 'Bildzeit zählt auf die Hörzeit' : 'Bildzeit mit eigenem Limit')
+          // (the card shows what belongs to the mode)
+          if (ok) renderPage(currentPage(), false)
+          return ok
+        }
+        case 'phLimitOn':
+          return savePhotoTime({ limitEnabled: v }, v ? 'Bildzeit-Limit an' : 'Bildzeit ohne Grenze')
+        case 'phWarn':
+          return savePhotoTime({ warnMinutes: PHOTO_WARN.find(([l]) => l === v)?.[1] ?? 5 })
+        case 'phIdle':
+          return savePhotoTime({ idlePauseSeconds: PHOTO_IDLE.find(([l]) => l === v)?.[1] ?? 120 })
         case 'resetHour': {
           const h = Number(v)
           // (an emptied field is no "0:00")
@@ -12858,6 +12992,11 @@ const CONTROLLERS = {
           }
           return saveCaps({ playtimeLimit: { resetHour: h } }, `Neuer Tag beginnt um ${h}:00 Uhr`)
         }
+      }
+      const phDay = /^phl([0-6])$/.exec(key)
+      if (phDay) {
+        const i = Number(phDay[1])
+        return savePhotoTime({ dailyMinutes: { [DAY_KEYS[i]]: Number(v) } }, `${DAY_LONG[i]}: ${Number(v) === 0 ? tr('keine Bilder') : `${v} min`}`)
       }
       const day = /^lim([0-6])$/.exec(key)
       if (day) {
@@ -12888,6 +13027,9 @@ const CONTROLLERS = {
       sheet(arg, _label, page) {
         if (arg === 'rule-new') openRule(null, page)
       },
+      phExtend: () => photoTimeAction('extend', '+10 Minuten Bildzeit für heute'),
+      phFree: () => photoTimeAction('free', 'Bildzeit heute frei'),
+      phReset: () => confirmSheet('Bildzeit zurücksetzen?', 'Die heute schon angeschauten Minuten zählen nicht mehr, die Bildzeit beginnt von vorn.', () => photoTimeAction('reset', 'Bildzeit zurückgesetzt')),
     },
     byLabel: {
       'Sperren aufheben'() {

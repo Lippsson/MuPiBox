@@ -8,7 +8,7 @@ import type { Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
 import { registerPhotoAlbumRoutes } from './albums'
-import { applyPhotoSettings, photoSettings } from './settings'
+import { applyPhotoSettings, applyPhotoTimeAction, photoSettings } from './settings'
 
 export interface PhotoDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -96,6 +96,23 @@ export function registerPhotoRoutes(router: Router, deps: PhotoDeps): void {
     const cfg = deps.getMupiboxConfig()
     installWhatIsNeeded(cfg)
     res.json(state(cfg))
+  })
+
+  /**
+   * POST /api/app/photos/time {action: extend|free|reset, minutes?} - today's photo time (Spielzeit › Bildzeit): the
+   * player takes it within a second; the answer is the settings again
+   */
+  router.post('/photos/time', requireSession, requireCsrf, async (req, res) => {
+    let error: string | null = null
+    try {
+      await deps.updateMupiboxConfig((cfg) => {
+        error = applyPhotoTimeAction(cfg as Record<string, unknown>, req.body?.action, req.body?.minutes)
+      })
+    } catch {
+      return void res.status(500).json({ error: 'config_not_saved' })
+    }
+    if (error) return void res.status(400).json({ error })
+    res.json({ ok: true })
   })
 
   /** POST /api/app/photos/install - try again (a program could not be installed: no internet then) */

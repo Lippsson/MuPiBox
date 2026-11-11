@@ -78,7 +78,16 @@
         "photosMedium": "medium",
         "photosFast": "fast",
         "photosFill": "Show picture large",
-        "photosFit": "Show whole picture"
+        "photosFit": "Show whole picture",
+        "photosTimeRunning": "Picture time left: {n} min, counting",
+        "photosTimePaused": "Picture time left: {n} min, paused",
+        "photosWarn": "{n} more minutes of pictures",
+        "photosWarnOne": "1 more minute of pictures",
+        "photosPauseTitle": "The pictures are taking a break",
+        "photosPauseText": "Picture time is over for today. Audio books and music still work.",
+        "photosToListening": "To the audio books",
+        "photosParents": "Parents",
+        "photosParentsHint": "More picture time comes from the parents' app."
       }
     },
     "de": {
@@ -158,7 +167,16 @@
         "photosMedium": "mittel",
         "photosFast": "schnell",
         "photosFill": "Bild groß zeigen",
-        "photosFit": "Ganzes Bild zeigen"
+        "photosFit": "Ganzes Bild zeigen",
+        "photosTimeRunning": "Bildzeit übrig: {n} min, läuft",
+        "photosTimePaused": "Bildzeit übrig: {n} min, pausiert",
+        "photosWarn": "Noch {n} Minuten Bilder",
+        "photosWarnOne": "Noch 1 Minute Bilder",
+        "photosPauseTitle": "Die Bilder machen Pause",
+        "photosPauseText": "Für heute ist die Bildzeit um. Hörspiele und Musik gehen noch.",
+        "photosToListening": "Zu den Hörspielen",
+        "photosParents": "Eltern",
+        "photosParentsHint": "Mehr Bildzeit gibt es über die Eltern-App."
       }
     },
     "fr": {
@@ -224,7 +242,16 @@
         "winampNoSkinHint": "Téléverse un skin .wsz dans l'appli des parents : Réglages › Apparence › Skin Winamp",
         "photosSlideshow": "Diaporama",
         "photosCount": "{n} images",
-        "photosCountOne": "1 image"
+        "photosCountOne": "1 image",
+        "photosTimeRunning": "Temps d'images restant : {n} min, en cours",
+        "photosTimePaused": "Temps d'images restant : {n} min, en pause",
+        "photosWarn": "Encore {n} minutes d’images",
+        "photosWarnOne": "Encore 1 minute d’images",
+        "photosPauseTitle": "Les images font une pause",
+        "photosPauseText": "Le temps d’images est fini pour aujourd’hui. Les histoires et la musique marchent encore.",
+        "photosToListening": "Vers les histoires",
+        "photosParents": "Parents",
+        "photosParentsHint": "Plus de temps d’images via l’application des parents."
       }
     },
     "es": {
@@ -290,7 +317,16 @@
         "winampNoSkinHint": "Sube un skin .wsz en la app de los padres: Ajustes › Apariencia › Skin de Winamp",
         "photosSlideshow": "Presentación",
         "photosCount": "{n} imágenes",
-        "photosCountOne": "1 imagen"
+        "photosCountOne": "1 imagen",
+        "photosTimeRunning": "Tiempo de fotos restante: {n} min, contando",
+        "photosTimePaused": "Tiempo de fotos restante: {n} min, en pausa",
+        "photosWarn": "Quedan {n} minutos de fotos",
+        "photosWarnOne": "Queda 1 minuto de fotos",
+        "photosPauseTitle": "Las fotos descansan",
+        "photosPauseText": "Por hoy se acabó el tiempo de fotos. Los cuentos y la música siguen.",
+        "photosToListening": "A los cuentos",
+        "photosParents": "Padres",
+        "photosParentsHint": "Más tiempo de fotos desde la app de los padres."
       }
     },
     "it": {
@@ -356,7 +392,16 @@
         "winampNoSkinHint": "Carica una skin .wsz nell'app dei genitori: Impostazioni › Aspetto › Skin Winamp",
         "photosSlideshow": "Presentazione",
         "photosCount": "{n} immagini",
-        "photosCountOne": "1 immagine"
+        "photosCountOne": "1 immagine",
+        "photosTimeRunning": "Tempo foto rimasto: {n} min, in corso",
+        "photosTimePaused": "Tempo foto rimasto: {n} min, in pausa",
+        "photosWarn": "Ancora {n} minuti di foto",
+        "photosWarnOne": "Ancora 1 minuto di foto",
+        "photosPauseTitle": "Le foto fanno una pausa",
+        "photosPauseText": "Per oggi il tempo delle foto è finito. Racconti e musica vanno ancora.",
+        "photosToListening": "Ai racconti",
+        "photosParents": "Genitori",
+        "photosParentsHint": "Altro tempo foto dall’app dei genitori."
       }
     },
     "nl": {
@@ -422,7 +467,16 @@
         "winampNoSkinHint": "Upload een .wsz-skin in de ouder-app: Instellingen › Uiterlijk › Winamp-skin",
         "photosSlideshow": "Diavoorstelling",
         "photosCount": "{n} foto’s",
-        "photosCountOne": "1 foto"
+        "photosCountOne": "1 foto",
+        "photosTimeRunning": "Fototijd over: {n} min, loopt",
+        "photosTimePaused": "Fototijd over: {n} min, gepauzeerd",
+        "photosWarn": "Nog {n} minuten foto’s",
+        "photosWarnOne": "Nog 1 minuut foto’s",
+        "photosPauseTitle": "De foto’s nemen pauze",
+        "photosPauseText": "De fototijd is voor vandaag om. Luisterboeken en muziek gaan nog.",
+        "photosToListening": "Naar de luisterboeken",
+        "photosParents": "Ouders",
+        "photosParentsHint": "Meer fototijd via de ouder-app."
       }
     },
     "sv": {
@@ -488,7 +542,16 @@
         "winampNoSkinHint": "Ladda upp ett .wsz-skal i föräldraappen: Inställningar › Utseende › Winamp-skal",
         "photosSlideshow": "Bildspel",
         "photosCount": "{n} bilder",
-        "photosCountOne": "1 bild"
+        "photosCountOne": "1 bild",
+        "photosTimeRunning": "Bildtid kvar: {n} min, räknas",
+        "photosTimePaused": "Bildtid kvar: {n} min, pausad",
+        "photosWarn": "{n} minuter bilder kvar",
+        "photosWarnOne": "1 minut bilder kvar",
+        "photosPauseTitle": "Bilderna tar paus",
+        "photosPauseText": "Bildtiden är slut för i dag. Ljudböcker och musik går fortfarande.",
+        "photosToListening": "Till ljudböckerna",
+        "photosParents": "Föräldrar",
+        "photosParentsHint": "Mer bildtid finns i föräldraappen."
       }
     },
     "da": {
@@ -554,7 +617,16 @@
         "winampNoSkinHint": "Upload et .wsz-skin i forældre-appen: Indstillinger › Udseende › Winamp-skin",
         "photosSlideshow": "Diasshow",
         "photosCount": "{n} billeder",
-        "photosCountOne": "1 billede"
+        "photosCountOne": "1 billede",
+        "photosTimeRunning": "Billedtid tilbage: {n} min, tæller",
+        "photosTimePaused": "Billedtid tilbage: {n} min, på pause",
+        "photosWarn": "{n} minutter billeder tilbage",
+        "photosWarnOne": "1 minut billeder tilbage",
+        "photosPauseTitle": "Billederne holder pause",
+        "photosPauseText": "Billedtiden er slut for i dag. Lydbøger og musik virker stadig.",
+        "photosToListening": "Til lydbøgerne",
+        "photosParents": "Forældre",
+        "photosParentsHint": "Mere billedtid fås i forældre-appen."
       }
     },
     "nb": {
@@ -620,7 +692,16 @@
         "winampNoSkinHint": "Last opp en .wsz-skin i foreldreappen: Innstillinger › Utseende › Winamp-skin",
         "photosSlideshow": "Lysbildefremvisning",
         "photosCount": "{n} bilder",
-        "photosCountOne": "1 bilde"
+        "photosCountOne": "1 bilde",
+        "photosTimeRunning": "Bildetid igjen: {n} min, teller",
+        "photosTimePaused": "Bildetid igjen: {n} min, på pause",
+        "photosWarn": "{n} minutter med bilder igjen",
+        "photosWarnOne": "1 minutt med bilder igjen",
+        "photosPauseTitle": "Bildene tar pause",
+        "photosPauseText": "Bildetiden er over for i dag. Lydbøker og musikk går fortsatt.",
+        "photosToListening": "Til lydbøkene",
+        "photosParents": "Foreldre",
+        "photosParentsHint": "Mer bildetid får du i foreldreappen."
       }
     },
     "fi": {
@@ -686,7 +767,16 @@
         "winampNoSkinHint": "Lataa .wsz-ulkoasu vanhempien sovelluksessa: Asetukset › Ulkoasu › Winamp-ulkoasu",
         "photosSlideshow": "Diaesitys",
         "photosCount": "{n} kuvaa",
-        "photosCountOne": "1 kuva"
+        "photosCountOne": "1 kuva",
+        "photosTimeRunning": "Kuva-aikaa jäljellä: {n} min, kuluu",
+        "photosTimePaused": "Kuva-aikaa jäljellä: {n} min, tauolla",
+        "photosWarn": "Kuvia vielä {n} minuuttia",
+        "photosWarnOne": "Kuvia vielä 1 minuutti",
+        "photosPauseTitle": "Kuvat pitävät taukoa",
+        "photosPauseText": "Kuva-aika on tältä päivältä lopussa. Äänikirjat ja musiikki toimivat vielä.",
+        "photosToListening": "Äänikirjoihin",
+        "photosParents": "Vanhemmat",
+        "photosParentsHint": "Lisää kuva-aikaa saa vanhempien sovelluksesta."
       }
     },
     "pl": {
@@ -752,7 +842,16 @@
         "winampNoSkinHint": "Prześlij skórkę .wsz w aplikacji dla rodziców: Ustawienia › Wygląd › Skórka Winamp",
         "photosSlideshow": "Pokaz slajdów",
         "photosCount": "Zdjęcia: {n}",
-        "photosCountOne": "1 zdjęcie"
+        "photosCountOne": "1 zdjęcie",
+        "photosTimeRunning": "Pozostały czas zdjęć: {n} min, liczy się",
+        "photosTimePaused": "Pozostały czas zdjęć: {n} min, wstrzymany",
+        "photosWarn": "Jeszcze {n} min zdjęć",
+        "photosWarnOne": "Jeszcze 1 minuta zdjęć",
+        "photosPauseTitle": "Zdjęcia mają przerwę",
+        "photosPauseText": "Na dziś czas zdjęć się skończył. Słuchowiska i muzyka nadal działają.",
+        "photosToListening": "Do słuchowisk",
+        "photosParents": "Rodzice",
+        "photosParentsHint": "Więcej czasu zdjęć daje aplikacja rodziców."
       }
     },
     "pt": {
@@ -818,7 +917,16 @@
         "winampNoSkinHint": "Envia um skin .wsz na app dos pais: Definições › Aparência › Skin do Winamp",
         "photosSlideshow": "Apresentação",
         "photosCount": "{n} imagens",
-        "photosCountOne": "1 imagem"
+        "photosCountOne": "1 imagem",
+        "photosTimeRunning": "Tempo de fotos restante: {n} min, a contar",
+        "photosTimePaused": "Tempo de fotos restante: {n} min, em pausa",
+        "photosWarn": "Mais {n} minutos de fotos",
+        "photosWarnOne": "Mais 1 minuto de fotos",
+        "photosPauseTitle": "As fotos fazem uma pausa",
+        "photosPauseText": "O tempo de fotos acabou por hoje. Histórias e música ainda funcionam.",
+        "photosToListening": "Para as histórias",
+        "photosParents": "Pais",
+        "photosParentsHint": "Mais tempo de fotos na app dos pais."
       }
     },
     "tr": {
@@ -884,7 +992,16 @@
         "winampNoSkinHint": "Ebeveyn uygulamasında bir .wsz kaplaması yükle: Ayarlar › Görünüm › Winamp kaplaması",
         "photosSlideshow": "Slayt gösterisi",
         "photosCount": "{n} resim",
-        "photosCountOne": "1 resim"
+        "photosCountOne": "1 resim",
+        "photosTimeRunning": "Kalan resim zamanı: {n} dk, sayılıyor",
+        "photosTimePaused": "Kalan resim zamanı: {n} dk, duraklatıldı",
+        "photosWarn": "{n} dakika daha resim",
+        "photosWarnOne": "1 dakika daha resim",
+        "photosPauseTitle": "Resimler mola veriyor",
+        "photosPauseText": "Bugünlük resim zamanı bitti. Sesli kitaplar ve müzik hâlâ çalışıyor.",
+        "photosToListening": "Sesli kitaplara",
+        "photosParents": "Ebeveynler",
+        "photosParentsHint": "Daha fazla resim zamanı ebeveyn uygulamasından."
       }
     },
     "uk": {
@@ -950,7 +1067,16 @@
         "winampNoSkinHint": "Завантажте скін .wsz у застосунку для батьків: Налаштування › Вигляд › Скін Winamp",
         "photosSlideshow": "Слайд-шоу",
         "photosCount": "Зображень: {n}",
-        "photosCountOne": "1 зображення"
+        "photosCountOne": "1 зображення",
+        "photosTimeRunning": "Залишок часу фото: {n} хв, рахується",
+        "photosTimePaused": "Залишок часу фото: {n} хв, на паузі",
+        "photosWarn": "Ще {n} хв фото",
+        "photosWarnOne": "Ще 1 хвилина фото",
+        "photosPauseTitle": "Фото відпочивають",
+        "photosPauseText": "Час фото на сьогодні закінчився. Аудіокниги й музика ще працюють.",
+        "photosToListening": "До аудіокниг",
+        "photosParents": "Батьки",
+        "photosParentsHint": "Більше часу фото — через застосунок для батьків."
       }
     },
     "ru": {
@@ -1016,7 +1142,16 @@
         "winampNoSkinHint": "Загрузите скин .wsz в приложении для родителей: Настройки › Внешний вид › Скин Winamp",
         "photosSlideshow": "Слайд-шоу",
         "photosCount": "Изображений: {n}",
-        "photosCountOne": "1 изображение"
+        "photosCountOne": "1 изображение",
+        "photosTimeRunning": "Осталось времени фото: {n} мин, идёт",
+        "photosTimePaused": "Осталось времени фото: {n} мин, пауза",
+        "photosWarn": "Ещё {n} мин фото",
+        "photosWarnOne": "Ещё 1 минута фото",
+        "photosPauseTitle": "Фото отдыхают",
+        "photosPauseText": "Время фото на сегодня закончилось. Аудиокниги и музыка ещё работают.",
+        "photosToListening": "К аудиокнигам",
+        "photosParents": "Родители",
+        "photosParentsHint": "Больше времени фото — через приложение для родителей."
       }
     },
     "cs": {
@@ -1082,7 +1217,16 @@
         "winampNoSkinHint": "Nahrajte skin .wsz v aplikaci pro rodiče: Nastavení › Vzhled › Skin Winamp",
         "photosSlideshow": "Prezentace",
         "photosCount": "Obrázky: {n}",
-        "photosCountOne": "1 obrázek"
+        "photosCountOne": "1 obrázek",
+        "photosTimeRunning": "Zbývá čas obrázků: {n} min, běží",
+        "photosTimePaused": "Zbývá čas obrázků: {n} min, pozastaveno",
+        "photosWarn": "Ještě {n} minut obrázků",
+        "photosWarnOne": "Ještě 1 minuta obrázků",
+        "photosPauseTitle": "Obrázky mají přestávku",
+        "photosPauseText": "Čas obrázků pro dnešek skončil. Pohádky a hudba ještě jdou.",
+        "photosToListening": "K pohádkám",
+        "photosParents": "Rodiče",
+        "photosParentsHint": "Víc času obrázků přidáš v aplikaci pro rodiče."
       }
     },
     "el": {
@@ -1148,7 +1292,16 @@
         "winampNoSkinHint": "Ανέβασε ένα skin .wsz στην εφαρμογή γονέων: Ρυθμίσεις › Εμφάνιση › Skin Winamp",
         "photosSlideshow": "Προβολή",
         "photosCount": "{n} εικόνες",
-        "photosCountOne": "1 εικόνα"
+        "photosCountOne": "1 εικόνα",
+        "photosTimeRunning": "Χρόνος εικόνων που απομένει: {n} λεπ., μετράει",
+        "photosTimePaused": "Χρόνος εικόνων που απομένει: {n} λεπ., σε παύση",
+        "photosWarn": "Ακόμη {n} λεπτά εικόνες",
+        "photosWarnOne": "Ακόμη 1 λεπτό εικόνες",
+        "photosPauseTitle": "Οι εικόνες κάνουν διάλειμμα",
+        "photosPauseText": "Ο χρόνος εικόνων τελείωσε για σήμερα. Ακουστικά βιβλία και μουσική παίζουν ακόμη.",
+        "photosToListening": "Στα ακουστικά βιβλία",
+        "photosParents": "Γονείς",
+        "photosParentsHint": "Περισσότερος χρόνος εικόνων από την εφαρμογή των γονιών."
       }
     }
   }

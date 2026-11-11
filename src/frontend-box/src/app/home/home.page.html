@@ -59,7 +59,7 @@
     <mupi-media-unavailable [nas]="category() === 'nas'"></mupi-media-unavailable>
   }
   @if (category() === 'photos') {
-    <mupi-photo-albums (opened)="photoAlbumOpened($event)"></mupi-photo-albums>
+    <mupi-photo-albums (opened)="photoAlbumOpened($event)" (toListening)="photosToListening()"></mupi-photo-albums>
   } @else {
     <mupi-swiper [data]="swiperData()" [compact]="headerHidden()" roundImages="true" (elementClicked)="this.artistCoverClicked($event.data)"></mupi-swiper>
   }

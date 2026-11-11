@@ -5,6 +5,9 @@
 
 export type PhotoOrder = 'shuffle' | 'newest' | 'taken'
 export type SlideshowSeconds = 8 | 5 | 3
+export type PhotoLimitMode = 'separate' | 'shared'
+export type PhotoDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+export const PHOTO_DAY_KEYS: PhotoDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 export interface PhotoSettings {
   enabled: boolean
@@ -21,6 +24,16 @@ export interface PhotoSettings {
     /** also while something plays (else only in silence) */
     duringPlayback: boolean
   }
+  /** "Bildzeit" (Spielzeit › Bildzeit): an account of its own, or counted on the listening time */
+  limitMode: PhotoLimitMode
+  /** the own account has a limit (off: the photos have no limit) */
+  limitEnabled: boolean
+  /** minutes per weekday of the own account */
+  dailyMinutes: Record<PhotoDayKey, number>
+  /** the display warns this many minutes before the end (0: no warning) */
+  warnMinutes: 0 | 2 | 5 | 10
+  /** the grid open and untouched: the time stops after this (0: never) */
+  idlePauseSeconds: 0 | 60 | 120 | 300
 }
 
 export const PHOTO_DEFAULTS: PhotoSettings = {
@@ -30,6 +43,17 @@ export const PHOTO_DEFAULTS: PhotoSettings = {
   order: 'shuffle',
   showVideos: false,
   screensaver: { enabled: false, afterMinutes: 5, duringPlayback: false },
+  limitMode: 'separate',
+  limitEnabled: true,
+  dailyMinutes: { mon: 20, tue: 20, wed: 20, thu: 20, fri: 20, sat: 20, sun: 20 },
+  warnMinutes: 5,
+  idlePauseSeconds: 120,
+}
+const WARN = [0, 2, 5, 10] as const
+const IDLE = [0, 60, 120, 300] as const
+const dayMinutes = (v: unknown): number | null => {
+  const m = Number(v)
+  return v !== null && v !== '' && Number.isInteger(m) && m >= 0 && m <= 1440 ? m : null
 }
 
 const ORDERS: PhotoOrder[] = ['shuffle', 'newest', 'taken']
@@ -53,10 +77,18 @@ export function photoSettings(cfg: unknown): PhotoSettings {
       afterMinutes: Number.isInteger(minutes) && minutes >= 1 && minutes <= 30 ? minutes : PHOTO_DEFAULTS.screensaver.afterMinutes,
       duringPlayback: s.duringPlayback === true,
     },
+    limitMode: p.limitMode === 'shared' ? 'shared' : 'separate',
+    limitEnabled: p.limitEnabled !== false,
+    dailyMinutes: Object.fromEntries(PHOTO_DAY_KEYS.map((d) => [d, dayMinutes(obj(p.dailyMinutes)[d]) ?? PHOTO_DEFAULTS.dailyMinutes[d]])) as Record<PhotoDayKey, number>,
+    warnMinutes: (WARN as readonly number[]).includes(Number(p.warnMinutes)) ? (Number(p.warnMinutes) as PhotoSettings['warnMinutes']) : PHOTO_DEFAULTS.warnMinutes,
+    idlePauseSeconds: (IDLE as readonly number[]).includes(Number(p.idlePauseSeconds)) ? (Number(p.idlePauseSeconds) as PhotoSettings['idlePauseSeconds']) : PHOTO_DEFAULTS.idlePauseSeconds,
   }
 }
 
-export type PhotoSettingsPatch = Partial<Omit<PhotoSettings, 'screensaver'>> & { screensaver?: Partial<PhotoSettings['screensaver']> }
+export type PhotoSettingsPatch = Partial<Omit<PhotoSettings, 'screensaver' | 'dailyMinutes'>> & {
+  screensaver?: Partial<PhotoSettings['screensaver']>
+  dailyMinutes?: Partial<PhotoSettings['dailyMinutes']>
+}
 
 /**
  * A change from the app, checked: every field must be one of its own values (a wrong one: the reason, nothing
@@ -66,7 +98,7 @@ export function applyPhotoSettings(target: Record<string, unknown>, patch: unkno
   const p = obj(patch)
   const bool = (v: unknown) => typeof v === 'boolean'
   const changes: Record<string, unknown> = {}
-  for (const key of ['enabled', 'startAsSlideshow', 'showVideos'] as const) {
+  for (const key of ['enabled', 'startAsSlideshow', 'showVideos', 'limitEnabled'] as const) {
     if (p[key] === undefined) continue
     if (!bool(p[key])) return `${key} must be true or false`
     changes[key] = p[key]
@@ -78,6 +110,29 @@ export function applyPhotoSettings(target: Record<string, unknown>, patch: unkno
   if (p.order !== undefined) {
     if (!ORDERS.includes(p.order as PhotoOrder)) return 'order must be shuffle, newest or taken'
     changes.order = p.order
+  }
+  if (p.limitMode !== undefined) {
+    if (p.limitMode !== 'separate' && p.limitMode !== 'shared') return 'limitMode must be separate or shared'
+    changes.limitMode = p.limitMode
+  }
+  if (p.warnMinutes !== undefined) {
+    if (!(WARN as readonly unknown[]).includes(p.warnMinutes)) return 'warnMinutes must be 0, 2, 5 or 10'
+    changes.warnMinutes = p.warnMinutes
+  }
+  if (p.idlePauseSeconds !== undefined) {
+    if (!(IDLE as readonly unknown[]).includes(p.idlePauseSeconds)) return 'idlePauseSeconds must be 0, 60, 120 or 300'
+    changes.idlePauseSeconds = p.idlePauseSeconds
+  }
+  if (p.dailyMinutes !== undefined) {
+    const d = obj(p.dailyMinutes)
+    const days: Record<string, unknown> = { ...obj(target.dailyMinutes) }
+    for (const [key, v] of Object.entries(d)) {
+      if (!PHOTO_DAY_KEYS.includes(key as PhotoDayKey)) return `dailyMinutes.${key} is no weekday`
+      const m = dayMinutes(v)
+      if (m === null) return `dailyMinutes.${key} must be 0-1440`
+      days[key] = m
+    }
+    changes.dailyMinutes = days
   }
   let screensaver: Record<string, unknown> | undefined
   if (p.screensaver !== undefined) {
@@ -96,5 +151,38 @@ export function applyPhotoSettings(target: Record<string, unknown>, patch: unkno
   }
   Object.assign(target, changes)
   if (screensaver) target.screensaver = screensaver
+  return null
+}
+
+/** The logical day as the player counts it (the listening time's reset hour: with 4, 2 o'clock is still yesterday) */
+export function logicalDate(now: Date, resetHour: number): string {
+  const shifted = new Date(now.getTime() - resetHour * 3600 * 1000)
+  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, '0')}-${String(shifted.getDate()).padStart(2, '0')}`
+}
+
+export type PhotoTimeAction = 'extend' | 'free' | 'reset'
+
+/**
+ * A parent's action on today's photo time (Spielzeit › Bildzeit), into `photos.today` - the player reads it:
+ * extend +minutes (adds up), free (no limit for the rest of the day), reset (today's count from 0 - a time, done
+ * once; minutes added and "free" stay). Another day's entry is replaced. Returns the error or null.
+ */
+export function applyPhotoTimeAction(cfg: Record<string, unknown>, action: unknown, minutes: unknown, now = new Date()): string | null {
+  if (action !== 'extend' && action !== 'free' && action !== 'reset') return 'action must be extend, free or reset'
+  const resetHour = Number(obj(cfg.playtimeLimit).resetHour)
+  const date = logicalDate(now, Number.isInteger(resetHour) && resetHour >= 0 && resetHour < 24 ? resetHour : 0)
+  const photos = { ...obj(cfg.photos) }
+  const old = obj(photos.today)
+  const today: Record<string, unknown> = old.date === date ? { ...old } : { date }
+  if (action === 'extend') {
+    const m = Number(minutes)
+    if (!Number.isInteger(m) || m < 1 || m > 1440) return 'minutes must be 1-1440'
+    const before = Number(today.bonusMinutes)
+    today.bonusMinutes = Math.min(1440, (Number.isFinite(before) && before > 0 ? before : 0) + m)
+  } else if (action === 'free') today.free = true
+  // (only the count: minutes added and "free" stay)
+  else today.reset = now.getTime()
+  photos.today = today
+  cfg.photos = photos
   return null
 }

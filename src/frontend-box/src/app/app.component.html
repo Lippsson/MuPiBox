@@ -5,6 +5,9 @@
     } @else {
       <!-- (not over the dark layer of a switched-off display: it stood out bright there, on the display's pictures too) -->
       <mupi-playtime-chip></mupi-playtime-chip>
+      <!-- the photo time (5.1): its chip on the photos' screens, its warning -->
+      <mupi-photo-time-chip></mupi-photo-time-chip>
+      <mupi-photo-time-warning></mupi-photo-time-warning>
     }
     @if (saver.active() && !monitorOff() && !playtimeBlocked()) {
       <mupi-photo-screensaver></mupi-photo-screensaver>

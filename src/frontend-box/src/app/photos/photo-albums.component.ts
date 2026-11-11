@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal, untracked } from '@angular/core'
 import { DisplayTextsService } from '../display-texts.service'
+import { PhotoTimeService } from './photo-time.service'
 import { type PhotoAlbumSummary, PhotosService } from './photos.service'
 
 // one page: three albums, 800 wide (handoff §4: left = 15 + i × 266,67 − page × 800 - on a wider display the fourth
@@ -15,6 +16,39 @@ const PER_PAGE = 3
 @Component({
   selector: 'mupi-photo-albums',
   template: `
+    @if (time.blocked()) {
+      <!-- the photo time is used up (handoff §8, 07_bildzeit-vorbei_eigenes-limit.png): the photos pause -->
+      <div class="pp">
+        <svg class="pp-fig" viewBox="0 0 220 220" aria-hidden="true">
+          <g transform="rotate(-9 110 120)"><rect x="40" y="52" width="140" height="120" rx="18" class="pp-back" /></g>
+          <g transform="rotate(4 110 120)">
+            <rect x="34" y="62" width="152" height="124" rx="18" class="pp-front" />
+            <path d="M74 120q12 10 24 0M122 120q12 10 24 0" class="pp-eye" />
+            <path d="M98 146q12 7 24 0" class="pp-eye" />
+          </g>
+          <text x="168" y="44" class="pp-z">z</text>
+          <text x="186" y="26" class="pp-z pp-z2">z</text>
+          <text x="200" y="12" class="pp-z pp-z3">z</text>
+        </svg>
+        <div class="pp-text">
+          <h2>{{ texts.text('photosPauseTitle') }}</h2>
+          <p>{{ texts.text('photosPauseText') }}</p>
+          <div class="pp-btns">
+            <button type="button" class="pp-go" (click)="toListening.emit()">{{ texts.text('photosToListening') }}</button>
+            <button type="button" class="pp-parents" (click)="parents()">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+              <span>{{ texts.text('photosParents') }}</span>
+            </button>
+          </div>
+        </div>
+        @if (hint()) {
+          <div class="pp-hint" role="status">
+            <span class="pp-hint-ic">i</span>
+            <span>{{ texts.text('photosParentsHint') }}</span>
+          </div>
+        }
+      </div>
+    } @else {
     <div class="pa" (pointerdown)="down($event)" (pointermove)="move($event)" (pointerup)="up($event)" (pointercancel)="cancel()">
       <div class="pa-track" [style.transform]="'translateX(' + -page() * PAGE + 'px)'">
         @for (a of albums(); track a.id; let i = $index) {
@@ -41,8 +75,137 @@ const PER_PAGE = 3
         </div>
       }
     </div>
+    }
   `,
   styles: `
+    .pp {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 52px;
+      padding: 0 30px 20px;
+    }
+    .pp-fig {
+      flex: 0 0 220px;
+      width: 220px;
+      height: 220px;
+      overflow: visible;
+    }
+    .pp-back {
+      fill: var(--km-cream, #fff6e5);
+    }
+    .pp-front {
+      fill: var(--km-night-3, #3b3456);
+      stroke: var(--km-ring, var(--km-cream, #fff6e5));
+      stroke-width: 6;
+    }
+    .pp-eye {
+      fill: none;
+      stroke: var(--km-cream, #fff6e5);
+      stroke-width: 5;
+      stroke-linecap: round;
+    }
+    .pp-z {
+      fill: var(--km-apricot, #f7b267);
+      font-size: 26px;
+      font-weight: 700;
+    }
+    .pp-z2 {
+      font-size: 21px;
+    }
+    .pp-z3 {
+      font-size: 16px;
+    }
+    .pp-text {
+      max-width: 420px;
+    }
+    .pp-text h2 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      font-weight: 600;
+      color: var(--km-on-bg, #fff);
+    }
+    .pp-text p {
+      margin: 0 0 22px;
+      font-size: 19px;
+      line-height: 1.35;
+      color: var(--km-lavender, rgba(255, 255, 255, 0.75));
+    }
+    .pp-btns {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .pp-go,
+    .pp-parents {
+      border: 0;
+      font: inherit;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 0 var(--km-shadow, rgba(0, 0, 0, 0.25));
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 150ms var(--km-spring, ease-out);
+    }
+    .pp-go:active,
+    .pp-parents:active {
+      transform: scale(0.95);
+    }
+    .pp-go {
+      height: 64px;
+      padding: 0 28px;
+      border-radius: 32px;
+      font-size: 21px;
+      background: var(--km-apricot, #f7b267);
+      color: var(--km-ink, #2b2240);
+    }
+    .pp-parents {
+      height: 48px;
+      padding: 0 20px 0 16px;
+      border-radius: 24px;
+      font-size: 17px;
+      background: var(--km-night-2, rgba(0, 0, 0, 0.4));
+      color: var(--km-on-bg, #fff);
+    }
+    .pp-parents svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+    }
+    .pp-hint {
+      position: absolute;
+      left: 50%;
+      bottom: 16px;
+      transform: translateX(-50%);
+      max-width: calc(100% - 60px);
+      min-height: 56px;
+      padding: 8px 24px 8px 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-radius: 28px;
+      background: var(--km-cream, #fff6e5);
+      color: var(--km-ink, #2b2240);
+      font-size: 19px;
+      font-weight: 600;
+      box-shadow: 0 4px 0 var(--km-shadow, rgba(0, 0, 0, 0.25));
+    }
+    .pp-hint-ic {
+      flex: 0 0 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--km-apricot, #f7b267);
+      font-weight: 700;
+    }
     :host {
       display: block;
       position: absolute;
@@ -182,11 +345,23 @@ const PER_PAGE = 3
 })
 export class PhotoAlbumsComponent {
   protected readonly photos = inject(PhotosService)
-  private readonly texts = inject(DisplayTextsService)
+  protected readonly texts = inject(DisplayTextsService)
+  protected readonly time = inject(PhotoTimeService)
   protected readonly STEP = STEP
   protected readonly PAGE = PAGE
 
   readonly opened = output<PhotoAlbumSummary>()
+  /** the photos pause: "Zu den Hörspielen" */
+  readonly toListening = output<void>()
+
+  // "Eltern" on the pause page: only the hint that more photo time comes from the parents' app (nothing to unlock here)
+  protected readonly hint = signal(false)
+  private hintTimer = 0
+  protected parents(): void {
+    this.hint.set(true)
+    window.clearTimeout(this.hintTimer)
+    this.hintTimer = window.setTimeout(() => this.hint.set(false), 5000)
+  }
 
   protected readonly albums = this.photos.albums
   protected readonly pages = computed(() => Math.max(1, Math.ceil(this.albums().length / PER_PAGE)))

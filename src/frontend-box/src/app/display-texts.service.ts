@@ -100,6 +100,16 @@ export const DEFAULT_DISPLAY_TEXTS = {
   photosFast: 'fast',
   photosFill: 'Show picture large',
   photosFit: 'Show whole picture',
+  // the picture time (Bildzeit): its chip ({n} minutes left), the warning, the pause page when it is used up
+  photosTimeRunning: 'Picture time left: {n} min, counting',
+  photosTimePaused: 'Picture time left: {n} min, paused',
+  photosWarn: '{n} more minutes of pictures',
+  photosWarnOne: '1 more minute of pictures',
+  photosPauseTitle: 'The pictures are taking a break',
+  photosPauseText: 'Picture time is over for today. Audio books and music still work.',
+  photosToListening: 'To the audio books',
+  photosParents: 'Parents',
+  photosParentsHint: "More picture time comes from the parents' app.",
 }
 export type DisplayTextKey = keyof typeof DEFAULT_DISPLAY_TEXTS
 type TextSet = Partial<Record<DisplayTextKey, string>>
