@@ -13,7 +13,7 @@ import type { SpotifyWebPlaybackState } from './spotify'
 import { SpotifyService } from './spotify.service'
 
 /** Whatever the player reports as playing: mplayer says "playing", Spotify (the display's Web Playback SDK) "pause". */
-function isPlaying(data: CurrentMPlayer): boolean {
+export function isPlaying(data: CurrentMPlayer): boolean {
   if (data.loading === true) return true // (a stream that is still buffering)
   return data.currentPlayer === 'spotify' ? data.pause === false && data.spotifySilent !== true : data.playing === true
 }

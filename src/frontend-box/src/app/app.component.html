@@ -6,6 +6,9 @@
       <!-- (not over the dark layer of a switched-off display: it stood out bright there, on the display's pictures too) -->
       <mupi-playtime-chip></mupi-playtime-chip>
     }
+    @if (saver.active() && !monitorOff() && !playtimeBlocked()) {
+      <mupi-photo-screensaver></mupi-photo-screensaver>
+    }
     @if (playtimeBlocked()) {
       <!-- held on WiFi/battery of the lock screen: it stands back for the settings (parent-access.service.ts) -->
       @if (parentAccess.active()) {

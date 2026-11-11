@@ -23,6 +23,8 @@ const MAX_PHOTO_BYTES = 50 * 1024 * 1024
 // what a picture takes on the box in its three sizes, for the check before an upload (see process.ts)
 const STORED_BYTES_PER_PHOTO = 450 * 1024
 const TITLE_MAX = 40
+// the screensaver's list at most (at 3 s a picture: over an hour)
+const SCREENSAVER_MAX = 1500
 
 const cleanTitle = (raw: unknown): string | null => {
   // eslint-disable-next-line no-control-regex
@@ -336,6 +338,7 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
  * display is on, only albums shown there and with pictures; no source, no account.
  *   GET /api/photos/albums           the albums in their order, with their first two pictures (the stack)
  *   GET /api/photos/album/:id        the pictures of an album in the order chosen
+ *   GET /api/photos/screensaver      whether the screensaver runs, how, and its pictures
  *   GET /api/photos/file/:album/:asset/:size
  */
 export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): void {
@@ -362,6 +365,24 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
     if (!a || !a.display) return void res.status(404).json({ error: 'no such album' })
     const order = photoSettings(deps.getMupiboxConfig()).order
     res.json({ id: a.id, title: a.title, assets: ordered(a.assets, order).map(({ id, w, h }) => ({ id, w, h })) })
+  })
+  // the screensaver: when it starts and how, and its pictures - from every album shown on the display, as one list in
+  // the order chosen ("Gemischt": all mixed; else album by album, in the albums' order)
+  app.get('/api/photos/screensaver', async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    const s = photoSettings(deps.getMupiboxConfig())
+    if (!s.enabled || !s.screensaver.enabled) return void res.json({ enabled: false })
+    const shown = (await albums()).filter((a) => a.display && a.assets.length > 0)
+    let pictures = shown.flatMap((a) => ordered(a.assets, s.order === 'shuffle' ? 'newest' : s.order).map((x) => ({ album: a.id, id: x.id })))
+    if (s.order === 'shuffle') {
+      for (let i = pictures.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[pictures[i], pictures[j]] = [pictures[j], pictures[i]]
+      }
+    }
+    // (enough for far longer than the display stays on)
+    pictures = pictures.slice(0, SCREENSAVER_MAX)
+    res.json({ ...s.screensaver, slideshowSeconds: s.slideshowSeconds, pictures })
   })
   app.get('/api/photos/file/:album/:asset/:size', (req, res) => {
     if (!on()) return void res.status(404).end()
