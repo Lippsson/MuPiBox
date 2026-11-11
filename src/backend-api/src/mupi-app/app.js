@@ -12776,18 +12776,38 @@ function photoImmichAlbumCard(a) {
 }
 
 let photoPrepTimer = 0
+// the open full view: shown anew when a clip in it is made meanwhile (null while it is closed)
+let photoViewerRefresh = null
 function mountPhotoAlbum(root, page) {
   const a = photoLib.album
   window.clearTimeout(photoPrepTimer)
   if (!a) return
   if (a.assets.some((x) => x.ready === false)) {
+    // while clips are being made: their state every 5 s, taken into this album (an answer for an album left meanwhile
+    // is dropped); the open full view shows a clip made meanwhile, the page is drawn anew when no sheet is over it
+    let stale = false
     const ask = () => {
       photoPrepTimer = window.setTimeout(async () => {
         if (currentPage()?.id !== page.id || photoLib.album !== a) return
-        // (not under an open sheet - the full view, a question: asked again in 5 s)
-        if (!$('#sheet').hidden) return ask()
-        await loadPhotoAlbum().catch(() => undefined)
-        if (currentPage()?.id === page.id) renderPage(page, false)
+        const r = await api(`${API}/photos/albums/${a.id}`)
+        if (currentPage()?.id !== page.id || photoLib.album !== a) return
+        if (r.ok) {
+          const now = new Map(r.body.assets.map((y) => [y.id, y]))
+          const changed = new Set()
+          for (const x of a.assets) {
+            const y = now.get(x.id)
+            if (!y || (x.ready === false && y.ready !== false)) changed.add(x.id)
+            if (y && x.ready === false && y.ready !== false) Object.assign(x, y)
+          }
+          // (a clip that could not be made: gone)
+          if (a.assets.some((x) => !now.has(x.id))) a.assets = a.assets.filter((x) => now.has(x.id))
+          if (changed.size) {
+            stale = true
+            photoViewerRefresh?.(changed)
+          }
+        }
+        if (stale && $('#sheet').hidden) return renderPage(page, false)
+        if (a.assets.some((x) => x.ready === false) || stale) ask()
       }, 5000)
     }
     ask()
@@ -12908,8 +12928,10 @@ function photoViewer(a, start, { setCover, deleteAssets }) {
       const img = sheet.querySelector('#ph-view-img')
       const vid = sheet.querySelector('#ph-view-vid')
       const prep = sheet.querySelector('.ph-view-prep')
+      let shownId = null
       const show = () => {
         const x = a.assets[i]
+        shownId = x.id
         const clip = x.kind === 'video'
         vid.pause()
         vid.hidden = !clip || x.ready === false
@@ -12940,6 +12962,13 @@ function photoViewer(a, start, { setCover, deleteAssets }) {
         vid.pause()
         close()
       }
+      // (a clip made while it is open: shown when it is the one on the screen; one taken out: the place stays in the list)
+      photoViewerRefresh = (changed) => {
+        if (!a.assets.length) return close()
+        if (i >= a.assets.length) i = a.assets.length - 1
+        if (a.assets[i].id !== shownId || changed.has(shownId)) show()
+        else sheet.querySelector('#ph-view-n').textContent = `${i + 1} / ${a.assets.length}`
+      }
       sheet.querySelector('[data-cover]').onclick = () => {
         close()
         setCover(a.assets[i].id)
@@ -12951,6 +12980,7 @@ function photoViewer(a, start, { setCover, deleteAssets }) {
       show()
     },
     () => {
+      photoViewerRefresh = null
       const v = document.querySelector('#ph-view-vid')
       if (!v) return
       v.pause()
