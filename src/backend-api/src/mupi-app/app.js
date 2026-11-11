@@ -249,6 +249,11 @@ function route() {
   routedHash = location.hash
   stopPageTimers()
   closeSheet() // (a sheet belongs to the page it was opened on)
+  // (an upload of photos belongs to its page: left, it stops - what came stays; its summary goes with the page)
+  if (page.id !== 'fotoupload') {
+    if (photoUp.phase === 'running') stopPhotoUpload()
+    else if (photoUp.phase === 'done') photoUploadReset()
+  }
   renderChrome(page)
   renderPage(page)
   window.scrollTo(0, 0)
@@ -5091,7 +5096,11 @@ const up = { cat: 'audiobook', artist: '', album: '', items: [], cover: null, sk
 function formatBytes(n) {
   if (!Number.isFinite(n)) return '–'
   const gb = n / 1024 ** 3
-  return gb >= 1 ? `${gb.toLocaleString(LOCALE, { maximumFractionDigits: 1 })} GB` : `${Math.round(n / 1024 ** 2)} MB`
+  if (gb >= 1) return `${gb.toLocaleString(LOCALE, { maximumFractionDigits: 1 })} GB`
+  // (a photo or two: KB, below 10 MB with a decimal - "0 MB" for seven photos said nothing)
+  if (n < 1024 ** 2) return `${n > 0 ? Math.max(1, Math.round(n / 1024)) : 0} KB`
+  const mb = n / 1024 ** 2
+  return `${mb.toLocaleString(LOCALE, { maximumFractionDigits: mb < 10 ? 1 : 0 })} MB`
 }
 
 function uploadTop() {
@@ -11523,7 +11532,7 @@ function mountPhotoOverview(root, page) {
   }
   for (const b of root.querySelectorAll('[data-open]')) b.onclick = () => openPhotoAlbum(b.dataset.open)
   for (const s of root.querySelectorAll('[data-show]')) s.onchange = () => photoShowSwitch(s, again)
-  $('#ph-upload', root)?.addEventListener('click', () => photoUploadSheet(null, again))
+  $('#ph-upload', root)?.addEventListener('click', () => openPhotoUpload(null))
   $('#ph-order', root)?.addEventListener('click', () => photoOrderSheet(again))
 }
 
@@ -11577,127 +11586,321 @@ function photoOrderSheet(after) {
   )
 }
 
-// Uploading (the short way, from the overview and an album): into an album chosen or a new one, the files one after the
-// other; what was left out is said at the end with its reason
-const PHOTO_SKIP = { format: 'Format wird nicht unterstützt', duplicate: 'Schon im Album', broken: 'Datei beschädigt', space: 'Kein Platz mehr' }
-function photoUploadSheet(albumId, after) {
+// Uploading (Bibliothek › Fotos › Fotos hochladen): into an album chosen or a new one, the files one after the other with
+// their progress, the whole at the top; at the end what came and what was left out with its reason. Leaving the page
+// stops it (the file on its way too, on the box as well - see the upload's route and its ticket); what came stays.
+const PHOTO_SKIP = { format: 'Format wird nicht unterstützt', duplicate: 'Schon im Album', broken: 'Datei beschädigt', space: 'Kein Platz mehr', aborted: 'Abgebrochen', heif: 'HEIC wird gerade eingerichtet', failed: 'Hochladen fehlgeschlagen' }
+const PHOTO_UPLOAD_EXT = /\.(jpe?g|png|hei[cf]|webp)$/i
+// (pictures the browser can show itself for the list - an iPhone's HEIC it cannot)
+const PHOTO_PREVIEW_EXT = /\.(jpe?g|png|webp)$/i
+const photoTicket = () => [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('')
+const photoUp = {
+  phase: 'form', // form · running · done
+  mode: 'existing', // existing · new
+  albumId: '',
+  newName: '',
+  items: [], // {file, url, state: wait|up|ok|skip, pct, reason}
+  check: null, // the box's answer for the choice: {enough, missing, …}
+  target: '',
+  targetTitle: '',
+  stopped: false,
+  unconfirmed: 0,
+  current: null, // the file on its way: {xhr, ticket}
+}
+
+// a new visit of the page (from the overview, an album: with that album chosen)
+function openPhotoUpload(albumId) {
+  photoUploadReset()
+  photoUp.albumId = albumId ?? ''
+  go('fotoupload')
+}
+
+function photoUploadReset() {
+  for (const it of photoUp.items) if (it.url) URL.revokeObjectURL(it.url)
+  Object.assign(photoUp, { phase: 'form', mode: 'existing', newName: '', items: [], check: null, target: '', targetTitle: '', stopped: false, unconfirmed: 0, current: null })
+}
+
+async function loadPhotoUpload() {
+  // (the overview: the albums to choose from and the card's space; not while it runs - nothing changes then)
+  if (photoUp.phase !== 'form') return
+  await loadPhotoOverview()
   const uploads = (photoLib.overview?.albums ?? []).filter((a) => a.source === 'upload')
-  const chosen = albumId ?? uploads[0]?.id ?? ''
-  const upload = { stopped: false, running: false, current: null, ticket: null, cancelling: null }
-  openSheet(
-    `<h2>Fotos hochladen</h2>
-     ${albumId ? '' : `<div class="field"><label for="ph-up-album">Wohin?</label><select class="input" id="ph-up-album">${uploads.map((a) => `<option value="${esc(a.id)}"${a.id === chosen ? ' selected' : ''}>${esc(a.title)}</option>`).join('')}<option value="">${esc(tr('Neues Album'))}</option></select></div>
-       <div class="field" id="ph-up-new"${chosen ? ' hidden' : ''}><label for="ph-up-name">Name des Albums</label><input class="input" id="ph-up-name" maxlength="40" autocomplete="off"></div>`}
-     <div class="field"><label>Fotos</label>
-       <div class="btns" style="margin:0"><button type="button" class="btn" id="ph-up-pick">${icon('image', 18)}Fotos wählen</button></div>
-       <input type="file" id="ph-up-files" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp" hidden>
-       <div class="drop" id="ph-up-drop">Oder Fotos hierher ziehen.</div>
-       <small id="ph-up-picked">JPEG, PNG, HEIC (iPhone)</small></div>
-     <div class="note">${icon('lock', 18)}<span>Die Box speichert Fotos verkleinert (ca. 1280 px) und entfernt Standortdaten. Die Originale bleiben auf deinem Gerät.</span></div>
-     <p class="help" id="ph-up-state" style="margin:0" hidden></p>
-     <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Hochladen</button></div>`,
-    (sheet, close) => {
-      const sel = sheet.querySelector('#ph-up-album')
-      sel?.addEventListener('change', () => (sheet.querySelector('#ph-up-new').hidden = sel.value !== ''))
-      sheet.querySelector('[data-close]').onclick = close
-      // the choice: from the button (the phone's picker) or dropped onto the field - a new choice replaces the one before
-      let files = []
-      const input = sheet.querySelector('#ph-up-files')
-      const drop = sheet.querySelector('#ph-up-drop')
-      const picked = sheet.querySelector('#ph-up-picked')
-      const choose = (list) => {
-        files = [...list].filter((f) => PHOTO_UPLOAD_EXT.test(f.name))
-        drop.classList.toggle('chosen', files.length > 0)
-        picked.textContent = files.length
-          ? `${tr(`${files.length} ${files.length === 1 ? 'Foto' : 'Fotos'} gewählt`)} · ${formatBytes(files.reduce((n, f) => n + f.size, 0))}`
-          : 'JPEG, PNG, HEIC (iPhone)'
-      }
-      sheet.querySelector('#ph-up-pick').onclick = () => input.click()
-      input.onchange = () => {
-        choose(input.files ?? [])
-        input.value = ''
-      }
-      drop.ondragover = (ev) => {
-        ev.preventDefault()
-        drop.classList.add('over')
-      }
-      drop.ondragleave = () => drop.classList.remove('over')
-      drop.ondrop = (ev) => {
-        ev.preventDefault()
-        drop.classList.remove('over')
-        if (!upload.running) choose(ev.dataTransfer?.files ?? [])
-      }
-      sheet.querySelector('[data-ok]').onclick = async (e) => {
-        if (!files.length) return toast('Bitte Fotos wählen', 'info')
-        let target = albumId ?? sel?.value ?? ''
-        if (!target) {
-          const title = sheet.querySelector('#ph-up-name').value.trim()
-          if (!title) return toast('Bitte einen Namen für das Album eintragen', 'info')
-          const r = await api(`${API}/photos/albums`, { method: 'POST', body: { title } })
-          if (!r.ok) return toast('Das Album ließ sich nicht anlegen', 'info')
-          target = r.body.id
-        }
-        const check = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: files.length } })
-        if (check.ok && check.body?.enough === false) return toast('Nicht genug Platz auf der Box', 'info')
-        e.target.disabled = true
-        upload.running = true
-        sheet.querySelector('#ph-up-pick').disabled = true
-        const line = sheet.querySelector('#ph-up-state')
-        line.hidden = false
-        let ok = 0
-        // (files stopped - after their 5 minutes or by closing - whose stop the box did not confirm: they may still
-        // turn up in the album)
-        let unconfirmed = 0
-        const skipped = []
-        for (const [i, f] of files.entries()) {
-          if (upload.stopped) break
-          line.textContent = tr(`${i + 1} von ${files.length} Dateien …`)
-          // (one file at most 5 minutes - a slow WLAN and the Pi's work on a big picture; then the next one, this one
-          // stopped on the box as well)
-          upload.current = new AbortController()
-          upload.ticket = photoTicket()
-          upload.cancelling = null
-          const timer = setTimeout(stopPhotoUpload, 5 * 60_000)
-          const r = await fetch(`${API}/photos/upload?album=${encodeURIComponent(target)}&name=${encodeURIComponent(f.name)}&ticket=${upload.ticket}`, {
-            method: 'PUT',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/octet-stream', 'x-mupibox-csrf': state.csrf },
-            body: f,
-            signal: upload.current.signal,
-          }).catch(() => null)
-          const body = r ? await r.json().catch(() => ({})) : {}
-          clearTimeout(timer)
-          upload.current = null
-          upload.ticket = null
-          // (this file was stopped - its time ran out, or the sheet closed: the box has to confirm it)
-          if (upload.cancelling && !(await upload.cancelling)) unconfirmed++
-          upload.cancelling = null
-          if (r?.ok && body.ok) ok++
-          else if (!upload.stopped) skipped.push(`${f.name}: ${tr(PHOTO_SKIP[body.skipped] ?? (body.error === 'heif_missing' ? 'HEIC wird gerade eingerichtet' : 'Hochladen fehlgeschlagen'))}`)
-        }
-        // (stopped before the end - the file on its way is not placed by the box either, see the upload's route)
-        const aborted = upload.stopped
-        close()
-        if (unconfirmed) toast('Abbruch von der Box nicht bestätigt – ein abgebrochenes Foto kann trotzdem im Album erscheinen.', 'info')
-        else if (aborted) toast(ok ? tr(`Hochladen abgebrochen – ${ok} übernommen`) : 'Hochladen abgebrochen', 'info')
-        else toast(skipped.length ? tr(`${ok} übernommen, ${skipped.length} übersprungen`) : tr(`${ok} übernommen`), skipped.length ? 'info' : 'ok')
-        if (skipped.length) console.warn('[photos] skipped', skipped)
-        after?.(target)
-      }
-    },
-    // (closed in any way - Abbrechen, swiped away, Escape, another page: no further file, the one on its way is stopped)
-    () => {
-      upload.stopped = true
-      stopPhotoUpload()
-    },
-  )
-  // the file on its way: the browser lets go, and the box is told (lighttpd keeps the way to the server open, so the
-  // server would not notice) - it does not make the picture, or takes it out again when it was just placed
-  function stopPhotoUpload() {
-    if (upload.ticket) upload.cancelling = cancelPhotoUpload(upload.ticket)
-    upload.current?.abort()
+  if (!uploads.some((a) => a.id === photoUp.albumId)) photoUp.albumId = uploads[0]?.id ?? ''
+  if (!uploads.length) photoUp.mode = 'new'
+}
+
+const photoUploadBytes = () => photoUp.items.reduce((n, it) => n + it.file.size, 0)
+const photoCountText = (n) => tr(`${n} ${n === 1 ? 'Datei' : 'Dateien'}`)
+
+function photoUploadTop() {
+  if (photoUp.phase === 'running') return photoUploadRunningTop()
+  if (photoUp.phase === 'done') return photoUploadDoneTop()
+  const o = photoLib.overview
+  if (o && !o.enabled) {
+    return [`<section class="card wide"><p class="help" style="margin:0">Die Fotoanzeige ist aus.</p><div class="navlist">${navRow('g-fotos', 'Fotoanzeige einschalten', 'Einstellungen › Fotos', 'image')}</div></section>`]
+  }
+  const uploads = (o?.albums ?? []).filter((a) => a.source === 'upload')
+  const n = photoUp.items.length
+  const full = photoUp.check && photoUp.check.enough === false
+  return [
+    `<section class="card wide"><h2>Wohin?</h2>
+      ${uploads.length ? `<div class="seg" id="pu-mode"><button aria-pressed="${photoUp.mode === 'existing'}" data-v="existing">Vorhandenes Album</button><button aria-pressed="${photoUp.mode === 'new'}" data-v="new">Neues Album</button></div>` : ''}
+      ${photoUp.mode === 'existing' && uploads.length
+        ? `<div class="field"><label for="pu-album">Album</label><select class="input" id="pu-album">${uploads.map((a) => `<option value="${esc(a.id)}"${a.id === photoUp.albumId ? ' selected' : ''}>${esc(a.title)}</option>`).join('')}</select></div>`
+        : `<div class="field"><label for="pu-name">Name des Albums</label><input class="input" id="pu-name" maxlength="40" autocomplete="off" value="${esc(photoUp.newName)}"><small>So heißt das Album am Display.</small></div>`}
+    </section>`,
+    `<section class="card wide"><h2>Dateien</h2>
+      <div class="btns"><button class="btn block soft" id="pu-pick">${icon('image', 18)}Fotos wählen</button></div>
+      <input type="file" id="pu-files" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp" hidden>
+      <div class="drop${n ? ' chosen' : ''}" id="pu-drop">Oder Fotos hierher ziehen.</div>
+      <small class="help" style="margin:0">JPEG, PNG, HEIC (iPhone)</small>
+      ${n ? `<dl class="kv"><div><dt>Ausgewählt</dt><dd>${esc(`${photoCountText(n)} · ${formatBytes(photoUploadBytes())}`)}</dd></div></dl>` : ''}
+    </section>`,
+    full
+      ? `<div class="note danger wide">${icon('info', 18)}<span><b>Nicht genug Platz auf der Box</b><br>${esc(tr(`Für diese Auswahl fehlen etwa ${formatBytes(photoUp.check.missing || 0)}.`))} ${esc(tr('Wähle weniger Dateien oder lösche Alben, die du nicht mehr brauchst.'))}<br><button class="link-btn danger-text" id="pu-manage">Alben verwalten</button></span></div>`
+      : '',
+    `<section class="card wide"><div class="note">${icon('lock', 18)}<span>Die Box speichert Fotos verkleinert (ca. 1280 px) und entfernt Standortdaten. Die Originale bleiben auf deinem Gerät.</span></div>${photoStorageBar(o?.storage)}</section>`,
+    `<div class="btns wide"><button class="btn primary block" id="pu-start"${!n || full ? ' disabled' : ''}>${icon('up', 18)}Hochladen</button></div>`,
+  ]
+}
+
+function photoUploadRow(it, i) {
+  const heic = /\.hei[cf]$/i.test(it.file.name)
+  const size = `${formatBytes(it.file.size)}${heic && it.state === 'ok' ? ` · ${tr('umgewandelt')}` : ''}`
+  let right
+  if (it.state === 'ok') right = `<span class="chip ok">${icon('check', 14)}${esc(tr('Fertig'))}</span>`
+  else if (it.state === 'skip') right = `<span class="chip danger">${esc(tr('Übersprungen'))}</span>`
+  else if (it.state === 'up') right = `<span class="pu-pct"><span class="track"><i style="--w:${it.pct}%"></i></span><small>${it.pct} %</small></span>`
+  else right = `<span class="chip">${esc(tr('Wartet'))}</span>`
+  return `<div class="entry pu-row" data-pu-row="${i}"><span class="pu-thumb">${it.url ? `<img src="${esc(it.url)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+    <span class="lbl"><b translate="no">${esc(it.file.name)}</b><small${it.state === 'skip' ? ' class="danger-text"' : ''}>${esc(it.state === 'skip' ? tr(PHOTO_SKIP[it.reason] ?? 'Hochladen fehlgeschlagen') : size)}</small></span>${right}</div>`
+}
+
+function photoUploadProgress() {
+  const total = photoUploadBytes() || 1
+  const done = photoUp.items.reduce((n, it) => n + (it.state === 'ok' || it.state === 'skip' ? it.file.size : it.state === 'up' ? (it.file.size * it.pct) / 100 : 0), 0)
+  const files = photoUp.items.filter((it) => it.state === 'ok' || it.state === 'skip').length
+  return { pct: Math.min(100, Math.floor((done / total) * 100)), done, files }
+}
+
+function photoUploadRunningTop() {
+  const p = photoUploadProgress()
+  return [
+    `<section class="card wide"><h2>Wird hochgeladen</h2>
+      <div class="pu-big"><b id="pu-pct">${p.pct} %</b><span>${esc(tr(`nach „${photoUp.targetTitle}“`))}</span></div>
+      <div class="bar"><div class="track"><i id="pu-fill" style="--w:${p.pct}%"></i></div><small id="pu-sum">${esc(photoUploadSumText(p))}</small></div>
+      <div class="btns"><button class="btn block" id="pu-stop">${icon('close', 18)}Abbrechen</button></div></section>`,
+    `<div class="note wide">${icon('info', 18)}<span>Lass diese Seite offen, bis alles übertragen ist.</span></div>`,
+    `<section class="card wide"><h2>Dateien</h2><div class="rows" id="pu-rows">${photoUp.items.map(photoUploadRow).join('')}</div></section>`,
+  ]
+}
+
+const photoUploadSumText = (p) =>
+  tr(`${p.files} von ${photoUp.items.length} Dateien · ${formatBytes(p.done)} von ${formatBytes(photoUploadBytes())}`)
+
+function photoUploadDoneTop() {
+  const ok = photoUp.items.filter((it) => it.state === 'ok').length
+  const skipped = photoUp.items.filter((it) => it.state === 'skip')
+  const head = ok ? tr(`${ok} ${ok === 1 ? 'Foto' : 'Fotos'} übernommen`) : tr('Keine Fotos übernommen')
+  return [
+    `<section class="card wide"><div class="photo-hero"><span class="photo-hero-ic${ok ? ' ok' : ''}">${icon(ok ? 'check' : 'info', 34)}</span><h2>${esc(head)}</h2>
+      <p class="help">${esc(tr(`Im Album „${photoUp.targetTitle}“.`))}</p>
+      <div class="btns"><button class="btn primary" id="pu-album">Zum Album</button><button class="btn" id="pu-more">Weitere hochladen</button></div></div></section>`,
+    photoUp.unconfirmed ? `<div class="note warn wide">${icon('info', 18)}<span>${esc(tr('Abbruch von der Box nicht bestätigt – ein abgebrochenes Foto kann trotzdem im Album erscheinen.'))}</span></div>` : '',
+    skipped.length
+      ? `<section class="card wide"><div class="card-head"><h2>Übersprungen</h2><span class="chip danger">${skipped.length}</span></div><div class="rows">${skipped.map((it) => photoUploadRow(it, photoUp.items.indexOf(it))).join('')}</div></section>`
+      : '',
+  ]
+}
+
+function mountPhotoUpload(root, page) {
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  if (photoUp.phase === 'running') {
+    $('#pu-stop', root)?.addEventListener('click', () => stopPhotoUpload('aborted'))
+    return
+  }
+  if (photoUp.phase === 'done') {
+    $('#pu-album', root)?.addEventListener('click', () => openPhotoAlbum(photoUp.target))
+    $('#pu-more', root)?.addEventListener('click', () => {
+      const keep = photoUp.target
+      photoUploadReset()
+      photoUp.albumId = keep
+      loadPhotoUpload().finally(redraw)
+    })
+    return
+  }
+  const mode = $('#pu-mode', root)
+  if (mode) {
+    mode.onclick = (e) => {
+      const b = e.target.closest('button')
+      if (!b) return
+      photoUp.mode = b.dataset.v
+      redraw()
+    }
+  }
+  $('#pu-album', root)?.addEventListener('change', (e) => (photoUp.albumId = e.target.value))
+  $('#pu-name', root)?.addEventListener('input', (e) => (photoUp.newName = e.target.value))
+  $('#pu-manage', root)?.addEventListener('click', () => go('fotos'))
+  const input = $('#pu-files', root)
+  const choose = async (list) => {
+    for (const it of photoUp.items) if (it.url) URL.revokeObjectURL(it.url)
+    const files = [...list]
+    const wrong = files.filter((f) => !PHOTO_UPLOAD_EXT.test(f.name))
+    photoUp.items = files.filter((f) => PHOTO_UPLOAD_EXT.test(f.name)).map((file) => ({ file, url: PHOTO_PREVIEW_EXT.test(file.name) ? URL.createObjectURL(file) : '', state: 'wait', pct: 0, reason: '' }))
+    if (wrong.length) toast(tr(`${wrong.length} ${wrong.length === 1 ? 'Datei' : 'Dateien'} in einem anderen Format ausgelassen`), 'info')
+    // (is there room for it on the box - before it starts, not halfway)
+    photoUp.check = null
+    if (photoUp.items.length) {
+      const r = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: photoUp.items.length } })
+      if (r.ok) photoUp.check = r.body
+    }
+    redraw()
+  }
+  $('#pu-pick', root)?.addEventListener('click', () => input.click())
+  input?.addEventListener('change', () => {
+    choose(input.files ?? [])
+    input.value = ''
+  })
+  const drop = $('#pu-drop', root)
+  if (drop) {
+    drop.ondragover = (e) => {
+      e.preventDefault()
+      drop.classList.add('over')
+    }
+    drop.ondragleave = () => drop.classList.remove('over')
+    drop.ondrop = (e) => {
+      e.preventDefault()
+      drop.classList.remove('over')
+      choose(e.dataTransfer?.files ?? [])
+    }
+  }
+  $('#pu-start', root)?.addEventListener('click', (e) => startPhotoUpload(e.currentTarget, page))
+}
+
+async function startPhotoUpload(button, page) {
+  if (!photoUp.items.length) return toast('Bitte Fotos wählen', 'info')
+  let target = photoUp.mode === 'existing' ? photoUp.albumId : ''
+  let title = (photoLib.overview?.albums ?? []).find((a) => a.id === target)?.title ?? ''
+  button.disabled = true
+  if (!target) {
+    title = photoUp.newName.trim()
+    if (!title) {
+      button.disabled = false
+      return toast('Bitte einen Namen für das Album eintragen', 'info')
+    }
+    const r = await api(`${API}/photos/albums`, { method: 'POST', body: { title } })
+    if (!r.ok) {
+      button.disabled = false
+      return toast('Das Album ließ sich nicht anlegen', 'info')
+    }
+    target = r.body.id
+    title = r.body.title
+  }
+  const check = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: photoUp.items.length } })
+  if (check.ok && check.body?.enough === false) {
+    photoUp.check = check.body
+    button.disabled = false
+    return renderPage(page, false)
+  }
+  Object.assign(photoUp, { phase: 'running', target, targetTitle: title, stopped: false, unconfirmed: 0 })
+  renderPage(page, false)
+  window.addEventListener('beforeunload', photoUploadUnload)
+  for (const [i, it] of photoUp.items.entries()) {
+    if (photoUp.stopped) {
+      Object.assign(it, { state: 'skip', reason: 'aborted' })
+      photoUploadPaint(i)
+      continue
+    }
+    it.state = 'up'
+    photoUploadPaint(i)
+    const r = await photoPut(target, it, i)
+    // (this file was stopped - its time ran out, or the upload was stopped: the box has to confirm it)
+    if (r.cancelling && !(await r.cancelling)) photoUp.unconfirmed++
+    if (r.ok && r.body?.ok) Object.assign(it, { state: 'ok', pct: 100 })
+    else Object.assign(it, { state: 'skip', reason: r.aborted ? 'aborted' : (r.body?.skipped ?? (r.body?.error === 'heif_missing' ? 'heif' : 'failed')) })
+    photoUploadPaint(i)
+  }
+  window.removeEventListener('beforeunload', photoUploadUnload)
+  const ok = photoUp.items.filter((it) => it.state === 'ok').length
+  photoUp.phase = 'done'
+  photoLib.overview = null
+  if (currentPage()?.id === page.id) renderPage(page, false)
+  // (the page was left meanwhile: the toast says how it ended)
+  else if (photoUp.stopped) toast(ok ? tr(`Hochladen abgebrochen – ${ok} übernommen`) : 'Hochladen abgebrochen', 'info')
+}
+
+// one file: PUT with its progress (fetch has none for what it sends), at most 5 minutes - a slow WLAN and the Pi's work
+// on a big picture; then the next one, this one stopped on the box as well
+function photoPut(target, it, i) {
+  return new Promise((resolve) => {
+    const ticket = photoTicket()
+    const xhr = new XMLHttpRequest()
+    const cur = { xhr, ticket, cancelling: null, aborted: false }
+    photoUp.current = cur
+    const done = (res) => {
+      photoUp.current = null
+      resolve({ ...res, cancelling: cur.cancelling, aborted: cur.aborted })
+    }
+    xhr.open('PUT', `${API}/photos/upload?album=${encodeURIComponent(target)}&name=${encodeURIComponent(it.file.name)}&ticket=${ticket}`)
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+    if (state.csrf) xhr.setRequestHeader('x-mupibox-csrf', state.csrf)
+    xhr.timeout = 5 * 60_000
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return
+      // (sent is not yet made: 95 % at most until the box answers)
+      it.pct = Math.min(95, Math.floor((e.loaded / e.total) * 95))
+      photoUploadPaint(i)
+    }
+    xhr.onload = () => {
+      let body = {}
+      try {
+        body = JSON.parse(xhr.responseText)
+      } catch {}
+      done({ ok: xhr.status >= 200 && xhr.status < 300, body })
+    }
+    xhr.onerror = () => done({ ok: false, body: {} })
+    xhr.onabort = () => done({ ok: false, body: {} })
+    xhr.ontimeout = () => {
+      cur.cancelling = cancelPhotoUpload(ticket)
+      done({ ok: false, body: {} })
+    }
+    xhr.send(it.file)
+  })
+}
+
+// stopped (Abbrechen, the page left): no further file, the one on its way is stopped - in the browser and on the box
+// (lighttpd keeps the way to the server open, so the server would not notice) - it does not make the picture, or takes
+// it out again when it was just placed
+function stopPhotoUpload() {
+  if (photoUp.phase !== 'running' || photoUp.stopped) return
+  photoUp.stopped = true
+  const cur = photoUp.current
+  if (cur) {
+    cur.aborted = true
+    cur.cancelling = cancelPhotoUpload(cur.ticket)
+    cur.xhr.abort()
   }
 }
+
+function photoUploadUnload(e) {
+  if (photoUp.phase !== 'running') return
+  e.preventDefault()
+  e.returnValue = ''
+}
+
+// the running page drawn anew in its parts only (a whole new page for every percent would flicker)
+function photoUploadPaint(i) {
+  if (currentPage()?.id !== 'fotoupload' || photoUp.phase !== 'running') return
+  const row = document.querySelector(`[data-pu-row="${i}"]`)
+  if (row) row.outerHTML = photoUploadRow(photoUp.items[i], i)
+  const p = photoUploadProgress()
+  const pct = document.getElementById('pu-pct')
+  if (pct) pct.textContent = `${p.pct} %`
+  document.getElementById('pu-fill')?.style.setProperty('--w', `${p.pct}%`)
+  const sum = document.getElementById('pu-sum')
+  if (sum) sum.textContent = photoUploadSumText(p)
+}
+
 // a few tries (the phone's WLAN may be gone for a moment): true when the box confirmed it
 async function cancelPhotoUpload(ticket) {
   for (let i = 0; i < 4; i++) {
@@ -11707,8 +11910,6 @@ async function cancelPhotoUpload(ticket) {
   }
   return false
 }
-const PHOTO_UPLOAD_EXT = /\.(jpe?g|png|hei[cf]|webp)$/i
-const photoTicket = () => [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('')
 
 async function loadPhotoAlbum() {
   let id = photoLib.albumId
@@ -11769,7 +11970,7 @@ function mountPhotoAlbum(root, page) {
     redraw()
   }
   for (const s of root.querySelectorAll('[data-show]')) s.onchange = () => photoShowSwitch(s, reload)
-  $('#ph-add', root)?.addEventListener('click', () => photoUploadSheet(a.id, reload))
+  $('#ph-add', root)?.addEventListener('click', () => openPhotoUpload(a.id))
   $('#ph-select', root)?.addEventListener('click', () => {
     photoLib.selecting = !photoLib.selecting
     photoLib.chosen.clear()
@@ -13990,6 +14191,7 @@ const CONTROLLERS = {
   tidal: { load: loadTidal, top: tidalTop, sections: () => [], mount: mountTidal },
   fotos: { load: loadPhotoOverview, top: photoOverviewTop, sections: () => [], mount: mountPhotoOverview, ownNav: true },
   fotoalbum: { load: loadPhotoAlbum, top: photoAlbumTop, sections: () => [], mount: mountPhotoAlbum },
+  fotoupload: { load: loadPhotoUpload, top: photoUploadTop, sections: () => [], mount: mountPhotoUpload },
   'g-fotos': { load: loadPhotoSettings, top: photoSettingsTop, sections: photoSettingsSections, mount: mountPhotoSettings, change: changePhotoSetting },
   mqtt: {
     load: loadMqtt,

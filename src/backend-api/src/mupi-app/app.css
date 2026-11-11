@@ -317,6 +317,26 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .ph-view .ph-next { right: 4px; }
 .tile.danger { background: var(--mp-danger-soft); color: var(--mp-danger); }
 .danger-text { color: var(--mp-danger); }
+/* Fotos hochladen (Bibliothek › Fotos): the choice, the run with a line per file, the end */
+.note.danger { background: var(--mp-danger-soft); color: var(--mp-danger); }
+.note.danger b { display: block; margin-bottom: 2px; }
+.note.danger span { color: var(--mp-text); }
+.note.danger span b { color: var(--mp-text); }
+.link-btn { margin-top: 8px; padding: 0; border: 0; background: none; font: inherit; font-weight: 700; cursor: pointer; }
+.btn.soft { background: var(--mp-primary-soft); border-color: transparent; color: var(--mp-primary-text); }
+.photo-hero-ic.ok { background: var(--mp-success-soft); color: var(--mp-success); }
+.pu-big { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 8px; }
+.pu-big b { font-family: var(--mp-font-display); font-size: 26px; }
+.pu-big span { color: var(--mp-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pu-row .lbl b, .pu-row .lbl small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pu-thumb { flex: none; width: 44px; height: 44px; border-radius: 10px; overflow: hidden; display: grid; place-items: center; background: var(--mp-primary-soft); color: var(--mp-primary-text); }
+.pu-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.pu-pct { flex: none; display: flex; align-items: center; gap: 8px; }
+.pu-pct .track { width: 56px; height: 6px; border-radius: 3px; background: var(--mp-track); overflow: hidden; }
+.pu-pct .track i { display: block; height: 100%; width: var(--w, 0%); background: var(--mp-primary); }
+.pu-pct small { min-width: 3.2em; text-align: right; font-weight: 700; }
+.pu-row .chip { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.pu-row .lbl small.danger-text { color: var(--mp-danger); }
 @media (min-width: 960px) {
   .ph-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .ph-actionbar { bottom: 12px; }

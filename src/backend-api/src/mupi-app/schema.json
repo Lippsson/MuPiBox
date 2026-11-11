@@ -1680,6 +1680,16 @@
    "sections": []
   },
   {
+   "id": "fotoupload",
+   "slug": "photo-upload",
+   "area": "bibliothek",
+   "parent": "fotos",
+   "title": "Fotos hochladen",
+   "description": "",
+   "icon": "up",
+   "sections": []
+  },
+  {
    "id": "theme",
    "slug": "theme",
    "area": "einstellungen",

@@ -217,7 +217,9 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     if (!Number.isInteger(files) || files < 0 || files > 10_000) return void res.status(400).json({ error: 'files' })
     const space = await cardSpace()
     const needed = files * STORED_BYTES_PER_PHOTO
-    res.json({ needed, free: space?.free ?? null, enough: space ? space.free - needed > RESERVE_BYTES : true })
+    // (missing: how much is lacking for this choice - "Für diese Auswahl fehlen etwa 1,1 GB")
+    const missing = space ? Math.max(0, needed + RESERVE_BYTES - space.free) : 0
+    res.json({ needed, free: space?.free ?? null, enough: space ? space.free - needed > RESERVE_BYTES : true, missing })
   })
 
   /**
