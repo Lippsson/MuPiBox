@@ -3613,5 +3613,11 @@
  "Test": "Test",
  "Verbindung steht": "Connexion établie",
  "Bilder": "Images",
- "{} min · frei": "{} min · libre"
+ "{} min · frei": "{} min · libre",
+ "Datei zu groß": "Fichier trop volumineux",
+ "Videos bereitet die Box danach noch vor.": "La box prépare ensuite les vidéos.",
+ "Wird vorbereitet": "En préparation",
+ "{} {} und {} {} übernommen": "Ajoutés : {} {} et {} {}",
+ "Fotos & Videos wählen": "Choisir photos et vidéos",
+ "{} Fotos und Videos": "{} photos et vidéos"
 }

@@ -10,6 +10,7 @@ import { requireCsrf, requireSession } from '../middleware'
 import { registerPhotoAlbumRoutes } from './albums'
 import { type PhotoImmichDeps, registerPhotoImmichRoutes } from './immich'
 import { type PhotoNasAccess, registerPhotoNasRoutes } from './nas'
+import { videoQueue } from './video'
 import { applyPhotoSettings, applyPhotoTimeAction, photoSettings } from './settings'
 
 export interface PhotoDeps {
@@ -48,6 +49,8 @@ function next(): void {
   const child = spawn('sudo', ['bash', SETUP, tool], { stdio: 'ignore' })
   const done = (ok: boolean) => {
     if (!ok || !installed(tool)) job.failed.push(tool)
+    // (ffmpeg there now: the clips that waited for it are made)
+    else if (tool === 'video') void videoQueue.kick()
     job.running = null
     next()
   }

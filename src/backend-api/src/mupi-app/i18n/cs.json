@@ -3613,5 +3613,11 @@
  "Test": "Test",
  "Verbindung steht": "Spojení funguje",
  "Bilder": "Obrázky",
- "{} min · frei": "{} min · volno"
+ "{} min · frei": "{} min · volno",
+ "Datei zu groß": "Soubor je příliš velký",
+ "Videos bereitet die Box danach noch vor.": "Videa box ještě připraví.",
+ "Wird vorbereitet": "Připravuje se",
+ "{} {} und {} {} übernommen": "Přidáno: {} {} a {} {}",
+ "Fotos & Videos wählen": "Vybrat fotky a videa",
+ "{} Fotos und Videos": "Fotky a videa: {}"
 }

@@ -3613,5 +3613,11 @@
  "Test": "Test",
  "Verbindung steht": "Connessione riuscita",
  "Bilder": "Foto",
- "{} min · frei": "{} min · libero"
+ "{} min · frei": "{} min · libero",
+ "Datei zu groß": "File troppo grande",
+ "Videos bereitet die Box danach noch vor.": "I video il box li prepara dopo.",
+ "Wird vorbereitet": "In preparazione",
+ "{} {} und {} {} übernommen": "Aggiunti: {} {} e {} {}",
+ "Fotos & Videos wählen": "Scegli foto e video",
+ "{} Fotos und Videos": "{} foto e video"
 }

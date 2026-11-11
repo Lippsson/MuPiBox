@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   input,
   OnDestroy,
@@ -10,12 +11,16 @@ import {
   signal,
   untracked,
 } from '@angular/core'
+import { environment } from 'src/environments/environment'
+import { isPlaying } from '../background-playback.service'
 import { DisplayTextsService } from '../display-texts.service'
 import { PhotoTimeService } from './photo-time.service'
 import { StatusComponent } from '../status/status.component'
 import { type PhotoAsset, PhotosService } from './photos.service'
 
 const SPEEDS = [8, 5, 3] as const
+// a clip in the slideshow: up to this long it plays (silent) to its end, a longer one shows its picture
+const CLIP_IN_SLIDESHOW = 30
 type Speed = (typeof SPEEDS)[number]
 
 /**
@@ -31,7 +36,23 @@ type Speed = (typeof SPEEDS)[number]
       @for (s of slides(); track s.key) {
         <div class="pv-slide" [class.pv-in]="s.fresh" [class.pv-zoom]="playing()" [class.pv-alt]="s.key % 2 === 1" [style.--pv-hold]="speed() + 1.2 + 's'">
           <img class="pv-bg" [src]="photos.fileUrl(albumId(), s.asset.id, 'b')" alt="" draggable="false" />
-          <img class="pv-fg" [class.pv-fill]="fill()" [src]="photos.fileUrl(albumId(), s.asset.id, 'f')" [attr.alt]="pictureLabel(s.index)" draggable="false" />
+          @if (s.key === slideKey() && isClip(s.asset)) {
+            <!-- a clip: with sound in the full view (silent while something plays), silent in the slideshow, to its end -->
+            <video
+              class="pv-fg pv-clip"
+              [class.pv-fill]="fill()"
+              [src]="photos.fileUrl(albumId(), s.asset.id, 'v')"
+              [poster]="photos.fileUrl(albumId(), s.asset.id, 'f')"
+              [muted]="playing() || audioPlays()"
+              autoplay
+              playsinline
+              (play)="clipPaused.set(false)"
+              (pause)="clipPaused.set(true)"
+              (ended)="clipEnded()"
+            ></video>
+          } @else {
+            <img class="pv-fg" [class.pv-fill]="fill()" [src]="photos.fileUrl(albumId(), s.asset.id, 'f')" [attr.alt]="pictureLabel(s.index)" draggable="false" />
+          }
         </div>
       }
 
@@ -51,6 +72,15 @@ type Speed = (typeof SPEEDS)[number]
           <div class="pv-count">{{ index() + 1 }} / {{ assets().length }}</div>
           <div class="pv-status" data-ui><mupi-status></mupi-status></div>
         </div>
+        @if (clipShown() && !playing()) {
+          <button class="pv-btn pv-96 pv-acc pv-clipbtn" type="button" data-ui [attr.aria-label]="texts.text(clipPaused() ? 'photosPlay' : 'photosPause')" (click)="clipToggle()">
+            @if (clipPaused()) {
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="pv-solid"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" /></svg>
+            } @else {
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="pv-solid"><rect x="6.5" y="5" width="4" height="14" rx="1.5" /><rect x="13.5" y="5" width="4" height="14" rx="1.5" /></svg>
+            }
+          </button>
+        }
         @if (assets().length > 1) {
           <button class="pv-btn pv-arrow pv-left" type="button" data-ui [attr.aria-label]="texts.text('photosPrev')" (click)="step(-1)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
@@ -295,6 +325,15 @@ type Speed = (typeof SPEEDS)[number]
       background: var(--km-apricot, #f7b267);
       color: var(--km-ink, #2b2240);
     }
+    .pv-clipbtn {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .pv-clipbtn:active {
+      transform: translate(-50%, -50%) scale(0.9);
+    }
     .pv-arrow {
       position: absolute;
       top: 202px;
@@ -329,6 +368,7 @@ export class PhotoViewerComponent implements OnDestroy {
   protected readonly photos = inject(PhotosService)
   protected readonly texts = inject(DisplayTextsService)
   private readonly time = inject(PhotoTimeService)
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef)
 
   readonly albumId = input.required<string>()
   readonly assets = input.required<PhotoAsset[]>()
@@ -360,6 +400,41 @@ export class PhotoViewerComponent implements OnDestroy {
       : [cur]
   })
 
+  // a clip: paused by its button; whether something plays on the box (then the clip is silent - checked every 5 s)
+  protected readonly clipPaused = signal(false)
+  protected readonly audioPlays = signal(false)
+  private audioTimer = 0
+  // (in the slideshow only a short clip plays, to its end - a long one shows its picture there)
+  protected isClip(a: PhotoAsset): boolean {
+    return a.kind === 'video' && (!this.playing() || (a.duration ?? 0) <= CLIP_IN_SLIDESHOW)
+  }
+  protected readonly clipShown = computed(() => {
+    const list = this.assets()
+    const a = list[Math.min(this.index(), list.length - 1)]
+    return !!a && this.isClip(a)
+  })
+  protected clipToggle(): void {
+    const v = this.host.nativeElement.querySelector<HTMLVideoElement>('video.pv-clip')
+    if (!v) return
+    if (v.paused) void v.play().catch((): void => undefined)
+    else v.pause()
+    this.touched()
+  }
+  // the slideshow goes on when a clip has come to its end; in the full view it stays on its last picture
+  protected clipEnded(): void {
+    if (!this.playing()) return
+    const n = this.assets().length
+    if (n > 1) this.show((this.index() + 1) % n)
+  }
+  private async checkAudio(): Promise<void> {
+    try {
+      const r = await fetch(`${environment.backend.playerUrl}/local`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      this.audioPlays.set(r.ok && isPlaying(await r.json()))
+    } catch {
+      this.audioPlays.set(false)
+    }
+  }
+
   private advanceTimer = 0
   private hideTimer = 0
   private dropTimer = 0
@@ -368,6 +443,8 @@ export class PhotoViewerComponent implements OnDestroy {
   private started = false
 
   constructor() {
+    void this.checkAudio()
+    this.audioTimer = window.setInterval((): void => void this.checkAudio(), 5000)
     // the photo time: the full view counts also untouched; its chip only with the buttons shown
     effect(() => {
       const controls = this.controls()
@@ -394,6 +471,7 @@ export class PhotoViewerComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    window.clearInterval(this.audioTimer)
     this.time.viewer.set(null)
     window.clearTimeout(this.advanceTimer)
     window.clearTimeout(this.hideTimer)
@@ -453,6 +531,7 @@ export class PhotoViewerComponent implements OnDestroy {
   private schedule(): void {
     window.clearTimeout(this.advanceTimer)
     if (!this.playing() || this.assets().length < 2) return
+    if (this.clipShown()) return
     this.advanceTimer = window.setTimeout(() => {
       const n = this.assets().length
       this.show((this.index() + 1) % n)
@@ -461,6 +540,7 @@ export class PhotoViewerComponent implements OnDestroy {
   }
 
   private show(i: number): void {
+    this.clipPaused.set(false)
     this.previous.set({ key: this.slideKey(), index: this.index() })
     this.slideKey.update((k) => k + 1)
     this.index.set(i)

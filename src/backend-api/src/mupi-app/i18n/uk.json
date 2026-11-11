@@ -3613,5 +3613,11 @@
  "Test": "Перевірка",
  "Verbindung steht": "Зʼєднання є",
  "Bilder": "Фото",
- "{} min · frei": "{} хв · вільно"
+ "{} min · frei": "{} хв · вільно",
+ "Datei zu groß": "Файл завеликий",
+ "Videos bereitet die Box danach noch vor.": "Відео пристрій підготує згодом.",
+ "Wird vorbereitet": "Готується",
+ "{} {} und {} {} übernommen": "Додано: {} {} і {} {}",
+ "Fotos & Videos wählen": "Вибрати фото й відео",
+ "{} Fotos und Videos": "Фото й відео: {}"
 }

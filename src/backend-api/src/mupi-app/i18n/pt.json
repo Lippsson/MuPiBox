@@ -3613,5 +3613,11 @@
  "Test": "Teste",
  "Verbindung steht": "Ligação estabelecida",
  "Bilder": "Imagens",
- "{} min · frei": "{} min · livre"
+ "{} min · frei": "{} min · livre",
+ "Datei zu groß": "Ficheiro demasiado grande",
+ "Videos bereitet die Box danach noch vor.": "Os vídeos a caixa prepara depois.",
+ "Wird vorbereitet": "A preparar",
+ "{} {} und {} {} übernommen": "Adicionados: {} {} e {} {}",
+ "Fotos & Videos wählen": "Escolher fotos e vídeos",
+ "{} Fotos und Videos": "{} fotos e vídeos"
 }

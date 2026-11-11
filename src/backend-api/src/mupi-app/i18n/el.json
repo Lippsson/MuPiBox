@@ -3613,5 +3613,11 @@
  "Test": "Δοκιμή",
  "Verbindung steht": "Η σύνδεση λειτουργεί",
  "Bilder": "Εικόνες",
- "{} min · frei": "{} λεπ. · ελεύθερα"
+ "{} min · frei": "{} λεπ. · ελεύθερα",
+ "Datei zu groß": "Το αρχείο είναι πολύ μεγάλο",
+ "Videos bereitet die Box danach noch vor.": "Τα βίντεο το κουτί τα ετοιμάζει μετά.",
+ "Wird vorbereitet": "Προετοιμάζεται",
+ "{} {} und {} {} übernommen": "Προστέθηκαν: {} {} και {} {}",
+ "Fotos & Videos wählen": "Επιλογή φωτογραφιών και βίντεο",
+ "{} Fotos und Videos": "{} φωτογραφίες και βίντεο"
 }

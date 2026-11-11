@@ -18,6 +18,15 @@ export interface PhotoAsset {
   id: string
   w: number
   h: number
+  /** a clip ("Videos anzeigen"), with its length in seconds */
+  kind?: 'video'
+  duration?: number
+}
+
+/** a clip's length as 0:24 */
+export const clipLength = (sec: number | undefined): string => {
+  const n = Math.max(0, Math.round(Number(sec) || 0))
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
 }
 
 export interface PhotoAlbumDetail {
@@ -33,8 +42,8 @@ interface AlbumsAnswer {
   albums: PhotoAlbumSummary[]
 }
 
-/** s: grid and stack (400), f: full view (1280), b: the blurred background (32) */
-export type PhotoSize = 's' | 'f' | 'b'
+/** s: grid and stack (400), f: full view (1280), b: the blurred background (32), v: a clip's video */
+export type PhotoSize = 's' | 'f' | 'b' | 'v'
 
 /**
  * The photo display on the box (5.1): the albums the parents show here (app › Bibliothek › Fotos) and the settings the

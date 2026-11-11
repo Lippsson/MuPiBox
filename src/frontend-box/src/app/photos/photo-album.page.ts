@@ -21,7 +21,7 @@ import { StatusComponent } from '../status/status.component'
 import { KmThemeService } from '../theme/km-theme.service'
 import { PhotoViewerComponent } from './photo-viewer.component'
 import { PhotoTimeService } from './photo-time.service'
-import { type PhotoAlbumDetail, PhotosService } from './photos.service'
+import { clipLength, type PhotoAlbumDetail, PhotosService } from './photos.service'
 
 /**
  * An album of the photo display (handoff §5): its pictures in a grid of four columns, scrolled up and down; a tap opens
@@ -84,6 +84,9 @@ import { type PhotoAlbumDetail, PhotosService } from './photos.service'
           @for (a of album()?.assets ?? []; track a.id; let i = $index) {
             <button class="pa-cell" type="button" [attr.aria-label]="texts.text('photosPicture', { n: i + 1 })" (click)="openAt(i)">
               <img [src]="photos.fileUrl(album()!.id, a.id, 's')" alt="" loading="lazy" draggable="false" />
+              @if (a.kind === 'video') {
+                <span class="pa-clip">▶ {{ clipLength(a.duration) }}</span>
+              }
             </button>
           }
         </div>
@@ -172,6 +175,20 @@ import { type PhotoAlbumDetail, PhotosService } from './photos.service'
       opacity: 0;
       transition: opacity 400ms ease-out;
     }
+    .pa-cell {
+      position: relative;
+    }
+    .pa-clip {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      padding: 3px 10px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.62);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+    }
     .pa-cell img {
       display: block;
       width: 100%;
@@ -184,6 +201,7 @@ import { type PhotoAlbumDetail, PhotosService } from './photos.service'
 export class PhotoAlbumPage implements OnDestroy {
   protected readonly photos = inject(PhotosService)
   protected readonly texts = inject(DisplayTextsService)
+  protected readonly clipLength = clipLength
   protected readonly r2 = inject(KmThemeService).roundTwo
   private readonly nav = inject(NavController)
   private readonly outlet = inject(IonRouterOutlet, { optional: true })

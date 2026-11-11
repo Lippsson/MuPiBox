@@ -118,9 +118,9 @@ export function processPhoto(src: string, out: string, ext: string, signal?: Abo
   })
 }
 
-/** The files of a processed picture (to delete them). */
+/** The files of a processed picture (to delete them) - and of a clip: its video and the clip as it came, waiting */
 export function photoFiles(out: string): string[] {
-  return ['.jpg', '.s.jpg', '.b.jpg'].map((s) => `${out}${s}`)
+  return ['.jpg', '.s.jpg', '.b.jpg', '.mp4', '.pending'].map((s) => `${out}${s}`)
 }
 
 export const extOf = (name: string): string => path.extname(name).toLowerCase()

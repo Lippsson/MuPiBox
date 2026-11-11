@@ -29,7 +29,10 @@ export interface PhotoAsset {
   taken: string | null
   /** when it came onto the box (ISO) */
   added: string
-  kind: 'photo'
+  kind: 'photo' | 'video'
+  /** a clip: false while it waits to be made (video.ts); its length in seconds */
+  ready?: boolean
+  duration?: number
   /** a fingerprint of the file as it came (sha1): the same picture twice in an album is left out */
   sum?: string
   /** a NAS album's picture: its file on the NAS, and the file's version there (ETag / date / size); an Immich
@@ -119,7 +122,8 @@ export const albumDir = (a: Pick<PhotoAlbum, 'id'> & { source?: PhotoSource }): 
 export const assetBase = (a: Pick<PhotoAlbum, 'id'> & { source?: PhotoSource }, assetId: string): string => path.join(albumDir(a), assetId)
 
 /** The album's picture: its own, else the first one */
-export const coverOf = (a: PhotoAlbum): string | undefined => (a.cover && a.assets.some((x) => x.id === a.cover) ? a.cover : a.assets[0]?.id)
+export const coverOf = (a: PhotoAlbum): string | undefined =>
+  a.cover && a.assets.some((x) => x.id === a.cover) ? a.cover : (a.assets.find((x) => x.ready !== false) ?? a.assets[0])?.id
 
 /** Bytes taken by the pictures (data/photos, or another folder - the NAS pictures' cache), counted on the card */
 export async function photoBytes(dir = PHOTOS_DIR): Promise<number> {

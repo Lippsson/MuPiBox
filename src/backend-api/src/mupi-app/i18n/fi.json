@@ -3613,5 +3613,11 @@
  "Test": "Testi",
  "Verbindung steht": "Yhteys toimii",
  "Bilder": "Kuvat",
- "{} min · frei": "{} min · vapaa"
+ "{} min · frei": "{} min · vapaa",
+ "Datei zu groß": "Tiedosto on liian suuri",
+ "Videos bereitet die Box danach noch vor.": "Laite valmistelee videot vielä myöhemmin.",
+ "Wird vorbereitet": "Valmistellaan",
+ "{} {} und {} {} übernommen": "Lisätty: {} {} ja {} {}",
+ "Fotos & Videos wählen": "Valitse kuvia ja videoita",
+ "{} Fotos und Videos": "{} kuvaa ja videota"
 }

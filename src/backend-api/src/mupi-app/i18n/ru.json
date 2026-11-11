@@ -3613,5 +3613,11 @@
  "Test": "Проверка",
  "Verbindung steht": "Соединение есть",
  "Bilder": "Фото",
- "{} min · frei": "{} мин · свободно"
+ "{} min · frei": "{} мин · свободно",
+ "Datei zu groß": "Файл слишком большой",
+ "Videos bereitet die Box danach noch vor.": "Видео устройство подготовит позже.",
+ "Wird vorbereitet": "Готовится",
+ "{} {} und {} {} übernommen": "Добавлено: {} {} и {} {}",
+ "Fotos & Videos wählen": "Выбрать фото и видео",
+ "{} Fotos und Videos": "Фото и видео: {}"
 }

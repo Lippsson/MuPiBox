@@ -11804,8 +11804,11 @@ function photoOrderSheet(after) {
 // stops it (the file on its way too, on the box as well - see the upload's route and its ticket); what came stays.
 // Every upload is a run of its own: a stopped one still waiting for the box's answer never takes over the page's next
 // choice, and a new visit never brings an old run back to life.
-const PHOTO_SKIP = { format: 'Format wird nicht unterstützt', duplicate: 'Schon im Album', broken: 'Datei beschädigt', space: 'Kein Platz mehr', aborted: 'Abgebrochen', heif: 'HEIC wird gerade eingerichtet', failed: 'Hochladen fehlgeschlagen' }
-const PHOTO_UPLOAD_EXT = /\.(jpe?g|png|hei[cf]|webp)$/i
+const PHOTO_SKIP = { format: 'Format wird nicht unterstützt', duplicate: 'Schon im Album', broken: 'Datei beschädigt', space: 'Kein Platz mehr', aborted: 'Abgebrochen', heif: 'HEIC wird gerade eingerichtet', failed: 'Hochladen fehlgeschlagen', large: 'Datei zu groß' }
+const PHOTO_UPLOAD_EXT = /\.(jpe?g|png|hei[cf]|webp|mp4|mov|m4v)$/i
+// (clips: kept as they come, made into what the Pi plays on the box - "Wird vorbereitet")
+const PHOTO_VIDEO_EXT = /\.(mp4|mov|m4v)$/i
+const photoVideoBytes = (items) => items.reduce((n, it) => n + (PHOTO_VIDEO_EXT.test(it.file.name) ? it.file.size : 0), 0)
 // (pictures the browser can show itself for the list - an iPhone's HEIC it cannot)
 const PHOTO_PREVIEW_EXT = /\.(jpe?g|png|webp)$/i
 const PHOTO_UNCONFIRMED = 'Abbruch von der Box nicht bestätigt – ein abgebrochenes Foto kann trotzdem im Album erscheinen.'
@@ -11878,10 +11881,10 @@ function photoUploadTop() {
         : `<div class="field"><label for="pu-name">Name des Albums</label><input class="input" id="pu-name" maxlength="40" autocomplete="off" value="${esc(photoUp.newName)}"><small>So heißt das Album am Display.</small></div>`}
     </section>`,
     `<section class="card wide"><h2>Dateien</h2>
-      <div class="btns"><button class="btn block soft" id="pu-pick">${icon('image', 18)}Fotos wählen</button></div>
-      <input type="file" id="pu-files" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp" hidden>
+      <div class="btns"><button class="btn block soft" id="pu-pick">${icon('image', 18)}Fotos &amp; Videos wählen</button></div>
+      <input type="file" id="pu-files" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,video/mp4,video/quicktime,.jpg,.jpeg,.png,.heic,.heif,.webp,.mp4,.mov,.m4v" hidden>
       <div class="drop${n ? ' chosen' : ''}" id="pu-drop">Oder Fotos hierher ziehen.</div>
-      <small class="help" style="margin:0">JPEG, PNG, HEIC (iPhone)</small>
+      <small class="help" style="margin:0">JPEG, PNG, HEIC (iPhone), MP4, MOV</small>
       ${n ? `<dl class="kv"><div><dt>Ausgewählt</dt><dd>${esc(`${photoCountText(n)} · ${formatBytes(photoBytes(photoUp.items))}`)}</dd></div></dl>` : ''}
     </section>`,
     full
@@ -11896,7 +11899,8 @@ function photoUploadRow(it, i) {
   const heic = /\.hei[cf]$/i.test(it.file.name)
   const size = `${formatBytes(it.file.size)}${heic && it.state === 'ok' ? ` · ${tr('umgewandelt')}` : ''}`
   let right
-  if (it.state === 'ok') right = `<span class="chip ok">${icon('check', 14)}${esc(tr('Fertig'))}</span>`
+  if (it.state === 'ok' && it.prep) right = `<span class="chip accent">${esc(tr('Wird vorbereitet'))}</span>`
+  else if (it.state === 'ok') right = `<span class="chip ok">${icon('check', 14)}${esc(tr('Fertig'))}</span>`
   else if (it.state === 'skip') right = `<span class="chip danger">${esc(tr('Übersprungen'))}</span>`
   else if (it.state === 'up') right = `<span class="pu-pct"><span class="track"><i style="--w:${it.pct}%"></i></span><small>${it.pct} %</small></span>`
   else right = `<span class="chip">${esc(tr('Wartet'))}</span>`
@@ -11928,10 +11932,18 @@ function photoUploadRunningTop(run) {
 function photoUploadDoneTop(run) {
   const ok = run.items.filter((it) => it.state === 'ok').length
   const skipped = run.items.filter((it) => it.state === 'skip')
-  const head = ok ? tr(`${ok} ${ok === 1 ? 'Foto' : 'Fotos'} übernommen`) : tr('Keine Fotos übernommen')
+  const vids = run.items.filter((it) => it.state === 'ok' && it.prep).length
+  const pics = ok - vids
+  const head = !ok
+    ? tr('Keine Fotos übernommen')
+    : !vids
+      ? tr(`${pics} ${pics === 1 ? 'Foto' : 'Fotos'} übernommen`)
+      : !pics
+        ? tr(`${vids} ${vids === 1 ? 'Video' : 'Videos'} übernommen`)
+        : tr(`${pics} ${pics === 1 ? 'Foto' : 'Fotos'} und ${vids} ${vids === 1 ? 'Video' : 'Videos'} übernommen`)
   return [
     `<section class="card wide"><div class="photo-hero"><span class="photo-hero-ic${ok ? ' ok' : ''}">${icon(ok ? 'check' : 'info', 34)}</span><h2>${esc(head)}</h2>
-      ${run.targetTitle ? `<p class="help">${esc(tr(`Im Album „${run.targetTitle}“.`))}</p>` : ''}
+      ${run.targetTitle ? `<p class="help">${esc(tr(`Im Album „${run.targetTitle}“.`))}${vids ? ` ${esc(tr('Videos bereitet die Box danach noch vor.'))}` : ''}</p>` : ''}
       <div class="btns">${run.target ? '<button class="btn primary" id="pu-album">Zum Album</button>' : ''}<button class="btn" id="pu-more">Weitere hochladen</button></div></div></section>`,
     run.unconfirmed ? `<div class="note warn wide">${icon('info', 18)}<span>${esc(tr(PHOTO_UNCONFIRMED))}</span></div>` : '',
     skipped.length
@@ -11985,7 +11997,7 @@ function mountPhotoUpload(root, page) {
     // (is there room for it on the box - before it starts, not halfway)
     photoUp.check = null
     if (photoUp.items.length) {
-      const r = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: photoUp.items.length } })
+      const r = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: photoUp.items.length, videoBytes: photoVideoBytes(photoUp.items) } })
       // (a newer choice meanwhile: its own check counts)
       if (mine !== choice) return
       if (r.ok) photoUp.check = r.body
@@ -12039,7 +12051,7 @@ async function startPhotoUpload(page) {
   }
   run.target = target
   run.targetTitle = title
-  const check = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: run.items.length } })
+  const check = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: run.items.length, videoBytes: photoVideoBytes(run.items) } })
   if (!still()) return photoRunEnd(run, page)
   if (check.ok && check.body?.enough === false) {
     photoUp.check = check.body
@@ -12059,7 +12071,7 @@ async function startPhotoUpload(page) {
     // (this file was stopped or lost on its way - stopped, its time ran out, the WLAN went: the box has to confirm
     // that it did not keep it; without, it may still turn up)
     if (r.cancelling && !(await r.cancelling)) run.unconfirmed++
-    if (r.ok && r.body?.ok) Object.assign(it, { state: 'ok', pct: 100 })
+    if (r.ok && r.body?.ok) Object.assign(it, { state: 'ok', pct: 100, prep: r.body.preparing === true })
     else Object.assign(it, { state: 'skip', reason: r.aborted ? 'aborted' : (r.body?.skipped ?? (r.body?.error === 'heif_missing' ? 'heif' : 'failed')) })
     photoRunPaint(run, i)
   }
@@ -12106,7 +12118,8 @@ function photoPut(run, target, it, i) {
     xhr.open('PUT', `${API}/photos/upload?album=${encodeURIComponent(target)}&name=${encodeURIComponent(it.file.name)}&ticket=${ticket}`)
     xhr.setRequestHeader('Content-Type', 'application/octet-stream')
     if (state.csrf) xhr.setRequestHeader('x-mupibox-csrf', state.csrf)
-    xhr.timeout = 5 * 60_000
+    // (a clip: up to 1 GB over the WLAN - more time)
+    xhr.timeout = PHOTO_VIDEO_EXT.test(it.file.name) ? 45 * 60_000 : 5 * 60_000
     xhr.upload.onprogress = (e) => {
       if (!e.lengthComputable) return
       // (sent is not yet made: 95 % at most until the box answers)
@@ -12718,7 +12731,7 @@ function photoAlbumTop() {
     ? `<div class="ph-grid${sel ? ' selecting' : ''}">${a.assets
         .map(
           (x) => `<button class="ph-tile${photoLib.chosen.has(x.id) ? ' chosen' : ''}" data-asset="${esc(x.id)}" aria-label="${esc(tr('Foto'))}" ${sel ? `aria-pressed="${photoLib.chosen.has(x.id)}"` : ''}>
-            <img src="${esc(photoFile(a.id, x.id, 's'))}" alt="" loading="lazy">${x.id === a.cover ? `<span class="ph-cover-pill">${esc(tr('Titelbild'))}</span>` : ''}${sel ? `<span class="ph-check">${icon('check', 16)}</span>` : ''}</button>`,
+            ${x.ready === false ? `<span class="ph-prep">${icon('sync', 18)}<small>${esc(tr('Wird vorbereitet'))}</small></span>` : `<img src="${esc(photoFile(a.id, x.id, 's'))}" alt="" loading="lazy">`}${x.kind === 'video' && x.ready !== false ? `<span class="ph-video-pill">▶ ${esc(clipLength(x.duration))}</span>` : ''}${x.id === a.cover ? `<span class="ph-cover-pill">${esc(tr('Titelbild'))}</span>` : ''}${sel ? `<span class="ph-check">${icon('check', 16)}</span>` : ''}</button>`,
         )
         .join('')}</div>`
     : `<p class="help" style="margin:0">Noch keine Fotos in diesem Album.</p>`
@@ -12731,7 +12744,7 @@ function photoAlbumTop() {
           <button class="navrow" id="ph-rename"><span class="tile">${icon('text', 18)}</span><span class="lbl"><b>Umbenennen</b></span><span class="chev">${icon('chevron', 18)}</span></button>
           <button class="navrow" id="ph-delete"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Album löschen</b></span></button></div></section>`
       : '',
-    `<section class="card wide"><div class="card-head"><h2>${esc(sel ? tr(`${n} ausgewählt`) : tr(`${a.assets.length} Fotos`))}</h2>${sel ? '<button class="btn sm" id="ph-all">Alle</button>' : ''}</div>${grid}</section>`,
+    `<section class="card wide"><div class="card-head"><h2>${esc(sel ? tr(`${n} ausgewählt`) : (a.videos ? tr(`${a.assets.length} Fotos und Videos`) : tr(`${a.assets.length} Fotos`)))}</h2>${sel ? '<button class="btn sm" id="ph-all">Alle</button>' : ''}</div>${grid}</section>`,
     sel
       ? `<div class="ph-actionbar wide"><button class="btn" id="ph-sel-cancel">Abbrechen</button>${n === 1 ? '<button class="btn" id="ph-sel-cover">Titelbild</button>' : ''}<button class="btn danger" id="ph-sel-delete" ${n ? '' : 'disabled'}>${esc(tr(`Löschen (${n})`))}</button></div>`
       : '',
@@ -12866,17 +12879,35 @@ function mountPhotoAlbum(root, page) {
 }
 
 // The app's full view of a picture: swiping (or the arrows) to the next, "Als Titelbild" and "Löschen" - nothing else
+const clipLength = (sec) => {
+  const n = Math.max(0, Math.round(Number(sec) || 0))
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
+}
+
 function photoViewer(a, start, { setCover, deleteAssets }) {
   let i = Math.max(0, start)
   openSheet(
-    `<div class="ph-view"><img id="ph-view-img" alt=""><button class="icon-btn soft ph-prev" aria-label="${esc(tr('Voriges Bild'))}">${icon('back', 18)}</button><button class="icon-btn soft ph-next" aria-label="${esc(tr('Nächstes Bild'))}">${icon('chevron', 18)}</button></div>
+    `<div class="ph-view"><img id="ph-view-img" alt=""><video id="ph-view-vid" controls playsinline preload="metadata" hidden></video><p class="ph-view-prep" hidden>${esc(tr('Wird vorbereitet'))}</p><button class="icon-btn soft ph-prev" aria-label="${esc(tr('Voriges Bild'))}">${icon('back', 18)}</button><button class="icon-btn soft ph-next" aria-label="${esc(tr('Nächstes Bild'))}">${icon('chevron', 18)}</button></div>
      <p class="help" id="ph-view-n" style="margin:0;text-align:center"></p>
      <div class="btns">${a.source === 'upload' ? '<button class="btn danger" data-del>Löschen</button>' : ''}<button class="btn" data-cover>Als Titelbild</button><button class="btn primary" data-close>Schließen</button></div>`,
     (sheet, close) => {
       const img = sheet.querySelector('#ph-view-img')
+      const vid = sheet.querySelector('#ph-view-vid')
+      const prep = sheet.querySelector('.ph-view-prep')
       const show = () => {
         const x = a.assets[i]
-        img.src = photoFile(a.id, x.id, 'f')
+        const clip = x.kind === 'video'
+        vid.pause()
+        vid.hidden = !clip || x.ready === false
+        img.hidden = clip
+        prep.hidden = !(clip && x.ready === false)
+        if (clip && x.ready !== false) {
+          vid.poster = photoFile(a.id, x.id, 'f')
+          vid.src = photoFile(a.id, x.id, 'v')
+        } else if (!clip) img.src = photoFile(a.id, x.id, 'f')
+        // (a clip still being made has no picture for the album yet)
+        const cover = sheet.querySelector('[data-cover]')
+        if (cover) cover.disabled = x.ready === false
         sheet.querySelector('#ph-view-n').textContent = `${i + 1} / ${a.assets.length}`
       }
       const step = (by) => {
@@ -12891,7 +12922,10 @@ function photoViewer(a, start, { setCover, deleteAssets }) {
         if (x0 !== null && Math.abs(e.clientX - x0) > 50) step(e.clientX < x0 ? 1 : -1)
         x0 = null
       })
-      sheet.querySelector('[data-close]').onclick = close
+      sheet.querySelector('[data-close]').onclick = () => {
+        vid.pause()
+        close()
+      }
       sheet.querySelector('[data-cover]').onclick = () => {
         close()
         setCover(a.assets[i].id)

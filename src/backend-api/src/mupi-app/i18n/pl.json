@@ -3613,5 +3613,11 @@
  "Test": "Test",
  "Verbindung steht": "Połączono",
  "Bilder": "Zdjęcia",
- "{} min · frei": "{} min · wolne"
+ "{} min · frei": "{} min · wolne",
+ "Datei zu groß": "Plik za duży",
+ "Videos bereitet die Box danach noch vor.": "Filmy urządzenie przygotuje potem.",
+ "Wird vorbereitet": "Przygotowywanie",
+ "{} {} und {} {} übernommen": "Dodano: {} {} i {} {}",
+ "Fotos & Videos wählen": "Wybierz zdjęcia i filmy",
+ "{} Fotos und Videos": "Zdjęcia i filmy: {}"
 }

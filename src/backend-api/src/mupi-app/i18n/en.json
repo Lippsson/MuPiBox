@@ -3629,5 +3629,11 @@
  "Test": "Test",
  "Verbindung steht": "Connected",
  "Bilder": "Pictures",
- "{} min · frei": "{} min · free"
+ "{} min · frei": "{} min · free",
+ "Datei zu groß": "File too large",
+ "Videos bereitet die Box danach noch vor.": "The box prepares videos afterwards.",
+ "Wird vorbereitet": "Being prepared",
+ "{} {} und {} {} übernommen": "{} {} and {} {} added",
+ "Fotos & Videos wählen": "Choose photos & videos",
+ "{} Fotos und Videos": "{} photos and videos"
 }

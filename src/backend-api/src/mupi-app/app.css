@@ -312,6 +312,13 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .ph-actionbar { position: sticky; bottom: calc(var(--mp-tab-h) + 8px); display: flex; gap: 10px; justify-content: flex-end; padding: 10px 12px; border-radius: var(--mp-r); background: var(--mp-surface); border: 1px solid var(--mp-border); z-index: 5; }
 .ph-view { position: relative; display: grid; place-items: center; }
 .ph-view img { max-width: 100%; max-height: 62vh; border-radius: 10px; touch-action: pan-y; }
+/* a clip: its player in the full view, the note while it is being made; in the grid its length and the note */
+.ph-view video { max-width: 100%; max-height: 62vh; border-radius: 10px; background: #000; }
+.ph-view-prep { margin: 40px 0; color: var(--mp-muted); font-weight: 700; }
+.ph-video-pill { position: absolute; left: 6px; bottom: 6px; padding: 2px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.62); color: #fff; font-size: 12px; font-weight: 700; }
+.ph-prep { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: var(--mp-track); color: var(--mp-accent-text); font-weight: 700; text-align: center; padding: 4px; }
+.ph-prep small { font-size: 11px; }
+.chip.accent { background: var(--mp-accent-soft); color: var(--mp-accent-text); }
 .ph-view .ph-prev, .ph-view .ph-next { position: absolute; top: 50%; transform: translateY(-50%); }
 .ph-view .ph-prev { left: 4px; }
 .ph-view .ph-next { right: 4px; }

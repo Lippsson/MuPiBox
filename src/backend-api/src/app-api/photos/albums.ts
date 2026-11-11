@@ -9,6 +9,7 @@ import type { Express, Request, Response, Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
 import { checkImmichNow, immichLiveAway, sendImmichLive } from './immich'
+import { VIDEO_EXTENSIONS, videoQueue } from './video'
 import { extOf, NotAPicture, PHOTO_EXTENSIONS, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings, type PhotoOrder } from './settings'
 import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, IMMICH_PHOTO_DIR, INCOMING_DIR, isId, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
@@ -33,7 +34,10 @@ const cleanTitle = (raw: unknown): string | null => {
   return t.length >= 1 && t.length <= TITLE_MAX ? t : null
 }
 
-const SIZE_SUFFIX: Record<string, string> = { f: '.jpg', s: '.s.jpg', b: '.b.jpg' }
+// (v: a clip's video)
+const SIZE_SUFFIX: Record<string, string> = { f: '.jpg', s: '.s.jpg', b: '.b.jpg', v: '.mp4' }
+// a clip from a phone: up to 1 GB as it comes (made smaller on the box)
+const MAX_VIDEO_BYTES = 1024 * 1024 * 1024
 
 /** The pictures of an album in the order chosen (Einstellungen › Fotos › Reihenfolge) */
 export function ordered(assets: PhotoAsset[], order: PhotoOrder): PhotoAsset[] {
@@ -54,7 +58,7 @@ const summary = (a: PhotoAlbum) => ({
   display: a.display,
   position: a.position,
   count: a.assets.length,
-  videos: 0,
+  videos: a.assets.filter((x) => x.kind === 'video').length,
   cover: coverOf(a) ?? null,
   // (a NAS album: its folder; an Immich album: its id there, and whether it is shown live)
   ...(a.source === 'nas' || a.source === 'immich' ? { ref: a.ref ?? null } : {}),
@@ -69,6 +73,8 @@ async function sendPicture(req: Request, res: Response, onlyShown: boolean): Pro
   const a = await findAlbum(albumId)
   const asset = a?.assets.find((x) => x.id === assetId)
   if (!a || (onlyShown && !a.display) || !asset) return void res.status(404).end()
+  // (a clip still waiting to be made has no picture yet; only a clip has a video)
+  if (asset.ready === false || (size === 'v' && asset.kind !== 'video')) return void res.status(404).end()
   // (an Immich album shown live: the picture comes from Immich; one kept on the box whose picture is not there yet -
   // switched from live a moment ago, the cache's limit reached - too)
   if (a.source === 'immich' && (a.live || !(await fsp.access(`${assetBase(a, assetId)}${suffix}`).then(() => true, () => false)))) {
@@ -119,6 +125,8 @@ function releaseTicket(ticket: string, entry: UploadTicket): void {
 export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): void {
   // (once at the start: what an upload left when the box went off - an upload waits for it)
   const swept = sweepLeftovers().catch((err) => console.warn(`${new Date().toLocaleString()}: [photos] cleanup: ${(err as Error).message}`))
+  // (the clips that wait to be made - after a restart too)
+  videoQueue.start()
 
   /** GET /api/app/photos/overview - the albums (with their state), the numbers and the card's space */
   // (?light=1: without the card's space - the library's line asks only for the numbers, counting the pictures' bytes
@@ -141,7 +149,7 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     res.setHeader('Cache-Control', 'no-store')
     const a = isId(req.params.id) ? await findAlbum(req.params.id) : undefined
     if (!a) return void res.status(404).json({ error: 'no such album' })
-    res.json({ ...summary(a), assets: ordered(a.assets, 'newest').map(({ id, w, h, taken, added }) => ({ id, w, h, taken, added })) })
+    res.json({ ...summary(a), assets: ordered(a.assets, 'newest').map(({ id, w, h, taken, added, kind, ready, duration }) => ({ id, w, h, taken, added, kind, ready: ready !== false, duration: duration ?? null })) })
   })
 
   /** POST /api/app/photos/albums {title} - a new album for uploads (shown on the display, last place) */
@@ -228,8 +236,10 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
   router.post('/photos/upload/check', requireSession, requireCsrf, async (req, res) => {
     const files = Number((req.body as { files?: unknown } | undefined)?.files)
     if (!Number.isInteger(files) || files < 0 || files > 10_000) return void res.status(400).json({ error: 'files' })
+    // (clips: their bytes twice - as they came until they are made, and the made ones)
+    const videoBytes = Number((req.body as { videoBytes?: unknown } | undefined)?.videoBytes) || 0
     const space = await cardSpace()
-    const needed = files * STORED_BYTES_PER_PHOTO
+    const needed = files * STORED_BYTES_PER_PHOTO + Math.max(0, Math.min(videoBytes, 100 * MAX_VIDEO_BYTES)) * 2
     // (missing: how much is lacking for this choice - "Für diese Auswahl fehlen etwa 1,1 GB")
     const missing = space ? Math.max(0, needed + RESERVE_BYTES - space.free) : 0
     res.json({ needed, free: space?.free ?? null, enough: space ? space.free - needed > RESERVE_BYTES : true, missing })
@@ -273,12 +283,14 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     if (!isId(albumId)) return void res.status(400).json({ error: 'album' })
     const target = await findAlbum(albumId)
     if (!target || target.source !== 'upload') return void res.status(404).json({ error: 'no such album' })
-    if (!PHOTO_EXTENSIONS.includes(ext)) return void res.json({ skipped: 'format' })
+    const isVideo = VIDEO_EXTENSIONS.includes(ext)
+    if (!PHOTO_EXTENSIONS.includes(ext) && !isVideo) return void res.json({ skipped: 'format' })
     const size = Number.parseInt(String(req.headers['content-length'] ?? ''), 10)
     if (!Number.isFinite(size) || size <= 0) return void res.status(411).json({ error: 'length required' })
-    if (size > MAX_PHOTO_BYTES) return void res.json({ skipped: 'format' })
+    if (size > (isVideo ? MAX_VIDEO_BYTES : MAX_PHOTO_BYTES)) return void res.json({ skipped: isVideo ? 'large' : 'format' })
     const space = await cardSpace()
-    if (space && space.free - size - STORED_BYTES_PER_PHOTO < RESERVE_BYTES) return void res.json({ skipped: 'space' })
+    // (a clip: as it came until it is made - about as much again for the made one)
+    if (space && space.free - (isVideo ? size * 2 : size + STORED_BYTES_PER_PHOTO) < RESERVE_BYTES) return void res.json({ skipped: 'space' })
 
     await swept
     await fsp.mkdir(INCOMING_DIR, { recursive: true })
@@ -301,6 +313,28 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
       const sum = await sumOf(part)
       if (target.assets.some((x) => x.sum === sum)) return void res.json({ skipped: 'duplicate' })
       await fsp.mkdir(albumDir(target), { recursive: true })
+      if (isVideo) {
+        // a clip: kept as it came, made in the background (video.ts) - the app shows it as "Wird vorbereitet"
+        if (gone.signal.aborted) return
+        await fsp.rename(part, `${out}.pending`)
+        const asset: PhotoAsset = { id, w: 0, h: 0, taken: null, added: new Date().toISOString(), kind: 'video', sum, ready: false, duration: 0 }
+        const placed = await update((lib) => {
+          if (gone.signal.aborted) return 'aborted'
+          const a = lib.albums.find((x) => x.id === albumId)
+          if (!a) return false
+          if (a.assets.some((x) => x.sum === sum)) return 'duplicate'
+          a.assets.push(asset)
+          entry.placed = { album: albumId, asset: id }
+          return true
+        })
+        if (placed !== true) {
+          for (const f of photoFiles(out)) await fsp.rm(f, { force: true })
+          if (placed === 'aborted') return
+          return void (placed === 'duplicate' ? res.json({ skipped: 'duplicate' }) : res.status(404).json({ error: 'no such album' }))
+        }
+        void videoQueue.kick()
+        return void res.json({ ok: true, preparing: true, video: true, asset: { id, w: 0, h: 0 } })
+      }
       let facts
       try {
         facts = await processPhoto(part, out, ext, gone.signal)
@@ -355,11 +389,14 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
  */
 export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): void {
   const on = () => photoSettings(deps.getMupiboxConfig()).enabled
+  // the pictures of an album the display shows: clips only with "Videos anzeigen" and once they are made
+  const shownAssets = (a: PhotoAlbum, videos = photoSettings(deps.getMupiboxConfig()).showVideos) => a.assets.filter((x) => x.kind !== 'video' || (videos && x.ready !== false))
+  const withShown = (a: PhotoAlbum): PhotoAlbum => ({ ...a, assets: shownAssets(a) })
   app.get('/api/photos/albums', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     const s = photoSettings(deps.getMupiboxConfig())
     if (!s.enabled) return void res.json({ enabled: false, albums: [] })
-    const list = (await albums()).filter((a) => a.display && a.assets.length > 0)
+    const list = (await albums()).map(withShown).filter((a) => a.display && a.assets.length > 0)
     // (albums shown live from Immich while it is away: "Gerade nicht da" on the display; ?check=1 - "Nochmal", or the
     // display asking while albums are not there - asks Immich first)
     if (req.query.check === '1') await checkImmichNow()
@@ -369,6 +406,7 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
       startAsSlideshow: s.startAsSlideshow,
       slideshowSeconds: s.slideshowSeconds,
       albums: list.map((a) => {
+        // (the stack: pictures - a clip's own picture too, when it is shown)
         const first = coverOf(a)
         const second = a.assets.find((x) => x.id !== first)?.id ?? null
         return { id: a.id, title: a.title, count: a.assets.length, pictures: [first, second].filter(Boolean), ...(away && a.source === 'immich' && a.live ? { away: true } : {}) }
@@ -380,7 +418,9 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
     const a = on() && isId(req.params.id) ? await findAlbum(req.params.id) : undefined
     if (!a || !a.display) return void res.status(404).json({ error: 'no such album' })
     const order = photoSettings(deps.getMupiboxConfig()).order
-    res.json({ id: a.id, title: a.title, assets: ordered(a.assets, order).map(({ id, w, h }) => ({ id, w, h })) })
+    const shown = shownAssets(a)
+    if (!shown.length) return void res.status(404).json({ error: 'no such album' })
+    res.json({ id: a.id, title: a.title, assets: ordered(shown, order).map(({ id, w, h, kind, duration }) => ({ id, w, h, ...(kind === 'video' ? { kind, duration: duration ?? 0 } : {}) })) })
   })
   // the screensaver: when it starts and how; with ?list=1 also its pictures (when it starts) - from every album shown
   // on the display, as one list in the order chosen ("Gemischt": all mixed; else album by album, in the albums' order)
@@ -389,7 +429,8 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
     const s = photoSettings(deps.getMupiboxConfig())
     if (!s.enabled || !s.screensaver.enabled) return void res.json({ enabled: false })
     if (req.query.list !== '1') return void res.json({ ...s.screensaver, slideshowSeconds: s.slideshowSeconds })
-    const shown = (await albums()).filter((a) => a.display && a.assets.length > 0)
+    // (pictures only: no clip in the screensaver)
+    const shown = (await albums()).map((a) => ({ ...a, assets: a.assets.filter((x) => x.kind !== 'video') })).filter((a) => a.display && a.assets.length > 0)
     let pictures = shown.flatMap((a) => ordered(a.assets, s.order === 'shuffle' ? 'newest' : s.order).map((x) => ({ album: a.id, id: x.id })))
     if (s.order === 'shuffle') {
       for (let i = pictures.length - 1; i > 0; i--) {
