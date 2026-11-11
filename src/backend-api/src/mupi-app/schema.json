@@ -495,125 +495,6 @@
    ]
   },
   {
-   "id": "verwaltet",
-   "slug": "managed",
-   "area": "bibliothek",
-   "parent": "bibliothek",
-   "title": "Verwaltete Inhalte",
-   "description": "",
-   "icon": "sync",
-   "intro": "Über die Suche hinzugefügte Künstler-Abos und Alben. Beim Künstler den Bereich (Folge von–bis) eingrenzen, einzelne Alben aus- oder einschließen.",
-   "sections": [
-    {
-     "title": "Künstler-Abos",
-     "help": "",
-     "items": [
-      {
-       "type": "rows",
-       "rows": [
-        {
-         "t": "Benjamin Blümchen",
-         "s": "Folgen 1–180 · 178 Alben",
-         "tag": "Abo",
-         "b": "Bearbeiten",
-         "act": "toast:Bearbeiten (Prototyp)"
-        },
-        {
-         "t": "Fünf Freunde",
-         "s": "alle Folgen · 162 Alben",
-         "tag": "Abo",
-         "b": "Bearbeiten",
-         "act": "toast:Bearbeiten (Prototyp)"
-        },
-        {
-         "t": "Die drei ??? Kids",
-         "s": "Folgen 60–99 · 40 Alben",
-         "tag": "Abo",
-         "b": "Bearbeiten",
-         "act": "toast:Bearbeiten (Prototyp)"
-        }
-       ]
-      }
-     ]
-    },
-    {
-     "title": "Benjamin Blümchen",
-     "help": "Bereich und einzelne Alben",
-     "items": [
-      {
-       "type": "text",
-       "label": "Folge von",
-       "key": "epFrom",
-       "default": "1",
-       "kind": "number"
-      },
-      {
-       "type": "text",
-       "label": "Folge bis",
-       "key": "epTo",
-       "default": "180",
-       "kind": "number"
-      },
-      {
-       "type": "toggle",
-       "label": "Folge 12 – Als Briefträger",
-       "key": "inc12",
-       "default": true
-      },
-      {
-       "type": "toggle",
-       "label": "Folge 99 – Das Weihnachtslied",
-       "key": "inc99",
-       "default": false,
-       "help": "ausgeschlossen"
-      },
-      {
-       "type": "buttons",
-       "buttons": [
-        [
-         "Übernehmen",
-         "primary",
-         "toast:Übernommen"
-        ],
-        [
-         "Abo entfernen",
-         "danger",
-         "toast:Entfernt (Prototyp)"
-        ]
-       ]
-      }
-     ]
-    },
-    {
-     "title": "Einzelne Alben",
-     "help": "",
-     "items": [
-      {
-       "type": "rows",
-       "rows": [
-        {
-         "t": "Die Vogelhochzeit",
-         "s": "Rolf Zuckowski",
-         "tag": "Album",
-         "b": "Entfernen",
-         "bk": "danger",
-         "act": "toast:Entfernt (Prototyp)"
-        },
-        {
-         "t": "Pettersson kriegt Weihnachtsbesuch",
-         "s": "Pettersson & Findus",
-         "tag": "Album",
-         "b": "Entfernen",
-         "bk": "danger",
-         "act": "toast:Entfernt (Prototyp)"
-        }
-       ]
-      }
-     ]
-    }
-   ]
-  },
-  {
    "id": "podsuche",
    "slug": "podcast-search",
    "area": "bibliothek",
@@ -2113,20 +1994,6 @@
        "type": "select",
        "label": "HDMI-Drehung",
        "key": "hdmiRot",
-       "default": "Aus (Standard)",
-       "options": [
-        "Aus (Standard)",
-        "90°",
-        "180°",
-        "270°",
-        "Horizontal spiegeln",
-        "Vertikal spiegeln"
-       ]
-      },
-      {
-       "type": "select",
-       "label": "DSI-Drehung",
-       "key": "dsiRot",
        "default": "Aus (Standard)",
        "options": [
         "Aus (Standard)",
@@ -5107,46 +4974,6 @@
    "l": "Top-Titel (7 Tage)",
    "where": "Hören › Hör-Verlauf",
    "id": "verlauf"
-  },
-  {
-   "l": "Verwaltete Inhalte",
-   "where": "Bibliothek › Verwaltete Inhalte",
-   "id": "verwaltet"
-  },
-  {
-   "l": "Künstler-Abos",
-   "where": "Bibliothek › Verwaltete Inhalte",
-   "id": "verwaltet"
-  },
-  {
-   "l": "Benjamin Blümchen",
-   "where": "Bibliothek › Verwaltete Inhalte",
-   "id": "verwaltet"
-  },
-  {
-   "l": "Folge von",
-   "where": "Bibliothek › Verwaltete Inhalte",
-   "id": "verwaltet"
-  },
-  {
-   "l": "Folge bis",
-   "where": "Bibliothek › Verwaltete Inhalte",
-   "id": "verwaltet"
-  },
-  {
-   "l": "Folge 12 – Als Briefträger",
-   "where": "Bibliothek › Verwaltete Inhalte",
-   "id": "verwaltet"
-  },
-  {
-   "l": "Folge 99 – Das Weihnachtslied",
-   "where": "Bibliothek › Verwaltete Inhalte",
-   "id": "verwaltet"
-  },
-  {
-   "l": "Einzelne Alben",
-   "where": "Bibliothek › Verwaltete Inhalte",
-   "id": "verwaltet"
   },
   {
    "l": "Podcasts suchen",

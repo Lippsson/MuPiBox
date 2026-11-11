@@ -6,7 +6,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const HOST_API = 1
+// (the same as the API's, app-api/extensions.ts: an extension the API installed for hostApi 2 or 3 lost its player part here)
+const HOST_API = 3
 // Since 5.1 below data/ (what the box keeps); a box that came over from before has them in ~/.mupibox/extensions: moved once
 // (the API's extensions.ts does the same - whoever is first wins). In development the player's config folder.
 const MUPI_HOME = '/home/dietpi/.mupibox'

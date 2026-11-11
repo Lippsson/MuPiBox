@@ -1,5 +1,5 @@
 // Packs an extension into its one file and enters it in the catalog (docs/extensions.md):
-//   node tools/mpx/pack.mjs <id> [--branch dev5.1] [--repo Lippsson/MuPiBox]
+//   node tools/mpx/pack.mjs <id> [--branch upstream-v5.1-pr] [--repo wowa1990/MuPiBox]
 // extensions/<id>/  ->  extensions/dist/<id>-<version>.mpx  (+ the entry in extensions/catalog.json: size, SHA-256, what it sets up)
 // The zip is made the same way every time (sorted names, fixed times), so the same files give the same checksum.
 
@@ -14,11 +14,11 @@ const args = process.argv.slice(2)
 const flag = (name, fallback) => (args.includes(`--${name}`) ? args[args.indexOf(`--${name}`) + 1] : fallback)
 const id = args.find((a) => !a.startsWith('--') && args[args.indexOf(a) - 1]?.startsWith('--') !== true)
 if (!id) {
-  console.error('usage: node tools/mpx/pack.mjs <id> [--branch dev5.1] [--repo Lippsson/MuPiBox]')
+  console.error('usage: node tools/mpx/pack.mjs <id> [--branch upstream-v5.1-pr] [--repo wowa1990/MuPiBox]')
   process.exit(1)
 }
-const branch = flag('branch', 'dev5.1')
-const repo = flag('repo', 'Lippsson/MuPiBox')
+const branch = flag('branch', 'upstream-v5.1-pr')
+const repo = flag('repo', 'wowa1990/MuPiBox')
 const MAX_MPX = 16 * 1024 * 1024
 
 const dir = path.join(root, 'extensions', id)

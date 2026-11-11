@@ -33,10 +33,15 @@ if (!process.env.MUPIBOX_EXT_DIR && process.env.NODE_ENV !== 'test' && process.e
   }
 }
 export const HOST_API = 4
-const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/Lippsson/MuPiBox/dev5.1/extensions/catalog.json'
+// (the catalog of the MuPiBox, in its repository: what is in it is trusted - an extension can do everything on the box; while 5.1
+// is not with splitti yet, the 5.1 branch of the fork that builds it)
+const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/catalog.json'
 // the largest package (the file as it is sent and downloaded; what is in it may be three times that, unpacked)
 const MAX_MPX = 16 * 1024 * 1024
 const ID = /^[a-z][a-z0-9-]{1,30}$/
+// (folders of EXT_DIR that are not an extension: an extension of that name replaced the settings or the data of all of them)
+const RESERVED_IDS = new Set(['settings', 'data', 'state', 'backup', 'cache', 'tmp'])
+const validId = (id: string) => ID.test(id) && !RESERVED_IDS.has(id)
 const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/
 const FILE = /^[A-Za-z0-9_][A-Za-z0-9_./-]{0,100}$/
 // what a package may hold (a file of another kind is a reason to refuse it)
@@ -44,7 +49,8 @@ const ALLOWED_FILES = /\.(js|mjs|json|svg|png|jpg|css|txt|md|rules|html)$/i
 // ... and what a package may hold beyond that: the unit files of its systemd services (never served to a browser)
 const PACKAGE_FILES = /\.(js|mjs|json|svg|png|jpg|css|txt|md|rules|html|service|timer)$/i
 const GROUPS = new Set(['cdrom', 'audio', 'video', 'plugdev'])
-const PACKAGE = /^[a-z0-9][a-z0-9+.-]{1,60}$/
+// (a Debian package name; never one that ends in - : apt-get reads "name-" as "remove name" - "g++" is a real one)
+const PACKAGE = /^[a-z0-9][a-z0-9+.-]{0,59}[a-z0-9+]$/
 const SECRET_SETTING = 'secret'
 
 export interface Manifest {
@@ -108,7 +114,7 @@ async function writeState(state: State): Promise<void> {
 
 /** The manifest of an installed extension, or null when it is missing or not for this host. */
 export async function readManifest(id: string): Promise<Manifest | null> {
-  if (!ID.test(id)) return null
+  if (!validId(id)) return null
   const manifest = await readJson<Manifest | null>(path.join(EXT_DIR, id, 'manifest.json'), null)
   return manifest && manifest.id === id && Number.isInteger(manifest.hostApi) && manifest.hostApi >= 1 && manifest.hostApi <= HOST_API ? manifest : null
 }
@@ -267,7 +273,7 @@ export function checkUnitFile(text: string, kind: 'service' | 'timer'): string |
 export function checkManifest(m: unknown, files: Set<string>): string | null {
   const x = m as Manifest
   if (!x || typeof x !== 'object') return 'no manifest'
-  if (!ID.test(String(x.id))) return 'bad id'
+  if (!validId(String(x.id))) return 'bad id'
   if (typeof x.name !== 'string' || x.name.length < 1 || x.name.length > 80) return 'bad name'
   if (!VERSION.test(String(x.version))) return 'bad version'
   if (!Number.isInteger(x.hostApi) || x.hostApi < 1) return 'bad hostApi'
@@ -381,9 +387,15 @@ export function checkSettings(manifest: Manifest, values: Record<string, unknown
 
 let catalogCache: { at: number; list: CatalogEntry[] } | null = null
 
+/** Developer mode (mupibox.extensionDevMode, switched in the app): own extension files and another catalog. Off, only the MuPiBox
+ *  catalog installs - an extension runs as the box's user, who may do everything as root. */
+function devMode(deps: ExtensionDeps): boolean {
+  return (deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.extensionDevMode === true
+}
+
 function catalogUrl(deps: ExtensionDeps): string {
   const set = (deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.extensionCatalog
-  return typeof set === 'string' && /^https:\/\//.test(set) ? set : DEFAULT_CATALOG
+  return devMode(deps) && typeof set === 'string' && /^https:\/\//.test(set) ? set : DEFAULT_CATALOG
 }
 
 /** The page of the catalog to read in a browser: the extensions folder on GitHub for the default catalog, else the address that was set. */
@@ -399,7 +411,7 @@ async function fetchCatalog(deps: ExtensionDeps): Promise<CatalogEntry[]> {
   if (!response.ok) throw new Error(`catalog: HTTP ${response.status}`)
   const body = await response.json()
   const list = (Array.isArray(body) ? body : []).filter(
-    (e): e is CatalogEntry => ID.test(String(e?.id)) && VERSION.test(String(e?.version)) && /^https:\/\//.test(String(e?.url)) && /^[0-9a-f]{64}$/.test(String(e?.sha256)) && Number.isInteger(e?.hostApi) && e.hostApi <= HOST_API && e.size <= MAX_MPX,
+    (e): e is CatalogEntry => validId(String(e?.id)) && VERSION.test(String(e?.version)) && /^https:\/\//.test(String(e?.url)) && /^[0-9a-f]{64}$/.test(String(e?.sha256)) && Number.isInteger(e?.hostApi) && e.hostApi <= HOST_API && e.size <= MAX_MPX,
   )
   // (an icon is only a small SVG as a data address - the page puts it into a style, so nothing else may get in)
   for (const e of list) if (e.icon !== undefined && !/^data:image\/svg\+xml;base64,[A-Za-z0-9+/=]{1,6000}$/.test(String(e.icon))) delete e.icon
@@ -535,15 +547,60 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
     const conflicts = (await testResources(manifest, deps)).filter((c) => c.severity === 'error')
     if (conflicts.length > 0) return fail(`conflict: ${conflicts.map((c) => c.message).join(' ')}`)
 
+    // In this order: the files ready beside it, the packages, the rules and groups, then the files in place and the services
+    // last. The version before stays whole until then - a failure on the way leaves it as it was (it was deleted first,
+    // and a package that could not be loaded left the new files without what they need); its services come back too.
     job.step = 'files'
     const target = path.join(EXT_DIR, id)
     const staging = path.join(EXT_DIR, `.install-${id}`)
+    const previous = path.join(EXT_DIR, `.previous-${id}`)
     await fsp.rm(staging, { recursive: true, force: true })
     for (const [name, data] of files) {
       await fsp.mkdir(path.dirname(path.join(staging, name)), { recursive: true })
       await fsp.writeFile(path.join(staging, name), data)
     }
-    await fsp.rm(target, { recursive: true, force: true })
+    const dropStaging = () => fsp.rm(staging, { recursive: true, force: true }).catch(() => undefined)
+
+    // (before the services: a service that runs a program of one of its packages could not start before it was there)
+    if ((sys.packages ?? []).length > 0) {
+      job.step = 'packages'
+      const r = await run('sudo', ['apt-get', 'install', '-y', '--no-install-recommends', '--no-remove', ...(sys.packages as string[])], 600000, { DEBIAN_FRONTEND: 'noninteractive' })
+      if (!r.ok) {
+        await dropStaging()
+        return fail(`packages: ${r.out.slice(-200)}`)
+      }
+    }
+
+    job.step = 'system'
+    for (const rule of sys.udev ?? []) {
+      const tmp = `/tmp/mpx-${id}-${process.pid}.rules`
+      await fsp.writeFile(tmp, files.get(rule.file) as Buffer)
+      const r = await run('sudo', ['install', '-m', '644', '-o', 'root', '-g', 'root', tmp, `/etc/udev/rules.d/${rule.name}`], 20000)
+      await fsp.rm(tmp, { force: true })
+      if (!r.ok) {
+        await dropStaging()
+        return fail(`rule ${rule.name}: ${r.out.slice(0, 100)}`)
+      }
+    }
+    // (the rules of the version before that this one no longer has: else they stayed for good - a removal later only
+    // knows the rules of the version then)
+    const staleRules = (before?.system?.udev ?? []).filter((old) => !(sys.udev ?? []).some((r) => r.name === old.name))
+    for (const rule of staleRules) await run('sudo', ['rm', '-f', `/etc/udev/rules.d/${rule.name}`], 20000)
+    if ((sys.udev ?? []).length > 0 || staleRules.length > 0) {
+      await run('sudo', ['udevadm', 'control', '--reload'], 20000)
+      await run('sudo', ['udevadm', 'trigger', '--subsystem-match=block', '--action=change'], 20000)
+    }
+    for (const group of sys.groups ?? []) {
+      const r = await run('sudo', ['usermod', '-aG', group, 'dietpi'], 20000)
+      if (!r.ok) {
+        await dropStaging()
+        return fail(`group ${group}: ${r.out.slice(0, 100)}`)
+      }
+    }
+
+    // the files in place, the version before kept aside until its services were replaced
+    await fsp.rm(previous, { recursive: true, force: true })
+    if (existsSync(target)) await fsp.rename(target, previous)
     await fsp.rename(staging, target)
 
     // the settings an older version of the box kept in its own configuration come along once
@@ -563,32 +620,25 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
       await fsp.writeFile(settingsFile(id), JSON.stringify(have))
     }
 
-    job.step = 'system'
-    for (const rule of sys.udev ?? []) {
-      const tmp = `/tmp/mpx-${id}-${process.pid}.rules`
-      await fsp.writeFile(tmp, files.get(rule.file) as Buffer)
-      const r = await run('sudo', ['install', '-m', '644', '-o', 'root', '-g', 'root', tmp, `/etc/udev/rules.d/${rule.name}`], 20000)
-      await fsp.rm(tmp, { force: true })
-      if (!r.ok) return fail(`rule ${rule.name}: ${r.out.slice(0, 100)}`)
-    }
-    if ((sys.udev ?? []).length > 0) {
-      await run('sudo', ['udevadm', 'control', '--reload'], 20000)
-      await run('sudo', ['udevadm', 'trigger', '--subsystem-match=block', '--action=change'], 20000)
-    }
-    for (const group of sys.groups ?? []) {
-      const r = await run('sudo', ['usermod', '-aG', group, 'dietpi'], 20000)
-      if (!r.ok) return fail(`group ${group}: ${r.out.slice(0, 100)}`)
-    }
     if ((sys.units ?? []).length > 0 || (before?.system?.units ?? []).length > 0) {
       job.step = 'services'
-      const problem = await setUpUnits(before?.system?.units ?? [], sys.units ?? [], files, path.join(EXT_DIR, id), id)
-      if (problem) return fail(problem)
+      const problem = await setUpUnits(before?.system?.units ?? [], sys.units ?? [], files, target, id)
+      if (problem) {
+        // back to the version before: its files, and its services as they were (none: the new ones go again)
+        await fsp.rm(target, { recursive: true, force: true })
+        if (existsSync(previous)) await fsp.rename(previous, target)
+        const oldUnits = before?.system?.units ?? []
+        if (oldUnits.length > 0) {
+          const oldFiles = new Map<string, Buffer>()
+          for (const u of oldUnits) oldFiles.set(u.file, await fsp.readFile(path.join(target, u.file)).catch(() => Buffer.alloc(0)))
+          await setUpUnits(sys.units ?? [], oldUnits, oldFiles, target, id)
+        } else {
+          await removeUnits(sys.units ?? [])
+        }
+        return fail(before ? `${problem} - the version before is back` : problem)
+      }
     }
-    if ((sys.packages ?? []).length > 0) {
-      job.step = 'packages'
-      const r = await run('sudo', ['apt-get', 'install', '-y', '--no-install-recommends', ...(sys.packages as string[])], 600000, { DEBIAN_FRONTEND: 'noninteractive' })
-      if (!r.ok) return fail(`packages: ${r.out.slice(-200)}`)
-    }
+    await fsp.rm(previous, { recursive: true, force: true })
 
     const state = await readState()
     state[id] = { version: manifest.version, enabled: true }
@@ -688,7 +738,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     } catch (error) {
       catalogError = (error as Error).message
     }
-    res.json({ installed, catalog, catalogError, catalogPage: catalogPage(deps), hostApi: HOST_API })
+    res.json({ installed, catalog, catalogError, catalogPage: catalogPage(deps), hostApi: HOST_API, devMode: devMode(deps) })
   })
 
   const start = (action: Job['action'], work: (id: string, body?: Record<string, unknown>) => Promise<void>): RequestHandler[] => [
@@ -699,7 +749,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
       // (an uploaded file names itself: its id is the one in its manifest)
       const upload = typeof body.token === 'string' ? uploads.get(body.token) : undefined
       const id = upload ? upload.pkg.manifest.id : String(body.id ?? '')
-      if (!ID.test(id)) {
+      if (!validId(id)) {
         res.status(400).json({ error: 'invalid id' })
         return
       }
@@ -716,6 +766,11 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     const token = typeof body?.token === 'string' ? body.token : ''
     const upload = token ? uploads.get(token) : undefined
     if (token) uploads.delete(token)
+    // (an uploaded file only in developer mode - switched off meanwhile: not installed)
+    if (token && !devMode(deps)) {
+      Object.assign(jobs.get(id) as Job, { running: false, ok: false, error: 'own extension files only in developer mode' })
+      return Promise.resolve()
+    }
     return installExtension(id, deps, upload && upload.until > Date.now() ? upload.pkg : undefined)
   }))
 
@@ -725,7 +780,7 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
     const body = (req.body ?? {}) as { id?: unknown; token?: unknown }
     let manifest: Manifest | undefined
     if (typeof body.token === 'string') manifest = uploads.get(body.token)?.pkg.manifest
-    else if (typeof body.id === 'string' && ID.test(body.id)) {
+    else if (typeof body.id === 'string' && validId(body.id)) {
       try {
         const entry = (await fetchCatalog(deps)).find((e) => e.id === body.id)
         if (entry) manifest = { id: entry.id, name: entry.name, version: entry.version, hostApi: entry.hostApi, resources: entry.resources }
@@ -745,6 +800,10 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
   // An extension file from the user (not from the catalog): read and checked here, nothing installed yet. The answer says what it is
   // and what it would set up, the app asks, and the install then names the token.
   router.post('/extensions/upload', requireSession, requireCsrf, express.raw({ type: () => true, limit: MAX_MPX }), async (req, res) => {
+    if (!devMode(deps)) {
+      res.status(403).json({ error: 'own extension files only in developer mode' })
+      return
+    }
     const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
     const checked = verifyPackage(bytes)
     if (!checked.ok) {
@@ -770,6 +829,23 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
       installedVersion: state[m.id]?.version ?? null,
       sha256: createHash('sha256').update(bytes).digest('hex'),
     })
+  })
+  // Developer mode on or off ({ on }): off, files uploaded before and not installed yet are forgotten
+  router.post('/extensions/devmode', requireSession, requireCsrf, async (req, res) => {
+    const on = (req.body as { on?: unknown } | undefined)?.on === true
+    if (!deps.updateMupiboxConfig) {
+      res.status(500).json({ error: 'settings cannot be written' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const mb = ((cfg.mupibox as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      if (on) mb.extensionDevMode = true
+      else delete mb.extensionDevMode
+      cfg.mupibox = mb
+    })
+    if (!on) uploads.clear()
+    catalogCache = null
+    res.json({ ok: true, devMode: on })
   })
   router.post('/extensions/remove', ...start('remove', removeExtension))
 

@@ -1086,13 +1086,8 @@ function startSkeleton() {
       ${navRow('g-system', 'System', 'Über die Box, Neustart, Updates', 'gear')}
       ${navRow('ext:manual', 'Handbuch', 'Anleitung zu Box, Display und App', 'book')}
     </div></section>`,
-    // (the donation box: last on the start page)
-    `<section class="card donate-box start-donate">
-      <span class="tile">${icon('heart', 20)}</span>
-      <div class="donate-text"><h2>MuPiBox unterstützen</h2>
-        <p class="help">MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.</p></div>
-      <a class="btn primary" href="https://mupibox.de/spenden/" target="_blank" rel="noopener">${icon('ext', 16)}Zur Spendenseite</a>
-    </section>`,
+    // (no donation box here for now: one way for the notice in the app - with the statistics' switch - is still to be
+    // agreed on in the core team; the old admin interface has its monthly one)
   ]
 }
 
@@ -1123,6 +1118,9 @@ function mountStart(root) {
   loadStatus(root)
   loadVolumeCap(root)
   loadNotices(root)
+  // (the project's monthly notices: a moment after the start page is there, while it still is)
+  // (root is the page container, there for every page: whether the start page still shows decides)
+  setTimeout(() => currentPage()?.id === 'start' && showProjectNotices(), 1500)
   every(5000, () => loadNow(root))
   every(30000, () => loadStatus(root))
   $('#q-plus', root).onclick = async () => {
@@ -2008,7 +2006,35 @@ function serviceCover(it) {
   return ref ? `/api/spotify/cover-for/${ref[0]}/${encodeURIComponent(ref[1])}` : ''
 }
 // (no cover of its own and none from the service - a radio station, a local entry: the artist's cover, if one is set)
-const coverOf = (it) => it.cover_override ?? it.cover ?? (serviceCover(it) || it.artistcover_override || it.artistcover || '')
+const coverOf = (it) => ownCover(it.cover_override ?? it.cover ?? (serviceCover(it) || it.artistcover_override || it.artistcover || ''))
+// A picture of the box's own cover folder (Bibliothek › Cover, saved as http://<box name>/cover/<file>, see covers.ts):
+// through the app's own address - a phone does not know the box's name (MuPiBox), the box's display does. Only the
+// box's names: the one it has (/api/network, also with .local), the default one (a cover chosen before a new name
+// keeps it) and the address the app is opened with - a picture of another server ("nas") stays as it is.
+const boxHosts = new Set(['mupibox', 'mupibox.local', location.hostname.toLowerCase()])
+let boxHostsAsked = null
+function loadBoxHosts() {
+  // (no name in the answer - the box not reachable for a moment: asked again with the next page)
+  boxHostsAsked ??= api('/api/network')
+    .then((r) => {
+      const host = r.ok ? String(r.body?.host ?? '').trim().toLowerCase() : ''
+      if (!host) {
+        boxHostsAsked = null
+        return
+      }
+      boxHosts.add(host)
+      boxHosts.add(`${host}.local`)
+    })
+    .catch(() => {
+      boxHostsAsked = null
+    })
+  return boxHostsAsked
+}
+function ownCover(url) {
+  const m = /^https?:\/\/([^/:?#]+)(?::(?:80|443))?\/cover\/([^/?#]+)$/i.exec(String(url ?? ''))
+  if (!m) return url
+  return boxHosts.has(m[1].toLowerCase()) ? `/cover/${m[2]}` : url
+}
 
 // Spotify entries that only name an artist are not playable on their own (the box looks their albums up itself)
 // Entries that subscribe a whole Spotify artist (only artistid): a folder of that artist's albums (as on the box)
@@ -2017,7 +2043,7 @@ const spotifyArtistTile = (it) => ({
   kind: 'spartist',
   title: itemArtist(it) || itemTitle(it),
   sub: catOf(it) === 'music' ? 'Alle Alben' : 'Alle Folgen',
-  cover: it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? `/api/spotify/cover-for/artist/${encodeURIComponent(it.artistid)}`,
+  cover: ownCover(it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? `/api/spotify/cover-for/artist/${encodeURIComponent(it.artistid)}`),
   badge: 'Spotify',
   folder: true,
   path: it.artistid,
@@ -2029,7 +2055,7 @@ const tidalArtistTile = (it) => ({
   kind: 'tdartist',
   title: itemArtist(it) || itemTitle(it),
   sub: catOf(it) === 'music' ? 'Alle Alben' : 'Alle Folgen',
-  cover: it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? '',
+  cover: ownCover(it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? ''),
   badge: 'TIDAL',
   folder: true,
   path: it.id,
@@ -2042,7 +2068,8 @@ async function loadHear() {
   // (whether TIDAL is on: its entries only then - see playable)
   await loadServices().catch(() => undefined)
   const [data, nas, ...local] = await Promise.all([
-    api('/api/data'),
+    // (the box's names first: its own pictures go through the app's address, see ownCover)
+    loadBoxHosts().then(() => api('/api/data')),
     api('/api/nas/artists?expand=1'),
     ...['audiobook', 'music', 'other'].map((c) => api(`/api/library/artists?category=${c}`)),
   ])
@@ -2083,7 +2110,7 @@ function topTiles() {
       }
       for (const [artist, list] of groups) {
         if (list.length === 1) tiles.push(entryTile(list[0]))
-        else tiles.push({ kind: 'artist', title: artist, sub: `${list.length} Einträge`, cover: list[0].artistcover ?? coverOf(list[0]), badge: badgeOf(list[0]), folder: true, path: artist })
+        else tiles.push({ kind: 'artist', title: artist, sub: `${list.length} Einträge`, cover: ownCover(list[0].artistcover ?? coverOf(list[0])), badge: badgeOf(list[0]), folder: true, path: artist })
       }
     }
     for (const c of cat === 'all' ? ['audiobook', 'music', 'other'] : [cat]) {
@@ -2203,7 +2230,7 @@ function drawHear() {
   grid.innerHTML = hearTiles
     .map(
       (t, i) => `<button class="cover-tile" data-i="${i}" aria-label="${esc(`${t.folder ? 'Öffnen' : 'Abspielen'}: ${t.title}`)}">
-        <span class="cover-img">${t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : ''}<span class="cover-ph">${icon(t.folder ? 'folder' : 'music', 28)}</span>
+        <span class="cover-img">${t.cover ? `<img src="${esc(ownCover(t.cover))}" alt="" loading="lazy">` : ''}<span class="cover-ph">${icon(t.folder ? 'folder' : 'music', 28)}</span>
           ${t.badge ? `<span class="cover-badge">${esc(t.badge)}</span>` : ''}${t.folder ? `<span class="cover-folder">${icon('folder', 14)}</span>` : ''}</span>
         <b translate="no">${esc(t.title)}</b>${t.sub ? `<small${t.subIsName ? ' translate="no"' : ''}>${esc(t.sub)}</small>` : ''}</button>`,
     )
@@ -2393,7 +2420,8 @@ const lib = { items: null, local: {}, nas: [], cat: 'all', src: 'all', q: '', sy
 
 async function loadLib() {
   const [data, sync, nas, subs, profiles, covers, ...local] = await Promise.all([
-    api('/api/data'),
+    // (the box's names first: its own pictures go through the app's address, see ownCover)
+    loadBoxHosts().then(() => api('/api/data')),
     api(`${SYNC_API}/status`),
     api('/api/nas/artists'),
     api(`${API}/library/subscriptions`),
@@ -2476,14 +2504,26 @@ function drawLibTiles() {
   const al = lib.subs?.explicit_albums?.length ?? 0
   const tiles = [
     ['spotify', 'music', 'Spotify', spotify],
-    ['verwaltet', 'lib', 'Verwaltete Inhalte', lib.subs ? `${a} ${a === 1 ? 'Abo' : 'Abos'} · ${al} ${al === 1 ? 'Album' : 'Alben'}` : ''],
+    // (what the search subscribed or added: the library shows it with the source Smart-Sync - the subscriptions' rules at
+    // their artists)
+    ['abos', 'sync', 'Abos', lib.subs ? `${a} ${a === 1 ? 'Abo' : 'Abos'} · ${al} ${al === 1 ? 'Album' : 'Alben'}` : ''],
     ['nas', 'server', 'NAS', lib.nasProfile ? `Profil ${lib.nasProfile}` : `${lib.nas.length} Ordner`],
     ['cover', 'image', 'Cover', lib.covers != null ? `${lib.covers} gefunden` : 'Eigene Bilder'],
   ]
   box.innerHTML = tiles
     .map(([id, ic, t, sub]) => `<button class="lib-tile" data-go="${id}"><span class="tile">${icon(ic, 18)}</span><span class="lbl"><b>${esc(t)}</b><small>${esc(sub)}</small></span></button>`)
     .join('')
-  for (const b of box.querySelectorAll('[data-go]')) b.onclick = () => go(b.dataset.go)
+  for (const b of box.querySelectorAll('[data-go]')) {
+    b.onclick = () => {
+      if (b.dataset.go !== 'abos') return go(b.dataset.go)
+      lib.src = 'spotify-sync'
+      lib.cat = 'all'
+      for (const x of $('#lib-src')?.children ?? []) x.setAttribute('aria-selected', String(x.dataset.v === 'spotify-sync'))
+      for (const x of $('#lib-cat')?.children ?? []) x.setAttribute('aria-selected', String(x.dataset.v === 'all'))
+      drawLib()
+      $('#lib-list')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+  }
 }
 
 // The list: everything grouped by artist (as the box shows it), per source; a group opens its entries
@@ -2508,6 +2548,29 @@ function libGroups() {
       if (q && !norm(`${title} ${artist}`).includes(q)) continue
       const g = add(`${src}|${cat}|${artist}`, { kind: 'entries', artist, src, cat, cover: it.artistcover_override ?? it.artistcover ?? it.cover_override ?? it.cover ?? serviceCover(it) })
       g.entries.push({ item: it, title })
+    }
+    // a subscribed artist none of whose albums is on the box yet (just subscribed, the sync still to come, all left
+    // out): there all the same, to change or end it here
+    if (lib.src === 'all' || lib.src === 'spotify' || lib.src === 'spotify-sync') {
+      for (const a of lib.subs?.artists ?? []) {
+        if (!a?.id || subEntries(a).length) continue
+        const cat = a.category === 'radio' ? 'other' : a.category || 'audiobook'
+        const artist = String(a.name || a.id)
+        if (lib.cat !== 'all' && cat !== lib.cat) continue
+        if (q && !norm(artist).includes(q)) continue
+        // (no album yet to take the picture from: the artist's own from Spotify, cached by the box)
+        add(`sub|${a.id}`, { kind: 'sub', artist, src: 'spotify-sync', cat, sub: a, cover: `/api/spotify/cover-for/artist/${encodeURIComponent(a.id)}` })
+      }
+      // an album added one by one from the search that is not on the box yet (the sync still to come, Spotify blocking
+      // the box): there all the same, to take it back
+      for (const al of lib.subs?.explicit_albums ?? []) {
+        if (!al?.id || (lib.items ?? []).some((it) => it && it.type === 'spotify' && it.id === al.id)) continue
+        const cat = al.category === 'radio' ? 'other' : al.category || 'audiobook'
+        const artist = String(al.name || al.id)
+        if (lib.cat !== 'all' && cat !== lib.cat) continue
+        if (q && !norm(artist).includes(q)) continue
+        add(`pin|${al.id}`, { kind: 'pin', artist, src: 'spotify-sync', cat, pin: al, cover: `/api/spotify/cover-for/album/${encodeURIComponent(al.id)}` })
+      }
     }
   }
   if (lib.src === 'all' || lib.src === 'local') {
@@ -2549,6 +2612,8 @@ function libSub(g) {
         : first?.type === 'tidal'
           ? 'TIDAL'
           : (SOURCE_LABEL[g.src] ?? '')
+  if (g.kind === 'sub') return 'Abo · noch keine Folgen · Spotify · Smart-Sync'
+  if (g.kind === 'pin') return 'Album · noch nicht auf der Box · Spotify · Smart-Sync'
   if (g.kind === 'local') return `${g.folder.libraryIsContainer ? 'Ordner' : 'Album'} · ${src}`
   if (g.kind === 'nas') return `${g.folder.nasIsContainer ? 'Ordner' : 'Album'} · ${src}`
   if (g.entries.length === 1) {
@@ -2568,7 +2633,7 @@ function drawLib() {
   if (!list || !lib.items) return
   drawLibTiles()
   libShown = libGroups()
-  const total = libShown.reduce((n, g) => n + (g.entries?.length || 1), 0)
+  const total = libShown.reduce((n, g) => n + (g.kind === 'sub' || g.kind === 'pin' ? 0 : g.entries?.length || 1), 0)
   const all = lib.items.filter((it) => it && !it.isResume && it.category !== 'resume' && it.type !== 'library').length + Object.values(lib.local).reduce((n, l) => n + l.length, 0) + lib.nas.length
   const end = lib.sync?.state?.last_sync_end
   $('#lib-count').textContent = `${total} von ${all} Inhalten${end ? ` · letzter Sync ${hhmm(Date.parse(end))}` : ''}`
@@ -2587,20 +2652,196 @@ function drawLib() {
   for (const b of list.querySelectorAll('.lib-row')) b.onclick = () => openLibGroup(libShown[Number(b.dataset.i)])
 }
 
+// An album of the Spotify sync that can be taken off here: one the search added or a subscription brought (an album,
+// no playlist left in it) - one that came from one of the user's playlists comes back with the next sync, it goes there
+function syncRemovable(item) {
+  return (
+    (item?.source ?? 'manual') === 'spotify-sync' &&
+    item.type === 'spotify' &&
+    /^[A-Za-z0-9]{22}$/.test(String(item.id ?? '')) &&
+    !(Array.isArray(item.spotify_sync_playlists) && item.spotify_sync_playlists.length)
+  )
+}
+
+// The albums a subscription brought onto the box (the sync marks them with the artist's id; one of before without it:
+// by the name)
+const subOwns = (a, it) => (it.artistid ? it.artistid === a.id : !!a.name && it.artist === a.name)
+function subEntries(a) {
+  return (lib.items ?? []).filter((it) => it && !it.isResume && (it.source ?? 'manual') === 'spotify-sync' && subOwns(a, it))
+}
+const subSummary = (a) =>
+  `${subRange(a)} · ${catLabel(a.category === 'radio' ? 'other' : a.category || 'audiobook')}${a.exclude_album_ids?.length ? ` · ${a.exclude_album_ids.length} ausgeschlossen` : ''}`
+
+// after a change of a subscription's rule in the library: the sync brings it, the library is read again
+async function libSubDone(text) {
+  const sync = await fireSync()
+  toast(`${text} ${sync}`)
+  libReload()
+}
+
+// Ends a subscription and takes its albums off at once: they are found in the whole library (not only in the group or
+// the search shown) - those of a playlist and those added one by one from the search stay
+function endSubscription(a) {
+  const explicit = new Set((lib.subs?.explicit_albums ?? []).map((x) => x?.id).filter(Boolean))
+  const own = subEntries(a).filter((it) => syncRemovable(it) && !explicit.has(it.id))
+  const name = a.name || a.id
+  confirmSheet('Abo beenden', own.length ? `„${name}“ abbestellen? Seine Folgen (${own.length}) gehen gleich von der Box.` : `„${name}“ abbestellen?`, async () => {
+    const r = await api(`${API}/library/unsubscribe-artist`, { method: 'POST', body: { artistId: a.id } })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    await removeLibEntries(own, { subscriptionEnded: true })
+    toast(`Abo beendet: ${name}`)
+    libReload()
+  })
+}
+
+// An album added one by one from the search (spotify_sync.explicit_albums): taken back - out of that list only; an entry
+// that also comes from a playlist or a subscription stays, one that came only from here goes with the next sync
+async function dropPin(albumId) {
+  const r = await api(`${API}/library/remove-album`, { method: 'POST', body: { albumId } })
+  if (!r.ok) {
+    toast('Das hat nicht geklappt', 'info')
+    return false
+  }
+  return true
+}
+const isPinned = (id) => !!id && (lib.subs?.explicit_albums ?? []).some((al) => al?.id === id)
+
+// An album added from the search that is not on the box yet: what it is, and taking it back
+function openPinSheet(al) {
+  openSheet(
+    `<h2 translate="no">${esc(al.name || al.id)}</h2><p class="help" style="margin:0">${esc(`${catLabel(al.category === 'radio' ? 'other' : al.category || 'audiobook')} · Spotify`)}</p>
+     <p class="help" style="margin:0">Einzeln über die Suche hinzugefügt. Es kommt mit dem nächsten Sync auf die Box.</p>
+     <div class="btns"><button class="btn danger" data-unpin>Vormerkung aufheben</button><button class="btn" data-close>Schließen</button></div>`,
+    (sheet, close) => {
+      sheet.querySelector('[data-close]').onclick = close
+      sheet.querySelector('[data-unpin]').onclick = async () => {
+        close()
+        if (!(await dropPin(al.id))) return
+        toast('Vormerkung aufgehoben')
+        libReload()
+      }
+    },
+  )
+}
+
+// One of several subscriptions in a group (see openLibGroup): its rule and its end, with the way back to the group
+function openLibSubSheet(a, back) {
+  openSheet(
+    `<button class="sheet-back" data-back>${icon('back', 18)}<span translate="no">${esc(back.title)}</span></button>
+     <h2 translate="no">${esc(a.name || a.id)}</h2><p class="help" style="margin:0">${esc(subSummary(a))}</p>
+     ${subControlsHtml(a)}
+     <div class="btns"><button class="btn danger" data-unsub>Abo beenden</button><button class="btn" data-close>Schließen</button></div>`,
+    (sheet, close) => {
+      sheet.querySelector('[data-close]').onclick = close
+      sheet.querySelector('[data-back]').onclick = () => back.open()
+      mountSubControls(sheet, a, close, libSubDone)
+      sheet.querySelector('[data-unsub]').onclick = () => {
+        close()
+        endSubscription(a)
+      }
+    },
+  )
+}
+
+// Takes entries out of the library: those of the sync first out of what the sync brings (see remove-synced, one call),
+// then all deleted in one step per 300 (/api/delete-many: the library written once - one by one, a
+// subscription of 250 albums took minutes). From the last place to the first, so the places of the others stay. The
+// number done; a failure is said.
+const LIB_ID_KEYS = ['type', 'id', 'artistid', 'playlistid', 'showid', 'audiobookid', 'title', 'artist', 'category']
+async function removeLibEntries(items, { subscriptionEnded = false } = {}) {
+  const isSync = (it) => (it.source ?? 'manual') === 'spotify-sync'
+  const list = items.filter((it) => !isSync(it) || syncRemovable(it)).sort((a, b) => libPlace(b) - libPlace(a))
+  if (!list.length) return 0
+  // (the subscription they came from is gone: only deleted - not left out of the other subscriptions)
+  const albumIds = subscriptionEnded ? [] : list.filter(isSync).map((it) => it.id)
+  if (albumIds.length) {
+    const r = await api(`${API}/library/remove-synced`, { method: 'POST', body: { albumIds } })
+    if (!r.ok) {
+      toast('Das hat nicht geklappt', 'info')
+      return 0
+    }
+  }
+  // (only the fields the server compares, see sameLibraryEntry: a request of hundreds of entries stays small)
+  const ids = (it) => Object.fromEntries(LIB_ID_KEYS.map((k) => [k, it[k] ?? null]))
+  let done = 0
+  for (let i = 0; i < list.length; i += 300) {
+    const part = list.slice(i, i + 300)
+    const r = await api('/api/delete-many', { method: 'POST', body: { entries: part.map((it) => ({ index: libPlace(it), original: ids(it) })) } })
+    if (!libWriteOk(r)) return done
+    done += part.length
+  }
+  return done
+}
+
 // A group: one entry opens right away, several are listed first
 function openLibGroup(g) {
   if (g.kind === 'local') return openLocalSheet(g.folder)
   if (g.kind === 'nas') return openNasSheet(g.folder)
-  if (g.entries.length === 1) return openEntrySheet(g.entries[0].item)
-  const entries = [...g.entries].sort((a, b) => a.title.localeCompare(b.title, 'de', { numeric: true }))
+  if (g.kind === 'pin') return openPinSheet(g.pin)
+  const entries = [...(g.entries ?? [])].sort((a, b) => a.title.localeCompare(b.title, 'de', { numeric: true }))
+  // Taking the whole group off: a subscribed artist's albums by ending the subscription, else every entry that can go
+  // here (a playlist's entries of the sync stay - they go in Spotify)
+  const items = entries.map((e) => e.item)
+  const isSyncItem = (it) => (it.source ?? 'manual') === 'spotify-sync'
+  // (the subscriptions the group's albums came from: one - its rule is changed here, above its albums; several - an
+  // artist field renamed to the same folder name: each is offered on its own, none is guessed)
+  const subsHere = g.sub ? [g.sub] : (lib.subs?.artists ?? []).filter((a) => a?.id && items.some((it) => isSyncItem(it) && subOwns(a, it)))
+  const sub = subsHere.length === 1 ? subsHere[0] : null
+  if (!subsHere.length && entries.length === 1) return openEntrySheet(entries[0].item)
+  const removable = items.filter((it) => !isSyncItem(it) || syncRemovable(it))
+  const kept = items.length - removable.length
+  const groupBtn = sub
+    ? `<button class="btn danger" data-unsub>Abo beenden</button>`
+    : !subsHere.length && removable.length > 1
+      ? `<button class="btn danger" data-delall>Alle entfernen</button>`
+      : ''
+  const subBlock = sub
+    ? `<div class="section-label" style="margin:0">Abo</div>
+       <p class="help" style="margin:0">${esc(subSummary(sub))}</p>
+       ${subControlsHtml(sub)}
+       <div class="section-label" style="margin:0">Auf der Box</div>`
+    : subsHere.length
+      ? `<div class="section-label" style="margin:0">Abos</div><div class="rows">${subsHere
+          .map((a, i) => `<button class="entry lib-row" data-subi="${i}"><span class="lbl"><b translate="no">${esc(a.name || a.id)}</b><small>${esc(subSummary(a))}</small></span><span class="chev">${icon('chevron', 18)}</span></button>`)
+          .join('')}</div>
+         <div class="section-label" style="margin:0">Auf der Box</div>`
+      : ''
   openSheet(
-    `<h2 translate="no">${esc(g.artist)}</h2><p class="help" style="margin:0">${esc(libSub(g))}${g.src === 'spotify-sync' ? ' – kommt vom Spotify-Sync, Abo und Bereich unter „Verwaltete Inhalte“.' : ''}</p>
-     <div class="rows">${entries
-       .map((e, i) => `<button class="entry lib-row" data-e="${i}"><span class="lbl"><b translate="no">${esc(e.title)}</b></span><span class="chev">${icon('chevron', 18)}</span></button>`)
-       .join('')}</div>
-     <div class="btns"><button class="btn" data-close>Schließen</button></div>`,
+    `<h2 translate="no">${esc(g.artist)}</h2><p class="help" style="margin:0">${esc(libSub(g))}${g.src === 'spotify-sync' && !sub ? ' – kommt vom Spotify-Sync.' : ''}</p>
+     ${subBlock}
+     ${
+       entries.length
+         ? `<div class="rows">${entries
+             .map((e, i) => `<button class="entry lib-row" data-e="${i}"><span class="lbl"><b translate="no">${esc(e.title)}</b></span><span class="chev">${icon('chevron', 18)}</span></button>`)
+             .join('')}</div>`
+         : `<p class="help" style="margin:0">Keine Folgen auf der Box. Was der Bereich und die Schalter zulassen, bringt der nächste Sync.</p>`
+     }
+     <div class="btns">${groupBtn}<button class="btn" data-close>Schließen</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = close
+      if (sub) mountSubControls(sheet, sub, close, libSubDone)
+      sheet.querySelector('[data-unsub]')?.addEventListener('click', () => {
+        close()
+        endSubscription(sub)
+      })
+      for (const b of sheet.querySelectorAll('[data-subi]')) {
+        b.onclick = () => openLibSubSheet(subsHere[Number(b.dataset.subi)], { title: g.artist, open: () => openLibGroup(g) })
+      }
+      sheet.querySelector('[data-delall]')?.addEventListener('click', () => {
+        close()
+        const n = removable.length
+        confirmSheet(
+          'Alle entfernen',
+          kept
+            ? `Alle ${n} Einträge von „${g.artist}“ aus der Bibliothek entfernen? Einträge aus einer Spotify-Playlist (${kept}) bleiben – die gehen in Spotify.`
+            : `Alle ${n} Einträge von „${g.artist}“ aus der Bibliothek entfernen?`,
+          async () => {
+            const done = await removeLibEntries(removable)
+            if (done) toast(`${done} entfernt`)
+            libReload()
+          },
+        )
+      })
       // (back from an entry: the list where it was)
       if (g.scrollTop) sheet.scrollTop = g.scrollTop
       for (const b of sheet.querySelectorAll('[data-e]')) {
@@ -2613,10 +2854,17 @@ function openLibGroup(g) {
   )
 }
 
-// Starts a sync run and says what happens; used after every change of the managed content
-async function fireSync() {
-  const r = await api(`${SYNC_API}/trigger?source=webapp`, { method: 'POST' })
+// Starts a sync run and says what happens; used after every change of a subscription or an album from the search
+// (subs: after a change of the subscribed artists or albums - those come also with Smart-Sync off, only the
+// playlists then stay as they are; "Jetzt abgleichen" on the Spotify page asks without it)
+async function fireSync(subs = true) {
+  const r = await api(`${SYNC_API}/trigger?source=webapp${subs ? '&subscriptions=1' : ''}`, { method: 'POST' })
   const b = r.body ?? {}
+  if (r.status === 202 && b.subscriptionsOnly) {
+    return b.status === 'scheduled'
+      ? `In ${b.scheduledInSeconds ?? 60} s kommt es auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, holt die Box nicht von selbst – dafür den Smart-Sync einschalten (Bibliothek › Spotify).`
+      : 'Es kommt jetzt auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, holt die Box nicht von selbst – dafür den Smart-Sync einschalten (Bibliothek › Spotify).'
+  }
   if (r.status === 202 && b.status === 'scheduled') return `Der Sync läuft in ${b.scheduledInSeconds ?? 60} s.`
   if (r.status === 202) return 'Der Sync läuft.'
   if (r.status === 409) return 'Ein Sync läuft gerade.'
@@ -2835,6 +3083,13 @@ function openEntrySheet(item, back = null) {
     ['artistcover', place ? 'Ordner-Cover (Bild-URL)' : 'Interpret-Cover (Bild-URL)'],
   ]
   const val = (k) => item[`${k}_override`] ?? (isSync ? '' : item[k] ?? '')
+  // an own picture in a Spotify entry (not one of Spotify's, as most entries keep): one tap back to Spotify's (both
+  // picture fields emptied)
+  const fromSpotify = (u) => /^https:\/\/i\.scdn\.co\//.test(u) || u.startsWith('/api/spotify/cover')
+  const spotifyPictureBack = item.type === 'spotify' && !!serviceCover(item) && [val('cover'), val('artistcover')].some((v) => v && !fromSpotify(String(v)))
+  // the same for TIDAL: its picture is kept in the entry itself (an own one replaced it) - asked from TIDAL again
+  const tidalKind = item.type === 'tidal' && ['album', 'playlist', 'artist'].includes(item.tidalKind) && item.id ? item.tidalKind : ''
+  const tidalPictureBack = !!tidalKind && [val('cover'), val('artistcover')].some((v) => v && !/^https:\/\/resources\.tidal\.com\//.test(String(v)))
   const folder = place ? String(item.artist ?? '').trim() : ''
   // (alone in its folder - as the app added playlists before, in one of their own name: a tile spares a tap)
   const aloneInFolder = !!folder && (lib.items ?? []).filter((it) => it && !it.isResume && it.category === item.category && String(it.artist ?? '').trim() === folder).length === 1
@@ -2855,13 +3110,16 @@ function openEntrySheet(item, back = null) {
              }`
        })
        .join('')}
+     ${spotifyPictureBack ? `<div class="btns"><button type="button" class="btn" data-svc-pic>${icon('image', 18)}Bild von Spotify verwenden</button></div>` : ''}
+     ${tidalPictureBack ? `<div class="btns"><button type="button" class="btn" data-tidal-pic>${icon('image', 18)}Bild von TIDAL verwenden</button></div>` : ''}
      <div class="field"><label for="e-cat">Kategorie</label>${catSelect('e-cat', item.category_override ?? (isSync ? '' : item.category === 'radio' ? 'other' : item.category), isSync)}</div>
      ${playOptions ? entryPlayFields(item) : ''}
      ${item.type === 'rss' ? offlineField(item) : ''}
-     ${isSync ? `<p class="help" style="margin:0">Entfernen geht über Bibliothek › Verwaltete Inhalte oder die Spotify-Playlist.</p>` : ''}
+     ${isSync && !syncRemovable(item) ? `<p class="help" style="margin:0">Kommt aus einer deiner Spotify-Playlists: Entfernen geht dort – in Spotify aus der Playlist nehmen, der nächste Sync nimmt es dann von der Box.</p>` : ''}
+     ${isSync && !syncRemovable(item) && isPinned(item.id) ? `<p class="help" style="margin:0">Außerdem einzeln über die Suche hinzugefügt: Das hält es auf der Box, auch wenn es aus der Playlist geht.</p><div class="btns"><button type="button" class="btn" data-unpin>Einzeln hinzugefügt aufheben</button></div>` : ''}
      ${wholeArtist ? `<div class="section-label" style="margin:0">Alben</div><div id="e-albums"><p class="help">Lade die Alben von Spotify …</p></div>` : ''}
      ${tidalArtist ? tidalRangeFields(item) : ''}
-     <div class="btns">${isSync ? '' : `<button class="btn danger" data-del>Löschen</button>`}<button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Speichern</button></div>`,
+     <div class="btns">${!isSync || syncRemovable(item) ? `<button class="btn danger" data-del>${isSync ? 'Entfernen' : 'Löschen'}</button>` : ''}<button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Speichern</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = back ? back.open : close
       sheet.querySelector('[data-back]')?.addEventListener('click', back?.open)
@@ -2869,6 +3127,41 @@ function openEntrySheet(item, back = null) {
       if (placer) sheet.querySelector('#e-cat').addEventListener('change', () => void placer.reload())
       if (wholeArtist) loadArtistAlbums(item, sheet.querySelector('#e-albums'))
       if (tidalArtist) wireTidalRange(item, sheet)
+      // (only the mark of "added one by one" goes - the entry stays while the playlist has it)
+      sheet.querySelector('[data-unpin]')?.addEventListener('click', async () => {
+        close()
+        if (!(await dropPin(item.id))) return
+        toast('Aufgehoben – das Album bleibt, solange es in der Playlist ist')
+        libReload()
+      })
+      // (the own pictures out of the fields - saved with "Speichern", then the box shows Spotify's picture again)
+      sheet.querySelector('[data-svc-pic]')?.addEventListener('click', (e) => {
+        for (const k of ['cover', 'artistcover']) {
+          const input = sheet.querySelector(`#e-${k}`)
+          if (input) input.value = ''
+        }
+        e.currentTarget.disabled = true
+        toast('Mit „Speichern“ zeigt die Box wieder das Bild von Spotify')
+      })
+      // (TIDAL's picture asked again and put into the cover field, the artist's field emptied - saved with "Speichern")
+      const tidalBtn = sheet.querySelector('[data-tidal-pic]')
+      tidalBtn?.addEventListener('click', async () => {
+        // (this sheet's own fields, taken before asking: the sheet is built anew for every entry - an answer that comes
+        // after it was closed or another entry opened is dropped, it never lands in another entry's fields)
+        const cover = sheet.querySelector('#e-cover')
+        const artistcover = sheet.querySelector('#e-artistcover')
+        tidalBtn.disabled = true
+        const r = await api(`${API}/tidal/item/${tidalKind}/${encodeURIComponent(item.id)}`)
+        if (!tidalBtn.isConnected || sheet.hidden) return
+        const picture = r.ok && typeof r.body?.cover === 'string' && /^https:\/\//.test(r.body.cover) ? r.body.cover : ''
+        if (!picture) {
+          tidalBtn.disabled = false
+          return toast(r.status === 409 ? 'TIDAL ist ausgeschaltet – einschalten unter Einstellungen › Dienste › TIDAL' : 'Das Bild von TIDAL ließ sich nicht laden', 'info')
+        }
+        if (cover?.isConnected) cover.value = picture
+        if (artistcover?.isConnected) artistcover.value = ''
+        toast('Mit „Speichern“ zeigt die Box wieder das Bild von TIDAL')
+      })
       if (item.type === 'rss') loadOfflineStatus(item.id, sheet.querySelector('#e-offline-status'))
       if (playOptions && item.type === 'rss') {
         wireEpisodePick(sheet, 'e', () =>
@@ -2974,12 +3267,17 @@ function openEntrySheet(item, back = null) {
       }
       sheet.querySelector('[data-del]')?.addEventListener('click', () => {
         close()
-        confirmSheet('Löschen', `„${item.title ?? item.artist ?? 'Eintrag'}“ aus der Bibliothek löschen?`, async () => {
-          const r = await api('/api/delete', { method: 'POST', body: { index: libPlace(item), original: item } })
-          if (!libWriteOk(r)) return
-          toast('Gelöscht')
-          libReload()
-        })
+        const name = item.title ?? item.artist ?? 'Eintrag'
+        confirmSheet(
+          isSync ? 'Entfernen' : 'Löschen',
+          isSync ? `„${name}“ von der Box entfernen? Es kommt auch beim nächsten Sync nicht wieder.` : `„${name}“ aus der Bibliothek löschen?`,
+          async () => {
+            const done = await removeLibEntries([item])
+            if (!done) return
+            toast(isSync ? 'Entfernt' : 'Gelöscht')
+            libReload()
+          },
+        )
       })
     },
   )
@@ -2988,6 +3286,7 @@ function openEntrySheet(item, back = null) {
 // A cover of the SD card after it was changed: the same address, so the browser is told it is new (its memory would
 // show the old picture)
 function stampedCover(url) {
+  url = ownCover(url)
   return url && lib.coverStamp && String(url).startsWith('/api/library/file') ? `${url}&v=${lib.coverStamp}` : url
 }
 const localCoverUrl = (path) => `/api/library/file?path=${encodeURIComponent(path)}&w=400`
@@ -3451,81 +3750,32 @@ async function squareImage(file, max = 1000) {
   }
 }
 
-/* Verwaltete Inhalte: the artist subscriptions and albums added from the search */
-
-const managed = { subs: null }
-
-function managedTop() {
-  const s = managed.subs ?? {}
-  const artists = s.artists ?? []
-  const albums = s.explicit_albums ?? []
-  const range = (a) => (a.range_from || a.range_to ? `Folgen ${a.range_from ?? 1}–${a.range_to ?? '…'}` : 'alle Folgen')
-  return [
-    `<p class="page-intro">Über die Suche hinzugefügte Künstler-Abos und Alben. Beim Künstler den Bereich (Folge von–bis) eingrenzen und einzelne Alben aus- oder einschließen.</p>`,
-    `<section class="card"><h2>Künstler-Abos</h2>${
-      artists.length
-        ? `<div class="rows">${artists
-            .map((a, i) => `<button class="entry lib-row" data-sub="${i}"><span class="avatar">${esc(initials(a.name || a.id))}</span><span class="lbl"><b translate="no">${esc(a.name || a.id)}</b><small>${esc(range(a))} · ${esc(catLabel(a.category))}${a.exclude_album_ids?.length ? ` · ${a.exclude_album_ids.length} ausgeschlossen` : ''}</small></span><span class="chev">${icon('chevron', 18)}</span></button>`)
-            .join('')}</div>`
-        : `<p class="help" style="margin:0">Noch keine. Über „Auf Spotify suchen“ einen Künstler mit ＋ abonnieren.</p>`
-    }</section>`,
-    `<section class="card"><h2>Einzelne Alben</h2>${
-      albums.length
-        ? `<div class="rows">${albums
-            .map((a, i) => `<div class="entry"><span class="avatar">${esc(initials(a.name || a.id))}</span><span class="lbl"><b translate="no">${esc(a.name || a.id)}</b><small>${esc(catLabel(a.category))}</small></span><button class="btn danger sm" data-album="${i}">Entfernen</button></div>`)
-            .join('')}</div>`
-        : `<p class="help" style="margin:0">Noch keine.</p>`
-    }</section>`,
-  ]
-}
-
-async function loadManaged() {
-  const r = await api(`${API}/library/subscriptions`)
-  if (!r.ok) throw new Error(`subscriptions ${r.status}`)
-  managed.subs = r.body ?? {}
-}
-
-async function managedDone(text, page) {
-  const sync = await fireSync()
-  toast(`${text} ${sync}`)
-  libChanged()
-  if (currentPage()?.id === page.id) renderPage(page)
-}
-
-function openSubSheet(a, page) {
-  openSheet(
-    `<h2 translate="no">${esc(a.name || a.id)}</h2><p class="help" style="margin:0">„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = offen.</p>
+// The rule of a subscription (what the Smart-Sync brings of the artist): the range of episodes and the albums let in or
+// left out - in the library, at the artist (openLibGroup, openLibSubSheet).
+const subRange = (a) => (a.range_from || a.range_to ? `Folgen ${a.range_from ?? 1}–${a.range_to ?? '…'}` : 'alle Folgen')
+function subControlsHtml(a) {
+  return `<p class="help" style="margin:0">„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = offen.</p>
      <div class="rule-times"><div class="field"><label for="s-from">Folge von</label><input class="input" id="s-from" type="number" min="1" value="${esc(a.range_from ?? '')}"></div>
        <div class="field"><label for="s-to">Folge bis</label><input class="input" id="s-to" type="number" min="1" value="${esc(a.range_to ?? '')}"></div></div>
      <div class="btns"><button class="btn primary" data-range>Bereich übernehmen</button><button class="btn" data-albums>Alben ein-/ausschließen</button></div>
-     <div id="s-albums"></div>
-     <div class="btns"><button class="btn danger" data-unsub>Abo entfernen</button><button class="btn" data-close>Schließen</button></div>`,
-    (sheet, close) => {
-      sheet.querySelector('[data-close]').onclick = close
-      sheet.querySelector('[data-range]').onclick = async () => {
-        const num = (id) => {
-          const v = sheet.querySelector(id).value.trim()
-          return v === '' ? undefined : Math.floor(Number(v))
-        }
-        const range_from = num('#s-from')
-        const range_to = num('#s-to')
-        if ([range_from, range_to].some((v) => v !== undefined && !(v >= 1)) || (range_from && range_to && range_from > range_to)) return toast('Bitte einen gültigen Bereich eintragen', 'info')
-        const r = await api(`${API}/library/subscribe-artist`, { method: 'POST', body: { artistId: a.id, name: a.name, category: a.category, range_from, range_to } })
-        if (!r.ok) return toast(r.body?.error ?? 'Das hat nicht geklappt', 'info')
-        close()
-        managedDone('Bereich übernommen.', page)
-      }
-      sheet.querySelector('[data-albums]').onclick = () => loadSubAlbums(a, sheet.querySelector('#s-albums'))
-      sheet.querySelector('[data-unsub]').onclick = () => {
-        close()
-        confirmSheet('Abo entfernen', `„${a.name || a.id}“ abbestellen? Der nächste Sync nimmt die Alben von der Box.`, async () => {
-          const r = await api(`${API}/library/unsubscribe-artist`, { method: 'POST', body: { artistId: a.id } })
-          if (!r.ok) return toast('Das hat nicht geklappt', 'info')
-          managedDone('Abo entfernt.', page)
-        })
-      }
-    },
-  )
+     <div id="s-albums"></div>`
+}
+// done(text): after a new range (the sheet closes); the albums' switches say themselves what they did
+function mountSubControls(sheet, a, close, done) {
+  sheet.querySelector('[data-range]').onclick = async () => {
+    const num = (id) => {
+      const v = sheet.querySelector(id).value.trim()
+      return v === '' ? undefined : Math.floor(Number(v))
+    }
+    const range_from = num('#s-from')
+    const range_to = num('#s-to')
+    if ([range_from, range_to].some((v) => v !== undefined && !(v >= 1)) || (range_from && range_to && range_from > range_to)) return toast('Bitte einen gültigen Bereich eintragen', 'info')
+    const r = await api(`${API}/library/subscribe-artist`, { method: 'POST', body: { artistId: a.id, name: a.name, category: a.category, range_from, range_to } })
+    if (!r.ok) return toast(r.body?.error ?? 'Das hat nicht geklappt', 'info')
+    close()
+    done('Bereich übernommen.')
+  }
+  sheet.querySelector('[data-albums]').onclick = () => loadSubAlbums(a, sheet.querySelector('#s-albums'))
 }
 
 async function loadSubAlbums(a, box) {
@@ -3559,7 +3809,9 @@ async function loadSubAlbums(a, box) {
         return toast('Das hat nicht geklappt', 'info')
       }
       const sync = await fireSync()
-      toast(`${cb.checked ? 'Wieder dabei' : 'Ausgeschlossen'}: ${al.name}. ${sync}`)
+      // (left out of this subscription: the sync takes it off unless a playlist or the search added it too - the sync's
+      // words say what comes onto the box, so they fit only the way back)
+      toast(cb.checked ? `Wieder dabei: ${al.name}. ${sync}` : `Aus dem Abo ausgeschlossen: ${al.name}. Kommt es nur über dieses Abo, nimmt der nächste Sync es von der Box.`)
       libChanged()
     }
   }
@@ -3786,7 +4038,7 @@ function drawSearch() {
     const subscribed = search.have.has(`artist:${a.id}`)
     box.innerHTML = `<div class="btns"><button class="btn" id="s-back">${icon('back', 18)}Zurück zur Suche</button></div>
       <section class="card"><div class="ard-head">${a.img ? `<img src="${esc(a.img)}" alt="">` : ''}<span class="lbl"><h2 translate="no" style="margin:0">${esc(a.name)}</h2><small>${esc(subscribed ? 'Künstler auf Spotify · abonniert' : 'Künstler auf Spotify')}</small></span></div>
-        <p class="help" style="margin:0">${esc('Abonnieren holt alle Folgen auf die Box und später auch neue. Einzelne Alben fügst du unten hinzu.')}</p>
+        <p class="help" style="margin:0">${esc(lib.sync && !lib.sync.enabled ? 'Abonnieren holt alle Folgen auf die Box. Später erscheinende kommen nur mit Smart-Sync von selbst (Bibliothek › Spotify). Einzelne Alben fügst du unten hinzu.' : 'Abonnieren holt alle Folgen auf die Box und später auch neue. Einzelne Alben fügst du unten hinzu.')}</p>
         <div class="btns"><button class="btn primary" id="s-sub">${icon(subscribed ? 'check' : 'plus', 18)}${esc(subscribed ? 'Abonniert' : 'Ganzen Künstler abonnieren')}</button></div></section>
       <section class="card"><h2>${esc('Alben')}</h2>${artistControls('s')}<div class="rows" id="s-alist"></div></section>`
     const list = () => {
@@ -4004,9 +4256,13 @@ async function subscribeSpotifyArtist(a) {
       sub: 'Künstler auf Spotify',
       img: a.img,
       have: search.have.has(`artist:${a.id}`),
-      haveText: 'Schon abonniert – Bereich und Kategorie änderst du unter „Verwaltete Inhalte“.',
+      haveText: 'Schon abonniert – den Bereich änderst du in der Bibliothek beim Künstler.',
       cat: search.cat,
-      text: 'Alle Folgen kommen auf die Box, neue später von selbst. Den Bereich kannst du danach unter „Verwaltete Inhalte“ eingrenzen.',
+      // (Smart-Sync off: they come all the same, see fireSync - but nothing that appears later)
+      text:
+        lib.sync && !lib.sync.enabled
+          ? 'Alle Folgen kommen auf die Box. Smart-Sync ist aus: Folgen, die später erscheinen, kommen nur mit Smart-Sync von selbst (Bibliothek › Spotify). Den Bereich kannst du danach in der Bibliothek beim Künstler eingrenzen.'
+          : 'Alle Folgen kommen auf die Box, neue später von selbst. Den Bereich kannst du danach in der Bibliothek beim Künstler eingrenzen.',
       okLabel: 'Abonnieren',
     },
     async (category) => {
@@ -4597,7 +4853,7 @@ function tidalRangeQuery(it) {
 }
 
 // The library's sheet of a whole TIDAL artist: the range and the albums left out (as a Spotify subscription has them
-// on "Verwaltete Inhalte") - saved with the sheet. The albums with their positions come from the service.
+// at its artist in the library) - saved with the sheet. The albums with their positions come from the service.
 function tidalRangeFields(item) {
   return `<div class="section-label" style="margin:0">${esc('Folgen und Alben')}</div>
     <p class="help" style="margin:0">${esc('„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = alle.')}</p>
@@ -5336,7 +5592,7 @@ function mountSpotify(root, page) {
     sync: async () => {
       // the result comes when the run ended: asked every 3 s for up to two minutes (a run takes a while)
       const before = spot.status?.state?.last_sync_end
-      toast(await fireSync())
+      toast(await fireSync(false))
       for (let i = 0; i < 40; i++) {
         await new Promise((r) => setTimeout(r, 3000))
         if (currentPage()?.id !== page.id) return
@@ -7843,12 +8099,10 @@ async function loadDisplaySettings() {
   if (o.brightness != null) state.values.set('bright', o.brightness)
   state.values.set('dispOff', Number(disp.power.idleDisplayOff ?? disp.power.timeout?.idleDisplayOff ?? 10))
   state.values.set('hdmiRot', rotLabel(HDMI_ROT, o.rotation.display_hdmi_rotate))
-  state.values.set('dsiRot', rotLabel(HDMI_ROT, o.dsi?.rotation ?? '0'))
   state.values.set('lcdRot', rotLabel(LCD_ROT, o.rotation.lcd_rotate))
   state.values.set('dlcdRot', rotLabel(LCD_ROT, o.rotation.display_lcd_rotate))
   state.values.set('resX', String(o.resX))
   state.values.set('resY', String(o.resY))
-  state.values.set('resLimit', o.limitWindow === true)
   const nd = o.nightDim ?? {}
   state.values.set('ndOn', nd.enabled === true)
   state.values.set('ndFrom', nd.from ?? '19:00')
@@ -9774,10 +10028,11 @@ function newsText(html) {
 
 
 async function loadAbout() {
-  const [info, version, bs] = await Promise.all([api(`${API}/system`), api(`${API}/version`), api(`${API}/bootscreen`)])
+  const [info, version, bs, notices] = await Promise.all([api(`${API}/system`), api(`${API}/version`), api(`${API}/bootscreen`), api(`${API}/notices`)])
   sys.info = info.ok ? info.body : null
   sys.version = version.body?.version ?? ''
   sys.bs = bs.ok ? bs.body : null
+  sys.notices = notices.ok ? notices.body : null
   api(`${API}/news`).then((r) => {
     sys.news = r.body?.text ?? ''
     const box = $('#ab-news')
@@ -9812,11 +10067,148 @@ function aboutTop() {
       <div class="btns"><button class="btn primary" id="ab-summary">${icon('copy', 18)}Für Discord kopieren</button></div>
       <p class="help">Wenn etwas klemmt und nach mehr gefragt wird: das Zip mit Bibliothek, Einstellungen (ohne Passwörter, Tokens und Konten), Netz- und Systemstand und den Protokollen der Box.</p>
       <div class="btns"><a class="btn" href="${API}/support-info" download>${icon('save', 18)}Support-Infos herunterladen</a></div></section>`,
+    ...projectCards(),
     `<section class="card wide"><div class="hist-head"><h2>Verlauf</h2><div class="pills small" id="ab-range">${[1, 6, 24].map((h) => `<button aria-selected="${sys.range === h}" data-h="${h}">${h} h</button>`).join('')}</div></div>
       <div class="hist-grid" id="ab-charts"><div class="loading"><p>Lade …</p></div></div>
       <p class="help" style="margin:0"><span id="ab-since"></span> Einmal pro Minute gemessen, nur im Arbeitsspeicher der Box – nach einem Neustart beginnt der Verlauf neu.</p></section>`,
     `<section class="card wide"><h2>Neuigkeiten</h2><pre class="news" id="ab-news">${esc(sys.news ? newsText(sys.news) : tr('Lade …'))}</pre></section>`,
   ]
+}
+
+/* The project: the voluntary statistics and the donation (what the admin interface had - admin.php, classic-notices.js -
+   in the app, since the admin interface is off by default). Both notices at most once a month and each can be switched
+   off; the consent to the statistics is its own switch and off until it is given. */
+const STAT_ERRORS = {
+  'Statistics server unavailable': 'Der Statistik-Server war nicht erreichbar. Die Box versucht es später noch einmal.',
+  'Deletion request unsuccessful': 'Die Löschanfrage kam nicht durch. Die Box versucht es später noch einmal.',
+  'Consent not valid for this device': 'Die Einwilligung stammte von einer anderen Box (wiederhergestellte Sicherung) und wurde zurückgesetzt.',
+  'Raspberry Pi serial unavailable': 'Die Seriennummer des Raspberry Pi ließ sich nicht lesen.',
+  'Raspberry Pi serial unavailable for deletion': 'Die Seriennummer des Raspberry Pi ließ sich nicht lesen.',
+}
+function projectCards() {
+  const n = sys.notices
+  if (!n) return []
+  const st = n.statistics ?? {}
+  const sw = (id, label, help, on) =>
+    `<div class="row"><span class="lbl"><b>${esc(tr(label))}</b>${help ? `<small>${esc(tr(help))}</small>` : ''}</span><label class="switch"><input type="checkbox" id="${id}" ${on ? 'checked' : ''} aria-label="${esc(tr(label))}"><span></span></label></div>`
+  const when = st.lastReport ? new Date(st.lastReport) : null
+  const lines = [
+    when && Number.isFinite(when.getTime()) ? `<p class="help" style="margin:0">${esc(tr('Zuletzt gemeldet:'))} <span translate="no">${esc(when.toLocaleDateString(LOCALE))}</span></p>` : '',
+    st.pendingDelete ? `<p class="help" style="margin:0">${esc(tr('Die Löschung der bisherigen Angaben wird beim nächsten Kontakt mit dem Server angefragt.'))}</p>` : '',
+    st.lastError ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(STAT_ERRORS[st.lastError] ?? 'Die Statistik meldet einen Fehler. Die Box versucht es später noch einmal.'))}</span></div>` : '',
+  ].join('')
+  return [
+    `<section class="card" id="ab-stat"><div class="card-head"><h2>Freiwillige Statistik</h2><span class="chip ${st.enabled ? 'ok' : ''}">${st.enabled ? 'an' : 'aus'}</span></div>
+      <p class="help">Hilf mit, MuPiBox weiterzuentwickeln: Mit deiner Einwilligung meldet die Box einmal im Monat technische Angaben zu Version und Hardware. Es werden keine abgespielten Inhalte, keine Konten und keine Nutzungszeiten übertragen. Im Standard aus, jederzeit widerrufbar.</p>
+      <details class="more"><summary>Was genau gemeldet wird</summary><p class="help">MuPiBox-Version, Modell und Seriennummer des Raspberry Pi, Betriebssystem und Debian-Version, Auflösung des Displays, Art der Soundkarte, MuPiHAT bzw. HiFiBerry und ob ein Controller oder eine Webcam angeschlossen ist – verschlüsselt an stat.mupibox.de. Aus der Seriennummer entsteht nur eine monatlich wechselnde, pseudonyme Kennung; die Seriennummer selbst speichert der Server nicht. Die IP-Adresse der Verbindung wird technisch verarbeitet. Einträge einzelner Boxen werden 45 Tage nach Monatsende gelöscht, danach bleiben nur zusammengezählte Monatswerte. Beim Ausschalten der Statistik bittet die Box den Server, ihre Einträge zu löschen.</p></details>
+      ${sw('ab-stat-on', 'Technische Statistik senden', 'Ich willige freiwillig ein, die oben beschriebenen technischen Angaben zu senden.', st.enabled)}
+      ${lines}
+      <div class="btns"><a class="btn" href="${esc(st.privacyUrl ?? 'https://stat.mupibox.de/datenschutz/')}" target="_blank" rel="noopener noreferrer">${icon('lock', 18)}Datenschutzhinweise</a>${st.enabled ? `<button class="btn" id="ab-stat-send">${icon('up', 18)}Jetzt melden</button>` : ''}</div></section>`,
+    `<section class="card" id="ab-support"><h2>MuPiBox unterstützen</h2>
+      <p class="help">Wir entwickeln MuPiBox gemeinsam mit der Community in unserer Freizeit und stellen das Projekt kostenlos zur Verfügung. Wenn dir MuPiBox gefällt, kannst du uns und die Weiterentwicklung mit einer freiwilligen Spende unterstützen. Ohne Spende bleibt alles uneingeschränkt nutzbar.</p>
+      <div class="btns"><a class="btn primary" href="${esc(n.donation?.url ?? 'https://mupibox.de/spenden/')}" target="_blank" rel="noopener noreferrer">${icon('link', 18)}Projekt unterstützen</a></div>
+      ${sw('ab-pop-donation', 'Monatlicher Spendenhinweis', 'Höchstens einmal im Monat beim Öffnen der App.', n.donation?.popup !== false)}
+      ${sw('ab-pop-stat', 'Monatlicher Statistikhinweis', 'Nur solange die Statistik aus ist, höchstens einmal im Monat.', st.popup !== false)}</section>`,
+  ]
+}
+
+function mountProject(root, page) {
+  const again = async (r) => {
+    if (r?.ok && r.body?.statistics) sys.notices = r.body
+    else {
+      const n = await api(`${API}/notices`)
+      if (n.ok) sys.notices = n.body
+    }
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  }
+  $('#ab-stat-on', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    const r = await api(`${API}/statistics`, { method: 'POST', body: { enabled: on } })
+    if (!r.ok) {
+      e.target.checked = !on
+      return toast('Das hat nicht geklappt', 'info')
+    }
+    if (r.body?.error === 'serial_unavailable') toast('Die Seriennummer des Raspberry Pi ließ sich nicht lesen – die Statistik bleibt aus', 'info')
+    else toast(on ? 'Danke! Die Box meldet sich gleich' : 'Statistik aus – die bisherigen Angaben werden gelöscht', 'ok')
+    again(r)
+  })
+  $('#ab-stat-send', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/statistics/send`, { method: 'POST', body: {} })
+    toast(r.ok ? 'Die Box meldet sich gleich' : 'Das hat nicht geklappt', r.ok ? 'ok' : 'info')
+    setTimeout(() => again(), 10_000)
+  })
+  const popupSwitch = (id, body) => {
+    $(id, root)?.addEventListener('change', async (e) => {
+      const r = await api(`${API}/notices/settings`, { method: 'POST', body: body(e.target.checked) })
+      if (!r.ok) {
+        e.target.checked = !e.target.checked
+        return toast('Das hat nicht geklappt', 'info')
+      }
+      toast('Gespeichert')
+      if (r.body?.statistics) sys.notices = r.body
+    })
+  }
+  popupSwitch('#ab-pop-donation', (on) => ({ donationPopup: on }))
+  popupSwitch('#ab-pop-stat', (on) => ({ statisticsPopup: on }))
+}
+
+// The monthly notices, on the start page: at most one each month (the month is kept on the box - not again on another
+// phone), and only once per visit of the app. The donation first, then the statistics.
+let projectNoticesAsked = false
+async function showProjectNotices() {
+  // (the app on the box's own display: no notice there - a child might see it, and a link would open on the box)
+  if (projectNoticesAsked || location.hostname === 'localhost' || location.hostname === '127.0.0.1') return
+  projectNoticesAsked = true
+  const r = await api(`${API}/notices`)
+  if (!r.ok) return
+  const queue = []
+  if (r.body?.donation?.due) {
+    queue.push({
+      kind: 'donation',
+      title: 'MuPiBox ist ein Community-Projekt',
+      text: 'Wir entwickeln MuPiBox gemeinsam mit der Community in unserer Freizeit und stellen das Projekt kostenlos zur Verfügung. Wenn dir MuPiBox gefällt, kannst du uns und die Weiterentwicklung mit einer freiwilligen Spende unterstützen. Ohne Spende bleibt alles uneingeschränkt nutzbar.',
+      ok: 'Projekt unterstützen',
+      no: 'Vielleicht später',
+      go: () => window.open(r.body.donation.url, '_blank', 'noopener,noreferrer'),
+    })
+  }
+  if (r.body?.statistics?.due) {
+    queue.push({
+      kind: 'statistics',
+      title: 'Hilf mit freiwilliger Statistik',
+      text: 'Mit deiner Einwilligung helfen rein technische Angaben zu Version und Hardware bei der Weiterentwicklung. Abgespielte Inhalte und Nutzungszeiten werden nicht erfasst. Die Statistik ist im Standard aus und jederzeit widerrufbar.',
+      ok: 'Statistik-Einstellungen',
+      no: 'Nicht jetzt',
+      go: () => {
+        go('ueber')
+        setTimeout(() => $('#ab-stat')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 400)
+      },
+    })
+  }
+  const next = () => {
+    const n = queue.shift()
+    if (!n) return
+    // (another page chosen meanwhile, or another sheet open - the parents already do something: no notice over it, it
+    // comes on another visit)
+    if (currentPage()?.id !== 'start' || !$('#sheet').hidden) return
+    api(`${API}/notices/shown`, { method: 'POST', body: { kind: n.kind } })
+    let chosen = false
+    openSheet(
+      `<h2>${esc(tr(n.title))}</h2><p class="help" style="margin:0">${esc(tr(n.text))}</p>
+       <div class="btns"><button class="btn" data-close>${esc(tr(n.no))}</button><button class="btn primary" data-ok>${esc(tr(n.ok))}</button></div>`,
+      (sheet, close) => {
+        sheet.querySelector('[data-close]').onclick = close
+        sheet.querySelector('[data-ok]').onclick = () => {
+          chosen = true
+          close()
+          n.go()
+        }
+      },
+      // (after the donation the statistics' notice; after "Statistik-Einstellungen" nothing more)
+      () => setTimeout(() => !chosen && next(), 300),
+    )
+  }
+  next()
 }
 
 // CPU, RAM and temperature over the last hours (the admin interface's rrd graphs): /system-history, a minute apart
@@ -9888,7 +10280,8 @@ function lineChart(rows, k, { title, unit, min, max, color, digits = 0, fmt, gap
     <small>${esc(`Zwischen ${fmt(low, digits)} und ${fmt(high, digits)} ${unit}`)}</small></div>`
 }
 
-function mountAbout(root) {
+function mountAbout(root, page) {
+  mountProject(root, page)
   drawSystemHistory(root)
   every(60_000, () => drawSystemHistory(root))
   $('#ab-range', root).onclick = (e) => {
@@ -11135,7 +11528,7 @@ function mountTidal(root, page) {
 /* Extensions (docs/extensions.md): the catalog on GitHub, install / switch off / remove, and the settings the installed ones declare */
 
 // the guideline for people who write extensions (English), in the repository
-const EXT_GUIDELINE_URL = 'https://github.com/Lippsson/MuPiBox/blob/dev5.1/extensions/README.md'
+const EXT_GUIDELINE_URL = 'https://github.com/wowa1990/MuPiBox/blob/upstream-v5.1-pr/extensions/README.md'
 const exts = { installed: [], catalog: [], catalogError: null }
 async function loadExtensions() {
   const r = await api(`${API}/extensions`)
@@ -11847,23 +12240,6 @@ const CONTROLLERS = {
       })
     },
   },
-  verwaltet: {
-    load: loadManaged,
-    top: managedTop,
-    sections: () => [],
-    mount(root, page) {
-      for (const b of root.querySelectorAll('[data-sub]')) b.onclick = () => openSubSheet(managed.subs.artists[Number(b.dataset.sub)], page)
-      for (const b of root.querySelectorAll('[data-album]')) {
-        const al = managed.subs.explicit_albums[Number(b.dataset.album)]
-        b.onclick = () =>
-          confirmSheet('Entfernen', `„${al.name || al.id}“ entfernen? Der nächste Sync nimmt es von der Box.`, async () => {
-            const r = await api(`${API}/library/remove-album`, { method: 'POST', body: { albumId: al.id } })
-            if (!r.ok) return toast('Das hat nicht geklappt', 'info')
-            managedDone('Entfernt.', page)
-          })
-      }
-    },
-  },
   suche: {
     top: searchTop,
     sections: () => [],
@@ -12119,7 +12495,7 @@ const CONTROLLERS = {
     sections: (page) =>
       page.sections.map((sec) => ({
         ...sec,
-        items: sec.items.map((it) => (it.key === 'syncOn' ? { ...it, help: 'Aus = gar kein Sync, auch nicht von Hand (Knopf, Telegram /resync). Die Inhalte auf der Box bleiben.' } : it)),
+        items: sec.items.map((it) => (it.key === 'syncOn' ? { ...it, help: 'Aus = kein Abgleich der Playlists, auch nicht von Hand (Knopf, Telegram /resync), und keine später erschienenen Folgen von selbst. Was du über die Suche abonnierst oder hinzufügst, kommt trotzdem auf die Box. Die Inhalte auf der Box bleiben.' } : it)),
       })),
     byLabel: {
       async Speichern() {
@@ -12246,11 +12622,6 @@ const CONTROLLERS = {
           help: 'Gilt nach einem Neustart der Box.',
           items: [
             { type: 'html', html: `<div class="field"><label>Display am HDMI-Anschluss</label>${rotTiles('hdmiRot', HDMI_ROT)}</div>` },
-            // (a display on the ribbon cable that the box found, with the KMS driver: turned and mirrored like the HDMI one -
-            // by the display server, so the kiosk starts again at once instead of after a restart of the box)
-            ...(disp.opts?.dsi
-              ? [{ type: 'html', html: `<div class="field"><label>Display am Flachbandkabel (DSI) – dreht und spiegelt auch die Berührung</label>${rotTiles('dsiRot', HDMI_ROT)}<small>Das Display startet nach dem Ändern gleich neu. Gedreht wird das Bild, wie es das Display von Haus aus zeigt.</small></div>` }]
-              : []),
             {
               type: 'html',
               html: `<details class="more"><summary>Display am Flachbandkabel (DSI/LCD)</summary><div class="field"><label>LCD-Drehung</label>${rotTiles('lcdRot', LCD_ROT)}</div>
@@ -12268,7 +12639,6 @@ const CONTROLLERS = {
           items: [
             { type: 'select', label: 'Größe', key: 'resPreset', options: [...RES_PRESETS.map(([l]) => l), 'Eigene …'] },
             { type: 'pair', dep: 'resCustom', keep: true, items: [it('resX', { label: 'Breite', unit: 'px' }), it('resY', { label: 'Höhe', unit: 'px' })] },
-            { type: 'toggle', key: 'resLimit', label: 'Seite nur in dieser Größe zeigen', help: 'Die Seite sitzt dann in der Mitte des Bildschirms, der Rest bleibt schwarz. Ohne diese Option füllt die Seite immer den ganzen Bildschirm.' },
             { type: 'buttons', buttons: [['Auflösung übernehmen', 'primary', 'toast:Gespeichert']] },
           ],
         },
@@ -12300,7 +12670,6 @@ const CONTROLLERS = {
         const rl = await api(`${API}/display/reload-page`, { method: 'POST', body: {} })
         return toast(`${Number(v) === 0 ? 'Display bleibt an' : `Display aus nach ${v} min`}. ${rl.body?.ok ? 'Das Display lädt neu.' : ''}`.trim())
       }
-      if (key === 'dsiRot') return saveDisplayOptions({ dsiRotation: rotValue(HDMI_ROT, v) }, 'Drehung gespeichert')
       const rot = { hdmiRot: ['display_hdmi_rotate', HDMI_ROT], lcdRot: ['lcd_rotate', LCD_ROT], dlcdRot: ['display_lcd_rotate', LCD_ROT] }[key]
       if (rot) return saveDisplayOptions({ rotation: { [rot[0]]: rotValue(rot[1], v) } }, 'Drehung gespeichert – gilt nach einem Neustart')
       if (key === 'resPreset') {
@@ -12319,10 +12688,9 @@ const CONTROLLERS = {
         const resX = Number(state.values.get('resX'))
         const resY = Number(state.values.get('resY'))
         if (!Number.isInteger(resX) || !Number.isInteger(resY) || resX < 200 || resY < 200) return toast('Bitte Breite und Höhe in Pixeln eintragen', 'info')
-        const limitWindow = !!state.values.get('resLimit')
-        if (resX === disp.opts.resX && resY === disp.opts.resY && limitWindow === (disp.opts.limitWindow === true)) return toast('Nichts geändert', 'info')
-        if (!(await ask('Auflösung ändern', `Das Display startet mit ${resX} × ${resY} Pixeln neu${limitWindow ? ' und zeigt die Seite nur in dieser Größe' : ''}. Das dauert ein paar Sekunden.`, 'Übernehmen'))) return
-        if (await saveDisplayOptions({ resX, resY, limitWindow }, 'Auflösung gespeichert')) Object.assign(disp.opts, { resX, resY, limitWindow })
+        if (resX === disp.opts.resX && resY === disp.opts.resY) return toast('Nichts geändert', 'info')
+        if (!(await ask('Auflösung ändern', `Das Display startet mit ${resX} × ${resY} Pixeln neu. Das dauert ein paar Sekunden.`, 'Übernehmen'))) return
+        if (await saveDisplayOptions({ resX, resY }, 'Auflösung gespeichert')) Object.assign(disp.opts, { resX, resY })
       },
     },
   },
@@ -12369,12 +12737,17 @@ const CONTROLLERS = {
             {
               type: 'html',
               html: `<div class="ext-bar"><div class="search">${icon('search')}<input class="input" id="ext-q" type="search" placeholder="Erweiterungen suchen" autocomplete="off"></div>
-                <button type="button" class="btn" data-ext-upload>Datei hochladen</button><input type="file" id="ext-file" accept=".mpx,.zip,application/zip" hidden></div>`,
+                ${exts.devMode ? `<button type="button" class="btn" data-ext-upload>Datei hochladen</button><input type="file" id="ext-file" accept=".mpx,.zip,application/zip" hidden>` : ''}</div>`,
             },
             { type: 'html', html: `<h2 class="ext-title">Alle Erweiterungen</h2>${note}<div class="ext-grid">${cards.join('') || '<p class="help">Keine Erweiterungen verfügbar.</p>'}</div>` },
             {
               type: 'html',
-              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/Lippsson/MuPiBox/tree/dev5.1/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab. <span translate="no">${esc(guide[0])}<a href="${EXT_GUIDELINE_URL}" target="_blank" rel="noopener noreferrer">${esc(tr('Richtlinie für Erweiterungen'))}</a>${esc(guide[1])}</span></span></div>`,
+              html: `<div class="note">${icon('info', 18)}<span>Aus dem <a href="${esc(exts.catalogPage || 'https://github.com/wowa1990/MuPiBox/tree/upstream-v5.1-pr/extensions')}" target="_blank" rel="noopener noreferrer">Katalog</a> auf GitHub. Eine Erweiterung ist eine einzige Datei; die Box prüft ihre Prüfsumme, bevor sie sie installiert. Ein Wechsel startet die Dienste der Box neu; eine Wiedergabe bricht dabei ab. <span translate="no">${esc(guide[0])}<a href="${EXT_GUIDELINE_URL}" target="_blank" rel="noopener noreferrer">${esc(tr('Richtlinie für Erweiterungen'))}</a>${esc(guide[1])}</span></span></div>`,
+            },
+            // (own extension files only in developer mode: an extension can do everything on the box)
+            {
+              type: 'html',
+              html: `<div class="row"><span class="lbl"><b>Entwicklermodus</b><small>Eigene Erweiterungsdateien hochladen und installieren, nicht nur aus dem Katalog.</small></span><label class="switch"><input type="checkbox" data-ext-devmode ${exts.devMode ? 'checked' : ''} aria-label="Entwicklermodus"><span></span></label></div>`,
             },
           ],
         },
@@ -12382,6 +12755,28 @@ const CONTROLLERS = {
     },
     mount(root) {
       const entry = (id) => exts.installed.find((e) => e.id === id) ?? exts.catalog.find((e) => e.id === id)
+      // developer mode: switched on only after the warning
+      $('[data-ext-devmode]', root)?.addEventListener('change', (ev) => {
+        const cb = ev.target
+        const set = async (on) => {
+          const r = await api(`${API}/extensions/devmode`, { method: 'POST', body: { on } })
+          if (!r.ok) {
+            cb.checked = !on
+            return toast('Das hat nicht geklappt', 'info')
+          }
+          renderPage(currentPage(), true)
+        }
+        if (!cb.checked) return set(false)
+        cb.checked = false
+        confirmSheet(
+          'Entwicklermodus',
+          'Im Entwicklermodus kannst du eigene Erweiterungsdateien hochladen. Eine Erweiterung kann auf der Box alles – auch als Administrator (root). Lade nur Dateien hoch, die du selbst gebaut hast oder deren Quelle du vertraust.',
+          () => {
+            cb.checked = true
+            return set(true)
+          },
+        )
+      })
       $('#ext-q', root)?.addEventListener('input', (ev) => {
         const q = ev.target.value.trim().toLowerCase()
         for (const c of root.querySelectorAll('.ext-card')) c.hidden = !!q && !c.dataset.q.includes(q)

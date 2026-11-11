@@ -49,15 +49,11 @@ Steht das Display auf dem Kopf oder quer, drehst du das Bild. Was du dafür sieh
 - **Offizielles 7″ (1. Generation):** Für ein **Display am HDMI-Anschluss** wählst du aus, 90°, 180°, 270°, horizontal oder vertikal spiegeln. Für ein **Display am Flachbandkabel (DSI/LCD)** gibt es (zugeklappt) **LCD-Drehung** und **Display-LCD-Drehung**, jeweils aus oder 180°. Die Drehung gilt nach einem Neustart der Box.
 - **Alle anderen Modelle:** Kacheln **0°**, **90°**, **180°** und **270°** sowie **Spiegeln ↔** (links-rechts) und **Spiegeln ↕** (oben-unten) – gedreht oder gespiegelt, nicht beides. Bild und Touch drehen bzw. spiegeln sich zusammen, beim Drehen auch das Start-, Wartungs- und Ausschaltbild (gespiegelt bleiben diese Bilder, wie sie sind). Die Anzeige startet kurz neu, die Box nicht. **Quer** markiert die Lagen, in denen die MuPiBox richtig steht – viele dieser Displays sind hochkant gebaut (etwa das Touch Display 2), dann ist es 90° oder 270°, je nachdem, wie das Display eingebaut ist. Das Touch Display 2 stellt die Box beim Wählen des Modells und bei einer Installation mit diesem Display schon auf 90°.
 
-Hat die Box ein **Display am Flachbandkabel (DSI)** mit dem KMS-Treiber (`vc4-kms-v3d`, bei neueren DietPi-Installationen der Standard) und erkennt sie es, erscheint darüber ein eigenes Feld **Display am Flachbandkabel (DSI)** mit denselben sechs Kacheln wie beim HDMI-Display: 90°, 180°, 270°, horizontal oder vertikal spiegeln. Das Bild wird vom Display-Server gedreht und gespiegelt, und die **Berührung dreht und spiegelt mit**, damit ein Tipp dort landet, wo das Bild ist. Nach dem Ändern startet das Display gleich neu, ein Neustart der Box ist nicht nötig. Gedreht wird, wie das Display von Haus aus zeigt: Ein Display, das hochkant eingebaut ist, bringst du mit 90° oder 270° ins Querformat.
-
 ## Auflösung
 
 Bei allen Modellen außer dem offiziellen 7″ nimmt die Box die Auflösung vom Display selbst (nach der Drehung) – der Abschnitt **Auflösung** erscheint dann nicht.
 
 Der Standard ist **800 × 480** Pixel (die Größe der üblichen 7-Zoll-Touch-Displays). Unter **Größe** wählst du eine der üblichen Größen oder **Eigene …** und trägst dann **Breite** und **Höhe** ein. Mit **Auflösung übernehmen** startet das Display gleich neu.
-
-Die Auflösung ändert nicht den Bildschirm selbst, die Seite füllt immer den ganzen Bildschirm. Soll sie nur in der eingestellten Größe erscheinen, etwa 800 × 480 auf einem breiteren Display, schalte **Seite nur in dieser Größe zeigen** ein: Die Seite sitzt dann in der Mitte, der Rest bleibt schwarz.
 
 Ist die Auflösung größer als 800 × 480, vergrößert die Box die Oberfläche passend: Aufbau und Themes bleiben gleich, Schrift, Symbole und Cover werden in voller Schärfe gezeichnet. Beim Raspberry Pi Touch Display 2 (1280 × 720) ist das das 1,5-Fache. Stell hier deshalb die echte Auflösung deines Displays ein. Hintergrundbilder für das Theme „custom“ passen am besten in genau dieser Größe ([Cover und Themes](../bedienung/cover-und-themes.md)).
 

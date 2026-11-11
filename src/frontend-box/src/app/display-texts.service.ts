@@ -79,6 +79,9 @@ export const DEFAULT_DISPLAY_TEXTS = {
   displayTestTitle: 'New display',
   displayTestText: 'Do you see this picture? Then tap “Keep”. Otherwise the box goes back to the display before in {s}.',
   displayTestKeep: 'Keep',
+  // the Winamp theme without a skin yet (winamp-shell.component.ts): the line and the hint under it (the app's menu path)
+  winampNoSkin: 'No Winamp skin installed',
+  winampNoSkinHint: "Upload a .wsz skin in the parents' app: Settings › Appearance › Winamp skin",
 }
 export type DisplayTextKey = keyof typeof DEFAULT_DISPLAY_TEXTS
 type TextSet = Partial<Record<DisplayTextKey, string>>

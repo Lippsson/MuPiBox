@@ -49,15 +49,11 @@ If the display stands upside down or sideways, you rotate the picture. What you 
 - **Official 7″ (1st generation):** For a **Display on the HDMI port** you choose off, 90°, 180°, 270°, mirror horizontally or vertically. For a **Display on the ribbon cable (DSI/LCD)** there are (folded) **LCD rotation** and **Display LCD rotation**, each off or 180°. The rotation applies after a restart of the box.
 - **All other models:** tiles **0°**, **90°**, **180°** and **270°** as well as **Mirror ↔** (left-right) and **Mirror ↕** (top-bottom) – turned or mirrored, not both. Picture and touch turn or mirror together; when turned, the start, maintenance and goodbye pictures turn too (mirrored, these pictures stay as they are). The display restarts briefly, the box does not. **Landscape** marks the positions in which the MuPiBox stands right – many of these displays are built upright (such as the Touch Display 2), then it is 90° or 270°, depending on how the display is mounted. The box sets the Touch Display 2 to 90° already when its model is chosen and when it is installed with this display.
 
-If the box has a **display on the ribbon cable (DSI)** with the KMS driver (`vc4-kms-v3d`, the default on newer DietPi installations) and finds it, a field of its own appears above: **Display on the ribbon cable (DSI)**, with the same six tiles as for the HDMI display: 90°, 180°, 270°, mirror horizontally or vertically. The picture is turned and mirrored by the display server, and the **touch turns and mirrors with it**, so a tap lands where the picture is. After the change the display restarts at once; the box does not need a restart. The picture is turned relative to how the display shows it by default: a display built in upright is brought to landscape with 90° or 270°.
-
 ## Resolution
 
 With all models except the official 7″ the box takes the resolution from the display itself (after the rotation) – the **Resolution** section does not show then.
 
 The default is **800 × 480** pixels (the size of the usual 7-inch touch displays). Under **Size** you choose one of the usual sizes or **Custom …** and then enter **Width** and **Height**. With **Apply resolution** the display restarts at once.
-
-The resolution does not change the screen itself; the page always fills the whole screen. If it should appear only at the set size, for example 800 × 480 on a wider display, switch on **Show the page only at this size**: the page then sits in the middle and the rest stays black.
 
 If the resolution is larger than 800 × 480, the box enlarges the interface to match: the layout and the themes stay the same, text, symbols and covers are drawn at full sharpness. With the Raspberry Pi Touch Display 2 (1280 × 720) that is 1.5 times. So set the real resolution of your display here. Background pictures for the theme “custom” fit best at exactly this size ([Covers and themes](../bedienung/cover-und-themes.md)).
 
