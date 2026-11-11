@@ -707,6 +707,18 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
       await fsp.rm(target, { recursive: true, force: true })
       if (existsSync(previous)) await fsp.rename(previous, target)
     }
+    // (... and the services of the version before as they were; it had none: the new ones go again. After restorePrevious.)
+    let unitsChanged = false
+    const restoreUnits = async () => {
+      const oldUnits = before?.system?.units ?? []
+      if (oldUnits.length > 0) {
+        const oldFiles = new Map<string, Buffer>()
+        for (const u of oldUnits) oldFiles.set(u.file, await fsp.readFile(path.join(target, u.file)).catch(() => Buffer.alloc(0)))
+        await setUpUnits(sys.units ?? [], oldUnits, oldFiles, target, id)
+      } else {
+        await removeUnits(sys.units ?? [])
+      }
+    }
 
     try {
       // the settings an older version of the box kept in its own configuration come along once
@@ -730,28 +742,26 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
         job.step = 'services'
         const problem = await setUpUnits(before?.system?.units ?? [], sys.units ?? [], files, target, id)
         if (problem) {
-          // back to the version before: its files, and its services as they were (none: the new ones go again)
+          // back to the version before: its files, and its services as they were
           await restorePrevious()
-          const oldUnits = before?.system?.units ?? []
-          if (oldUnits.length > 0) {
-            const oldFiles = new Map<string, Buffer>()
-            for (const u of oldUnits) oldFiles.set(u.file, await fsp.readFile(path.join(target, u.file)).catch(() => Buffer.alloc(0)))
-            await setUpUnits(sys.units ?? [], oldUnits, oldFiles, target, id)
-          } else {
-            await removeUnits(sys.units ?? [])
-          }
+          await restoreUnits()
           return fail(before ? `${problem} - the version before is back` : problem)
         }
+        unitsChanged = true
       }
+
+      // the state names the new version while the version before can still come back: a state that cannot be written (a full
+      // card) is a failure like any other here - new files beside a state that says the old version is what this is against
+      const state = await readState()
+      state[id] = { version: manifest.version, enabled: true }
+      await writeState(state)
     } catch (error) {
       await restorePrevious().catch(() => undefined)
+      if (unitsChanged) await restoreUnits().catch(() => undefined)
       throw error
     }
-    await fsp.rm(previous, { recursive: true, force: true })
-
-    const state = await readState()
-    state[id] = { version: manifest.version, enabled: true }
-    await writeState(state)
+    // (the version before is not needed any more; should it not go, the next install of this extension clears it away)
+    await fsp.rm(previous, { recursive: true, force: true }).catch(() => undefined)
     Object.assign(job, { running: false, ok: true, step: 'done' })
     restartServices()
   } catch (error) {

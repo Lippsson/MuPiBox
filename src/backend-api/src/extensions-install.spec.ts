@@ -1,7 +1,7 @@
 // What an install does when something goes wrong half way: a failed update leaves the version before as it was (files and state),
 // a failed first install leaves nothing. Runs in a folder of its own (MUPIBOX_EXT_DIR); nothing here uses sudo.
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { after, before, describe, it } from 'node:test'
@@ -60,6 +60,29 @@ describe('an install that fails after the new files are in place', () => {
     // nothing is left beside it
     assert.equal(existsSync(path.join(dir, '.previous-demo')), false)
     assert.equal(existsSync(path.join(dir, '.install-demo')), false)
+  })
+
+  it('puts the version before back when the state cannot be written at the very end', async () => {
+    put('demo', '1.0.0')
+    // (a folder where the state is written first: the write fails, as on a full card)
+    mkdirSync(path.join(dir, 'state.json.new'))
+    try {
+      const job = await install('demo', { getMupiboxConfig: () => undefined }, pkg('2.0.0'))
+      assert.equal(job.ok, false)
+      assert.equal(installedVersion(), '1.0.0', 'the files of the version before')
+      assert.equal(readFileSync(path.join(dir, 'demo', 'display.js'), 'utf8'), '// version 1.0.0')
+      assert.equal(JSON.parse(readFileSync(path.join(dir, 'state.json'), 'utf8')).demo.version, '1.0.0', 'and the state says the same')
+      assert.equal(existsSync(path.join(dir, '.previous-demo')), false)
+      assert.equal(existsSync(path.join(dir, '.install-demo')), false)
+    } finally {
+      rmSync(path.join(dir, 'state.json.new'), { recursive: true, force: true })
+    }
+    // ... and with the state writable again the same update goes through
+    const job = await install('demo', { getMupiboxConfig: () => undefined }, pkg('2.0.0'))
+    assert.equal(job.ok, true)
+    assert.equal(installedVersion(), '2.0.0')
+    assert.equal(JSON.parse(readFileSync(path.join(dir, 'state.json'), 'utf8')).demo.version, '2.0.0')
+    assert.equal(existsSync(path.join(dir, '.previous-demo')), false)
   })
 
   it('leaves nothing behind when it was the first install', async () => {
