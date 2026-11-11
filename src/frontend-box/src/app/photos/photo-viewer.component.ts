@@ -49,6 +49,7 @@ type Speed = (typeof SPEEDS)[number]
               (play)="clipPaused.set(false)"
               (pause)="clipPaused.set(true)"
               (ended)="clipEnded()"
+              (error)="clipEnded()"
             ></video>
           } @else {
             <img class="pv-fg" [class.pv-fill]="fill()" [src]="photos.fileUrl(albumId(), s.asset.id, 'f')" [attr.alt]="pictureLabel(s.index)" draggable="false" />
@@ -517,6 +518,12 @@ export class PhotoViewerComponent implements OnDestroy {
 
   private play(): void {
     this.playing.set(true)
+    const v = this.host.nativeElement.querySelector<HTMLVideoElement>('video.pv-clip')
+    if (v && this.clipShown()) {
+      if (v.ended) v.currentTime = 0
+      v.muted = true
+      if (v.paused) void v.play().catch((): void => this.clipEnded())
+    }
     this.schedule()
     this.touched()
   }

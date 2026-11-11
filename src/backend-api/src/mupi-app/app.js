@@ -12775,9 +12775,20 @@ function photoImmichAlbumCard(a) {
     <div class="navlist">${navRow('fotoimmich', 'Immich', 'Alben, Abgleich, Zugang', 'grid')}</div></section>`
 }
 
+let photoPrepTimer = 0
 function mountPhotoAlbum(root, page) {
   const a = photoLib.album
+  window.clearTimeout(photoPrepTimer)
   if (!a) return
+  if (a.assets.some((x) => x.ready === false)) {
+    photoPrepTimer = window.setTimeout(async () => {
+      if (currentPage()?.id !== page.id || photoLib.album !== a) return
+      await loadPhotoAlbum().catch(() => undefined)
+      // (not under an open sheet - the full view, a question: drawn when it is closed, at the next round)
+      if (currentPage()?.id === page.id && $('#sheet').hidden) renderPage(page, false)
+      else if (currentPage()?.id === page.id) mountPhotoAlbum(root, page)
+    }, 5000)
+  }
   $('#ph-immich-sync', root)?.addEventListener('click', async (e) => {
     e.currentTarget.disabled = true
     const r = await api(`${API}/photos/immich/sync`, { method: 'POST', body: {} })
@@ -12935,6 +12946,13 @@ function photoViewer(a, start, { setCover, deleteAssets }) {
         deleteAssets([a.assets[i].id])
       })
       show()
+    },
+    () => {
+      const v = document.querySelector('#ph-view-vid')
+      if (!v) return
+      v.pause()
+      v.removeAttribute('src')
+      v.load()
     },
   )
 }
