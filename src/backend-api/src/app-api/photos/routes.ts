@@ -8,11 +8,14 @@ import type { Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
 import { registerPhotoAlbumRoutes } from './albums'
+import { type PhotoNasAccess, registerPhotoNasRoutes } from './nas'
 import { applyPhotoSettings, applyPhotoTimeAction, photoSettings } from './settings'
 
 export interface PhotoDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
   updateMupiboxConfig: (mutate: (cfg: Record<string, unknown>) => void) => Promise<void>
+  /** the server's NAS access, for the photos of NAS folders (see nas.ts) */
+  nas?: PhotoNasAccess
 }
 
 const SETUP = '/usr/local/bin/mupibox/photos_setup.sh'
@@ -70,6 +73,8 @@ function installWhatIsNeeded(cfg: MupiboxConfig | undefined): void {
 export function registerPhotoRoutes(router: Router, deps: PhotoDeps): void {
   // (Bibliothek › Fotos: overview, albums, upload - see albums.ts)
   registerPhotoAlbumRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig })
+  // (Bibliothek › Fotos › NAS-Ordner - see nas.ts)
+  registerPhotoNasRoutes(router, deps)
 
   /** GET /api/app/photos/settings - the settings (with their defaults) and the programs' state */
   router.get('/photos/settings', requireSession, (_req, res) => {

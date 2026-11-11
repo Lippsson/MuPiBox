@@ -6,12 +6,14 @@
 import { randomBytes } from 'node:crypto'
 import { promises as fsp } from 'node:fs'
 import path from 'node:path'
-import { DATA_DIR } from '../../paths'
+import { CACHE_DIR, DATA_DIR } from '../../paths'
 
 export const PHOTOS_DIR = path.join(DATA_DIR, 'photos')
 const LIBRARY_FILE = path.join(PHOTOS_DIR, 'library.json')
 export const UPLOAD_DIR = path.join(PHOTOS_DIR, 'upload')
 export const INCOMING_DIR = path.join(PHOTOS_DIR, 'incoming')
+/** The pictures of NAS folders, in their sizes: fetched again when gone (cache/ - may be emptied any time) */
+export const NAS_PHOTO_DIR = path.join(CACHE_DIR, 'photos', 'nas')
 
 export type PhotoSource = 'upload' | 'nas' | 'immich'
 
@@ -26,6 +28,9 @@ export interface PhotoAsset {
   kind: 'photo'
   /** a fingerprint of the file as it came (sha1): the same picture twice in an album is left out */
   sum?: string
+  /** a NAS album's picture: its file on the NAS, and the file's version there (ETag / date / size) */
+  ref?: string
+  ver?: string
 }
 
 export interface PhotoAlbum {
@@ -40,6 +45,8 @@ export interface PhotoAlbum {
   cover?: string
   created: string
   assets: PhotoAsset[]
+  /** a NAS album: its folder on the NAS */
+  ref?: string
 }
 
 interface Library {
@@ -99,15 +106,15 @@ export function update<T>(mutate: (lib: Library) => T): Promise<T> {
   return run
 }
 
-export const albumDir = (a: Pick<PhotoAlbum, 'id'>): string => path.join(UPLOAD_DIR, a.id)
+export const albumDir = (a: Pick<PhotoAlbum, 'id'> & { source?: PhotoSource }): string => path.join(a.source === 'nas' ? NAS_PHOTO_DIR : UPLOAD_DIR, a.id)
 /** The path of an asset's files without their size suffix (see process.ts) */
-export const assetBase = (a: Pick<PhotoAlbum, 'id'>, assetId: string): string => path.join(albumDir(a), assetId)
+export const assetBase = (a: Pick<PhotoAlbum, 'id'> & { source?: PhotoSource }, assetId: string): string => path.join(albumDir(a), assetId)
 
 /** The album's picture: its own, else the first one */
 export const coverOf = (a: PhotoAlbum): string | undefined => (a.cover && a.assets.some((x) => x.id === a.cover) ? a.cover : a.assets[0]?.id)
 
-/** Bytes taken by the pictures (data/photos), counted on the card */
-export async function photoBytes(): Promise<number> {
+/** Bytes taken by the pictures (data/photos, or another folder - the NAS pictures' cache), counted on the card */
+export async function photoBytes(dir = PHOTOS_DIR): Promise<number> {
   let total = 0
   const walk = async (dir: string): Promise<void> => {
     let entries: import('node:fs').Dirent[]
@@ -122,7 +129,7 @@ export async function photoBytes(): Promise<number> {
       else if (e.isFile()) total += (await fsp.stat(p).catch(() => ({ size: 0 }))).size
     }
   }
-  await walk(PHOTOS_DIR)
+  await walk(dir)
   return total
 }
 
@@ -137,18 +144,20 @@ export async function sweepLeftovers(): Promise<void> {
   for (const f of await fsp.readdir(PHOTOS_DIR).catch(() => [] as string[])) {
     if (/^library\.json\.\d+\.tmp$/.test(f)) await fsp.rm(path.join(PHOTOS_DIR, f), { force: true }).catch(() => undefined)
   }
-  let dirs: import('node:fs').Dirent[]
-  try {
-    dirs = await fsp.readdir(UPLOAD_DIR, { withFileTypes: true })
-  } catch {
-    return
-  }
-  for (const d of dirs) {
-    if (!d.isDirectory() || !isId(d.name)) continue
-    const dir = path.join(UPLOAD_DIR, d.name)
-    const files = await fsp.readdir(dir).catch(() => [] as string[])
-    for (const f of files) {
-      if (f.endsWith('.tmp') || f.endsWith('.heic.jpg')) await fsp.rm(path.join(dir, f), { force: true }).catch(() => undefined)
+  for (const root of [UPLOAD_DIR, NAS_PHOTO_DIR]) {
+    let dirs: import('node:fs').Dirent[]
+    try {
+      dirs = await fsp.readdir(root, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const d of dirs) {
+      if (!d.isDirectory() || !isId(d.name)) continue
+      const dir = path.join(root, d.name)
+      const files = await fsp.readdir(dir).catch(() => [] as string[])
+      for (const f of files) {
+        if (f.endsWith('.tmp') || f.endsWith('.heic.jpg') || f.endsWith('.part')) await fsp.rm(path.join(dir, f), { force: true }).catch(() => undefined)
+      }
     }
   }
 }

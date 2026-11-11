@@ -1690,6 +1690,16 @@
    "sections": []
   },
   {
+   "id": "fotonas",
+   "slug": "photo-nas",
+   "area": "bibliothek",
+   "parent": "fotos",
+   "title": "NAS-Ordner",
+   "description": "",
+   "icon": "server",
+   "sections": []
+  },
+  {
    "id": "theme",
    "slug": "theme",
    "area": "einstellungen",

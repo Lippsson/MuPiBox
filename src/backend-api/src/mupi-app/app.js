@@ -11567,15 +11567,28 @@ function mountHa(root, page) {
    its numbers and the card's space, an album with its pictures, uploading into it. A part of its own, beside the
    radio plays and the music: never in their lists, filters or "Hören". */
 
-const photoLib = { overview: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
+const photoLib = { overview: null, nas: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
 const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'] }
 const photoFile = (albumId, assetId, size) => `${API}/photos/file/${albumId}/${assetId}/${size}`
 
 async function loadPhotoOverview() {
-  const r = await api(`${API}/photos/overview`)
+  const [r, nas] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`)])
   if (!r.ok) throw new Error(`photos ${r.status}`)
   photoLib.overview = r.body
+  // (the photo services: the NAS folders - their line in the overview)
+  photoLib.nas = nas.ok ? nas.body : null
   photoLib.stale = false
+}
+
+// "Foto-Dienste": the NAS folders (Immich comes later) - a line with their state, or the way to choose some
+function photoServicesCard() {
+  const n = photoLib.nas
+  if (!n) return ''
+  const folders = n.settings.folders.length
+  let sub = folders ? tr(`${folders} Ordner · ${n.albums} ${n.albums === 1 ? 'Album' : 'Alben'}`) : tr('Ordner vom NAS als Alben')
+  if (!n.nas.connected) sub = tr('Noch kein NAS verbunden')
+  else if (folders && n.sync.offlineSince) sub = tr(`Nicht erreichbar seit ${relTime(n.sync.offlineSince).replace(/^vor /, '')}`)
+  return `<section class="card wide"><h2>Foto-Dienste</h2><div class="navlist">${navRow('fotonas', 'NAS-Ordner', sub, 'server')}</div></section>`
 }
 
 function photoAlbumRow(a, { toggle = true, sub = '' } = {}) {
@@ -11610,7 +11623,8 @@ function photoOverviewTop() {
     return [
       buttons,
       `<section class="card wide"><div class="photo-hero"><span class="photo-hero-ic">${icon('image', 30)}</span><h2>Noch keine Fotos</h2>
-        <p class="help">Lade Fotos vom Handy hoch. Die Box zeigt sie als Alben am Display.</p></div>${photoStorageBar(o.storage)}</section>`,
+        <p class="help">Lade Fotos vom Handy hoch oder wähle Ordner von deinem NAS. Die Box zeigt sie als Alben am Display.</p></div>${photoStorageBar(o.storage)}</section>`,
+      photoServicesCard(),
       `<div class="note wide">${icon('lock', 18)}<span>Fotos bleiben auf der Box in deinem Heimnetz. Es gibt keine Links zum Teilen.</span></div>`,
     ]
   }
@@ -11622,6 +11636,7 @@ function photoOverviewTop() {
     `<section class="card wide"><div class="card-head"><h2>Alben am Display</h2>${o.albums.length > 1 ? '<button class="btn sm" id="ph-order">Reihenfolge</button>' : ''}</div>
       <div class="rows">${o.albums.map((a) => photoAlbumRow(a)).join('')}</div>
       <p class="help" style="margin:0">Ausgeblendete Alben bleiben auf der Box, am Display erscheinen sie nicht.</p></section>`,
+    photoServicesCard(),
     `<section class="card wide"><h2>Anzeige</h2><div class="navlist">${navRow('g-fotos', 'Einstellungen der Fotoanzeige', 'Diashow, Videos, Bildschirmschoner', 'gear')}</div></section>`,
   ]
 }
@@ -12060,6 +12075,207 @@ async function cancelPhotoUpload(ticket) {
   return false
 }
 
+/* Bibliothek › Fotos › NAS-Ordner (5.1): folders of the NAS the box is signed in to as albums - the tree to choose
+   them (loaded when opened), subfolders as albums of their own or not, how often the box syncs, what the cache may
+   take; the sync's state. The access to the NAS is the one of Bibliothek › NAS. */
+
+const photoNas = { data: null, tree: new Map(), open: new Set(), chosen: null, subs: true, timer: 0 }
+const NAS_SYNC = [
+  ['Alle 15 Min.', 15],
+  ['Jede Stunde', 60],
+  ['Alle 6 Stunden', 360],
+  ['Täglich', 1440],
+  ['Nur von Hand', 0],
+]
+const NAS_CACHE = [
+  ['500 MB', 500],
+  ['1 GB', 1024],
+  ['2 GB', 2048],
+  ['4 GB', 4096],
+  ['8 GB', 8192],
+  ['Ohne Grenze', 0],
+]
+
+async function loadPhotoNas() {
+  const r = await api(`${API}/photos/nas`)
+  if (!r.ok) throw new Error(`photos nas ${r.status}`)
+  photoNas.data = r.body
+  // (the choice on this page: what the box has, until "Übernehmen")
+  photoNas.chosen = new Set(r.body.settings.folders)
+  photoNas.subs = r.body.settings.subfoldersAsAlbums
+  if (r.body.nas.connected && !photoNas.tree.has('/')) await photoNasBrowse('/')
+}
+
+async function photoNasBrowse(path) {
+  const r = await api(`${API}/photos/nas/browse?path=${encodeURIComponent(path)}`)
+  photoNas.tree.set(path, r.ok ? r.body : { error: r.body?.error ?? 'nas_unreachable', folders: [] })
+}
+
+function photoNasStatus(d) {
+  const s = d.sync
+  if (s.running) return [`${icon('sync', 16)}${esc(tr(`Abgleich läuft · ${s.total ? Math.round((s.done / s.total) * 100) : 0} %`))}`, 'accent']
+  if (s.offlineSince) return [`${icon('info', 16)}${esc(tr(`Nicht erreichbar seit ${relTime(s.offlineSince).replace(/^vor /, '')}`))}`, 'danger']
+  if (s.lastSync) return [`${icon('check', 16)}${esc(tr(`Abgeglichen ${relTime(s.lastSync)}`))}`, 'ok']
+  return [esc(tr('Noch nicht abgeglichen')), '']
+}
+
+function photoNasFolderRows(path, depth) {
+  const node = photoNas.tree.get(path)
+  if (!node) return `<div class="ph-tree-row" style="--d:${depth}"><span class="help">${esc(tr('Wird geladen …'))}</span></div>`
+  if (node.error) return `<div class="ph-tree-row" style="--d:${depth}"><span class="help danger-text">${esc(tr('Dieser Ordner lässt sich gerade nicht lesen.'))}</span></div>`
+  if (!node.folders.length && depth === 0) return `<p class="help" style="margin:0">Auf dem NAS gibt es hier keine Ordner.</p>`
+  return node.folders
+    .map((f) => {
+      const open = photoNas.open.has(f.path)
+      const on = photoNas.chosen.has(f.path)
+      // (a folder below one that is chosen: in it already)
+      const inside = [...photoNas.chosen].some((c) => f.path.startsWith(`${c}/`))
+      const more = f.folders !== 0
+      const count = f.pictures === null ? '' : tr(`${f.pictures} ${f.pictures === 1 ? 'Foto' : 'Fotos'}`)
+      return `<div class="ph-tree-row" style="--d:${depth}">
+          <button class="icon-btn ph-tree-arrow${open ? ' open' : ''}" data-tree="${esc(f.path)}" ${more ? '' : 'disabled'} aria-label="${esc(tr(open ? 'Zuklappen' : 'Aufklappen'))}" aria-expanded="${open}">${more ? icon('chevron', 16) : ''}</button>
+          <span class="ph-tree-ic">${icon('folder', 18)}</span>
+          <span class="lbl"><b translate="no">${esc(f.name)}</b>${count ? `<small>${esc(count)}</small>` : ''}</span>
+          <button class="ph-check-box" role="checkbox" aria-checked="${on ? 'true' : inside ? 'mixed' : 'false'}" data-pick="${esc(f.path)}" ${inside ? 'disabled' : ''} aria-label="${esc(f.name)}">${on || inside ? icon('check', 16) : ''}</button>
+        </div>${open ? photoNasFolderRows(f.path, depth + 1) : ''}`
+    })
+    .join('')
+}
+
+function photoNasTop() {
+  const d = photoNas.data
+  if (!d) return []
+  if (!d.nas.connected) {
+    return [
+      `<section class="card wide"><div class="photo-hero"><span class="photo-hero-ic">${icon('server', 30)}</span><h2>Noch kein NAS verbunden</h2>
+        <p class="help">Verbinde zuerst dein NAS. Danach kannst du hier Ordner als Alben wählen.</p></div>
+        <div class="navlist">${navRow('nas', 'Zu Bibliothek › NAS', 'Zugang zum NAS', 'server')}</div></section>`,
+    ]
+  }
+  const s = d.sync
+  const [status, kind] = photoNasStatus(d)
+  const saved = d.settings.folders
+  const changed = saved.length !== photoNas.chosen.size || saved.some((f) => !photoNas.chosen.has(f)) || d.settings.subfoldersAsAlbums !== photoNas.subs
+  const limit = d.settings.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><p class="help" style="margin:0">${esc(tr(`Verbunden mit dem NAS „${d.nas.name ?? ''}“. Zugang ändern unter Bibliothek › NAS.`))}</p>
+      <div class="ph-nas-state ${kind}">${status}</div>
+      <dl class="kv"><div><dt>Ordner</dt><dd>${esc(String(saved.length))}</dd></div><div><dt>Alben</dt><dd>${esc(tr(`${d.albums} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob das NAS läuft.</span></div>` : ''}
+      ${s.cacheFull ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Ordner.</span></div>` : ''}
+      ${s.failed?.length ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(`Nicht lesbar: ${s.failed.join(', ')}`))}</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="nas-sync" ${s.running || !saved.length ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div></section>`,
+    `<section class="card wide"><h2>Ordner</h2><p class="help">Jeder gewählte Ordner wird ein Album.</p>
+      <div class="ph-tree">${photoNasFolderRows('/', 0)}</div>
+      <div class="row"><span class="lbl"><b>Unterordner als eigene Alben</b><small>An: Jeder Unterordner wird ein eigenes Album. Aus: Fotos aus Unterordnern landen im Album des Ordners.</small></span>
+        <label class="switch"><input type="checkbox" id="nas-subs" ${photoNas.subs ? 'checked' : ''} aria-label="${esc(tr('Unterordner als eigene Alben'))}"><span></span></label></div>
+      <p class="help" style="margin:0">${esc(tr(`${photoNas.chosen.size} ${photoNas.chosen.size === 1 ? 'Ordner' : 'Ordner'} gewählt`))}</p>
+      <div class="btns"><button class="btn primary" id="nas-apply" ${changed ? '' : 'disabled'}>Übernehmen</button></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="nas-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === d.settings.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos vom NAS erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      <p class="help">Fotos vom NAS liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="nas-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === d.settings.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div></section>`,
+    saved.length || d.albums
+      ? `<section class="card wide"><div class="navlist"><button class="navrow" id="nas-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Ordner nicht mehr verwenden</b><small>Die Alben vom NAS werden von der Box entfernt. Auf dem NAS bleibt alles.</small></span></button></div></section>`
+      : '',
+  ]
+}
+
+function mountPhotoNas(root, page) {
+  const d = photoNas.data
+  window.clearTimeout(photoNas.timer)
+  if (!d?.nas.connected) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const fresh = async () => {
+    const r = await api(`${API}/photos/nas`)
+    if (r.ok) photoNas.data = r.body
+    photoLib.stale = true
+    redraw()
+  }
+  // (while a sync runs: its state every 3 s)
+  if (d.sync.running) photoNas.timer = window.setTimeout(() => currentPage()?.id === page.id && fresh(), 3000)
+  for (const b of root.querySelectorAll('[data-tree]')) {
+    b.onclick = async () => {
+      const p = b.dataset.tree
+      if (photoNas.open.has(p)) photoNas.open.delete(p)
+      else {
+        photoNas.open.add(p)
+        if (!photoNas.tree.has(p)) {
+          redraw()
+          await photoNasBrowse(p)
+        }
+      }
+      redraw()
+    }
+  }
+  for (const b of root.querySelectorAll('[data-pick]')) {
+    b.onclick = () => {
+      const p = b.dataset.pick
+      if (photoNas.chosen.has(p)) photoNas.chosen.delete(p)
+      else {
+        // (a folder takes in the ones below it that were chosen)
+        for (const c of [...photoNas.chosen]) if (c.startsWith(`${p}/`)) photoNas.chosen.delete(c)
+        photoNas.chosen.add(p)
+      }
+      redraw()
+    }
+  }
+  $('#nas-subs', root)?.addEventListener('change', (e) => {
+    photoNas.subs = e.target.checked
+    redraw()
+  })
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/nas`, { method: 'POST', body })
+    if (!r.ok) return toast('Nicht gespeichert', 'info')
+    photoNas.data = r.body
+    photoNas.chosen = new Set(r.body.settings.folders)
+    photoNas.subs = r.body.settings.subfoldersAsAlbums
+    photoLib.stale = true
+    toast(done)
+    redraw()
+  }
+  $('#nas-apply', root)?.addEventListener('click', () => save({ folders: [...photoNas.chosen], subfoldersAsAlbums: photoNas.subs }, 'Gespeichert – Abgleich gestartet'))
+  $('#nas-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/nas/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    photoNas.data = r.body
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = () => {
+            close()
+            save({ [key]: Number(b.dataset.v) }, 'Gespeichert')
+          }
+        }
+      },
+    )
+  $('#nas-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#nas-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#nas-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Ordner nicht mehr verwenden', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} vom NAS und ihre Fotos werden von der Box entfernt. Auf dem NAS bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/nas/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoNas.data = r.body
+      photoNas.chosen = new Set()
+      photoLib.stale = true
+      toast('NAS-Ordner entfernt')
+      redraw()
+    }),
+  )
+}
+
 async function loadPhotoAlbum() {
   let id = photoLib.albumId
   if (!id) {
@@ -12073,6 +12289,11 @@ async function loadPhotoAlbum() {
   if (o?.ok) Object.assign(photoLib, { overview: o.body, stale: false })
   photoLib.albumId = id
   photoLib.album = a.body
+  // (a NAS album: the sync's state for its card "Quelle")
+  if (a.body.source === 'nas') {
+    const nas = await api(`${API}/photos/nas`)
+    if (nas.ok) photoLib.nas = nas.body
+  }
 }
 
 function photoAlbumTop() {
@@ -12092,6 +12313,7 @@ function photoAlbumTop() {
   return [
     `<section class="card wide">${photoAlbumRow(a, { sub: a.display ? 'Am Display sichtbar' : 'Am Display ausgeblendet' })}
       ${upload ? `<div class="btns"><button class="btn primary" id="ph-add">${icon('plus', 18)}Fotos hinzufügen</button>${a.assets.length ? `<button class="btn" id="ph-select">${icon('check', 18)}${sel ? 'Fertig' : 'Auswählen'}</button>` : ''}</div>` : ''}</section>`,
+    a.source === 'nas' ? photoNasAlbumCard(a) : '',
     upload
       ? `<section class="card wide"><h2>Album</h2><div class="navlist">
           <button class="navrow" id="ph-rename"><span class="tile">${icon('text', 18)}</span><span class="lbl"><b>Umbenennen</b></span><span class="chev">${icon('chevron', 18)}</span></button>
@@ -12104,9 +12326,29 @@ function photoAlbumTop() {
   ]
 }
 
+// A NAS album: only looked at here - its folder, the last sync, "Jetzt abgleichen"
+function photoNasAlbumCard(a) {
+  const n = photoLib.nas
+  const running = !!n?.sync.running
+  const last = n?.sync.lastSync ? relTime(n.sync.lastSync) : '–'
+  return `<section class="card wide"><h2>Quelle</h2>
+    <div class="note">${icon('info', 18)}<span>Dieses Album ist ein Ordner auf dem NAS. Fotos dort hinzufügen oder löschen. Die Box gleicht den Ordner regelmäßig ab.</span></div>
+    <dl class="kv"><div><dt>Dienst</dt><dd>NAS</dd></div><div><dt>Ordner</dt><dd translate="no">${esc(a.ref ?? '–')}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
+    <div class="btns"><button class="btn" id="ph-nas-sync" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>
+    <div class="navlist">${navRow('fotonas', 'NAS-Ordner', 'Ordner, Abgleich, Zwischenspeicher', 'server')}</div></section>`
+}
+
 function mountPhotoAlbum(root, page) {
   const a = photoLib.album
   if (!a) return
+  $('#ph-nas-sync', root)?.addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true
+    const r = await api(`${API}/photos/nas/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    photoLib.nas = r.body
+    toast('Abgleich gestartet')
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  })
   const title = $('#topbar .title')
   if (title) {
     title.textContent = a.title
@@ -14370,6 +14612,7 @@ const CONTROLLERS = {
   fotos: { load: loadPhotoOverview, top: photoOverviewTop, sections: () => [], mount: mountPhotoOverview, ownNav: true },
   fotoalbum: { load: loadPhotoAlbum, top: photoAlbumTop, sections: () => [], mount: mountPhotoAlbum },
   fotoupload: { load: loadPhotoUpload, top: photoUploadTop, sections: () => [], mount: mountPhotoUpload },
+  fotonas: { load: loadPhotoNas, top: photoNasTop, sections: () => [], mount: mountPhotoNas },
   'g-fotos': { load: loadPhotoSettings, top: photoSettingsTop, sections: photoSettingsSections, mount: mountPhotoSettings, change: changePhotoSetting },
   mqtt: {
     load: loadMqtt,

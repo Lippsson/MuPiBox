@@ -70,3 +70,20 @@ test('photo time actions: today by the reset hour, minutes add up, free, reset k
   assert.match(String(applyPhotoTimeAction(cfg, 'more', 5, now)), /action/)
   assert.equal(JSON.stringify(cfg), before)
 })
+
+test('photo NAS folders: paths cleaned, settings checked, defaults on a box from before', async () => {
+  const { applyNasPhotoSettings, cleanNasPath, nasPhotoSettings } = await import('./app-api/photos/nas')
+  assert.equal(cleanNasPath('photo//2024/'), '/photo/2024')
+  assert.equal(cleanNasPath('/a/../b'), null)
+  assert.equal(cleanNasPath('/'), null)
+  assert.deepEqual(nasPhotoSettings(undefined), { folders: [], subfoldersAsAlbums: true, syncMinutes: 360, cacheLimitMb: 2048 })
+  const cfg: Record<string, unknown> = { photos: { enabled: true, sources: { immich: { url: 'x' } } } }
+  assert.equal(applyNasPhotoSettings(cfg, { folders: ['/Fotos/Urlaub', 'Fotos/Urlaub', '/Fotos/Zelten'], subfoldersAsAlbums: false, syncMinutes: 60, cacheLimitMb: 0 }), null)
+  assert.deepEqual(nasPhotoSettings(cfg), { folders: ['/Fotos/Urlaub', '/Fotos/Zelten'], subfoldersAsAlbums: false, syncMinutes: 60, cacheLimitMb: 0 })
+  assert.deepEqual((cfg.photos as { sources: Record<string, unknown> }).sources.immich, { url: 'x' })
+  const before = JSON.stringify(cfg)
+  assert.equal(applyNasPhotoSettings(cfg, { folders: ['/ok', '/../x'] }), 'folders')
+  assert.equal(applyNasPhotoSettings(cfg, { syncMinutes: 30 }), 'syncMinutes')
+  assert.equal(applyNasPhotoSettings(cfg, { cacheLimitMb: 3000 }), 'cacheLimitMb')
+  assert.equal(JSON.stringify(cfg), before)
+})

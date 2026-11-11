@@ -44,6 +44,7 @@ import { startTlsWatch } from './app-api/tls'
 import { startWeeklySummary } from './app-api/weekly-summary'
 import { startInstallationStatistics } from './app-api/telemetry'
 import { registerPhotoDisplayRoutes } from './app-api/photos/albums'
+import type { PhotoNasAccess } from './app-api/photos/nas'
 import { startNightDim } from './app-api/night-dim'
 import { bootConfigPath } from './app-api/boot-paths'
 import { startSpeech } from './speech'
@@ -5508,6 +5509,56 @@ async function nasPathSelected(raw: string): Promise<boolean> {
 // (cover.png) into that folder with the box's NAS login - only in the folders the parents selected. A cover there
 // before is kept as cover-previous.*, the box's own cover-online.jpg goes (it would come first); when the upload fails
 // the cover before comes back. An account without write permission: 'denied'.
+// The NAS for the photo display's NAS folders (5.1, app-api/photos/nas.ts): the same access as the audio folders, its
+// own choice of folders. A listing (undefined: no NAS signed in, or away), a file into a local one, whether one is set up.
+const photoNas: PhotoNasAccess = {
+  async list(folder) {
+    let files: NasFileEntry[] | undefined
+    try {
+      files = await withNasSession((s) => nasListFilesLive(s, folder))
+    } catch (err) {
+      // (the NAS answered with an error for this folder: thrown on; no answer at all - it is away)
+      if (err instanceof NasApiError) throw err
+      return undefined
+    }
+    return files?.map((f) => ({ name: f.name, path: f.path, isdir: f.isdir, size: f.additional?.size, version: f.version }))
+  },
+  async download(file, dest, maxBytes, signal) {
+    const session = await getActiveNasSession()
+    if (!session) return false
+    let response: Response
+    try {
+      response = await nasFetch(session, nasUrl(session, file), { headers: { Authorization: session.auth }, signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]) })
+    } catch {
+      return false
+    }
+    const size = Number(response.headers.get('content-length'))
+    if (response.status !== 200 || !response.body || (Number.isFinite(size) && size > maxBytes)) {
+      await response.body?.cancel().catch(() => undefined)
+      return false
+    }
+    const out = await fs.promises.open(dest, 'wx')
+    let written = 0
+    try {
+      for await (const chunk of Readable.fromWeb(response.body as import('node:stream/web').ReadableStream)) {
+        const piece = chunk as Buffer
+        written += piece.length
+        if (written > maxBytes) throw new Error('too big')
+        await out.write(piece)
+      }
+      return true
+    } catch {
+      return false
+    } finally {
+      await out.close().catch(() => undefined)
+    }
+  },
+  info() {
+    const c = nasSettings(getMupiboxConfigSync())
+    return { connected: Boolean(c?.address && c.account && c.password && c.rememberMe), name: c?.address ?? null }
+  },
+}
+
 async function writeNasCover(folder: string, bytes: Buffer, ext: '.jpg' | '.png'): Promise<'ok' | 'not_selected' | 'offline' | 'denied' | 'failed'> {
   if (!(await nasPathSelected(folder))) return 'not_selected'
   const session = await getActiveNasSession()
@@ -8619,6 +8670,7 @@ app.use(
     nasCover: writeNasCover,
     nasSelected: nasPathSelected,
     podcastOffline,
+    photoNas,
     localLibrary: {
       root: libraryRoot,
       categories: libraryCategories,

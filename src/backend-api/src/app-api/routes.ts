@@ -61,6 +61,7 @@ import { registerDietpiDashboardRoutes, startDietpiDashboard } from './dietpi-da
 import { registerServicesRoutes } from './services'
 import { registerTidalRoutes } from './tidal'
 import { registerPhotoRoutes } from './photos/routes'
+import type { PhotoNasAccess } from './photos/nas'
 import { registerSystemRoutes } from './system'
 import { markNoticeShown, noticeState, requestReportNow, setNoticeSwitches, setStatisticsConsent } from './telemetry'
 import { registerAdminRoutes } from './admin'
@@ -119,6 +120,8 @@ export interface ElternRouterDeps {
   nasSelected?: (folder: string) => Promise<boolean>
   /** The podcast episodes kept on the SD card (see ../podcast-offline.ts). */
   podcastOffline?: PodcastOffline
+  /** The NAS for the photo display's NAS folders (see photos/nas.ts). */
+  photoNas?: PhotoNasAccess
 }
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
@@ -438,7 +441,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   registerServicesRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerTidalRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   // (the photo display, Einstellungen › Fotos - off by default)
-  registerPhotoRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
+  registerPhotoRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig, nas: deps.photoNas })
   registerSystemRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   // (pm2 runs server.js from its folder: templates/ lies next to it)
   registerAdminRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig, serverDir: process.cwd() })

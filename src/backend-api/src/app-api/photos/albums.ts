@@ -10,7 +10,7 @@ import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
 import { extOf, NotAPicture, PHOTO_EXTENSIONS, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings, type PhotoOrder } from './settings'
-import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, INCOMING_DIR, isId, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
+import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, INCOMING_DIR, isId, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
 
 export interface PhotoAlbumDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -55,6 +55,8 @@ const summary = (a: PhotoAlbum) => ({
   count: a.assets.length,
   videos: 0,
   cover: coverOf(a) ?? null,
+  // (a NAS album: its folder)
+  ...(a.source === 'nas' ? { ref: a.ref ?? null } : {}),
 })
 
 /** Sends one size of a picture of an album (s: grid, f: full, b: background) - only one the list knows */
@@ -116,12 +118,13 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
   router.get('/photos/overview', requireSession, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     const list = await albums()
-    const [space, used] = req.query.light ? [null, 0] : await Promise.all([cardSpace(), photoBytes()])
+    // (the pictures on the card: the uploaded ones and those of the NAS folders in the cache)
+    const [space, used, nasUsed] = req.query.light ? [null, 0, 0] : await Promise.all([cardSpace(), photoBytes(), photoBytes(NAS_PHOTO_DIR)])
     res.json({
       enabled: photoSettings(deps.getMupiboxConfig()).enabled,
       albums: list.map(summary),
       totals: { photos: list.reduce((n, a) => n + a.assets.length, 0), videos: 0, albums: list.length },
-      storage: space ? { total: space.total, free: space.free, photos: used } : null,
+      storage: space ? { total: space.total, free: space.free, photos: used + nasUsed } : null,
     })
   })
 

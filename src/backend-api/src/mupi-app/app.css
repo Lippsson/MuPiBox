@@ -319,6 +319,25 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .danger-text { color: var(--mp-danger); }
 /* Fotos hochladen (Bibliothek › Fotos): the choice, the run with a line per file, the end */
 .note.danger { background: var(--mp-danger-soft); color: var(--mp-danger); }
+/* Bibliothek › Fotos › NAS-Ordner: the folder tree (indented per level), the sync's state */
+.ph-tree { display: flex; flex-direction: column; }
+.ph-tree-row { display: flex; align-items: center; gap: 8px; min-height: 44px; padding-left: calc(var(--d, 0) * 22px); border-top: 1px solid var(--mp-border); }
+.ph-tree-row:first-child { border-top: 0; }
+.ph-tree-row .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ph-tree-row .lbl b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-tree-row .lbl small { color: var(--mp-muted); font-size: 12px; }
+.ph-tree-arrow { width: 32px; height: 32px; flex: 0 0 32px; }
+.ph-tree-arrow svg { transition: transform 150ms; }
+.ph-tree-arrow.open svg { transform: rotate(90deg); }
+.ph-tree-ic { color: var(--mp-muted); display: grid; }
+.ph-check-box { width: 26px; height: 26px; flex: 0 0 26px; margin-right: 6px; border-radius: 7px; border: 2px solid var(--mp-border); background: var(--mp-surface); color: var(--mp-on-primary); display: grid; place-items: center; padding: 0; }
+.ph-check-box[aria-checked='true'] { background: var(--mp-primary); border-color: var(--mp-primary); }
+.ph-check-box[aria-checked='mixed'] { background: var(--mp-primary-soft, var(--mp-track)); border-color: var(--mp-primary); color: var(--mp-primary-text, var(--mp-primary)); }
+.ph-check-box:disabled { cursor: default; }
+.ph-nas-state { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-weight: 700; font-size: 14px; color: var(--mp-muted); }
+.ph-nas-state.ok { color: var(--mp-success); }
+.ph-nas-state.accent { color: var(--mp-primary-text, var(--mp-primary)); }
+.ph-nas-state.danger { color: var(--mp-danger); }
 .note.danger b { display: block; margin-bottom: 2px; }
 .note.danger span { color: var(--mp-text); }
 .note.danger span b { color: var(--mp-text); }
