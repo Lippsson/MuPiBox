@@ -18,7 +18,7 @@ import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
 import { NotAPicture, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings } from './settings'
-import { VIDEO_MAX_BYTES, videoQueue } from './video'
+import { VIDEO_MAX_BYTES, VIDEO_MAX_SECONDS, videoQueue } from './video'
 import { albumDir, albums, assetBase, cardSpace, IMMICH_LIVE_DIR, IMMICH_PHOTO_DIR, INCOMING_DIR, newId, type PhotoAlbum, type PhotoAsset, PHOTOS_DIR, photoBytes, update } from './store'
 
 export interface PhotoImmichDeps {
@@ -502,7 +502,8 @@ export class ImmichPhotoSync {
             const before = new Map(a.assets.map((x) => [x.ref, x]))
             a.assets = assets.slice(0, PICTURES_MAX).map((x) => {
               const old = before.get(x.id)
-              if (old && old.ver === versionOf(x)) return old
+              // (a clip waiting to be made when the album was kept: live it is ready at once)
+              if (old && old.ver === versionOf(x)) return old.kind === 'video' ? { ...old, ready: true } : old
               const base = { id: newId(), ...dims(x), taken: takenOf(x), added: new Date().toISOString(), ref: x.id, ver: versionOf(x) }
               return x.type === 'VIDEO' ? { ...base, kind: 'video' as const, ready: true, duration: clipSeconds(x.duration) } : { ...base, kind: 'photo' as const }
             })
@@ -545,7 +546,10 @@ export class ImmichPhotoSync {
           })
           for (const x of drop) for (const f of photoFiles(assetBase(album, x.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
         }
-        for (const x of assets) if (wanted.has(x.id)) work.push({ album, asset: x, old: replace.get(x.id), fresh })
+        // (a clip Immich says is too long, or one not taken before while unchanged: not fetched)
+        const rejected = new Set(album.rejected ?? [])
+        const takes = (x: ImmichAsset) => !rejected.has(`${x.id}|${versionOf(x)}`) && !(x.type === 'VIDEO' && clipSeconds(x.duration) > VIDEO_MAX_SECONDS + 1)
+        for (const x of assets) if (wanted.has(x.id) && takes(x)) work.push({ album, asset: x, old: replace.get(x.id), fresh })
       }
       this.state.total = work.length
 
@@ -570,7 +574,9 @@ export class ImmichPhotoSync {
         try {
           if (clip) {
             const r = await client.clip(x.id, { signal: stop.signal })
-            if (!(await streamTo(r, part, VIDEO_MAX_BYTES))) continue
+            // (at most what leaves room for the made one and the reserve)
+            const room = space ? Math.floor((space.free - RESERVE_BYTES) / 2) : VIDEO_MAX_BYTES
+            if (room <= 0 || !(await streamTo(r, part, Math.min(VIDEO_MAX_BYTES, room)))) continue
           } else {
             const r = await client.picture(x.id, 'preview', stop.signal)
             const size = Number(r.headers.get('content-length'))

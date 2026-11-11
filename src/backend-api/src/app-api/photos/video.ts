@@ -10,7 +10,10 @@ import { execFile } from 'node:child_process'
 import { existsSync, promises as fsp } from 'node:fs'
 import { promisify } from 'node:util'
 import { NotAPicture, photoFiles, processPhoto } from './process'
-import { albums, assetBase, update } from './store'
+import { albums, assetBase, cardSpace, update } from './store'
+
+// what stays free on the card (as for an upload)
+const RESERVE_BYTES = 300 * 1024 * 1024
 
 const execFileAsync = promisify(execFile)
 
@@ -145,14 +148,23 @@ export class VideoQueue {
 
   private async work(): Promise<void> {
     for (;;) {
-      const waiting = (await albums()).flatMap((a) => a.assets.filter((x) => x.kind === 'video' && x.ready === false).map((x) => ({ a, x })))
+      // (an Immich album shown live: its clips come from Immich - nothing to make)
+      const waiting = (await albums()).flatMap((a) => (a.live ? [] : a.assets.filter((x) => x.kind === 'video' && x.ready === false).map((x) => ({ a, x }))))
       if (!waiting.length) return
       if (!existsSync(FFMPEG) || !existsSync(FFPROBE)) return
       const { a, x } = waiting[0]
       const out = assetBase(a, x.id)
       const src = `${out}.pending`
+      // (the made one takes at most about as much as the clip as it came: that room and the reserve, else it waits)
+      const size = (await fsp.stat(src).catch(() => ({ size: 0 }))).size
+      const space = await cardSpace()
+      if (space && space.free - size < RESERVE_BYTES) {
+        this.log(`${x.id}: not enough room on the card to make it, it waits`)
+        return
+      }
       let result: ProcessedVideo | null = null
       let gone = false
+      let rejected = false
       if (!existsSync(src)) gone = true
       else {
         try {
@@ -160,6 +172,7 @@ export class VideoQueue {
         } catch (err) {
           this.log(`${x.id}: ${err instanceof VideoTooLong ? 'longer than 3 minutes' : err instanceof NotAVideo ? 'not a clip' : (err as Error).message}`)
           gone = true
+          rejected = err instanceof VideoTooLong || err instanceof NotAVideo
         }
       }
       // done: ready with its size and length; not to be made: out again (the app shows it no longer)
@@ -167,9 +180,12 @@ export class VideoQueue {
         const album = lib.albums.find((y) => y.id === a.id)
         const asset = album?.assets.find((y) => y.id === x.id)
         if (!album || !asset) return false
+        // (the album went live meanwhile: its clip comes from Immich - the entry stays, the files made here go)
+        if (album.live) return false
         if (gone || !result) {
           album.assets = album.assets.filter((y) => y.id !== x.id)
           if (album.cover === x.id) delete album.cover
+          if (rejected && asset.ref) album.rejected = [...(album.rejected ?? []), `${asset.ref}|${asset.ver ?? ''}`].slice(-500)
           return false
         }
         Object.assign(asset, { w: result.w, h: result.h, duration: result.duration, taken: result.taken ?? asset.taken, ready: true })

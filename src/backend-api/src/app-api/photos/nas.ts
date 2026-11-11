@@ -332,7 +332,8 @@ export class NasPhotoSync {
           })
           for (const x of drop) for (const f of photoFiles(assetBase(album, x.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
         }
-        for (const file of files) if (wanted.has(file.path)) work.push({ album, file, old: replace.get(file.path), fresh })
+        const rejected = new Set(album.rejected ?? [])
+        for (const file of files) if (wanted.has(file.path) && !rejected.has(`${file.path}|${versionOf(file)}`)) work.push({ album, file, old: replace.get(file.path), fresh })
       }
       this.state.total = work.length
 
@@ -350,7 +351,9 @@ export class NasPhotoSync {
         if (old) for (const f of photoFiles(assetBase(album, old.id))) oldBytes += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
         // (a new picture: its sizes guessed from the file before it is fetched; a changed one is checked by what it makes -
         // it often takes as much as the old one)
-        if ((!old && used + (file.size ?? 0) / 4 > limit) || (space && space.free - (file.size ?? 0) < RESERVE_BYTES)) {
+        // (a clip: as it comes and once made - twice its size on the card for a while)
+        const need = isClip(file) ? 2 * (file.size ?? VIDEO_MAX_BYTES) : (file.size ?? 0)
+        if ((!old && used + (file.size ?? 0) / 4 > limit) || (space && space.free - need < RESERVE_BYTES)) {
           full = true
           break
         }
@@ -360,7 +363,9 @@ export class NasPhotoSync {
         const out = assetBase(album, id)
         try {
           const clip = isClip(file)
-          if (!(await nas.download(file.path, part, clip ? VIDEO_MAX_BYTES : FILE_MAX_BYTES, stop.signal))) {
+          // (a clip: at most what leaves room for the made one and the reserve)
+          const room = space ? Math.floor((space.free - RESERVE_BYTES) / 2) : VIDEO_MAX_BYTES
+          if (!(await nas.download(file.path, part, clip ? Math.min(VIDEO_MAX_BYTES, room) : FILE_MAX_BYTES, stop.signal))) {
             if (stop.signal.aborted) return
             continue
           }

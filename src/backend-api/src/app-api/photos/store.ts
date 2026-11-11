@@ -57,6 +57,8 @@ export interface PhotoAlbum {
   ref?: string
   /** an Immich album shown live: its pictures are not kept on the box, they come from Immich when shown */
   live?: boolean
+  /** NAS/Immich: clips not taken ("<ref>|<version>": longer than 3 minutes, no clip) - not fetched again while unchanged */
+  rejected?: string[]
 }
 
 interface Library {
