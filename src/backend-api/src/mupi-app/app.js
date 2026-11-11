@@ -11454,7 +11454,7 @@ function mountHa(root, page) {
    its numbers and the card's space, an album with its pictures, uploading into it. A part of its own, beside the
    radio plays and the music: never in their lists, filters or "Hören". */
 
-const photoLib = { overview: null, album: null, albumId: null, selecting: false, chosen: new Set() }
+const photoLib = { overview: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
 const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'] }
 const photoFile = (albumId, assetId, size) => `${API}/photos/file/${albumId}/${assetId}/${size}`
 
@@ -11462,6 +11462,7 @@ async function loadPhotoOverview() {
   const r = await api(`${API}/photos/overview`)
   if (!r.ok) throw new Error(`photos ${r.status}`)
   photoLib.overview = r.body
+  photoLib.stale = false
 }
 
 function photoAlbumRow(a, { toggle = true, sub = '' } = {}) {
@@ -11600,7 +11601,8 @@ let photoRunSeq = 0
 // runs not ended yet (also stopped ones waiting for the box): the browser asks before the tab is closed
 const photoRunsActive = new Set()
 window.addEventListener('beforeunload', (e) => {
-  if (![...photoRunsActive].some((r) => !r.stopped)) return
+  // (also a stopped run still waiting for the box: closed now, its cancel would not be asked again)
+  if (!photoRunsActive.size) return
   e.preventDefault()
   e.returnValue = ''
 })
@@ -11860,7 +11862,8 @@ function photoRunGiveBack(run, page, message) {
 function photoRunEnd(run, page) {
   photoRunsActive.delete(run)
   run.phase = 'done'
-  photoLib.overview = null
+  // (the overview is asked anew where it is needed next - not taken away: a new visit of this page may show it)
+  photoLib.stale = true
   const ok = run.items.filter((it) => it.state === 'ok').length
   if (photoRunShown(run)) return renderPage(page, false)
   // (the page was left meanwhile, or opened anew: a toast says how it ended - the box's missing answer first)
@@ -11952,9 +11955,9 @@ async function loadPhotoAlbum() {
     } catch {}
   }
   if (!id) throw new Error('no album')
-  const [a, o] = await Promise.all([api(`${API}/photos/albums/${id}`), photoLib.overview ? null : api(`${API}/photos/overview`)])
+  const [a, o] = await Promise.all([api(`${API}/photos/albums/${id}`), photoLib.overview && !photoLib.stale ? null : api(`${API}/photos/overview`)])
   if (!a.ok) throw new Error(`album ${a.status}`)
-  if (o?.ok) photoLib.overview = o.body
+  if (o?.ok) Object.assign(photoLib, { overview: o.body, stale: false })
   photoLib.albumId = id
   photoLib.album = a.body
 }
