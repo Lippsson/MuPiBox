@@ -4,7 +4,7 @@ Die Erweiterung **USB-CD-Laufwerk** spielt **Audio-CDs** von einem CD-Laufwerk, 
 
 ## Was du brauchst
 
-- ein externes CD- oder DVD-Laufwerk mit USB-Anschluss. Viele Laufwerke brauchen mehr Strom, als ein USB-Anschluss des Raspberry Pi liefert: Nimm dann ein Laufwerk mit eigener Stromversorgung oder einen USB-Hub mit Netzteil
+- ein externes CD- oder DVD-Laufwerk mit USB-Anschluss. Manche Laufwerke brauchen mehr Strom, als ein USB-Anschluss des Raspberry Pi liefert: Nimm dann ein Laufwerk mit eigener Stromversorgung oder einen USB-Hub mit Netzteil
 - die Erweiterung, [installiert](installieren.md) unter **Einstellungen › System › Erweiterungen**
 
 Bei der Installation richtet die Box den Zugriff auf das Laufwerk ein (eine Zugriffsregel und die Gruppe `cdrom`). Die App zeigt das vorher an.
@@ -33,6 +33,6 @@ Für beides braucht die Box Internet. Ohne Internet spielt die CD trotzdem, nur 
 
 ## Wenn die CD nicht erscheint
 
-- Dreht das Laufwerk an? Wenn nicht, bekommt es zu wenig Strom (siehe oben).
-- Der Reiter **CD** erscheint nur bei **Audio-CDs**, nicht bei Daten-CDs mit MP3-Dateien. Solche Dateien kopierst du in die Bibliothek ([Eigene Hörspiele und Musik](../inhalte/lokale-medien.md)).
+- Dreht das Laufwerk an? Wenn nicht, bekommt es vielleicht zu wenig Strom (siehe oben).
+- Der Reiter **CD** erscheint nur bei reinen **Audio-CDs**, nicht bei Daten-CDs mit MP3-Dateien und nicht bei gemischten CDs (Audio und Daten). Solche Dateien kopierst du in die Bibliothek ([Eigene Hörspiele und Musik](../inhalte/lokale-medien.md)).
 - Ist die Erweiterung unter **Einstellungen › System › Erweiterungen** eingeschaltet?

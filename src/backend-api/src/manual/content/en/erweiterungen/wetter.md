@@ -7,7 +7,7 @@ The extension **Weather** shows the weather of a place as **dials** on the displ
 1. Install the extension under **Settings › System › Extensions** ([Installing and managing](installieren.md)).
 2. Open the details of its card and search for the name of your place under **Place**. Tap a result.
 
-Once a place is chosen, the display shows the tab **Weather** at the top. A tap on it opens the dials, always two side by side. The back button in the title bar closes them again.
+Once a place is chosen, the display shows the tab **Weather** at the top. A tap on it opens the dials: always two side by side, and a swipe brings the next ones. The back button in the title bar closes them again.
 
 ## Settings
 

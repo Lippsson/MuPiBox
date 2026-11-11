@@ -72,6 +72,13 @@
         }
       },
       {
+        "id": "winamp",
+        "title": {
+          "de": "Das Winamp-Theme",
+          "en": "The Winamp theme"
+        }
+      },
+      {
         "id": "eltern-zugang",
         "title": {
           "de": "Einstellungen am Display",

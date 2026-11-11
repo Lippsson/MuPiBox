@@ -4,7 +4,7 @@ The extension **USB CD drive** plays **audio CDs** from a CD drive connected to 
 
 ## What you need
 
-- an external CD or DVD drive with a USB connection. Many drives need more power than a USB port of the Raspberry Pi supplies: in that case use a drive with its own power supply or a powered USB hub
+- an external CD or DVD drive with a USB connection. Some drives need more power than a USB port of the Raspberry Pi supplies: in that case use a drive with its own power supply or a powered USB hub
 - the extension, [installed](installieren.md) under **Settings › System › Extensions**
 
 When it is installed, the box sets up access to the drive (an access rule and the group `cdrom`). The app shows that beforehand.
@@ -33,6 +33,6 @@ Both need the internet. Without it the CD still plays, only without names and co
 
 ## If the CD does not appear
 
-- Does the drive spin up? If not, it gets too little power (see above).
-- The tab **CD** only appears for **audio CDs**, not for data CDs with MP3 files. Copy such files into the library ([Your own audiobooks and music](../inhalte/lokale-medien.md)).
+- Does the drive spin up? If not, it may be getting too little power (see above).
+- The tab **CD** only appears for pure **audio CDs**, not for data CDs with MP3 files and not for mixed CDs (audio and data). Copy such files into the library ([Your own audiobooks and music](../inhalte/lokale-medien.md)).
 - Is the extension switched on under **Settings › System › Extensions**?

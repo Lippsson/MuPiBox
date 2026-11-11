@@ -7,7 +7,7 @@ Die Erweiterung **Wetter** zeigt das Wetter eines Ortes als **Messuhren** auf de
 1. Installiere die Erweiterung unter **Einstellungen › System › Erweiterungen** ([Installieren und verwalten](installieren.md)).
 2. Öffne die Details ihrer Karte und suche unter **Ort** nach dem Namen deines Ortes. Tippe einen Treffer an.
 
-Ist ein Ort gewählt, zeigt das Display oben den Reiter **Wetter**. Ein Tipp darauf öffnet die Messuhren, immer zwei nebeneinander. Der Zurück-Knopf in der Titelleiste schließt sie wieder.
+Ist ein Ort gewählt, zeigt das Display oben den Reiter **Wetter**. Ein Tipp darauf öffnet die Messuhren: immer zwei nebeneinander, mit Wischen kommst du zu den nächsten. Der Zurück-Knopf in der Titelleiste schließt sie wieder.
 
 ## Einstellungen
 
