@@ -338,7 +338,8 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
  * display is on, only albums shown there and with pictures; no source, no account.
  *   GET /api/photos/albums           the albums in their order, with their first two pictures (the stack)
  *   GET /api/photos/album/:id        the pictures of an album in the order chosen
- *   GET /api/photos/screensaver      whether the screensaver runs, how, and its pictures
+ *   GET /api/photos/screensaver      whether the screensaver runs and how (?list=1: and its pictures)
+ *   POST /api/photos/screensaver/check  which pictures of a running screensaver are still there
  *   GET /api/photos/file/:album/:asset/:size
  */
 export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): void {
@@ -366,12 +367,13 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
     const order = photoSettings(deps.getMupiboxConfig()).order
     res.json({ id: a.id, title: a.title, assets: ordered(a.assets, order).map(({ id, w, h }) => ({ id, w, h })) })
   })
-  // the screensaver: when it starts and how, and its pictures - from every album shown on the display, as one list in
-  // the order chosen ("Gemischt": all mixed; else album by album, in the albums' order)
-  app.get('/api/photos/screensaver', async (_req, res) => {
+  // the screensaver: when it starts and how; with ?list=1 also its pictures (when it starts) - from every album shown
+  // on the display, as one list in the order chosen ("Gemischt": all mixed; else album by album, in the albums' order)
+  app.get('/api/photos/screensaver', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     const s = photoSettings(deps.getMupiboxConfig())
     if (!s.enabled || !s.screensaver.enabled) return void res.json({ enabled: false })
+    if (req.query.list !== '1') return void res.json({ ...s.screensaver, slideshowSeconds: s.slideshowSeconds })
     const shown = (await albums()).filter((a) => a.display && a.assets.length > 0)
     let pictures = shown.flatMap((a) => ordered(a.assets, s.order === 'shuffle' ? 'newest' : s.order).map((x) => ({ album: a.id, id: x.id })))
     if (s.order === 'shuffle') {
@@ -383,6 +385,20 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
     // (enough for far longer than the display stays on)
     pictures = pictures.slice(0, SCREENSAVER_MAX)
     res.json({ ...s.screensaver, slideshowSeconds: s.slideshowSeconds, pictures })
+  })
+  // a running screensaver's pictures, which of them are still there and shown (hidden or deleted in the app meanwhile:
+  // left out) - asked with its own list, the list above is only a part of them when there are many
+  app.post('/api/photos/screensaver/check', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    const s = photoSettings(deps.getMupiboxConfig())
+    if (!s.enabled || !s.screensaver.enabled) return void res.json({ enabled: false })
+    const asked: unknown[] = Array.isArray(req.body?.pictures) ? req.body.pictures.slice(0, SCREENSAVER_MAX) : []
+    const there = new Set((await albums()).filter((a) => a.display).flatMap((a) => a.assets.map((x) => `${a.id}/${x.id}`)))
+    const pictures = asked.filter(
+      (p): p is { album: string; id: string } =>
+        !!p && typeof p === 'object' && isId((p as { album?: unknown }).album) && isId((p as { id?: unknown }).id) && there.has(`${(p as { album: string }).album}/${(p as { id: string }).id}`),
+    )
+    res.json({ enabled: true, pictures: pictures.map(({ album, id }) => ({ album, id })) })
   })
   app.get('/api/photos/file/:album/:asset/:size', (req, res) => {
     if (!on()) return void res.status(404).end()

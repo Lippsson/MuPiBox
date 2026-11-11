@@ -78,18 +78,26 @@ export class PhotoScreensaverService {
         // (no answer - the server restarts: what was there stays)
         if (!a) return
         this.answer.set(a)
-        if (this.active()) this.follow(a)
+        if (!this.active()) return
+        if (!a.enabled) this.end()
+        else this.follow()
       })
   }
 
-  // a running screensaver takes the box's new answer: switched off - it ends; pictures hidden or deleted in the app
-  // meanwhile - they leave its list (none left: it ends)
-  private follow(a: SaverAnswer): void {
-    const there = new Set((a.enabled ? (a.pictures ?? []) : []).map((p) => `${p.album}/${p.id}`))
+  // a running screensaver asks after its own pictures (the list it got at its start is only a part of them when there
+  // are many): hidden or deleted in the app meanwhile - they leave its list; none left, or switched off: it ends
+  private follow(): void {
     const list = this.pictures()
-    const kept = list.filter((p) => there.has(`${p.album}/${p.id}`))
-    if (!kept.length) return this.end()
-    if (kept.length !== list.length) this.pictures.set(kept)
+    this.http
+      .post<SaverAnswer>(`${environment.backend.apiUrl}/photos/screensaver/check`, { pictures: list })
+      .pipe(catchError(() => of(null)))
+      .subscribe((a) => {
+        // (no answer: it goes on as it is; ended or started anew meanwhile: this answer is for no one)
+        if (!a || !this.active() || this.pictures() !== list) return
+        const kept = a.enabled ? (a.pictures ?? []) : []
+        if (!kept.length) return this.end()
+        if (kept.length !== list.length) this.pictures.set(kept)
+      })
   }
 
   private async tick(): Promise<void> {
@@ -106,12 +114,12 @@ export class PhotoScreensaverService {
       if (!(await this.allowed())) return
       // the pictures as they are now (one deleted in the app since the last question would be a gap)
       const fresh = await firstValueFrom(
-        this.http.get<SaverAnswer>(`${environment.backend.apiUrl}/photos/screensaver`).pipe(
+        this.http.get<SaverAnswer>(`${environment.backend.apiUrl}/photos/screensaver?list=1`).pipe(
           timeout(5000),
           catchError(() => of(null)),
         ),
       )
-      if (fresh) this.answer.set(fresh)
+      if (fresh) this.answer.set({ ...fresh, pictures: undefined })
       const list = fresh?.enabled ? (fresh.pictures ?? []) : []
       // (touched meanwhile, or the display went off: not now)
       if (!list.length || Date.now() - this.lastTouch < minutes * 60_000 || !(await this.allowed())) return
