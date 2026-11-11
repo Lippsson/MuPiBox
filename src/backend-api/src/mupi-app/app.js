@@ -11750,6 +11750,8 @@ function mountPhotoOverview(root, page) {
 }
 
 function openPhotoAlbum(id) {
+  // (another album: the question for the one before ends here - its answer must not draw it again)
+  window.clearTimeout(photoPrepTimer)
   photoLib.albumId = id
   photoLib.selecting = false
   photoLib.chosen.clear()
@@ -12788,9 +12790,9 @@ function mountPhotoAlbum(root, page) {
     let stale = false
     const ask = () => {
       photoPrepTimer = window.setTimeout(async () => {
-        if (currentPage()?.id !== page.id || photoLib.album !== a) return
+        if (currentPage()?.id !== page.id || photoLib.album !== a || photoLib.albumId !== a.id) return
         const r = await api(`${API}/photos/albums/${a.id}`)
-        if (currentPage()?.id !== page.id || photoLib.album !== a) return
+        if (currentPage()?.id !== page.id || photoLib.album !== a || photoLib.albumId !== a.id) return
         if (r.ok) {
           const now = new Map(r.body.assets.map((y) => [y.id, y]))
           const changed = new Set()
