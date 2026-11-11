@@ -3541,5 +3541,7 @@
  "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS’a ulaşılamıyor. Adresi (WebDAV portuyla) ve kutunun ağda NAS’a ulaşmasına izin verildiğini kontrol et.",
  "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS kendinden imzalı bir sertifika kullanıyor. Parmak izini kontrol edip onayla – ya da HTTP kullan.",
  "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "NAS’ın sertifikası daha önce onaylanan değil. NAS’ta yenilendiyse yeni parmak izini karşılaştırıp onayla.",
- "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Bu adreste WebDAV çalışmıyor. Adresi, portu ve NAS’ta WebDAV’ın açık olduğunu kontrol et."
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Bu adreste WebDAV çalışmıyor. Adresi, portu ve NAS’ta WebDAV’ın açık olduğunu kontrol et.",
+ "Abgleich läuft · {} von {} Fotos": "Eşitleniyor · {} / {} fotoğraf",
+ "In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.": "Seçilen klasörlerde fotoğraf bulunamadı. NAS’ta kullanıcının okuma izinlerini kontrol et – yalnızca klasörler için değil, klasörlerdeki dosyalar için de."
 }

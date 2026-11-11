@@ -3557,5 +3557,7 @@
  "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "The NAS cannot be reached. Check the address (with WebDAV port) and that the box may reach the NAS in the network.",
  "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "The NAS uses a self-signed certificate. Check the fingerprint and confirm it – or use HTTP.",
  "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "The NAS certificate is not the one confirmed before. If it was renewed on the NAS, compare the new fingerprint and confirm it.",
- "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "There is no WebDAV at this address. Check address and port and that WebDAV is switched on on the NAS."
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "There is no WebDAV at this address. Check address and port and that WebDAV is switched on on the NAS.",
+ "Abgleich läuft · {} von {} Fotos": "Syncing · {} of {} photos",
+ "In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.": "No photos were found in the folders chosen. Check the user’s read rights on the NAS – also for the files in the folders, not only for the folders."
 }

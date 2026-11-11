@@ -130,10 +130,13 @@ interface SyncState {
   cacheFull: boolean
   /** folders the NAS answered with an error (gone, no right to read) */
   failed: string[]
+  /** pictures the last sync found in the folders chosen (0 with folders chosen: none there - or no right to read the
+   * files, the NAS then lists only the folders) */
+  found: number | null
 }
 
 export class NasPhotoSync {
-  private state: SyncState = { running: false, done: 0, total: 0, lastSync: null, offlineSince: null, cacheFull: false, failed: [] }
+  private state: SyncState = { running: false, done: 0, total: 0, lastSync: null, offlineSince: null, cacheFull: false, failed: [], found: null }
   private lastTry = 0
   private again = false
   private stop: AbortController | null = null
@@ -147,6 +150,7 @@ export class NasPhotoSync {
         this.state.lastSync = typeof s.lastSync === 'string' ? s.lastSync : null
         this.state.offlineSince = typeof s.offlineSince === 'string' ? s.offlineSince : null
         this.state.cacheFull = s.cacheFull === true
+        this.state.found = typeof s.found === 'number' ? s.found : null
       })
       .catch(() => undefined)
   }
@@ -193,10 +197,10 @@ export class NasPhotoSync {
   }
 
   private async save(): Promise<void> {
-    const { lastSync, offlineSince, cacheFull } = this.state
+    const { lastSync, offlineSince, cacheFull, found } = this.state
     await fsp.mkdir(PHOTOS_DIR, { recursive: true }).catch(() => undefined)
     const tmp = `${STATE_FILE}.${process.pid}.tmp`
-    await fsp.writeFile(tmp, JSON.stringify({ lastSync, offlineSince, cacheFull })).catch(() => undefined)
+    await fsp.writeFile(tmp, JSON.stringify({ lastSync, offlineSince, cacheFull, found })).catch(() => undefined)
     await fsp.rename(tmp, STATE_FILE).catch(() => undefined)
   }
 
@@ -257,6 +261,7 @@ export class NasPhotoSync {
       }
       this.state.offlineSince = null
       this.state.failed = failed
+      this.state.found = [...targets.values()].reduce((n, t) => n + t.files.length, 0)
       // a folder the NAS did not list: what came from it stays - an album at or below it, and (one album per folder chosen)
       // the album of the folder chosen above it with the pictures of it; only within what is chosen now (an album of a
       // folder no longer chosen goes, whatever the NAS answered)
@@ -275,14 +280,17 @@ export class NasPhotoSync {
           gone.push(a)
         }
         lib.albums = lib.albums.filter((a) => !gone.includes(a))
-        const out: Array<{ album: PhotoAlbum; files: PhotoNasEntry[] }> = []
+        // (an album new to the box goes into the list with its first picture: none in the app's list with "0 Fotos"
+        // while a long first sync is still busy elsewhere)
+        const out: Array<{ album: PhotoAlbum; files: PhotoNasEntry[]; fresh: boolean }> = []
         for (const [ref, t] of targets) {
-          let a = lib.albums.find((x) => x.source === 'nas' && x.ref === ref)
-          if (!a) {
-            a = { id: newId(), title: t.title, source: 'nas', display: true, position: lib.albums.length, created: now, assets: [], ref }
-            lib.albums.push(a)
-          }
-          out.push({ album: { ...a, assets: [...a.assets] }, files: t.files })
+          const a = lib.albums.find((x) => x.source === 'nas' && x.ref === ref)
+          // (one still without a picture - from a sync before: out of the list too, until its first one is there)
+          if (a && a.assets.length === 0) {
+            lib.albums = lib.albums.filter((x) => x !== a)
+            out.push({ album: { ...a, assets: [] }, files: t.files, fresh: true })
+          } else if (a) out.push({ album: { ...a, assets: [...a.assets] }, files: t.files, fresh: false })
+          else out.push({ album: { id: newId(), title: t.title, source: 'nas', display: true, position: 0, created: now, assets: [], ref }, files: t.files, fresh: true })
         }
         return out
       })
@@ -292,8 +300,8 @@ export class NasPhotoSync {
       // the pictures of each album: gone from the NAS out at once; changed ones (or their files gone from the cache)
       // replaced only when the new one is made - a failed fetch keeps the old one; new ones in. A picture from a folder
       // the NAS did not list stays as it is.
-      const work: Array<{ album: PhotoAlbum; file: PhotoNasEntry; old?: PhotoAsset }> = []
-      for (const { album, files } of plan) {
+      const work: Array<{ album: PhotoAlbum; file: PhotoNasEntry; old?: PhotoAsset; fresh: boolean }> = []
+      for (const { album, files, fresh } of plan) {
         const wanted = new Map(files.map((f) => [f.path, f]))
         const drop: PhotoAsset[] = []
         const replace = new Map<string, PhotoAsset>()
@@ -317,7 +325,7 @@ export class NasPhotoSync {
           })
           for (const x of drop) for (const f of photoFiles(assetBase(album, x.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
         }
-        for (const file of files) if (wanted.has(file.path)) work.push({ album, file, old: replace.get(file.path) })
+        for (const file of files) if (wanted.has(file.path)) work.push({ album, file, old: replace.get(file.path), fresh })
       }
       this.state.total = work.length
 
@@ -326,7 +334,7 @@ export class NasPhotoSync {
       let used = await photoBytes(NAS_PHOTO_DIR)
       let full = false
       await fsp.mkdir(INCOMING_DIR, { recursive: true })
-      for (const { album, file, old } of work) {
+      for (const { album, file, old, fresh } of work) {
         if (stop.signal.aborted) return
         const space = await cardSpace()
         // (a changed picture: its old files go when the new ones are there - they count as freed for the limit; the card
@@ -360,7 +368,12 @@ export class NasPhotoSync {
           }
           const asset: PhotoAsset = { id, w: facts.w, h: facts.h, taken: facts.taken, added: new Date().toISOString(), kind: 'photo', ref: file.path, ver: versionOf(file) }
           const placed = await update((lib) => {
-            const a = lib.albums.find((x) => x.id === album.id)
+            let a = lib.albums.find((x) => x.id === album.id)
+            // (a new album: in the list with its first picture, at the end)
+            if (!a && fresh && !lib.albums.some((x) => x.source === 'nas' && x.ref === album.ref)) {
+              a = { ...album, assets: [], position: lib.albums.length }
+              lib.albums.push(a)
+            }
             // (the album taken out meanwhile - the folders changed in the app; or the picture there already)
             if (!a || a.assets.some((x) => x.ref === file.path && x.id !== old?.id)) return false
             // (a changed picture: the new one in the old one's place, its album picture too)
@@ -388,6 +401,10 @@ export class NasPhotoSync {
           this.state.done++
         }
       }
+      // (albums of the NAS left without a picture - all of its pictures gone there, or from a sync before this one)
+      await update((lib) => {
+        lib.albums = lib.albums.filter((a) => a.source !== 'nas' || a.assets.length > 0 || kept(a.ref))
+      })
       this.state.cacheFull = full
       this.state.lastSync = new Date().toISOString()
       if (full) this.log('the cache limit (or the card) is reached, not all pictures fetched')
@@ -409,7 +426,7 @@ export class NasPhotoSync {
       return out
     })
     await fsp.rm(NAS_PHOTO_DIR, { recursive: true, force: true }).catch(() => undefined)
-    Object.assign(this.state, { lastSync: null, offlineSince: null, cacheFull: false, failed: [] })
+    Object.assign(this.state, { lastSync: null, offlineSince: null, cacheFull: false, failed: [], found: null })
     await this.save()
     return gone.length
   }

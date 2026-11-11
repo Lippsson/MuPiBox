@@ -3541,5 +3541,7 @@
  "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "Το NAS δεν είναι προσβάσιμο. Έλεγξε τη διεύθυνση (με θύρα WebDAV) και αν το κουτί επιτρέπεται να φτάσει το NAS στο δίκτυο.",
  "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "Το NAS χρησιμοποιεί αυτουπογεγραμμένο πιστοποιητικό. Έλεγξε το αποτύπωμα και επιβεβαίωσέ το – ή χρησιμοποίησε HTTP.",
  "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Το πιστοποιητικό του NAS δεν είναι αυτό που επιβεβαιώθηκε. Αν ανανεώθηκε στο NAS, σύγκρινε το νέο αποτύπωμα και επιβεβαίωσέ το.",
- "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Σε αυτή τη διεύθυνση δεν τρέχει WebDAV. Έλεγξε διεύθυνση και θύρα και αν το WebDAV είναι ενεργό στο NAS."
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Σε αυτή τη διεύθυνση δεν τρέχει WebDAV. Έλεγξε διεύθυνση και θύρα και αν το WebDAV είναι ενεργό στο NAS.",
+ "Abgleich läuft · {} von {} Fotos": "Συγχρονισμός · {} από {} φωτογραφίες",
+ "In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.": "Δεν βρέθηκαν φωτογραφίες στους επιλεγμένους φακέλους. Έλεγξε τα δικαιώματα ανάγνωσης του χρήστη στο NAS – και για τα αρχεία μέσα στους φακέλους, όχι μόνο για τους φακέλους."
 }

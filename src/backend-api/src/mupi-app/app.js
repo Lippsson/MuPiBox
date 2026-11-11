@@ -12130,7 +12130,7 @@ async function photoNasBrowse(path) {
 
 function photoNasStatus(d) {
   const s = d.sync
-  if (s.running) return [`${icon('sync', 16)}${esc(tr(`Abgleich läuft · ${s.total ? Math.round((s.done / s.total) * 100) : 0} %`))}`, 'accent']
+  if (s.running) return [`${icon('sync', 16)}${esc(s.total ? tr(`Abgleich läuft · ${s.done} von ${s.total} Fotos`) : tr('Abgleich läuft …'))}`, 'accent']
   if (s.offlineSince) return [`${icon('info', 16)}${esc(tr(`Nicht erreichbar seit ${relTime(s.offlineSince).replace(/^vor /, '')}`))}`, 'danger']
   if (s.lastSync) return [`${icon('check', 16)}${esc(tr(`Abgeglichen ${relTime(s.lastSync)}`))}`, 'ok']
   return [esc(tr('Noch nicht abgeglichen')), '']
@@ -12179,6 +12179,7 @@ function photoNasTop() {
       <div class="ph-nas-state ${kind}">${status}</div>
       <dl class="kv"><div><dt>Ordner</dt><dd>${esc(String(saved.length))}</dd></div><div><dt>Alben</dt><dd>${esc(tr(`${d.albums} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
       ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob das NAS läuft.</span></div>` : ''}
+      ${!s.running && !s.offlineSince && saved.length && s.found === 0 ? `<div class="note warn">${icon('info', 18)}<span>In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.</span></div>` : ''}
       ${s.cacheFull ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Ordner.</span></div>` : ''}
       ${s.failed?.length ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(`Nicht lesbar: ${s.failed.join(', ')}`))}</span></div>` : ''}
       <div class="btns"><button class="btn primary" id="nas-sync" ${s.running || !saved.length ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div></section>`,

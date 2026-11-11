@@ -3541,5 +3541,7 @@
  "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS-en kan ikke nås. Sjekk adressen (med WebDAV-port) og om boksen får nå NAS-en i nettverket.",
  "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS-en bruker et selvutstedt sertifikat. Sjekk fingeravtrykket og bekreft det – eller bruk HTTP.",
  "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Sertifikatet til NAS-en er ikke det som ble bekreftet. Er det fornyet på NAS-en, sammenlign det nye fingeravtrykket og bekreft det.",
- "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Det kjører ingen WebDAV på denne adressen. Sjekk adresse og port og om WebDAV er slått på på NAS-en."
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Det kjører ingen WebDAV på denne adressen. Sjekk adresse og port og om WebDAV er slått på på NAS-en.",
+ "Abgleich läuft · {} von {} Fotos": "Synkroniserer · {} av {} bilder",
+ "In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.": "Fant ingen bilder i de valgte mappene. Sjekk brukerens leserettigheter på NAS-en – også for filene i mappene, ikke bare for mappene."
 }

@@ -3541,5 +3541,7 @@
  "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "Le NAS est injoignable. Vérifie l’adresse (avec le port WebDAV) et que la box a le droit d’atteindre le NAS sur le réseau.",
  "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "Le NAS utilise un certificat auto-signé. Vérifie l’empreinte et confirme-la – ou utilise HTTP.",
  "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Le certificat du NAS n’est pas celui confirmé auparavant. S’il a été renouvelé sur le NAS, compare la nouvelle empreinte et confirme-la.",
- "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Aucun WebDAV à cette adresse. Vérifie l’adresse et le port, et que WebDAV est activé sur le NAS."
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Aucun WebDAV à cette adresse. Vérifie l’adresse et le port, et que WebDAV est activé sur le NAS.",
+ "Abgleich läuft · {} von {} Fotos": "Synchronisation · {} sur {} photos",
+ "In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.": "Aucune photo trouvée dans les dossiers choisis. Vérifie les droits de lecture de l’utilisateur sur le NAS – aussi pour les fichiers des dossiers, pas seulement pour les dossiers."
 }

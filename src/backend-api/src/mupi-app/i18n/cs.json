@@ -3541,5 +3541,7 @@
  "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS není dostupný. Zkontroluj adresu (s portem WebDAV) a zda box smí NAS v síti dosáhnout.",
  "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS používá vlastní certifikát. Zkontroluj otisk a potvrď ho – nebo použij HTTP.",
  "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Certifikát NAS je jiný než potvrzený. Pokud byl na NAS obnoven, porovnej nový otisk a potvrď ho.",
- "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Na této adrese neběží WebDAV. Zkontroluj adresu a port a zda je WebDAV na NAS zapnutý."
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "Na této adrese neběží WebDAV. Zkontroluj adresu a port a zda je WebDAV na NAS zapnutý.",
+ "Abgleich läuft · {} von {} Fotos": "Synchronizace · {} z {} fotek",
+ "In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.": "Ve vybraných složkách nebyly nalezeny žádné fotky. Zkontroluj práva uživatele ke čtení na NAS – i pro soubory ve složkách, nejen pro složky."
 }

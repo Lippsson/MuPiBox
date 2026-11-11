@@ -3541,5 +3541,7 @@
  "Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.": "NAS недоступний. Перевір адресу (з портом WebDAV) і чи може пристрій звертатися до NAS у мережі.",
  "Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.": "NAS використовує самопідписаний сертифікат. Перевір відбиток і підтверди його — або використай HTTP.",
  "Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.": "Сертифікат NAS не той, що був підтверджений. Якщо його оновлено на NAS, порівняй новий відбиток і підтверди його.",
- "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "За цією адресою немає WebDAV. Перевір адресу й порт і чи увімкнено WebDAV на NAS."
+ "Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.": "За цією адресою немає WebDAV. Перевір адресу й порт і чи увімкнено WebDAV на NAS.",
+ "Abgleich läuft · {} von {} Fotos": "Синхронізація · {} з {} фото",
+ "In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.": "У вибраних папках не знайдено фото. Перевір права користувача на читання на NAS — і для файлів у папках, а не лише для самих папок."
 }
