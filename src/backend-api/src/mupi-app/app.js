@@ -12365,60 +12365,77 @@ const IMMICH_ERRORS = {
   unsupportedVersion: ['Immich-Version zu alt', 'Diese Version wird nicht unterstützt. Bitte Immich aktualisieren (ab Version {}).'],
 }
 
+// The assistant as the Spotify one (.wz): the steps on top (done ones ticked, one already passed can be opened
+// again), "Schritt x von 4", the step, and below Zurück on the left, the way on at the right
+const IMMICH_STEPS = [
+  ['url', 'Adresse'],
+  ['key', 'Schlüssel'],
+  ['test', 'Test'],
+  ['albums', 'Alben'],
+]
+
 function photoImmichSteps() {
-  const s = photoImmich.step
-  const bar = `<p class="help" style="margin:0">${esc(tr(`Schritt ${s} von 4`))}</p><div class="track ph-steps"><i style="--w:${s * 25}%"></i></div>`
+  const s = photoImmichImmichStep()
+  const t = photoImmich.test
+  const bar = `<ol class="wz-steps" style="grid-template-columns:repeat(${IMMICH_STEPS.length}, minmax(0, 1fr))">${IMMICH_STEPS.map(([, label], i) => {
+    const n = i + 1
+    const done = n < s
+    return `<li class="${done ? 'done' : ''}${n === s ? ' current' : ''}"><button type="button" data-imstep="${n}"${n === s ? ' aria-current="step"' : ''}${done ? '' : ' disabled'}><span class="bar"></span><span class="lbl">${done ? icon('check', 14) : `<i>${n}</i>`}${esc(tr(label))}</span></button></li>`
+  }).join('')}</ol>`
+  let body
+  let next
   if (s === 1) {
-    return [
-      `<section class="card wide">${bar}<h2>Wo läuft dein Immich?</h2>
-        <div class="field"><label for="im-url">Server-Adresse</label><input class="input mono" id="im-url" placeholder="http://192.168.1.20:2283" value="${esc(photoImmich.url)}" ${NO_PW_MANAGER}>
-        <small>Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.</small></div>
-        <div class="btns"><button class="btn" id="im-cancel">Abbrechen</button><button class="btn primary" id="im-next1">Weiter</button></div></section>`,
-    ]
-  }
-  if (s === 2 || s === 3) {
-    const t = photoImmich.test
+    body = `<h2>Wo läuft dein Immich?</h2>
+      <div class="field"><label for="im-url">Server-Adresse</label><input class="input mono" id="im-url" placeholder="http://192.168.1.20:2283" value="${esc(photoImmich.url)}" ${NO_PW_MANAGER} spellcheck="false">
+      <small>Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.</small></div>`
+    next = `<button class="btn primary" id="im-next1">Weiter</button>`
+  } else if (s === 2) {
     const kept = photoImmich.data?.settings.hasKey
-    let result = ''
+    body = `<h2>API-Schlüssel anlegen</h2><p class="help">Damit die Box deine Alben lesen darf.</p>
+      <ol class="ph-howto"><li>Immich im Browser öffnen und anmelden.</li><li>Kontoeinstellungen › API-Schlüssel › „Neuer API-Schlüssel“.</li>
+      <li>Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.</li><li>Schlüssel kopieren und hier einfügen.</li></ol>
+      <div class="field"><label for="im-key">API-Schlüssel</label><div class="input-wrap"><input class="input mono has-eye" id="im-key" type="password" value="${esc(photoImmich.key)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um ihn zu behalten') : '')}" ${NO_PW_MANAGER} spellcheck="false"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
+      <small>Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
+    next = `<button class="btn primary" id="im-test" ${photoImmich.testing ? 'disabled' : ''}>${esc(tr(photoImmich.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
+  } else if (s === 3) {
     if (t?.ok) {
-      result = `<div class="ph-nas-state ok">${icon('check', 16)}${esc(tr('Verbindung steht – Die Box kann deine Alben lesen.'))}</div>
+      body = `<h2>Verbindung steht</h2><p class="help">Die Box kann deine Alben lesen.</p>
         <dl class="kv">${t.account ? `<div><dt>Konto</dt><dd translate="no">${esc(t.account)}</dd></div>` : ''}<div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.assets))}</dd></div><div><dt>Version</dt><dd>${esc(t.version)}</dd></div></dl>`
-    } else if (t) {
-      const [head, text] = IMMICH_ERRORS[t.error] ?? IMMICH_ERRORS.unreachable
-      result = `<div class="ph-nas-state danger">${icon('info', 16)}${esc(tr(head))}</div><div class="note danger">${icon('info', 18)}<span>${esc(tr(text.replace('{}', photoImmich.data?.minVersion ?? '1.106')))}</span></div>`
+      next = `<button class="btn primary" id="im-next3">Weiter</button>`
+    } else {
+      const [head, text] = IMMICH_ERRORS[t?.error] ?? IMMICH_ERRORS.unreachable
+      body = `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text.replace('{}', photoImmich.data?.minVersion ?? '1.106')))}</span></div>`
+      next = t?.error === 'unauthorized' ? `<button class="btn primary" data-imstep="2">Schlüssel ändern</button>` : `<button class="btn primary" data-imstep="1">Adresse ändern</button>`
     }
-    return [
-      `<section class="card wide">${bar}<h2>API-Schlüssel anlegen</h2><p class="help">Damit die Box deine Alben lesen darf.</p>
-        <ol class="ph-howto"><li>Immich im Browser öffnen und anmelden.</li><li>Kontoeinstellungen › API-Schlüssel › „Neuer API-Schlüssel“.</li>
-        <li>Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.</li><li>Schlüssel kopieren und hier einfügen.</li></ol>
-        <div class="field"><label for="im-key">API-Schlüssel</label><div class="input-wrap"><input class="input mono has-eye${t && !t.ok && t.error === 'unauthorized' ? ' bad' : ''}" id="im-key" type="password" value="${esc(photoImmich.key)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um ihn zu behalten') : '')}" ${NO_PW_MANAGER}><button class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
-        <small>Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>
-        ${result}
-        <div class="btns"><button class="btn" id="im-back2">Zurück</button><button class="btn${t?.ok ? '' : ' primary'}" id="im-test" ${photoImmich.testing ? 'disabled' : ''}>${esc(tr(photoImmich.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>${t?.ok ? '<button class="btn primary" id="im-next3">Weiter</button>' : ''}</div></section>`,
-    ]
+  } else {
+    const list = photoImmich.albums
+    const rows = !list
+      ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+      : list.error
+        ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+        : list.albums.length
+          ? `<div class="rows">${list.albums
+              .map(
+                (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/immich/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+                <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}</small></span>
+                <button class="ph-check-box" role="checkbox" aria-checked="${photoImmich.chosen.has(a.id)}" data-im="${esc(a.id)}" aria-label="${esc(a.name)}">${photoImmich.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
+              )
+              .join('')}</div>`
+          : `<p class="help" style="margin:0">In Immich gibt es noch keine Alben.</p>`
+    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Immich` : 'Alben in Immich'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="im-all">Alle wählen</button>' : ''}</div>
+      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoImmich.chosen.size} ${photoImmich.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    next = `<button class="btn primary" id="im-done">Fertig</button>`
   }
-  // 4: the albums to show
-  const list = photoImmich.albums
-  const rows = !list
-    ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
-    : list.error
-      ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
-      : list.albums.length
-        ? `<div class="rows">${list.albums
-            .map(
-              (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/immich/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
-              <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}</small></span>
-              <button class="ph-check-box" role="checkbox" aria-checked="${photoImmich.chosen.has(a.id)}" data-im="${esc(a.id)}" aria-label="${esc(a.name)}">${photoImmich.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
-            )
-            .join('')}</div>`
-        : `<p class="help" style="margin:0">In Immich gibt es noch keine Alben.</p>`
+  // (the first step's way back: out of the assistant - to the service's page when connected, else to the photos)
+  const back = s === 1 ? `<button class="btn" id="im-cancel">Abbrechen</button>` : `<button class="btn" id="im-back">${icon('back', 18)}Zurück</button>`
   return [
-    `<section class="card wide">${bar}<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Immich` : 'Alben in Immich'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="im-all">Alle wählen</button>' : ''}</div>
-      ${rows}
-      <p class="help" style="margin:0">${esc(tr(`${photoImmich.chosen.size} ${photoImmich.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>
-      <div class="btns"><button class="btn" id="im-back4">Zurück</button><button class="btn primary" id="im-done">Fertig</button></div></section>`,
+    `<section class="card wide wz">${bar}<div class="wz-count">${esc(tr(`Schritt ${s} von ${IMMICH_STEPS.length}`))}</div>${body}
+      <div class="wz-foot">${back}<span class="wz-next">${next}</span></div></section>`,
   ]
 }
+
+// the step shown (3, the test, only with a result)
+const photoImmichImmichStep = () => (photoImmich.step === 3 && !photoImmich.test ? 2 : photoImmich.step)
 
 function photoImmichTop() {
   const d = photoImmich.data
@@ -12499,11 +12516,16 @@ function mountPhotoImmich(root, page) {
     photoImmich.step = 2
     redraw()
   })
-  $('#im-back2', root)?.addEventListener('click', () => {
-    photoImmich.key = $('#im-key', root).value
-    photoImmich.step = 1
+  // back one step (the key typed is kept while the assistant is open); a step passed already, from the steps on top
+  const goStep = (n) => {
+    const key = $('#im-key', root)
+    if (key) photoImmich.key = key.value
+    photoImmich.step = n
     redraw()
-  })
+    window.scrollTo(0, 0)
+  }
+  $('#im-back', root)?.addEventListener('click', () => goStep(photoImmichImmichStep() === 4 && d.connected && !photoImmich.test ? 0 : photoImmichImmichStep() - 1))
+  for (const b of root.querySelectorAll('[data-imstep]')) b.onclick = () => goStep(Number(b.dataset.imstep))
   $('#im-test', root)?.addEventListener('click', async () => {
     photoImmich.key = $('#im-key', root).value.trim()
     if (!photoImmich.key && !d.settings.hasKey) return toast('Bitte den API-Schlüssel einfügen', 'info')
@@ -12537,10 +12559,6 @@ function mountPhotoImmich(root, page) {
   }
   $('#im-all', root)?.addEventListener('click', () => {
     for (const a of photoImmich.albums?.albums ?? []) photoImmich.chosen.add(a.id)
-    redraw()
-  })
-  $('#im-back4', root)?.addEventListener('click', () => {
-    photoImmich.step = d.connected && !photoImmich.test ? 0 : 2
     redraw()
   })
   $('#im-done', root)?.addEventListener('click', async () => {

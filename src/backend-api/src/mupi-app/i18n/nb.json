@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "{} album i Immich",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valgte album finnes ikke lenger i Immich.",
  "Gewählt": "Valgt",
- "Abwählen": "Fjern valg"
+ "Abwählen": "Fjern valg",
+ "Die Box kann deine Alben lesen.": "Boksen kan lese albumene dine.",
+ "Schlüssel": "Nøkkel",
+ "Schlüssel ändern": "Endre nøkkel",
+ "Test": "Test",
+ "Verbindung steht": "Tilkoblet"
 }

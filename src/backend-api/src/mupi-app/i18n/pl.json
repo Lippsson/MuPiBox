@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "Albumy w Immich: {}",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "Wybranych albumów nie ma już w Immich: {}.",
  "Gewählt": "Wybrane",
- "Abwählen": "Odznacz"
+ "Abwählen": "Odznacz",
+ "Die Box kann deine Alben lesen.": "Urządzenie może czytać twoje albumy.",
+ "Schlüssel": "Klucz",
+ "Schlüssel ändern": "Zmień klucz",
+ "Test": "Test",
+ "Verbindung steht": "Połączono"
 }

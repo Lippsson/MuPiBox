@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "{} album i Immich",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valgte album findes ikke længere i Immich.",
  "Gewählt": "Valgt",
- "Abwählen": "Fravælg"
+ "Abwählen": "Fravælg",
+ "Die Box kann deine Alben lesen.": "Boksen kan læse dine album.",
+ "Schlüssel": "Nøgle",
+ "Schlüssel ändern": "Skift nøgle",
+ "Test": "Test",
+ "Verbindung steht": "Forbindelsen er oprettet"
 }

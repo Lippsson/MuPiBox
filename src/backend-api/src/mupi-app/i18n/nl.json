@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "{} albums in Immich",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "{} gekozen albums bestaan niet meer in Immich.",
  "Gewählt": "Gekozen",
- "Abwählen": "Verwijderen"
+ "Abwählen": "Verwijderen",
+ "Die Box kann deine Alben lesen.": "De box kan je albums lezen.",
+ "Schlüssel": "Sleutel",
+ "Schlüssel ändern": "Sleutel wijzigen",
+ "Test": "Test",
+ "Verbindung steht": "Verbinding staat"
 }

@@ -3622,5 +3622,10 @@
  "{} Alben in Immich": "{} albums in Immich",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "{} albums chosen no longer exist in Immich.",
  "Gewählt": "Chosen",
- "Abwählen": "Remove"
+ "Abwählen": "Remove",
+ "Die Box kann deine Alben lesen.": "The box can read your albums.",
+ "Schlüssel": "Key",
+ "Schlüssel ändern": "Change key",
+ "Test": "Test",
+ "Verbindung steht": "Connected"
 }

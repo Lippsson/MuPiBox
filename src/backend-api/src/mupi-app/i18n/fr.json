@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "{} albums dans Immich",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "{} albums choisis n’existent plus dans Immich.",
  "Gewählt": "Choisis",
- "Abwählen": "Retirer"
+ "Abwählen": "Retirer",
+ "Die Box kann deine Alben lesen.": "La box peut lire tes albums.",
+ "Schlüssel": "Clé",
+ "Schlüssel ändern": "Changer la clé",
+ "Test": "Test",
+ "Verbindung steht": "Connexion établie"
 }

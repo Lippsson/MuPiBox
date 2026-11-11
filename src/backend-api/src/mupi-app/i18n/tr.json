@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "Immich’te {} albüm",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "Seçilen {} albüm artık Immich’te yok.",
  "Gewählt": "Seçilenler",
- "Abwählen": "Kaldır"
+ "Abwählen": "Kaldır",
+ "Die Box kann deine Alben lesen.": "Kutu albümlerini okuyabiliyor.",
+ "Schlüssel": "Anahtar",
+ "Schlüssel ändern": "Anahtarı değiştir",
+ "Test": "Test",
+ "Verbindung steht": "Bağlantı kuruldu"
 }

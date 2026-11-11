@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "Alba v Immich: {}",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "Vybraná alba už v Immich neexistují: {}.",
  "Gewählt": "Vybráno",
- "Abwählen": "Zrušit výběr"
+ "Abwählen": "Zrušit výběr",
+ "Die Box kann deine Alben lesen.": "Box může číst tvá alba.",
+ "Schlüssel": "Klíč",
+ "Schlüssel ändern": "Změnit klíč",
+ "Test": "Test",
+ "Verbindung steht": "Spojení funguje"
 }

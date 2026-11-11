@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "{} albumia Immichissä",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valittua albumia ei enää ole Immichissä.",
  "Gewählt": "Valittu",
- "Abwählen": "Poista valinta"
+ "Abwählen": "Poista valinta",
+ "Die Box kann deine Alben lesen.": "Laite voi lukea albumisi.",
+ "Schlüssel": "Avain",
+ "Schlüssel ändern": "Vaihda avain",
+ "Test": "Testi",
+ "Verbindung steht": "Yhteys toimii"
 }

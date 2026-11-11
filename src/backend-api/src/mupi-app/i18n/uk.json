@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "Альбомів в Immich: {}",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "Вибраних альбомів уже немає в Immich: {}.",
  "Gewählt": "Вибрано",
- "Abwählen": "Прибрати"
+ "Abwählen": "Прибрати",
+ "Die Box kann deine Alben lesen.": "Пристрій може читати твої альбоми.",
+ "Schlüssel": "Ключ",
+ "Schlüssel ändern": "Змінити ключ",
+ "Test": "Перевірка",
+ "Verbindung steht": "Зʼєднання є"
 }

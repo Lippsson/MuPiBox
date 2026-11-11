@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "{} álbuns no Immich",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "{} álbuns escolhidos já não existem no Immich.",
  "Gewählt": "Escolhidas",
- "Abwählen": "Remover"
+ "Abwählen": "Remover",
+ "Die Box kann deine Alben lesen.": "A caixa pode ler os teus álbuns.",
+ "Schlüssel": "Chave",
+ "Schlüssel ändern": "Alterar chave",
+ "Test": "Teste",
+ "Verbindung steht": "Ligação estabelecida"
 }

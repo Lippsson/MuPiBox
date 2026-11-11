@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "{} άλμπουμ στο Immich",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "{} επιλεγμένα άλμπουμ δεν υπάρχουν πια στο Immich.",
  "Gewählt": "Επιλεγμένα",
- "Abwählen": "Αφαίρεση"
+ "Abwählen": "Αφαίρεση",
+ "Die Box kann deine Alben lesen.": "Το κουτί μπορεί να διαβάσει τα άλμπουμ σου.",
+ "Schlüssel": "Κλειδί",
+ "Schlüssel ändern": "Αλλαγή κλειδιού",
+ "Test": "Δοκιμή",
+ "Verbindung steht": "Η σύνδεση λειτουργεί"
 }

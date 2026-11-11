@@ -3606,5 +3606,10 @@
  "{} Alben in Immich": "{} album i Immich",
  "{} gewählte Alben gibt es in Immich nicht mehr.": "{} valda album finns inte längre i Immich.",
  "Gewählt": "Valda",
- "Abwählen": "Avmarkera"
+ "Abwählen": "Avmarkera",
+ "Die Box kann deine Alben lesen.": "Boxen kan läsa dina album.",
+ "Schlüssel": "Nyckel",
+ "Schlüssel ändern": "Ändra nyckel",
+ "Test": "Test",
+ "Verbindung steht": "Ansluten"
 }
