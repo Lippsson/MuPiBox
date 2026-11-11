@@ -8,7 +8,7 @@ import { pipeline } from 'node:stream/promises'
 import type { Express, Request, Response, Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
-import { immichLiveAway, sendImmichLive } from './immich'
+import { checkImmichNow, immichLiveAway, sendImmichLive } from './immich'
 import { extOf, NotAPicture, PHOTO_EXTENSIONS, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings, type PhotoOrder } from './settings'
 import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, IMMICH_PHOTO_DIR, INCOMING_DIR, isId, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
@@ -355,12 +355,14 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
  */
 export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): void {
   const on = () => photoSettings(deps.getMupiboxConfig()).enabled
-  app.get('/api/photos/albums', async (_req, res) => {
+  app.get('/api/photos/albums', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     const s = photoSettings(deps.getMupiboxConfig())
     if (!s.enabled) return void res.json({ enabled: false, albums: [] })
     const list = (await albums()).filter((a) => a.display && a.assets.length > 0)
-    // (albums shown live from Immich while it is away: "Gerade nicht da" on the display)
+    // (albums shown live from Immich while it is away: "Gerade nicht da" on the display; ?check=1 - "Nochmal", or the
+    // display asking while albums are not there - asks Immich first)
+    if (req.query.check === '1') await checkImmichNow()
     const away = immichLiveAway()
     res.json({
       enabled: true,

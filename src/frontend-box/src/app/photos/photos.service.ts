@@ -69,12 +69,13 @@ export class PhotosService {
     window.setInterval(() => this.refresh(), 120_000)
   }
 
-  /** Asks again (at most every 10 s - the start page calls it on every visit) */
+  /** Asks again (at most every 10 s - the start page calls it on every visit); albums not there: the box asks Immich first */
   refresh(force = false): void {
     if (!force && Date.now() - this.lastAsked < 10_000) return
     this.lastAsked = Date.now()
+    const check = this.albums().some((a) => a.away) ? '?check=1' : ''
     this.http
-      .get<AlbumsAnswer>(`${this.base}/albums`)
+      .get<AlbumsAnswer>(`${this.base}/albums${check}`)
       .pipe(catchError(() => of(null)))
       .subscribe((a) => {
         // (no answer - the server restarts: what was there stays)

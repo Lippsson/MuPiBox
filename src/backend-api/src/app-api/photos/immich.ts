@@ -327,9 +327,13 @@ export class ImmichPhotoSync {
     return { ...this.state }
   }
 
-  /** A live picture came from Immich: it is back (the albums show again before the next sync) */
+  /** Immich answered with the key (a live picture came, or the check): it is back - the albums show again before the next sync */
   reachable(): void {
-    if (this.state.offlineSince) this.state.offlineSince = null
+    if (this.state.offlineSince || this.state.unauthorized) {
+      this.state.offlineSince = null
+      this.state.unauthorized = false
+      void this.save()
+    }
   }
 
   /** The client with the key as kept; null: none set up (or the key cannot be read on this box) */
@@ -616,6 +620,25 @@ let liveSync: ImmichPhotoSync | null = null
 let pruning = 0
 // the last time a live picture could not come from Immich (0: the last one came)
 let liveFailedAt = 0
+
+let lastCheck = 0
+/**
+ * Asked again now (the display's "Nochmal", and its own questions while albums are not there): Immich answers the
+ * key with its albums within 5 s - it is back, the albums show again. At most every 10 s.
+ */
+export async function checkImmichNow(): Promise<void> {
+  if (!immichLiveAway() || Date.now() - lastCheck < 10_000) return
+  lastCheck = Date.now()
+  const client = liveSync?.client()
+  if (!client) return
+  try {
+    await client.json('/api/albums', { signal: AbortSignal.timeout(5000) })
+    liveFailedAt = 0
+    liveSync?.reachable()
+  } catch {
+    // still away
+  }
+}
 
 /**
  * Immich is away for the albums shown live (the display shows them as "Gerade nicht da"): the last sync did not reach
