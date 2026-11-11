@@ -1249,7 +1249,9 @@ textarea[hidden] { display: none; }
 .ext-list { margin: 2px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.45; }
 .ext-list li { margin: 2px 0; overflow-wrap: anywhere; }
 /* a heading that starts a group of fields in the settings of an extension (button 1, button 2 ...), and its own page */
-.ext-group { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--mp-border); display: flex; flex-direction: column; gap: 4px; }
+.ext-group { margin-top: 14px; padding-top: 18px; border-top: 1px solid var(--mp-border); display: flex; flex-direction: column; gap: 12px; }
+/* (lines stand between the groups only - the buttons - not between the fields of one) */
+.field[data-xgroup]:not([data-xgroup=""]), .row[data-xgroup]:not([data-xgroup=""]) { border-top: 0; padding-top: 0; }
 .ext-group h3 { margin: 0; font-size: 15px; font-weight: 600; }
 .ext-page select.input { max-width: 420px; }
 /* (a group the user names: the name is a field, the label of the group its placeholder; right of it the button that removes the group) */
@@ -1260,8 +1262,8 @@ textarea[hidden] { display: none; }
 /* (the "+" of a series of groups, on the right) */
 .ext-add { display: flex; justify-content: flex-end; margin-top: 10px; }
 /* (a GPIO pin: the label left of the list, not above it) */
-.field.ext-pin { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
-.field.ext-pin > label { flex: 0 0 auto; min-width: 9.5em; }
+.field.ext-pin { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.field.ext-pin > label { flex: 0 0 auto; }
 .field.ext-pin > select { flex: 1 1 200px; min-width: 0; }
 .field.ext-pin > small { flex-basis: 100%; }
 /* a list to put in order by dragging (an "order" field of an extension) */

@@ -11774,7 +11774,10 @@ function extFormHtml(e, fields) {
       if (it.type === 'heading') {
         // a line that starts a group of fields (button 1, button 2 ...): a name the user gives it (rename: the label stands there
         // while it has none), and a button that takes the group away again (optional)
-        const name = it.rename ? `<input class="input ext-group-name" type="text" maxlength="30" data-xname="${esc(it.rename)}" value="${esc(e.settings?.[it.rename] ?? '')}" placeholder="${esc(it.label)}" aria-label="Name" autocomplete="off" ${NO_PW_MANAGER}>` : `<h3>${esc(it.label)}</h3>`
+        // (one of a series has its number: "Taster 1", "Taster 2")
+        const g = groups.find((x) => x.index === index)
+        const title = groups.filter((x) => x.series === g.series).length > 1 ? `${it.label} ${g.nr}` : it.label
+        const name = it.rename ? `<input class="input ext-group-name" type="text" maxlength="30" data-xname="${esc(it.rename)}" value="${esc(e.settings?.[it.rename] ?? '')}" placeholder="${esc(title)}" aria-label="Name" autocomplete="off" ${NO_PW_MANAGER}>` : `<h3>${esc(title)}</h3>`
         const del = it.optional ? `<button type="button" class="ext-group-del" data-xdel="${index}" aria-label="Entfernen" title="Entfernen"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : ''
         return `<div class="ext-group" data-ext-dep="${esc(it.dep ?? '')}"><div class="ext-group-head">${name}${del}</div>${help}</div>`
       }
@@ -11839,6 +11842,12 @@ function extFormMount(sheet, e, fields, saved) {
   const groupOn = (g) => !g.heading.optional || e.settings?.[g.heading.optional] === true || g.keys.some((k) => e.settingTypes?.[k] === 'gpio' && Number(e.settings?.[k] ?? 0) !== 0)
   // (a field that depends on a switch is shown while the switch is on, one that depends on a pin while a pin is chosen - and
   // only while its group is there)
+  // (what a group is called: the name the user gave it, else its heading - with its number when it is one of a series)
+  const groupTitle = (g) => {
+    const named = g.heading.rename ? String(e.settings?.[g.heading.rename] ?? '') : ''
+    const many = groups.filter((x) => x.series === g.series).length > 1
+    return named || (many ? `${tr(g.heading.label)} ${g.nr}` : tr(g.heading.label))
+  }
   const dep = () => {
     for (const d of sheet.querySelectorAll('[data-xgroup]')) {
       const name = d.dataset.extDep
@@ -11909,7 +11918,7 @@ function extFormMount(sheet, e, fields, saved) {
       const pins = g.keys.filter((k) => e.settingTypes?.[k] === 'gpio')
       const name = g.heading.rename ? String(e.settings?.[g.heading.rename] ?? '') : ''
       const used = name !== '' || pins.some((k) => Number(e.settings?.[k] ?? 0) !== 0)
-      if (used && !(await ask('Entfernen', `„${name || tr(g.heading.label)}“ wird entfernt, seine Pins sind danach wieder frei.`, 'Entfernen'))) return
+      if (used && !(await ask('Entfernen', `„${groupTitle(g)}“ wird entfernt, seine Pins sind danach wieder frei.`, 'Entfernen'))) return
       const values = { [g.heading.optional]: false, ...Object.fromEntries(pins.map((k) => [k, 0])) }
       if (g.heading.rename) values[g.heading.rename] = ''
       const ok = await save(values, true)
@@ -11938,14 +11947,10 @@ function extFormMount(sheet, e, fields, saved) {
     let taken = new Map()
     // (pins that are free but meant for something that is switched off, the rotary encoder: they can be chosen, with a word)
     let hints = new Map()
-    // (what a field is called in the list of another one: the name of its group - the one the user gave it, else its heading
-    // with its number in the series, "Taster 2")
+    // (what a field is called in the list of another one: the name of its group, "Taster 2")
     const groupOf = (key) => {
       const g = groups.find((x) => x.keys.includes(key))
-      if (!g) return tr(fields.find((it) => it.key === key)?.label ?? key)
-      const named = g.heading.rename ? String(e.settings?.[g.heading.rename] ?? '') : ''
-      const many = groups.filter((x) => x.series === g.series).length > 1
-      return named || (many ? `${tr(g.heading.label)} ${g.nr}` : tr(g.heading.label))
+      return g ? groupTitle(g) : tr(fields.find((it) => it.key === key)?.label ?? key)
     }
     const draw = () => {
       for (const select of pinSelects) {
