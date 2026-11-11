@@ -12103,7 +12103,10 @@ async function loadPhotoNas() {
   // (the choice on this page: what the box has, until "Übernehmen")
   photoNas.chosen = new Set(r.body.settings.folders)
   photoNas.subs = r.body.settings.subfoldersAsAlbums
-  if (r.body.nas.connected && !photoNas.tree.has('/')) await photoNasBrowse('/')
+  // (every visit asks the NAS anew: folders added or renamed there meanwhile, or it was away the last time)
+  photoNas.tree.clear()
+  photoNas.open.clear()
+  if (r.body.nas.connected) await photoNasBrowse('/')
 }
 
 async function photoNasBrowse(path) {
@@ -12122,7 +12125,7 @@ function photoNasStatus(d) {
 function photoNasFolderRows(path, depth) {
   const node = photoNas.tree.get(path)
   if (!node) return `<div class="ph-tree-row" style="--d:${depth}"><span class="help">${esc(tr('Wird geladen …'))}</span></div>`
-  if (node.error) return `<div class="ph-tree-row" style="--d:${depth}"><span class="help danger-text">${esc(tr('Dieser Ordner lässt sich gerade nicht lesen.'))}</span></div>`
+  if (node.error) return `<div class="ph-tree-row" style="--d:${depth}"><span class="help danger-text" style="flex:1">${esc(tr('Dieser Ordner lässt sich gerade nicht lesen.'))}</span><button class="btn sm" data-retry="${esc(path)}">${esc(tr('Erneut versuchen'))}</button></div>`
   if (!node.folders.length && depth === 0) return `<p class="help" style="margin:0">Auf dem NAS gibt es hier keine Ordner.</p>`
   return node.folders
     .map((f) => {
@@ -12205,11 +12208,20 @@ function mountPhotoNas(root, page) {
       if (photoNas.open.has(p)) photoNas.open.delete(p)
       else {
         photoNas.open.add(p)
-        if (!photoNas.tree.has(p)) {
+        // (not listed yet, or the NAS did not answer the last time: asked again)
+        if (!photoNas.tree.has(p) || photoNas.tree.get(p).error) {
+          photoNas.tree.delete(p)
           redraw()
           await photoNasBrowse(p)
         }
       }
+      redraw()
+    }
+  }
+  for (const b of root.querySelectorAll('[data-retry]')) {
+    b.onclick = async () => {
+      b.disabled = true
+      await photoNasBrowse(b.dataset.retry)
       redraw()
     }
   }
