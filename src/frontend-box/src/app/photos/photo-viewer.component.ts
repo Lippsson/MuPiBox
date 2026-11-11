@@ -425,7 +425,18 @@ export class PhotoViewerComponent implements OnDestroy {
       this.clipPaused.set(true)
       return
     }
-    void v.play().catch((): void => {
+    this.startClip(v)
+  }
+  // starts the clip on the screen; a start that fails goes on in the slideshow - not one broken off (the picture changed,
+  // the clip went, it was paused while still loading): that one is no failure of this clip
+  private startClip(v: HTMLVideoElement): void {
+    const key = this.slideKey()
+    void v.play().catch((err: unknown): void => {
+      if (!v.isConnected || key !== this.slideKey()) return
+      if ((err as DOMException | null)?.name === 'AbortError') {
+        this.clipPaused.set(v.paused)
+        return
+      }
       if (this.playing()) this.clipEnded()
       else this.clipPaused.set(true)
     })
@@ -550,7 +561,7 @@ export class PhotoViewerComponent implements OnDestroy {
     if (v && this.clipShown()) {
       if (v.ended) v.currentTime = 0
       v.muted = true
-      if (v.paused) void v.play().catch((): void => this.clipEnded())
+      if (v.paused) this.startClip(v)
     }
     this.schedule()
     this.touched()
