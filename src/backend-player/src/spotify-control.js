@@ -3682,9 +3682,10 @@ app.post('/display/reload-page', (_req, res) => {
   res.json({ ok: true })
 })
 
-// The display: an album is open and the photo time counts (every few seconds while it does - see photoTimeTickStep)
-app.post('/photos/active', (_req, res) => {
-  photoActiveUntil = readPhotoTimeConfig().enabled ? Date.now() + PHOTO_ACTIVE_MS : 0
+// The display: an album is open and the photo time counts (every few seconds while it does - see photoTimeTickStep);
+// {active: false} when it stops counting (the album left, the display off, the grid idle): it stops at once
+app.post('/photos/active', (req, res) => {
+  photoActiveUntil = req.body?.active !== false && readPhotoTimeConfig().enabled ? Date.now() + PHOTO_ACTIVE_MS : 0
   res.json({ ok: true })
 })
 

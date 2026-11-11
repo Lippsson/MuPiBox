@@ -89,14 +89,21 @@ export class PhotoTimeService {
       const pause = this.status()?.idlePauseSeconds ?? 0
       this.idle.set(pause > 0 && Date.now() - this.lastTouch >= pause * 1000)
     }, 1000)
-    // counting: the player is told at once and then every few seconds; it stops counting by itself after the last word
+    // counting: the player is told at once and then every few seconds; when it stops (the album left, the display
+    // off, the grid idle) at once too - its own 12 s after the last word are only for a display that went silent
+    let was = false
     effect(() => {
       const on = this.counting()
       untracked(() => {
         window.clearInterval(this.beatTimer)
-        if (!on) return
-        this.beat()
-        this.beatTimer = window.setInterval(() => this.beat(), BEAT_MS)
+        if (!on) {
+          if (was) this.beat(false)
+          was = false
+          return
+        }
+        was = true
+        this.beat(true)
+        this.beatTimer = window.setInterval(() => this.beat(true), BEAT_MS)
       })
     })
     // the warning: once when the time left comes to it while it counts; again after more time was given
@@ -122,9 +129,9 @@ export class PhotoTimeService {
     })
   }
 
-  private beat(): void {
+  private beat(active: boolean): void {
     this.http
-      .post(`${environment.backend.playerUrl}/photos/active`, {})
+      .post(`${environment.backend.playerUrl}/photos/active`, { active })
       .pipe(catchError(() => of(null)))
       .subscribe()
   }

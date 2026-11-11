@@ -138,6 +138,8 @@ export class PhotoScreensaverService {
     if (window.location.pathname.startsWith('/photos')) return false
     const p = this.playtime.status()
     if (p.enabled && (p.state === 'blocked' || (p.quiet?.enabled && p.quiet.inWindow))) return false
+    // the picture time is used up: the photos pause - also here
+    if (p.photos?.state === 'blocked') return false
     if (a.duringPlayback) return true
     return !(await this.playing())
   }
