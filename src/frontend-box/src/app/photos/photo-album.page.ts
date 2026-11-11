@@ -199,6 +199,8 @@ export class PhotoAlbumPage implements OnDestroy {
   private leaving = false
   private checkTimer = 0
   private asking: Subscription | null = null
+  /** "Album startet als Diashow": the slideshow of this visit is still to start (when the album has come) */
+  private showPending = false
 
   constructor() {
     addIcons({ arrowBackOutline, playOutline })
@@ -232,13 +234,17 @@ export class PhotoAlbumPage implements OnDestroy {
         // (the same pictures - in the order "Zufällig" they come in another order each time: the grid stays as it is)
         const same = before?.id === a.id && before.title === a.title && sameIds(before.assets, a.assets)
         if (!same) this.album.set(a)
-        if (first && this.direct() && !this.viewer()) this.viewer.set({ start: 0, play: true })
+        // (the slideshow that starts at once: with the first answer of this visit that came - also when the one right
+        // at the start failed and a later one came, the server restarting)
+        if (this.showPending && !this.viewer()) this.viewer.set({ start: 0, play: true })
+        this.showPending = false
       })
   }
 
   ionViewWillEnter(): void {
     this.visible = true
     this.visit++
+    this.showPending = this.direct()
     window.clearInterval(this.checkTimer)
     this.checkTimer = window.setInterval(() => this.load(false), 30_000)
     // asked at once: the first visit (nothing there yet), or back from the player - the album may have changed
@@ -251,6 +257,7 @@ export class PhotoAlbumPage implements OnDestroy {
   ionViewWillLeave(): void {
     this.visible = false
     this.visit++
+    this.showPending = false
     window.clearInterval(this.checkTimer)
     this.asking?.unsubscribe()
     this.asking = null
@@ -262,11 +269,14 @@ export class PhotoAlbumPage implements OnDestroy {
     this.asking?.unsubscribe()
   }
 
+  // (opened by hand - a picture, the slideshow: the one waiting to start at once is no longer wanted)
   protected openAt(i: number): void {
+    this.showPending = false
     this.viewer.set({ start: i, play: false })
   }
 
   protected slideshow(): void {
+    this.showPending = false
     this.viewer.set({ start: 0, play: true })
   }
 
