@@ -370,7 +370,7 @@
         "install": "Programme werden installiert …",
         "settings": "Einstellungen werden übernommen …",
         "done": "Fertig – die Box startet gleich neu",
-        "failed": "Update abgebrochen – die Box bleibt auf der bisherigen Version"
+        "failed": "Update abgebrochen – bitte die Box neu starten"
       },
       "en": {
         "prepare": "Preparing the update …",
@@ -379,7 +379,7 @@
         "install": "Installing programs …",
         "settings": "Applying settings …",
         "done": "Done – the box restarts in a moment",
-        "failed": "Update stopped – the box stays on its previous version"
+        "failed": "Update stopped – please restart the box"
       },
       "fr": {
         "prepare": "Préparation de la mise à jour …",
@@ -388,7 +388,7 @@
         "install": "Installation des programmes …",
         "settings": "Application des réglages …",
         "done": "Terminé – la box redémarre dans un instant",
-        "failed": "Mise à jour interrompue – la box garde sa version actuelle"
+        "failed": "Mise à jour interrompue – merci de redémarrer la box"
       },
       "es": {
         "prepare": "Preparando la actualización …",
@@ -397,7 +397,7 @@
         "install": "Instalando programas …",
         "settings": "Aplicando ajustes …",
         "done": "Listo: la caja se reinicia enseguida",
-        "failed": "Actualización interrumpida: la caja sigue con su versión anterior"
+        "failed": "Actualización interrumpida: reinicia la caja"
       },
       "it": {
         "prepare": "Preparazione dell’aggiornamento …",
@@ -406,7 +406,7 @@
         "install": "Installazione dei programmi …",
         "settings": "Applicazione delle impostazioni …",
         "done": "Fatto – il box si riavvia tra poco",
-        "failed": "Aggiornamento interrotto – il box resta alla versione precedente"
+        "failed": "Aggiornamento interrotto – riavvia il box"
       },
       "nl": {
         "prepare": "Update wordt voorbereid …",
@@ -415,7 +415,7 @@
         "install": "Programma’s worden geïnstalleerd …",
         "settings": "Instellingen worden overgenomen …",
         "done": "Klaar – de box start zo opnieuw",
-        "failed": "Update afgebroken – de box blijft op de vorige versie"
+        "failed": "Update afgebroken – start de box opnieuw"
       },
       "sv": {
         "prepare": "Uppdateringen förbereds …",
@@ -424,7 +424,7 @@
         "install": "Program installeras …",
         "settings": "Inställningar tillämpas …",
         "done": "Klart – boxen startar om strax",
-        "failed": "Uppdateringen avbröts – boxen behåller sin tidigare version"
+        "failed": "Uppdateringen avbröts – starta om boxen"
       },
       "da": {
         "prepare": "Opdateringen forberedes …",
@@ -433,7 +433,7 @@
         "install": "Programmer installeres …",
         "settings": "Indstillinger anvendes …",
         "done": "Færdig – boksen genstarter om lidt",
-        "failed": "Opdatering afbrudt – boksen bliver på den hidtidige version"
+        "failed": "Opdatering afbrudt – genstart boksen"
       },
       "nb": {
         "prepare": "Oppdateringen forberedes …",
@@ -442,7 +442,7 @@
         "install": "Programmer installeres …",
         "settings": "Innstillinger tas i bruk …",
         "done": "Ferdig – boksen starter på nytt om litt",
-        "failed": "Oppdatering avbrutt – boksen beholder forrige versjon"
+        "failed": "Oppdatering avbrutt – start boksen på nytt"
       },
       "fi": {
         "prepare": "Päivitystä valmistellaan …",
@@ -451,7 +451,7 @@
         "install": "Ohjelmia asennetaan …",
         "settings": "Asetuksia otetaan käyttöön …",
         "done": "Valmis – laite käynnistyy kohta uudelleen",
-        "failed": "Päivitys keskeytyi – laite jää aiempaan versioon"
+        "failed": "Päivitys keskeytyi – käynnistä laite uudelleen"
       },
       "pl": {
         "prepare": "Przygotowanie aktualizacji …",
@@ -460,7 +460,7 @@
         "install": "Instalowanie programów …",
         "settings": "Zapisywanie ustawień …",
         "done": "Gotowe – urządzenie zaraz uruchomi się ponownie",
-        "failed": "Aktualizacja przerwana – urządzenie zostaje przy poprzedniej wersji"
+        "failed": "Aktualizacja przerwana – uruchom urządzenie ponownie"
       },
       "pt": {
         "prepare": "A preparar a atualização …",
@@ -469,7 +469,7 @@
         "install": "A instalar programas …",
         "settings": "A aplicar definições …",
         "done": "Pronto – a caixa reinicia daqui a pouco",
-        "failed": "Atualização interrompida – a caixa mantém a versão anterior"
+        "failed": "Atualização interrompida – reinicia a caixa"
       },
       "tr": {
         "prepare": "Güncelleme hazırlanıyor …",
@@ -478,7 +478,7 @@
         "install": "Programlar kuruluyor …",
         "settings": "Ayarlar uygulanıyor …",
         "done": "Bitti – kutu birazdan yeniden başlıyor",
-        "failed": "Güncelleme durdu – kutu önceki sürümde kalıyor"
+        "failed": "Güncelleme durdu – lütfen kutuyu yeniden başlat"
       },
       "uk": {
         "prepare": "Підготовка оновлення …",
@@ -487,7 +487,7 @@
         "install": "Встановлення програм …",
         "settings": "Застосування налаштувань …",
         "done": "Готово – пристрій зараз перезапуститься",
-        "failed": "Оновлення перервано – пристрій лишається на попередній версії"
+        "failed": "Оновлення перервано – перезапусти пристрій"
       },
       "ru": {
         "prepare": "Подготовка обновления …",
@@ -496,7 +496,7 @@
         "install": "Установка программ …",
         "settings": "Применение настроек …",
         "done": "Готово – устройство сейчас перезапустится",
-        "failed": "Обновление прервано – устройство остаётся на прежней версии"
+        "failed": "Обновление прервано – перезапустите устройство"
       },
       "cs": {
         "prepare": "Příprava aktualizace …",
@@ -505,7 +505,7 @@
         "install": "Instalace programů …",
         "settings": "Použití nastavení …",
         "done": "Hotovo – box se za chvíli restartuje",
-        "failed": "Aktualizace přerušena – box zůstává na předchozí verzi"
+        "failed": "Aktualizace přerušena – restartuj box"
       },
       "el": {
         "prepare": "Προετοιμασία ενημέρωσης …",
@@ -514,7 +514,7 @@
         "install": "Εγκατάσταση προγραμμάτων …",
         "settings": "Εφαρμογή ρυθμίσεων …",
         "done": "Έτοιμο – το κουτί επανεκκινεί σε λίγο",
-        "failed": "Η ενημέρωση διακόπηκε – το κουτί μένει στην προηγούμενη έκδοση"
+        "failed": "Η ενημέρωση διακόπηκε – κάνε επανεκκίνηση του κουτιού"
       }
     }
   },

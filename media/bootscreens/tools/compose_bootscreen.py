@@ -173,7 +173,8 @@ def fortschritt(picture, bid, pct, phase, lang, out):
     """The maintenance picture of the update with the progress at its foot: a bar of the scene's pill (the colours of
     its line of text), a sentence on the part of the update and the percent, under it the bar - in the title's colour
     when that is dark, else in the pill's text colour. Where the maintenance text reaches down into the foot, the bar
-    goes beside it (text on the right: the left half) or to the top. phase "failed": the sentence in red, no percent.
+    goes beside it (text on the right: the left half) or to the top. phase "failed" (an abort after which the box
+    has to be restarted - any other abort brings the display back by itself): the sentence in red, no percent.
     The picture as it is (the boot screen's maintenance picture), so this takes about half a second."""
     from PIL import Image, ImageDraw
     try:
@@ -215,7 +216,7 @@ def fortschritt(picture, bid, pct, phase, lang, out):
         room = x1 - x0 - 36 - (d.textlength(label, font=f_pct) + 16 if label else 0)
         if d.textlength(text, font=f_text) <= room:
             break
-    while text and d.textlength(text, font=f_text) > room:
+    while len(text) > 1 and d.textlength(text, font=f_text) > room:
         text = text[:-2].rstrip() + "…"
     d.text((x0 + 18, y0 + 12), text, font=f_text, fill=ink)
     if label:

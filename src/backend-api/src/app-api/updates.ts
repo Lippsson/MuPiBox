@@ -58,10 +58,13 @@ finish() {
 }
 progress() {
 	printf '%s\\t%s\\n' "$1" "$2" > "$D/progress"
-	[ -x ${PROGRESS_DISPLAY} ] && ${PROGRESS_DISPLAY} "$1" "$2" >/dev/null 2>&1 &
+	# (the display too - not for an update of the system: the display goes on showing the box there)
+	[ "$KIND" != "os" ] && [ -x ${PROGRESS_DISPLAY} ] && ${PROGRESS_DISPLAY} "$1" "$2" >/dev/null 2>&1 &
 }
 exec > "$D/output.txt" 2>&1
 write_state
+# (the progress on the display starts anew: what an update before left there - aborted, the box not restarted since)
+rm -rf /run/mupibox-update-progress
 progress 0 "Start"
 
 # the idle shutdown must not switch the box off in the middle of it

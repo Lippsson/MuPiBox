@@ -6,7 +6,7 @@
 #
 # With a progress ($2 = percent, $3 = part: prepare download packages install settings done failed - see
 # update_progress_display.sh): the picture with a progress bar at its foot (compose_bootscreen.py fortschritt), in
-# place of the one shown before. Without Python and PIL, or when drawing it fails: the picture as it is.
+# place of the one shown before. Without Python and PIL, or when drawing it fails: what is shown stays as it is.
 
 # a display with KMS that is turned: the picture turned with it (see fbv_options.sh)
 FBV_OPTS=$(/usr/local/bin/mupibox/fbv_options.sh 2>/dev/null)
@@ -18,7 +18,7 @@ CONFIG="/etc/mupibox/mupiboxconfig.json"
 OUT="/home/dietpi/MuPiBox/sysmedia/images/bootscreen"
 FALLBACK="/home/dietpi/MuPiBox/sysmedia/images/installation.jpg"
 TOOLS="/home/dietpi/MuPiBox/sysmedia/bootscreens/tools"
-PROGRESS_PIC="/tmp/mupibox-update-progress.png"
+PROGRESS_PIC="/run/mupibox-update-progress/picture.png"
 
 SCENE=$(/usr/bin/jq -r '.mupibox.maintenanceScreen // "same"' "${CONFIG}" 2>/dev/null)
 if [ -z "${SCENE}" ] || [ "${SCENE}" = "same" ] || [ "${SCENE}" = "null" ]; then
@@ -33,19 +33,22 @@ LANG_DIR=$(/usr/bin/jq -r '.mupibox.bootscreenLanguage // "en"' "${CONFIG}" 2>/d
 [ -f "${PIC}" ] || PIC="${READY}/en/maintenance-karte-${KIND}.png"
 [ -f "${PIC}" ] || PIC="${FALLBACK}"
 
-if [ -n "${PCT}" ] && [ -n "${PART}" ] && [ "${PIC}" != "${FALLBACK}" ]; then
+if [ -n "${PCT}" ] && [ -n "${PART}" ]; then
+	# (no picture to draw the bar on, or drawing it fails: what the display shows stays - the update showed the picture
+	# without a bar at its start; nothing is started for every step)
+	[ "${PIC}" != "${FALLBACK}" ] || exit 0
+	mkdir -p -m 700 "$(dirname "${PROGRESS_PIC}")" 2>/dev/null || exit 0
 	# the scene of the picture by its name (maintenance-<scene>-<kind>.png): its colours and where its text is
 	PIC_SCENE=$(basename "${PIC}" | sed -n "s/^maintenance-\(.*\)-${KIND}\.png$/\1/p")
-	if python3 "${TOOLS}/compose_bootscreen.py" fortschritt "${PIC}" "${PIC_SCENE:-karte}" "${PCT}" "${PART}" "${LANG_DIR:-en}" "${PROGRESS_PIC}.tmp.png" 2>/dev/null; then
-		mv -f "${PROGRESS_PIC}.tmp.png" "${PROGRESS_PIC}"
-		PIC="${PROGRESS_PIC}"
-	else
+	if ! python3 "${TOOLS}/compose_bootscreen.py" fortschritt "${PIC}" "${PIC_SCENE:-karte}" "${PCT}" "${PART}" "${LANG_DIR:-en}" "${PROGRESS_PIC}.tmp.png" 2>/dev/null; then
 		rm -f "${PROGRESS_PIC}.tmp.png"
+		exit 0
 	fi
+	mv -f "${PROGRESS_PIC}.tmp.png" "${PROGRESS_PIC}"
 	# (the picture shown before goes: one fbv at a time; called from the update's unit there is no terminal - fbv shows
 	# nothing without one, so the display's)
 	pkill -x fbv 2>/dev/null
-	/usr/bin/fbv ${FBV_OPTS} -c -y "${PIC}" </dev/tty1 >/dev/tty1 2>/dev/null &
+	/usr/bin/fbv ${FBV_OPTS} -c -y "${PROGRESS_PIC}" </dev/tty1 >/dev/tty1 2>/dev/null &
 	exit 0
 fi
 /usr/bin/fbv ${FBV_OPTS} -c -y "${PIC}" &
