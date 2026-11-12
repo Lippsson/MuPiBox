@@ -123,16 +123,15 @@ export class ExtensionHostService {
     root.style.cssText =
       'position:fixed;inset:0;z-index:100000;display:flex;flex-direction:column;box-sizing:border-box;background:var(--ion-background-color,#121212);color:var(--ion-text-color,#fff);font-family:var(--ion-font-family,inherit)'
     const bar = document.createElement('div')
-    bar.style.cssText = 'flex:none;display:flex;align-items:center;gap:12px;height:64px;padding:0 16px'
+    // (only the arrow in the corner: the page says what it is by itself, and the room goes to the page)
+    bar.style.cssText = 'flex:none;display:flex;align-items:center;height:60px;padding:0 12px'
+    root.setAttribute('aria-label', page.title)
     const back = document.createElement('button')
     back.type = 'button'
     back.setAttribute('aria-label', 'Zurück')
-    back.style.cssText = 'flex:none;width:48px;height:48px;border:0;border-radius:50%;display:grid;place-items:center;background:rgba(127,127,127,.22);color:inherit;cursor:pointer'
-    back.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'
-    const title = document.createElement('div')
-    title.textContent = page.title
-    title.style.cssText = 'font:700 22px/1.1 var(--ion-font-family,inherit);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
-    bar.append(back, title)
+    back.style.cssText = 'flex:none;width:44px;height:44px;border:0;border-radius:50%;display:grid;place-items:center;background:rgba(127,127,127,.22);color:inherit;cursor:pointer'
+    back.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5.5L8.5 12l6.5 6.5"/></svg>'
+    bar.append(back)
     const content = document.createElement('div')
     content.style.cssText = 'flex:1;min-height:0;position:relative;overflow:hidden'
     root.append(bar, content)
