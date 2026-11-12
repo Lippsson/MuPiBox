@@ -43,7 +43,16 @@ export class RemoteRefused extends Error {
 // (a time limit that ran out - asking, or reading the answer - is the service not answering. Where a request of the box
 // itself may be called off - the sync stopped, the display gone - that is checked before.)
 const timedOut = (err: unknown): boolean => err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')
-export const remoteDown = (err: unknown): boolean => err instanceof RemoteAway || timedOut(err) || (err instanceof RemoteRefused && (err.status >= 500 || err.status === 429))
+// (the connection lost while an answer was read: a socket's error - the stream of an https answer with a confirmed
+// certificate gives ECONNRESET "aborted" when its time limit runs out -, or fetch's "terminated" with the socket's error
+// as its cause. Not an error of the card or of a file here: those are no service away.)
+const NET_CODES = new Set(['ECONNRESET', 'ECONNABORTED', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EHOSTUNREACH', 'ENETUNREACH', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_SOCKET', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_CONNECT_TIMEOUT'])
+const lostConnection = (err: unknown): boolean => {
+  const e = err as { code?: unknown; cause?: { code?: unknown } } | null
+  return !!e && (NET_CODES.has(String(e.code)) || NET_CODES.has(String(e.cause?.code)) || (err instanceof TypeError && err.message === 'terminated'))
+}
+export const remoteDown = (err: unknown): boolean =>
+  err instanceof RemoteAway || timedOut(err) || lostConnection(err) || (err instanceof RemoteRefused && (err.status >= 500 || err.status === 429))
 /** The key or the login is not (or no longer) accepted, or it lacks a right */
 export const remoteRefusedKey = (err: unknown): boolean => err instanceof RemoteRefused && (err.status === 401 || err.status === 403)
 
@@ -529,7 +538,13 @@ export class RemoteLive {
     if (size === 'v') {
       if (!client?.liveClips) return void res.status(404).end()
       const stop = new AbortController()
-      res.on('close', () => stop.abort())
+      // (what came first: the display closing - its own abort - or the service's stream failing, which closes the answer too)
+      let displayGone = false
+      let sourceFailed = false
+      res.on('close', () => {
+        if (!sourceFailed && !res.writableFinished) displayGone = true
+        stop.abort()
+      })
       try {
         const range = typeof req.headers.range === 'string' && /^bytes=\d*-\d*$/.test(req.headers.range) ? req.headers.range : undefined
         const r = await client.clip(albumRef, item, { signal: stop.signal, range })
@@ -541,10 +556,14 @@ export class RemoteLive {
           if (v) res.setHeader(h, v)
         }
         res.setHeader('Cache-Control', 'private, no-store')
-        await pipeline(Readable.fromWeb(r.body as import('node:stream/web').ReadableStream), res)
+        const source = Readable.fromWeb(r.body as import('node:stream/web').ReadableStream)
+        source.once('error', () => {
+          if (!displayGone) sourceFailed = true
+        })
+        await pipeline(source, res)
       } catch (err) {
-        // (the display went away - its own abort, not the service)
-        if (!stop.signal.aborted && (remoteDown(err) || remoteRefusedKey(err))) this.failedAt = Date.now()
+        // (the display went away - its own abort, not the service; the service's stream failed - it is away for now)
+        if (!displayGone && (sourceFailed || remoteDown(err) || remoteRefusedKey(err))) this.failedAt = Date.now()
         if (!res.headersSent) res.status(404).end()
         else res.destroy()
       }

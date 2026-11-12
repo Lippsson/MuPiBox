@@ -175,6 +175,10 @@ test('photo Immich: trouble of the server (or a proxy in front of it) counts as 
   assert.equal(immichDown(new Error('x')), false)
   // (a time limit that ran out - also while the answer was read - is the service not answering)
   assert.equal(immichDown(new DOMException('timed out', 'TimeoutError')), true)
+  // (the connection lost while an answer is read - a socket's error, fetch's 'terminated' - is the service away too; an error of the card is not)
+  assert.equal(immichDown(Object.assign(new Error('aborted'), { code: 'ECONNRESET' })), true)
+  assert.equal(immichDown(new TypeError('terminated', { cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }) })), true)
+  assert.equal(immichDown(Object.assign(new Error('no space left'), { code: 'ENOSPC' })), false)
 })
 
 test('photo Immich: a clip length from its duration', async () => {
