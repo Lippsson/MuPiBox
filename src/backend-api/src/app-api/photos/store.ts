@@ -21,10 +21,13 @@ export const IMMICH_LIVE_DIR = path.join(CACHE_DIR, 'photos', 'immich-live')
 /** The same for the albums of Synology Photos */
 export const SYNOLOGY_PHOTO_DIR = path.join(CACHE_DIR, 'photos', 'synology')
 export const SYNOLOGY_LIVE_DIR = path.join(CACHE_DIR, 'photos', 'synology-live')
+/** The same for the albums of Nextcloud */
+export const NEXTCLOUD_PHOTO_DIR = path.join(CACHE_DIR, 'photos', 'nextcloud')
+export const NEXTCLOUD_LIVE_DIR = path.join(CACHE_DIR, 'photos', 'nextcloud-live')
 
-export type PhotoSource = 'upload' | 'nas' | 'immich' | 'synology'
+export type PhotoSource = 'upload' | 'nas' | 'immich' | 'synology' | 'nextcloud'
 /** the sources whose albums come from a photo service (remote.ts): an id there, kept on the box or shown live */
-export const SERVICE_SOURCES: readonly PhotoSource[] = ['immich', 'synology']
+export const SERVICE_SOURCES: readonly PhotoSource[] = ['immich', 'synology', 'nextcloud']
 
 export interface PhotoAsset {
   id: string
@@ -139,7 +142,7 @@ export function update<T>(mutate: (lib: Library) => T): Promise<T> {
   return run
 }
 
-const SOURCE_DIR: Record<PhotoSource, string> = { upload: UPLOAD_DIR, nas: NAS_PHOTO_DIR, immich: IMMICH_PHOTO_DIR, synology: SYNOLOGY_PHOTO_DIR }
+const SOURCE_DIR: Record<PhotoSource, string> = { upload: UPLOAD_DIR, nas: NAS_PHOTO_DIR, immich: IMMICH_PHOTO_DIR, synology: SYNOLOGY_PHOTO_DIR, nextcloud: NEXTCLOUD_PHOTO_DIR }
 export const albumDir = (a: Pick<PhotoAlbum, 'id'> & { source?: PhotoSource }): string => path.join(SOURCE_DIR[a.source ?? 'upload'] ?? UPLOAD_DIR, a.id)
 /** The path of an asset's files without their size suffix (see process.ts) */
 export const assetBase = (a: Pick<PhotoAlbum, 'id'> & { source?: PhotoSource }, assetId: string): string => path.join(albumDir(a), assetId)

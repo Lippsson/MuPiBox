@@ -1720,6 +1720,16 @@
    "sections": []
   },
   {
+   "id": "fotonextcloud",
+   "slug": "photo-nextcloud",
+   "area": "bibliothek",
+   "parent": "fotos",
+   "title": "Nextcloud",
+   "description": "",
+   "icon": "cloud",
+   "sections": []
+  },
+  {
    "id": "theme",
    "slug": "theme",
    "area": "einstellungen",

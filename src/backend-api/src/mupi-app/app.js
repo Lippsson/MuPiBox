@@ -11624,18 +11624,19 @@ function mountHa(root, page) {
    its numbers and the card's space, an album with its pictures, uploading into it. A part of its own, beside the
    radio plays and the music: never in their lists, filters or "Hören". */
 
-const photoLib = { overview: null, nas: null, immich: null, synology: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
-const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'], synology: ['image', 'Synology Photos'] }
+const photoLib = { overview: null, nas: null, immich: null, synology: null, nextcloud: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
+const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'], synology: ['image', 'Synology Photos'], nextcloud: ['cloud', 'Nextcloud'] }
 const photoFile = (albumId, assetId, size) => `${API}/photos/file/${albumId}/${assetId}/${size}`
 
 async function loadPhotoOverview() {
-  const [r, nas, immich, synology] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`), api(`${API}/photos/immich`), api(`${API}/photos/synology`)])
+  const [r, nas, immich, synology, nextcloud] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`), api(`${API}/photos/immich`), api(`${API}/photos/synology`), api(`${API}/photos/nextcloud`)])
   if (!r.ok) throw new Error(`photos ${r.status}`)
   photoLib.overview = r.body
   // (the photo services: the NAS folders and Immich - their lines in the overview)
   photoLib.nas = nas.ok ? nas.body : null
   photoLib.immich = immich.ok ? immich.body : null
   photoLib.synology = synology.ok ? synology.body : null
+  photoLib.nextcloud = nextcloud.ok ? nextcloud.body : null
   photoLib.stale = false
 }
 
@@ -11655,6 +11656,8 @@ function photoServicesCard() {
   if (im?.connected) rows.push(navRow('fotoimmich', 'Immich', immichLine(im), 'grid'))
   const sy = photoLib.synology
   if (sy?.connected) rows.push(navRow('fotosynology', 'Synology Photos', synologyLine(sy), 'image'))
+  const nc = photoLib.nextcloud
+  if (nc?.connected) rows.push(navRow('fotonextcloud', 'Nextcloud', synologyLine(nc), 'cloud'))
   return rows.length ? `<section class="card wide"><h2>Foto-Dienste</h2><div class="navlist">${rows.join('')}</div></section>` : ''
 }
 
@@ -11746,7 +11749,8 @@ function mountPhotoOverview(root, page) {
       `<h2>Foto-Dienst verbinden</h2><p class="help" style="margin:0">Fotos werden nur aus deinem Heimnetz geladen.</p>
        <div class="navlist"><button class="navrow" data-svc="fotonas"><span class="tile">${icon('server', 18)}</span><span class="lbl"><b>NAS-Ordner</b><small>Ordner vom verbundenen NAS als Alben</small></span><span class="chev">${icon('chevron', 18)}</span></button>
        <button class="navrow" data-svc="fotoimmich"><span class="tile">${icon('grid', 18)}</span><span class="lbl"><b>Immich</b><small>Dein eigener Fotodienst, per API-Schlüssel</small></span><span class="chev">${icon('chevron', 18)}</span></button>
-       <button class="navrow" data-svc="fotosynology"><span class="tile">${icon('image', 18)}</span><span class="lbl"><b>Synology Photos</b><small>Alben deines Synology-NAS, mit eigenem Konto</small></span><span class="chev">${icon('chevron', 18)}</span></button></div>`,
+       <button class="navrow" data-svc="fotosynology"><span class="tile">${icon('image', 18)}</span><span class="lbl"><b>Synology Photos</b><small>Alben deines Synology-NAS, mit eigenem Konto</small></span><span class="chev">${icon('chevron', 18)}</span></button>
+       <button class="navrow" data-svc="fotonextcloud"><span class="tile">${icon('cloud', 18)}</span><span class="lbl"><b>Nextcloud</b><small>Alben der Nextcloud-App „Fotos“, per App-Passwort</small></span><span class="chev">${icon('chevron', 18)}</span></button></div>`,
       (sheet, close) => {
         for (const b of sheet.querySelectorAll('[data-svc]')) {
           b.onclick = () => {
@@ -13020,6 +13024,306 @@ function mountPhotoSynology(root, page) {
   )
 }
 
+/* Bibliothek › Fotos › Nextcloud (5.1): a login of its own (address, user name, app password) - the assistant (login,
+   test with the certificate, albums of the Photos app) and, once switched on, the service's page as Immich's (nextcloud.ts) */
+const photoNc = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+
+async function loadPhotoNextcloud() {
+  const r = await api(`${API}/photos/nextcloud`)
+  if (!r.ok) throw new Error(`photos nextcloud ${r.status}`)
+  const d = r.body
+  photoNc.data = d
+  // (not switched on yet: the assistant)
+  photoNc.step = d.connected ? 0 : 1
+  photoNc.url = d.settings.url || ''
+  photoNc.account = d.settings.account || ''
+  photoNc.password = ''
+  photoNc.fingerprint = d.settings.certFingerprint || ''
+  photoNc.test = null
+  photoNc.albums = null
+}
+
+const NC_ERRORS = {
+  unauthorized: ['Anmeldung abgelehnt', 'Nextcloud nimmt Benutzername oder App-Passwort nicht an. Prüfe beides, oder erstelle ein neues App-Passwort.'],
+  noPhotos: ['Fotos-App fehlt', 'In dieser Nextcloud ist die App „Fotos“ nicht eingeschaltet. Schalte sie unter Apps ein.'],
+  certificate: ['Zertifikat passt nicht', 'Die Nextcloud zeigt ein anderes Zertifikat als das bestätigte. Wurde es erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.'],
+  unreachable: ['Nextcloud nicht erreichbar', 'Die Box erreicht die Nextcloud unter dieser Adresse nicht. Prüfe Adresse und Netz.'],
+}
+
+const NC_STEPS = [
+  ['login', 'Anmeldung'],
+  ['test', 'Test'],
+  ['albums', 'Alben'],
+]
+
+// the password kept on the box, for the address and the account typed in (another one gets it only typed in anew)
+const photoNcPasswordKept = () => {
+  const st = photoNc.data?.settings
+  return !!st?.hasPassword && photoNc.url.trim().replace(/\/+$/, '').toLowerCase() === String(st.url).toLowerCase() && photoNc.account.trim() === st.account
+}
+
+function photoNextcloudSteps() {
+  const s = photoNc.step
+  const t = photoNc.test
+  const bar = `<ol class="wz-steps" style="grid-template-columns:repeat(${NC_STEPS.length}, minmax(0, 1fr))">${NC_STEPS.map(([, label], i) => {
+    const n = i + 1
+    const done = n < s
+    return `<li class="${done ? 'done' : ''}${n === s ? ' current' : ''}"><button type="button" data-ncstep="${n}"${n === s ? ' aria-current="step"' : ''}${done ? '' : ' disabled'}><span class="bar"></span><span class="lbl">${done ? icon('check', 14) : `<i>${n}</i>`}${esc(tr(label))}</span></button></li>`
+  }).join('')}</ol>`
+  let body
+  let next = ''
+  if (s === 1) {
+    const kept = photoNcPasswordKept()
+    body = `<h2>Bei Nextcloud anmelden</h2><p class="help">Die Box zeigt die Alben der Nextcloud-App „Fotos“ dieses Kontos und alle Alben, die mit ihm geteilt sind. Am besten legst du in Nextcloud ein eigenes Konto nur für die Box an und teilst ihm die Alben.</p>
+      <div class="field"><label for="nc-url">Nextcloud-Adresse</label><input class="input mono" id="nc-url" placeholder="https://cloud.example.de" value="${esc(photoNc.url)}" ${NO_PW_MANAGER} spellcheck="false">
+      <small>Wie im Browser, ohne /apps/… dahinter.</small></div>
+      <div class="field"><label for="nc-account">Benutzername</label><input class="input" id="nc-account" value="${esc(photoNc.account)}" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="nc-pass">App-Passwort</label><div class="input-wrap"><input class="input has-eye" id="nc-pass" type="password" value="${esc(photoNc.password)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um es zu behalten') : '')}" autocomplete="new-password"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
+      <small>In Nextcloud unter Persönliche Einstellungen › Sicherheit › „Neues App-Passwort erstellen“. Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
+    next = `<button class="btn primary" id="nc-test" ${photoNc.testing ? 'disabled' : ''}>${esc(tr(photoNc.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
+  } else if (s === 2 && t?.ok) {
+    body = `<h2>Verbindung steht</h2><p class="help">Die Box kann die Alben des Kontos lesen.</p>
+      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(t.account ?? '–')}</dd></div><div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Davon mit dem Konto geteilt</dt><dd>${esc(String(t.shared))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.pictures))}</dd></div></dl>
+      ${t.albums ? '' : `<div class="note warn">${icon('info', 18)}<span>Noch keine Alben. Lege in der Nextcloud-App „Fotos“ ein Album an oder teile eines mit diesem Konto und teste erneut.</span></div>`}`
+    next = t.albums ? `<button class="btn primary" id="nc-next">Weiter</button>` : `<button class="btn primary" id="nc-retry">${esc(tr('Erneut testen'))}</button>`
+  } else if (s === 2) {
+    const [head, text] = NC_ERRORS[t?.error] ?? NC_ERRORS.unreachable
+    // (a certificate not confirmed yet: shown to be compared and trusted, as for the NAS)
+    const cert = t?.error === 'certificate' ? t.certificate : null
+    body = cert
+      ? `<h2>Zertifikat bestätigen</h2><p class="help" style="margin:0">Die Nextcloud nutzt ein eigenes (selbst signiertes) Zertifikat. Vergleiche den Fingerabdruck mit dem im Browser über das Schloss-Symbol. Nur wenn er übereinstimmt:</p>
+        <dl class="kv"><div><dt>Ausgestellt für</dt><dd>${esc(cert.subject)}</dd></div><div><dt>Gültig bis</dt><dd>${esc(cert.validTo)}</dd></div></dl>
+        <p class="mono-block">${esc(cert.fingerprint)}</p>
+        ${photoNc.fingerprint ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(text))}</span></div>` : ''}`
+      : `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text))}</span></div>`
+    next = cert
+      ? `<button class="btn primary" id="nc-trust" data-fp="${esc(cert.fingerprint)}">${esc(tr('Vertrauen und testen'))}</button>`
+      : `<button class="btn primary" data-ncstep="1">${esc(tr('Anmeldung ändern'))}</button>`
+  } else {
+    const list = photoNc.albums
+    const rows = !list
+      ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+      : list.error
+        ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+        : list.albums.length
+          ? `<div class="rows">${list.albums
+              .map(
+                (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/nextcloud/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+                <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}${a.shared ? ` · ${esc(tr('Geteilt'))}` : ''}</small></span>
+                <button class="ph-check-box" role="checkbox" aria-checked="${photoNc.chosen.has(a.id)}" data-nc="${esc(a.id)}" aria-label="${esc(a.name)}">${photoNc.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
+              )
+              .join('')}</div>`
+          : `<p class="help" style="margin:0">Das Konto sieht noch keine Alben.</p>`
+    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Nextcloud` : 'Alben in Nextcloud'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="nc-all">Alle wählen</button>' : ''}</div>
+      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoNc.chosen.size} ${photoNc.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    next = `<button class="btn primary" id="nc-done">Fertig</button>`
+  }
+  // (the first step's way back: out of the assistant - to the service's page when switched on, else to the photos)
+  const back = s === 1 ? `<button class="btn" id="nc-cancel">Abbrechen</button>` : `<button class="btn" id="nc-back">${icon('back', 18)}Zurück</button>`
+  return [
+    `<section class="card wide wz">${bar}<div class="wz-count">${esc(tr(`Schritt ${s} von ${NC_STEPS.length}`))}</div>${body}
+      <div class="wz-foot">${back}<span class="wz-next">${next}</span></div></section>`,
+  ]
+}
+
+function photoNextcloudTop() {
+  const d = photoNc.data
+  if (!d) return []
+  if (photoNc.step) return photoNextcloudSteps()
+  const s = d.sync
+  const st = d.settings
+  const status = photoServiceStatus(s, 'Anmeldung abgelehnt')
+  const limit = st.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
+      <div class="ph-nas-state ${status[1]}">${status[0]}</div>
+      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>Nextcloud nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und App-Passwort unten.</span></div>` : ''}
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob die Nextcloud läuft.</span></div>` : ''}
+      ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr oder es ist nicht mehr geteilt.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr oder sie sind nicht mehr geteilt.`))}</span></div>` : ''}
+      ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="nc-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="nc-albums">Alben ändern</button></div></section>`,
+    `<section class="card wide"><h2>Fotos</h2>
+      <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live von der Nextcloud – Videos gibt es dann nicht, und ohne Netz sind diese Alben gerade nicht da.</small></span>
+        <label class="switch"><input type="checkbox" id="nc-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="nc-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos aus Nextcloud erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(st.keepCopy && limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${st.keepCopy && limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      ${st.keepCopy
+        ? `<p class="help">Fotos aus Nextcloud liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="nc-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === st.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
+        : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
+    `<section class="card wide"><h2>Zugang</h2>
+      <dl class="kv"><div><dt>Nextcloud-Adresse</dt><dd translate="no">${esc(st.url)}</dd></div><div><dt>Konto</dt><dd translate="no">${esc(st.account || '–')}</dd></div><div><dt>App-Passwort</dt><dd>${esc(tr(st.hasPassword ? 'gesetzt' : 'fehlt'))}</dd></div>${st.certFingerprint ? `<div><dt>Zertifikat</dt><dd>${esc(tr('bestätigt'))}</dd></div>` : ''}</dl>
+      <p class="help">Das App-Passwort wird aus Sicherheitsgründen nicht mehr angezeigt.</p>
+      <div class="btns"><button class="btn" id="nc-login">Anmeldung ändern</button></div></section>`,
+    `<section class="card wide"><div class="navlist"><button class="navrow" id="nc-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Die Alben aus Nextcloud und ihre Fotos werden von der Box entfernt. In der Nextcloud bleibt alles erhalten.</small></span></button></div></section>`,
+  ]
+}
+
+async function photoNextcloudLoadAlbums() {
+  photoNc.albums = null
+  const r = await api(`${API}/photos/nextcloud/albums`)
+  photoNc.albums = r.ok ? r.body : { error: true }
+}
+
+function mountPhotoNextcloud(root, page) {
+  const d = photoNc.data
+  window.clearTimeout(photoNc.timer)
+  if (!d) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const take = (body) => {
+    photoNc.data = body
+    photoLib.stale = true
+  }
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/nextcloud`, { method: 'POST', body })
+    if (!r.ok) {
+      toast('Nicht gespeichert', 'info')
+      return false
+    }
+    take(r.body)
+    if (done) toast(done)
+    return true
+  }
+  // (what is typed in stays while the assistant is open)
+  const keep = () => {
+    const url = $('#nc-url', root)
+    if (url) photoNc.url = url.value.trim()
+    const account = $('#nc-account', root)
+    if (account) photoNc.account = account.value.trim()
+    const pass = $('#nc-pass', root)
+    if (pass) photoNc.password = pass.value
+  }
+  const goStep = (n) => {
+    keep()
+    photoNc.step = n
+    redraw()
+    window.scrollTo(0, 0)
+  }
+  // the assistant
+  $('#nc-cancel', root)?.addEventListener('click', () => (d.connected ? goStep(0) : go('fotos')))
+  $('#nc-back', root)?.addEventListener('click', () => goStep(photoNc.step === 3 && d.connected && !photoNc.test ? 0 : photoNc.step - 1))
+  for (const b of root.querySelectorAll('[data-ncstep]')) b.onclick = () => goStep(Number(b.dataset.ncstep))
+  const test = async (fingerprint) => {
+    photoNc.testing = true
+    photoNc.test = null
+    redraw()
+    const body = { url: photoNc.url, account: photoNc.account, ...(photoNc.password ? { password: photoNc.password } : {}), ...(fingerprint ? { fingerprint } : {}) }
+    const r = await api(`${API}/photos/nextcloud/test`, { method: 'POST', body, timeoutMs: 45000 })
+    photoNc.testing = false
+    photoNc.test = r.ok ? r.body : { ok: false, error: 'unreachable' }
+    if (r.ok && r.body.ok) photoNc.fingerprint = r.body.fingerprint || ''
+    photoNc.step = 2
+    redraw()
+  }
+  $('#nc-test', root)?.addEventListener('click', () => {
+    keep()
+    if (!/^(https?:\/\/)?[^\s/:]+(:\d+)?(\/\S*)?$/i.test(photoNc.url)) return toast('Bitte die Adresse der Nextcloud eintragen, z. B. https://cloud.example.de', 'info')
+    if (!photoNc.account) return toast('Bitte den Benutzernamen eintragen', 'info')
+    if (!photoNc.password && !photoNcPasswordKept()) return toast('Bitte das App-Passwort eintragen', 'info')
+    // (another address: the certificate confirmed for the one before does not count)
+    if (photoNc.url.replace(/\/+$/, '').toLowerCase() !== String(d.settings.url).toLowerCase()) photoNc.fingerprint = ''
+    void test(photoNc.fingerprint)
+  })
+  $('#nc-trust', root)?.addEventListener('click', (e) => {
+    photoNc.fingerprint = e.currentTarget.dataset.fp
+    void test(photoNc.fingerprint)
+  })
+  $('#nc-retry', root)?.addEventListener('click', () => void test(photoNc.fingerprint))
+  $('#nc-next', root)?.addEventListener('click', async () => {
+    // (the login is saved now - the album list comes from the box with it)
+    const body = { url: photoNc.url, account: photoNc.account, userId: photoNc.test?.userId, certFingerprint: photoNc.fingerprint }
+    if (photoNc.password) body.password = photoNc.password
+    if (!(await save(body))) return
+    photoNc.password = ''
+    photoNc.chosen = new Set(photoNc.data.settings.albumIds)
+    photoNc.step = 3
+    redraw()
+    await photoNextcloudLoadAlbums()
+    redraw()
+  })
+  for (const b of root.querySelectorAll('[data-nc]')) {
+    b.onclick = () => {
+      const id = b.dataset.nc
+      if (photoNc.chosen.has(id)) photoNc.chosen.delete(id)
+      else photoNc.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#nc-all', root)?.addEventListener('click', () => {
+    for (const a of photoNc.albums?.albums ?? []) photoNc.chosen.add(a.id)
+    redraw()
+  })
+  $('#nc-done', root)?.addEventListener('click', async () => {
+    if (!(await save({ enabled: true, albumIds: [...photoNc.chosen] }, photoNc.chosen.size ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
+    photoNc.step = 0
+    photoNc.test = null
+    redraw()
+  })
+  if (photoNc.step) return
+  // the service's page
+  if (d.sync.running) photoNc.timer = window.setTimeout(async () => {
+    if (currentPage()?.id !== page.id || photoNc.step) return
+    const r = await api(`${API}/photos/nextcloud`)
+    if (r.ok) take(r.body)
+    redraw()
+  }, 3000)
+  $('#nc-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/nextcloud/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    take(r.body)
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  $('#nc-albums', root)?.addEventListener('click', async () => {
+    photoNc.chosen = new Set(d.settings.albumIds)
+    photoNc.test = null
+    photoNc.step = 3
+    redraw()
+    await photoNextcloudLoadAlbums()
+    redraw()
+  })
+  $('#nc-login', root)?.addEventListener('click', () => {
+    Object.assign(photoNc, { url: d.settings.url, account: d.settings.account, password: '', fingerprint: d.settings.certFingerprint || '', test: null })
+    goStep(1)
+  })
+  $('#nc-keep', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (!(await save({ keepCopy: on }, on ? 'Fotos werden auf der Box gespeichert' : 'Fotos kommen live von der Nextcloud'))) e.target.checked = !on
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = async () => {
+            close()
+            if (await save({ [key]: Number(b.dataset.v) }, 'Gespeichert')) redraw()
+          }
+        }
+      },
+    )
+  $('#nc-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#nc-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#nc-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Verbindung trennen', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} aus Nextcloud und ihre Fotos werden von der Box entfernt. In der Nextcloud bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/nextcloud/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoLib.stale = true
+      toast('Nextcloud getrennt')
+      go('fotos')
+    }),
+  )
+}
+
 async function loadPhotoAlbum() {
   let id = photoLib.albumId
   if (!id) {
@@ -13038,7 +13342,7 @@ async function loadPhotoAlbum() {
     const nas = await api(`${API}/photos/nas`)
     if (nas.ok) photoLib.nas = nas.body
   }
-  if (a.body.source === 'immich' || a.body.source === 'synology') {
+  if (a.body.source === 'immich' || a.body.source === 'synology' || a.body.source === 'nextcloud') {
     const sv = await api(`${API}/photos/${a.body.source}`)
     if (sv.ok) photoLib[a.body.source] = sv.body
   }
@@ -13061,7 +13365,7 @@ function photoAlbumTop() {
   return [
     `<section class="card wide">${photoAlbumRow(a, { sub: a.display ? 'Am Display sichtbar' : 'Am Display ausgeblendet' })}
       ${upload ? `<div class="btns"><button class="btn primary" id="ph-add">${icon('plus', 18)}Fotos hinzufügen</button>${a.assets.length ? `<button class="btn" id="ph-select">${icon('check', 18)}${sel ? 'Fertig' : 'Auswählen'}</button>` : ''}</div>` : ''}</section>`,
-    a.source === 'nas' ? photoNasAlbumCard(a) : a.source === 'immich' || a.source === 'synology' ? photoServiceAlbumCard(a) : '',
+    a.source === 'nas' ? photoNasAlbumCard(a) : PHOTO_SERVICE[a.source] ? photoServiceAlbumCard(a) : '',
     upload
       ? `<section class="card wide"><h2>Album</h2><div class="navlist">
           <button class="navrow" id="ph-rename"><span class="tile">${icon('text', 18)}</span><span class="lbl"><b>Umbenennen</b></span><span class="chev">${icon('chevron', 18)}</span></button>
@@ -13088,19 +13392,23 @@ function photoNasAlbumCard(a) {
 
 // An album of a photo service (Immich, Synology Photos): only looked at here - kept on the box or shown live, the last
 // sync, "Jetzt abgleichen"
+// the photo services: their name, page, icon, the note on an album of theirs and how live is said
+const PHOTO_SERVICE = {
+  immich: { name: 'Immich', page: 'fotoimmich', icon: 'grid', live: 'Live von Immich', note: 'Dieses Album wird in Immich verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
+  synology: { name: 'Synology Photos', page: 'fotosynology', icon: 'image', live: 'Live vom NAS', note: 'Dieses Album wird in Synology Photos verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
+  nextcloud: { name: 'Nextcloud', page: 'fotonextcloud', icon: 'cloud', live: 'Live von der Nextcloud', note: 'Dieses Album wird in Nextcloud verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
+}
+
 function photoServiceAlbumCard(a) {
-  const syno = a.source === 'synology'
+  const svc = PHOTO_SERVICE[a.source]
   const sv = photoLib[a.source]
   const running = !!sv?.sync.running
   const last = sv?.sync.lastSync ? relTime(sv.sync.lastSync) : '–'
-  const note = syno
-    ? `<div class="note">${icon('info', 18)}<span>Dieses Album wird in Synology Photos verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.</span></div>`
-    : `<div class="note">${icon('info', 18)}<span>Dieses Album wird in Immich verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.</span></div>`
   return `<section class="card wide"><h2>Quelle</h2>
-    ${note}
-    <dl class="kv"><div><dt>Dienst</dt><dd>${syno ? 'Synology Photos' : 'Immich'}</dd></div><div><dt>Fotos</dt><dd>${esc(tr(a.live ? (syno ? 'Live vom NAS' : 'Live von Immich') : 'Auf der Box gespeichert'))}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
+    <div class="note">${icon('info', 18)}<span>${esc(tr(svc.note))}</span></div>
+    <dl class="kv"><div><dt>Dienst</dt><dd>${esc(svc.name)}</dd></div><div><dt>Fotos</dt><dd>${esc(tr(a.live ? svc.live : 'Auf der Box gespeichert'))}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
     <div class="btns"><button class="btn" id="ph-service-sync" data-source="${esc(a.source)}" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>
-    <div class="navlist">${syno ? navRow('fotosynology', 'Synology Photos', 'Alben, Abgleich, Zugang', 'image') : navRow('fotoimmich', 'Immich', 'Alben, Abgleich, Zugang', 'grid')}</div></section>`
+    <div class="navlist">${navRow(svc.page, svc.name, 'Alben, Abgleich, Zugang', svc.icon)}</div></section>`
 }
 
 let photoPrepTimer = 0
@@ -13377,7 +13685,7 @@ function photoSettingsTop() {
   if (!d.settings.enabled) {
     return [
       `<section class="card photo-off"><div class="photo-hero"><span class="photo-hero-ic">${icon('image', 30)}</span><h2>Fotos am Display</h2>
-        <p class="help">Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.</p></div>
+        <p class="help">Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich, Synology Photos oder Nextcloud.</p></div>
         <div class="row"><span class="lbl"><b>Fotoanzeige</b><small>Standardmäßig aus.</small></span><label class="switch"><input type="checkbox" id="ph-on" role="switch" aria-label="Fotoanzeige"><span></span></label></div></section>`,
       `<div class="note wide">${icon('info', 18)}<span>Nach dem Einschalten erscheinen „Fotos“ in der Bibliothek und die Bildzeit unter Spielzeit. Am Display kommt der Reiter „Fotos“ dazu, sobald ein Album freigegeben ist.</span></div>`,
       `<div class="note wide">${icon('lock', 18)}<span>Fotos bleiben auf der Box in deinem Heimnetz. Es gibt keine Links zum Teilen.</span></div>`,
@@ -15461,6 +15769,7 @@ const CONTROLLERS = {
   fotonas: { load: loadPhotoNas, top: photoNasTop, sections: () => [], mount: mountPhotoNas },
   fotoimmich: { load: loadPhotoImmich, top: photoImmichTop, sections: () => [], mount: mountPhotoImmich },
   fotosynology: { load: loadPhotoSynology, top: photoSynologyTop, sections: () => [], mount: mountPhotoSynology },
+  fotonextcloud: { load: loadPhotoNextcloud, top: photoNextcloudTop, sections: () => [], mount: mountPhotoNextcloud },
   'g-fotos': { load: loadPhotoSettings, top: photoSettingsTop, sections: photoSettingsSections, mount: mountPhotoSettings, change: changePhotoSetting },
   mqtt: {
     load: loadMqtt,

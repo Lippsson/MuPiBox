@@ -12,8 +12,9 @@ Die Fotoanzeige ist anfangs aus. Du schaltest sie unter **Einstellungen › Foto
 | **NAS-Ordner** | Ordner vom NAS, mit dem die Box verbunden ist, werden Alben | [NAS-Ordner](nas-ordner.md) |
 | **Immich** | Alben eines Immich-Servers im Heimnetz | [Immich](immich.md) |
 | **Synology Photos** | Alben aus Synology Photos auf einem Synology-NAS | [Synology Photos](synology-photos.md) |
+| **Nextcloud** | Alben der Nextcloud-App „Fotos“ | [Nextcloud](nextcloud.md) |
 
-Alben aus Immich und Synology Photos kann die Box speichern oder beim Anzeigen live holen ([Foto-Dienste: speichern oder live](speichern-oder-live.md)).
+Alben aus Immich, Synology Photos und Nextcloud kann die Box speichern oder beim Anzeigen live holen ([Foto-Dienste: speichern oder live](speichern-oder-live.md)).
 
 ## So geht es los
 

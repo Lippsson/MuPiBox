@@ -6,11 +6,12 @@
 // few), unless asked anew (the test).
 
 import { createHash } from 'node:crypto'
-import https from 'node:https'
-import net from 'node:net'
-import { Readable } from 'node:stream'
-import tls from 'node:tls'
+import { CertificateError, type CertificateInfo, serviceFetch } from './pinned-fetch'
 import { RemoteAway, RemoteRefused } from './remote'
+
+// (the certificate as for every service - pinned-fetch.ts)
+export { CertificateError as DsmCertificateError }
+export type DsmCertificateInfo = CertificateInfo
 
 export interface DsmTarget {
   /** https://host:port or http://host:port */
@@ -19,13 +20,6 @@ export interface DsmTarget {
   password: string
   /** the confirmed certificate's SHA-256 fingerprint ("AB:CD:…"); none: a certificate the system trusts, or http */
   fingerprint?: string
-}
-
-export interface DsmCertificateInfo {
-  fingerprint: string
-  subject: string
-  issuer: string
-  validTo: string
 }
 
 /**
@@ -39,107 +33,10 @@ export class DsmLoginRefused extends RemoteRefused {
   }
 }
 
-/** The certificate is not trusted: self-signed and not confirmed yet, or not the one confirmed (renewed on the NAS) */
-export class DsmCertificateError extends RemoteAway {
-  constructor(readonly certificate: DsmCertificateInfo | undefined) {
-    super('Synology: certificate not trusted')
-  }
-}
-
-const info = (cert: tls.PeerCertificate | undefined): DsmCertificateInfo | undefined =>
-  cert?.fingerprint256
-    ? { fingerprint: cert.fingerprint256, subject: String(cert.subject?.CN ?? cert.subject?.O ?? ''), issuer: String(cert.issuer?.CN ?? cert.issuer?.O ?? ''), validTo: String(cert.valid_to ?? '') }
-    : undefined
-
-/** What DSM presents on https without trusting it - and whether the system's authorities vouch for it (no confirming then) */
-export function peekCertificate(url: string, timeoutMs = 8000): Promise<{ certificate?: DsmCertificateInfo; trusted: boolean } | undefined> {
-  const u = new URL(url)
-  if (u.protocol !== 'https:') return Promise.resolve(undefined)
-  return new Promise((resolve) => {
-    const host = u.hostname.replace(/^\[|\]$/g, '')
-    const socket = tls.connect({ host, port: Number(u.port || 443), servername: net.isIP(host) ? undefined : host, rejectUnauthorized: false, timeout: timeoutMs })
-    const done = (v: { certificate?: DsmCertificateInfo; trusted: boolean } | undefined) => {
-      socket.destroy()
-      resolve(v)
-    }
-    socket.once('secureConnect', () => done({ certificate: info(socket.getPeerCertificate()), trusted: socket.authorized }))
-    socket.once('timeout', () => done(undefined))
-    socket.once('error', () => done(undefined))
-  })
-}
-
-// a request over a connection whose certificate is the confirmed one (fetch() refuses a self-signed one)
-function pinned(url: URL, fingerprint: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal }): Promise<Response> {
-  const host = url.hostname.replace(/^\[|\]$/g, '')
-  return new Promise<tls.TLSSocket>((resolve, reject) => {
-    const s = tls.connect({ host, port: Number(url.port || 443), servername: net.isIP(host) ? undefined : host, rejectUnauthorized: false })
-    const onAbort = () => {
-      s.destroy()
-      reject(init.signal.reason ?? new Error('aborted'))
-    }
-    if (init.signal.aborted) return onAbort()
-    init.signal.addEventListener('abort', onAbort, { once: true })
-    s.once('secureConnect', () => {
-      init.signal.removeEventListener('abort', onAbort)
-      const cert = s.getPeerCertificate()
-      if (!cert?.fingerprint256 || cert.fingerprint256.toUpperCase() !== fingerprint.toUpperCase()) {
-        s.destroy()
-        reject(new DsmCertificateError(info(cert)))
-        return
-      }
-      resolve(s)
-    })
-    s.once('error', (error) => {
-      init.signal.removeEventListener('abort', onAbort)
-      reject(error)
-    })
-  }).then(
-    (socket) =>
-      new Promise<Response>((resolve, reject) => {
-        const req = https.request(
-          { method: init.method, hostname: host, port: Number(url.port || 443), path: `${url.pathname}${url.search}`, headers: init.headers, createConnection: () => socket, signal: init.signal },
-          (res) => {
-            const headers = new Headers()
-            for (const [name, value] of Object.entries(res.headers)) {
-              if (Array.isArray(value)) for (const v of value) headers.append(name, v)
-              else if (value !== undefined) headers.set(name, String(value))
-            }
-            const status = res.statusCode ?? 502
-            // (no body with 204/205/304; a status outside 200-599 is refused by Response - a failed request instead)
-            const noBody = status === 204 || status === 205 || status === 304
-            try {
-              if (status < 200 || status > 599) throw new Error(`unexpected status ${status}`)
-              if (noBody) res.resume()
-              resolve(new Response(noBody ? null : (Readable.toWeb(res) as unknown as ReadableStream), { status, statusText: res.statusMessage, headers }))
-            } catch (err) {
-              res.destroy()
-              reject(err)
-            }
-          },
-        )
-        req.once('error', (error) => {
-          socket.destroy()
-          reject(error)
-        })
-        req.end(init.body)
-      }),
-  )
-}
-
 // (stop: the caller's own abort - passed on as it is; the time limit running out in signal is DSM not answering)
 async function post(target: DsmTarget, form: Record<string, string>, signal: AbortSignal, stop?: AbortSignal): Promise<Response> {
-  const url = new URL(`${target.url}/webapi/entry.cgi`)
   const init = { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(form).toString(), signal }
-  try {
-    return url.protocol === 'https:' && target.fingerprint ? await pinned(url, target.fingerprint, init) : await fetch(url, { ...init, redirect: 'error' })
-  } catch (err) {
-    if (stop?.aborted) throw err
-    if (err instanceof DsmCertificateError) throw err
-    // (https without a confirmed fingerprint, and the system does not trust the certificate: to be confirmed)
-    const code = String((err as { cause?: { code?: unknown } })?.cause?.code ?? '')
-    if (/CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ERR_TLS/i.test(code)) throw new DsmCertificateError((await peekCertificate(target.url))?.certificate)
-    throw new RemoteAway(`Synology: ${(err as Error).message}`)
-  }
+  return serviceFetch(new URL(`${target.url}/webapi/entry.cgi`), target.fingerprint, init, 'Synology', stop)
 }
 
 const sessions = new Map<string, string>()

@@ -239,6 +239,13 @@
         }
       },
       {
+        "id": "nextcloud",
+        "title": {
+          "de": "Nextcloud",
+          "en": "Nextcloud"
+        }
+      },
+      {
         "id": "speichern-oder-live",
         "title": {
           "de": "Foto-Dienste: speichern oder live",

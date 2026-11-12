@@ -1,13 +1,13 @@
 # Photo services: keep or live
 
-For albums from [Immich](immich.md) and [Synology Photos](synology-photos.md), **Keep photos on the box** on the service's page decides how the box handles the photos.
+For albums from [Immich](immich.md), [Synology Photos](synology-photos.md) and [Nextcloud](nextcloud.md), **Keep photos on the box** on the service's page decides how the box handles the photos.
 
 | | On (default) | Off (live) |
 | --- | --- | --- |
 | Where the photos are | in display size on the memory card | at the service; the box fetches each photo when it is shown |
 | Without a network | everything is there | the album shows **Not there right now** |
 | Room on the card | up to the limit under **Cache** | only the photos shown last, at most 200 MB |
-| Videos | yes | Immich: yes, straight from the server; Synology Photos: no |
+| Videos | yes | Immich: yes, straight from the server; Synology Photos and Nextcloud: no |
 
 Live is worth it with fast Wi-Fi and large albums that should not fill the card.
 

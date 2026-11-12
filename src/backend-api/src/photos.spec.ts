@@ -216,3 +216,30 @@ test('photo Synology: the address of DSM, the login bound to it, the certificate
   assert.equal(applySynologySettings(cfg, { albumIds: ['x'] }), 'albumIds')
   assert.equal(applySynologySettings(cfg, { certFingerprint: 'nope' }), 'certFingerprint')
 })
+
+test('photo Nextcloud: the address, the WebDAV answer, the login bound to the address', async () => {
+  const { applyNextcloudSettings, cleanNextcloudUrl, nextcloudSettings, parseMultistatus } = await import('./app-api/photos/nextcloud')
+  assert.equal(cleanNextcloudUrl('cloud.example.lan'), 'https://cloud.example.lan')
+  assert.equal(cleanNextcloudUrl('http://10.0.0.5:8080/nextcloud/index.php/apps/photos/'), 'http://10.0.0.5:8080/nextcloud')
+  assert.equal(cleanNextcloudUrl('https://cloud.example.lan/apps/photos/albums'), 'https://cloud.example.lan')
+  assert.equal(cleanNextcloudUrl('ftp://x'), null)
+  assert.equal(cleanNextcloudUrl('https://u:p@x'), null)
+  const xml = `<?xml version="1.0"?><d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
+    <d:response><d:href>/remote.php/dav/photos/box/albums/Urlaub%20%26%20Meer/</d:href><d:propstat><d:prop><nc:nbItems>5</nc:nbItems><nc:last-photo>127</nc:last-photo></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+      <d:propstat><d:prop><nc:location/></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat></d:response>
+    <d:response><d:href>/remote.php/dav/photos/box/albums/Urlaub%20%26%20Meer/128-a.jpg</d:href><d:propstat><d:prop><oc:fileid>128</oc:fileid><d:getetag>&quot;158d&quot;</d:getetag><nc:metadata-photos-size><width>1200</width><height>1800</height></nc:metadata-photos-size></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+  </d:multistatus>`
+  const r = parseMultistatus(xml)
+  assert.equal(r.length, 2)
+  assert.equal(decodeURIComponent(r[0].href), '/remote.php/dav/photos/box/albums/Urlaub & Meer/')
+  assert.deepEqual(r[0].props, { nbItems: '5', 'last-photo': '127' })
+  assert.equal(r[1].props.fileid, '128')
+  assert.equal(r[1].props.getetag, '"158d"')
+  assert.match(r[1].props['metadata-photos-size'], /<width>1200<\/width>/)
+  const cfg: Record<string, unknown> = {}
+  assert.equal(applyNextcloudSettings(cfg, { url: 'cloud.example.lan', account: 'box', userId: 'box', password: 'app-pass' }, (x) => `enc:${x}`), null)
+  assert.equal(nextcloudSettings(cfg).password, 'enc:app-pass')
+  assert.equal(applyNextcloudSettings(cfg, { url: 'other.example.lan' }), 'password')
+  assert.equal(applyNextcloudSettings(cfg, { userId: '../x' }), 'userId')
+  assert.equal(applyNextcloudSettings(cfg, { albumIds: ['nope'] }), 'albumIds')
+})

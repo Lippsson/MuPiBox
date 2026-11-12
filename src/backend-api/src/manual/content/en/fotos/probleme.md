@@ -11,6 +11,7 @@
 | Immich: **Permissions missing** | the API key lacks permissions | create a new key with `album.read`, `asset.read`, `asset.view` |
 | Synology: **Synology Photos not allowed** | the account may not use the app | allow it in DSM under **User & Group › Edit › Applications** |
 | Synology: **Box blocked by DSM** | too many failed attempts | unblock it in DSM under **Security › Protection › Auto Block** |
+| Nextcloud: **Photos app missing** | the Photos app is off in the Nextcloud | enable it in Nextcloud under **Apps** |
 | Note "the cache is full" | the limit for kept photos is reached | raise the limit or choose fewer albums/folders |
 | **The pictures are taking a break** | the picture time for today is used up | **+10 min** or **Free today** under **Playtime › Picture time** ([Picture time](bildzeit.md)) |
 

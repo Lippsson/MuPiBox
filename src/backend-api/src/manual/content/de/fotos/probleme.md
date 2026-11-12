@@ -11,6 +11,7 @@
 | Immich: **Rechte fehlen** | dem API-Schlüssel fehlen Rechte | neuen Schlüssel mit `album.read`, `asset.read`, `asset.view` anlegen |
 | Synology: **Synology Photos nicht erlaubt** | das Konto darf die App nicht nutzen | in DSM unter **Benutzer und Gruppe › Bearbeiten › Anwendungen** erlauben |
 | Synology: **Box von DSM gesperrt** | zu viele Fehlversuche | in DSM unter **Sicherheit › Schutz › Automatische Blockierung** freigeben |
+| Nextcloud: **Fotos-App fehlt** | die App „Fotos“ ist in der Nextcloud aus | in Nextcloud unter **Apps** einschalten |
 | Hinweis „Zwischenspeicher ist voll“ | die Grenze für gespeicherte Fotos ist erreicht | Grenze erhöhen oder weniger Alben/Ordner wählen |
 | **Die Bilder machen Pause** | die Bildzeit für heute ist um | unter **Spielzeit › Bildzeit** **+10 min** oder **Heute frei** ([Bildzeit](bildzeit.md)) |
 

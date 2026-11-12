@@ -71,6 +71,9 @@ export interface RemoteItem {
   taken: string | null
   /** a clip's length in seconds (0: not known) */
   duration: number
+  /** false: a picture the service cannot show in a display size (no preview of it) - kept on the box from its original,
+   *  left out live */
+  liveOk?: boolean
 }
 
 export interface RemoteClient {
@@ -96,7 +99,7 @@ export interface RemoteSettings {
 }
 
 export interface RemoteSpec {
-  source: Extract<PhotoSource, 'immich' | 'synology'>
+  source: Extract<PhotoSource, 'immich' | 'synology' | 'nextcloud'>
   /** how the logs name it */
   label: string
   stateFile: string
@@ -299,7 +302,7 @@ export class RemotePhotoSync {
         await update((lib) => {
           for (const { album, items } of plan) {
             let a = lib.albums.find((x) => x.id === album.id)
-            const shown = client.liveClips ? items : items.filter((x) => x.kind === 'photo')
+            const shown = items.filter((x) => x.liveOk !== false && (client.liveClips || x.kind === 'photo'))
             if (!a) {
               if (!shown.length) continue
               a = { ...album, assets: [], position: lib.albums.length }

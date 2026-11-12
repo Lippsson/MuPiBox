@@ -12,8 +12,9 @@ The photo display is off at first. You switch it on under **Settings › Photos*
 | **NAS folders** | folders of the NAS the box is connected to become albums | [NAS folders](nas-ordner.md) |
 | **Immich** | albums of an Immich server in the home network | [Immich](immich.md) |
 | **Synology Photos** | albums from Synology Photos on a Synology NAS | [Synology Photos](synology-photos.md) |
+| **Nextcloud** | albums of the Nextcloud Photos app | [Nextcloud](nextcloud.md) |
 
-The box can keep albums from Immich and Synology Photos or fetch them live when they are shown ([Photo services: keep or live](speichern-oder-live.md)).
+The box can keep albums from Immich, Synology Photos and Nextcloud or fetch them live when they are shown ([Photo services: keep or live](speichern-oder-live.md)).
 
 ## Getting started
 

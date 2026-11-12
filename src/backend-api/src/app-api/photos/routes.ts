@@ -10,6 +10,7 @@ import { requireCsrf, requireSession } from '../middleware'
 import { registerPhotoAlbumRoutes } from './albums'
 import { type PhotoImmichDeps, registerPhotoImmichRoutes } from './immich'
 import { type PhotoNasAccess, registerPhotoNasRoutes } from './nas'
+import { registerPhotoNextcloudRoutes } from './nextcloud'
 import { registerPhotoSynologyRoutes } from './synology'
 import { videoQueue } from './video'
 import { applyPhotoSettings, applyPhotoTimeAction, photoSettings } from './settings'
@@ -86,6 +87,8 @@ export function registerPhotoRoutes(router: Router, deps: PhotoDeps): void {
   registerPhotoImmichRoutes(router, deps)
   // (Bibliothek › Fotos › Synology Photos: the NAS's account at DSM - see synology.ts)
   registerPhotoSynologyRoutes(router, deps)
+  // (Bibliothek › Fotos › Nextcloud: the albums of its Photos app - see nextcloud.ts)
+  registerPhotoNextcloudRoutes(router, deps)
 
   /** GET /api/app/photos/settings - the settings (with their defaults) and the programs' state */
   router.get('/photos/settings', requireSession, (_req, res) => {
