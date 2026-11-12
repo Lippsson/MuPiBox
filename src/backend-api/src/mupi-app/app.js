@@ -1477,7 +1477,8 @@ async function loadNotices(root) {
   const usedUp = (pt.body?.tiles?.list ?? []).filter((t) => t.blocked)
   if (usedUp.length) {
     const names = usedUp.map((t) => t.name || t.key.replace(/^[a-z]+:/, '')).join(', ')
-    notes.push(['time', usedUp.length === 1 ? tr(`${names} ist für heute aufgebraucht`) : tr(`Für heute aufgebraucht: ${names}`), tr('Antippen für +10 min oder „Heute frei“.'), 'spielzeit'])
+    // (the names as they are, the sentence below them in the app's language)
+    notes.push(['time', names, tr('Für heute aufgebraucht. Antippen für +10 min oder „Heute frei“.'), 'spielzeit'])
   }
   // a new display model waiting for its answer (Display & Bedienung): from the start page too, first of all - without
   // an answer the box goes back to the display before
@@ -9354,9 +9355,10 @@ async function loadTelegram() {
 // The bot's commands a parent uses most (the whole list: /command in Telegram, see telegram_i18n.py)
 const TG_COMMANDS = [
   ['/help', 'die wichtigsten Befehle als Knöpfe'],
-  ['/status', 'Spielzeit, Ruhezeiten und Bildzeit jetzt'],
+  ['/status', 'Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt'],
   ['/extend 30', 'Bonus-Minuten für heute'],
   ['/photoextend 10', 'Bildzeit: Minuten für heute dazu'],
+  ['/tiles', 'Kacheln mit Tageslimit: Stand, +10 min, heute frei'],
   ['/release 60', 'alle Sperren für eine Weile aufheben'],
   ['/quietnow 60', 'Wiedergabe für eine Weile sperren'],
   ['/pause', 'Wiedergabe anhalten'],
@@ -15493,8 +15495,9 @@ const CONTROLLERS = {
         if (!b) return
         const key = b.dataset.tx ?? b.dataset.tf
         const name = b.dataset.name ?? ''
-        if (b.dataset.tx !== undefined) tileTimeAction(key, 'extend', tr(`+10 Minuten ${name} für heute`))
-        else tileTimeAction(key, 'free', tr(`${name} heute frei`))
+        // (the name as it is, the rest in the app's language)
+        if (b.dataset.tx !== undefined) tileTimeAction(key, 'extend', `${name}: ${tr('+10 min für heute')}`)
+        else tileTimeAction(key, 'free', `${name}: ${tr('heute frei')}`)
       })
       bonusButton(root)
       every(20000, refreshPlaytime)

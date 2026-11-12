@@ -35,6 +35,10 @@ When the [photo display](../fotos/index.md) is on, `/status` also tells today's 
 
 Both hold for today only, as **+10 min** and **Free today** in the app.
 
+## Tiles with a day's limit
+
+When single tiles have a limit per day of their own ([Tiles with a day's limit](../spielzeit/kachel-limit.md)), `/status` tells them with today's minutes. `/tiles` (also the button **Tiles with a limit** under `/help`) shows them with two buttons each: **+10** gives the tile 10 more minutes today, **free** lifts its limit for today.
+
 ## Signing in with a link
 
 With `/login` the bot sends you a **link** that signs you in to the app, even without a password ([Opening the app and signing in](../erste-schritte/app-oeffnen.md)).

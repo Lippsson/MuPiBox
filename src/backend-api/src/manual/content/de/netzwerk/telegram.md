@@ -35,6 +35,10 @@ Ist die [Fotoanzeige](../fotos/index.md) an, nennt `/status` auch die **Bildzeit
 
 Beides gilt nur heute, wie **+10 min** und **Heute frei** in der App.
 
+## Kacheln mit Tageslimit
+
+Haben einzelne Kacheln eine eigene Grenze am Tag ([Kacheln mit Tageslimit](../spielzeit/kachel-limit.md)), nennt `/status` sie mit den Minuten von heute. `/tiles` (auch als Knopf **Kacheln mit Limit** unter `/help`) zeigt sie mit je zwei Knöpfen: **+10** gibt der Kachel heute 10 Minuten mehr, **frei** hebt ihre Grenze für heute auf.
+
 ## Anmelden mit einem Link
 
 Der Bot schickt dir mit `/login` einen **Link**, der dich in der App anmeldet, auch ohne Passwort ([Die App öffnen und anmelden](../erste-schritte/app-oeffnen.md)).

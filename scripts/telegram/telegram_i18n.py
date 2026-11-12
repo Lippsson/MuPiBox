@@ -39,6 +39,9 @@ TEXTS = {
     'st_photos_limit': {'de': 'Bildzeit: {used}/{limit} min, noch {left}', 'en': 'Photo time: {used}/{limit} min, {left} left'},
     'st_photos_blocked': {'de': 'Bildzeit: <b>aufgebraucht</b> ({used}/{limit} min)', 'en': 'Photo time: <b>used up</b> ({used}/{limit} min)'},
     'st_photos_free': {'de': 'Bildzeit: heute frei ({used} min angesehen)', 'en': 'Photo time: free today ({used} min looked at)'},
+    'st_tile_limit': {'de': '🧩 {name}: {used}/{limit} min, noch {left}', 'en': '🧩 {name}: {used}/{limit} min, {left} left'},
+    'st_tile_blocked': {'de': '🧩 {name}: <b>für heute vorbei</b> ({used}/{limit} min)', 'en': '🧩 {name}: <b>over for today</b> ({used}/{limit} min)'},
+    'st_tile_free': {'de': '🧩 {name}: heute frei ({used} min gehört)', 'en': '🧩 {name}: free today ({used} min listened)'},
     'st_photos_unlimited': {'de': 'Bildzeit: heute {used} min (ohne Limit)', 'en': 'Photo time: {used} min today (no limit)'},
     'st_photos_shared': {'de': 'Bildzeit: zählt zur Spielzeit (heute {used} min Fotos)', 'en': 'Photo time: counts as playtime ({used} min of photos today)'},
     'st_quiet_active': {'de': 'Ruhezeit: <b>aktiv</b>{label}', 'en': 'Quiet time: <b>active</b>{label}'},
@@ -56,6 +59,8 @@ TEXTS = {
     'kb_release60': {'de': 'Freigabe 60 min', 'en': 'Release 60 min'},
     'kb_photoextend10': {'de': 'Bildzeit +10 min', 'en': 'Photo time +10 min'},
     'kb_photofree': {'de': 'Bildzeit heute frei', 'en': 'Photo time free today'},
+    'kb_tiles': {'de': '🧩 Kacheln mit Limit', 'en': '🧩 Tiles with a limit'},
+    'kb_tilefree': {'de': '{name} frei', 'en': '{name} free'},
     'kb_quietnow60': {'de': 'Ruhe sofort 60 min', 'en': 'Quiet now 60 min'},
     'kb_volume': {'de': 'Lautstärke', 'en': 'Set volume'},
     'kb_sleep': {'de': 'Schlaftimer', 'en': 'Sleep timer'},
@@ -84,6 +89,11 @@ TEXTS = {
     'extend_short': {'de': '+{mins} min hinzugefügt', 'en': '+{mins} min added'},
     'photoextend_done': {'de': '✅ Bildzeit: heute +{mins} min.', 'en': '✅ Photo time: +{mins} min today.'},
     'photofree_done': {'de': '✅ Bildzeit: heute frei.', 'en': '✅ Photo time: free today.'},
+    'tileextend_done': {'de': '✅ {name}: heute +{mins} min.', 'en': '✅ {name}: +{mins} min today.'},
+    'tilefree_done': {'de': '✅ {name}: heute frei.', 'en': '✅ {name}: free today.'},
+    'tiles_head': {'de': '<b>Kacheln mit Limit</b> (heute):', 'en': '<b>Tiles with a limit</b> (today):'},
+    'tiles_none': {'de': 'ℹ️ Keine Kachel hat ein eigenes Tageslimit. Einstellen in der App: Bibliothek › Kachel › „Höchstens am Tag“.', 'en': 'ℹ️ No tile has a day\'s limit of its own. Set one in the app: Library › tile › "At most per day".'},
+    'tiles_gone': {'de': 'Diese Kachel hat kein Limit mehr – /tiles zeigt die aktuellen.', 'en': 'This tile has no limit any more – /tiles shows the current ones.'},
     'photos_no_limit': {'de': 'ℹ️ Die Bildzeit hat gerade kein eigenes Limit (Fotoanzeige aus, Bildzeit ohne Limit oder sie zählt zur Spielzeit).', 'en': 'ℹ️ The photo time has no limit of its own right now (photo display off, no limit, or it counts as playtime).'},
     'release_done': {'de': '✅ Freigabe für {mins} min – alle Sperren aus.', 'en': '✅ Released for {mins} min – all blocks off.'},
     'release_short': {'de': 'Freigabe für {mins} min aktiv', 'en': 'Released for {mins} min'},
@@ -181,10 +191,11 @@ TEXTS['commands'] = {
     'de': (
         '<b><u>Befehle:</u></b>\n\n'
         '<code><b>/help</b></code>\n<i>zeigt die Buttons</i>\n\n'
-        '<code><b>/status</b></code>\n<i>Spielzeit, Ruhezeiten und Bildzeit jetzt</i>\n\n'
+        '<code><b>/status</b></code>\n<i>Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt</i>\n\n'
         '<code><b>/extend</b> <i>[Minuten, Standard 30]</i></code>\n<i>Bonus-Minuten für heute</i>\n\n'
         '<code><b>/photoextend</b> <i>[Minuten, Standard 10]</i></code>\n<i>Bildzeit: Minuten für heute dazu</i>\n\n'
         '<code><b>/photofree</b></code>\n<i>Bildzeit: heute ohne Limit</i>\n\n'
+        '<code><b>/tiles</b></code>\n<i>Kacheln mit Tageslimit: Stand, +10 min, heute frei</i>\n\n'
         '<code><b>/release</b> <i>[Minuten, Standard 60]</i></code>\n<i>alle Sperren für N Minuten aufheben</i>\n\n'
         '<code><b>/quietnow</b> <i>[Minuten, Standard 60]</i></code>\n<i>Wiedergabe für N Minuten sperren</i>\n\n'
         '<code><b>/limit set</b> <i>&lt;Tag&gt; &lt;Minuten&gt;</i></code>\n<i>Spielzeit-Limit für einen Wochentag (mon..sun, 0..1440)</i>\n\n'
@@ -205,10 +216,11 @@ TEXTS['commands'] = {
     'en': (
         '<b><u>Possible commands:</u></b>\n\n'
         '<code><b>/help</b></code>\n<i>shows the buttons</i>\n\n'
-        '<code><b>/status</b></code>\n<i>playtime, quiet hours and photo time right now</i>\n\n'
+        '<code><b>/status</b></code>\n<i>playtime, quiet hours, photo time and tiles right now</i>\n\n'
         '<code><b>/extend</b> <i>[minutes, default 30]</i></code>\n<i>bonus minutes for today</i>\n\n'
         '<code><b>/photoextend</b> <i>[minutes, default 10]</i></code>\n<i>photo time: minutes added for today</i>\n\n'
         '<code><b>/photofree</b></code>\n<i>photo time: no limit today</i>\n\n'
+        '<code><b>/tiles</b></code>\n<i>tiles with a day\'s limit: state, +10 min, free today</i>\n\n'
         '<code><b>/release</b> <i>[minutes, default 60]</i></code>\n<i>lift all blocks for N minutes</i>\n\n'
         '<code><b>/quietnow</b> <i>[minutes, default 60]</i></code>\n<i>block playback for N minutes</i>\n\n'
         '<code><b>/limit set</b> <i>&lt;day&gt; &lt;minutes&gt;</i></code>\n<i>playtime limit for one weekday (mon..sun, 0..1440)</i>\n\n'

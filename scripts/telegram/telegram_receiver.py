@@ -5,6 +5,7 @@ import time
 import datetime
 import telepot
 import html
+import hashlib
 import json
 import subprocess
 import requests
@@ -169,10 +170,66 @@ def photo_time_action(action, mins=None):
         return ('photoextend_done' if action == 'extend' else 'photofree_done'), None
     return 'error', failure_detail(status_code, body)
 
+def tile_list(status=None):
+    """The tiles of the start page with a day's limit (5.1, "Kachel-Limit") as the player reports them under "tiles";
+    read from the box when no status is given."""
+    if status is None:
+        status_code, body = call_api_get('/playtime')
+        status = body if status_code == 200 and isinstance(body, dict) else {}
+    tiles = (status or {}).get('tiles') or {}
+    return [t for t in (tiles.get('list') or []) if isinstance(t, dict) and t.get('key')]
+
+def tile_name(t):
+    return html.escape(str(t.get('name') or t.get('key', '').split(':', 1)[-1]))
+
+def tile_lines(status):
+    """One line per tile with a limit: today's minutes, used up or free today."""
+    lines = []
+    for t in tile_list(status):
+        used = int(t.get('usedSeconds', 0)) // 60
+        limit = int(t.get('limitMinutes', 0))
+        if t.get('free'):
+            lines.append(tr('st_tile_free', name=tile_name(t), used=used))
+        elif t.get('blocked'):
+            lines.append(tr('st_tile_blocked', name=tile_name(t), used=used, limit=limit))
+        else:
+            lines.append(tr('st_tile_limit', name=tile_name(t), used=used, limit=limit, left=fmt_minutes(int(t.get('remainingSeconds') or 0))))
+    return lines
+
+def tile_hash(key):
+    """A short mark of a tile for a button (Telegram allows 64 bytes of callback data, a key can be longer)."""
+    return hashlib.sha1(key.encode('utf-8')).hexdigest()[:10]
+
+def tile_by_hash(h):
+    return next((t for t in tile_list() if tile_hash(t['key']) == h), None)
+
+def tile_time_action(t, action, mins=None):
+    """extend (mins) or free for today's time of a tile; the key of the text that says how it went."""
+    status_code, body = call_api_post('/tiletime', {'key': t['key'], 'action': action, **({'minutes': mins} if mins else {})})
+    if status_code == 200:
+        return ('tileextend_done' if action == 'extend' else 'tilefree_done'), None
+    return 'error', failure_detail(status_code, body)
+
+def tiles_message(chat_id):
+    """/tiles: the tiles with a limit, each with +10 min and free today"""
+    tiles = tile_list()
+    if not tiles:
+        bot.sendMessage(chat_id, tr('tiles_none'))
+        return
+    b = InlineKeyboardButton
+    rows = []
+    for t in tiles:
+        name = str(t.get('name') or t['key'].split(':', 1)[-1])[:24]
+        row = [b(text=f'{name} +10', callback_data=f'tilex_{tile_hash(t["key"])}')]
+        if not t.get('free'):
+            row.append(b(text=tr('kb_tilefree', name=name), callback_data=f'tilef_{tile_hash(t["key"])}'))
+        rows.append(row)
+    bot.sendMessage(chat_id, '\n'.join([tr('tiles_head'), *tile_lines({'tiles': {'list': tiles}})]), parse_mode='HTML', reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
 def format_status(status):
     if not status or status.get('enabled') is False:
-        # (the photo time has its own limit: it is told even without playtime or quiet hours)
-        return '\n'.join([tr('st_not_configured'), *photo_lines(status)])
+        # (the photo time and the tiles have limits of their own: told even without playtime or quiet hours)
+        return '\n'.join([tr('st_not_configured'), *photo_lines(status), *tile_lines(status)])
     state = status.get('state', 'normal')
     source = block_source_name(status.get('blockSource'))
     pt = status.get('playtime', {}) or {}
@@ -202,6 +259,7 @@ def format_status(status):
     if int(ovr.get('allowUntil', 0)) > now_ms:
         lines.append(tr('st_override', mins=(int(ovr['allowUntil']) - now_ms) // 60000))
     lines.extend(photo_lines(status))
+    lines.extend(tile_lines(status))
     return '\n'.join(lines)
 
 def failure_detail(status_code, body):
@@ -211,6 +269,8 @@ def help_keyboard():
     b = InlineKeyboardButton
     # (the photo time's buttons only while it has a limit of its own)
     photos = [[b(text=tr('kb_photoextend10'), callback_data='photoextend_10'), b(text=tr('kb_photofree'), callback_data='photofree')]] if photo_time_limited() else []
+    # (the tiles with a day's limit: one button, their list with their own buttons)
+    photos += [[b(text=tr('kb_tiles'), callback_data='tiles')]] if tile_list() else []
     return InlineKeyboardMarkup(inline_keyboard=[
         [b(text=tr('kb_status'), callback_data='status'), b(text=tr('kb_screen'), callback_data='screen')],
         [b(text=tr('kb_pause'), callback_data='pause'), b(text=tr('kb_play'), callback_data='play')],
@@ -333,6 +393,8 @@ def on_chat_message(msg):
     elif command.split(' ', 1)[0] == '/photofree':
         key, detail = photo_time_action('free')
         bot.sendMessage(chat_id, tr(key, detail=detail))
+    elif command == '/tiles':
+        tiles_message(chat_id)
     elif command[:7] == '/extend':
         send_minutes_action(chat_id, command, 30, '/playtime/extend', 'extend_done')
     elif command[:8] == '/release':
@@ -533,6 +595,17 @@ def handle_callback(query_data, chat_id, keyboard_msg, answer):
         mins = int(query_data.split('_')[1]) if query_data != 'photofree' else None
         key, detail = photo_time_action('extend' if mins else 'free', mins)
         answer(text=tr(key, mins=mins, detail=detail), show_alert=True)
+    elif query_data == 'tiles':
+        tiles_message(chat_id)
+    elif query_data[:6] in ('tilex_', 'tilef_'):
+        # (a tile of the list sent before: found again by its mark - gone meanwhile, it says so)
+        t = tile_by_hash(query_data[6:])
+        if not t:
+            answer(text=tr('tiles_gone'), show_alert=True)
+        else:
+            extend = query_data[:6] == 'tilex_'
+            key, detail = tile_time_action(t, 'extend' if extend else 'free', 10 if extend else None)
+            answer(text=tr(key, mins=10, name=str(t.get('name') or ''), detail=detail), show_alert=True)
     elif query_data[:9] == 'quietnow_':
         mins = int(query_data.split('_')[1])
         status_code, body = call_api_post('/quiethours/now', {'minutes': mins})

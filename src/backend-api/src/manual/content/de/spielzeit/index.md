@@ -5,6 +5,7 @@ In der App unter **Spielzeit** bestimmst du, wann und wie lange die Box spielt.
 | Werkzeug | Wofür |
 | --- | --- |
 | [Tageslimits](tageslimits.md) | wie viele Minuten pro Wochentag gehört werden darf |
+| [Kacheln mit Tageslimit](kachel-limit.md) | eine eigene Grenze am Tag für einzelne Kacheln, zum Beispiel eine Hörspielserie |
 | [Ruhezeiten](ruhezeiten.md) | Zeitfenster, in denen die Box schweigt, zum Beispiel Hausaufgaben und Schlafenszeit |
 | [Sofort-Aktionen und Schlaftimer](schlaftimer.md) | Bonus-Zeit, Sperren aufheben, sofort Ruhe, Ausschalten nach Zeit |
 | [Hör-Verlauf](hoer-verlauf.md) | was in den letzten Tagen gehört wurde |

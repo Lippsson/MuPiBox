@@ -160,6 +160,13 @@
         }
       },
       {
+        "id": "kachel-limit",
+        "title": {
+          "de": "Kacheln mit Tageslimit",
+          "en": "Tiles with a day's limit"
+        }
+      },
+      {
         "id": "ruhezeiten",
         "title": {
           "de": "Ruhezeiten",
