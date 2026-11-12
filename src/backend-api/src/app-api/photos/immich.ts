@@ -581,6 +581,8 @@ export class ImmichPhotoSync {
       const limit = s.cacheLimitMb > 0 ? s.cacheLimitMb * 1024 * 1024 : Number.POSITIVE_INFINITY
       let used = await photoBytes(IMMICH_PHOTO_DIR)
       let full = false
+      // (stopped in the middle: Immich away or in trouble, or the key refused - no finished sync)
+      let broken = false
       await fsp.mkdir(INCOMING_DIR, { recursive: true })
       for (const { album, asset: x, old, fresh } of work) {
         if (stop.signal.aborted) return
@@ -654,9 +656,12 @@ export class ImmichPhotoSync {
           // (Immich went away in the middle, or it has trouble - a proxy in front of it answering 502, say -, or the key is no
           // longer accepted: not one try per picture, the rest at the next sync)
           if (immichDown(err) || keyRefused(err)) {
-            // (a key without the right for the pictures: the app says so, as for one refused)
+            // (a key without the right for the pictures: the app says so, as for one refused; Immich away: "nicht erreichbar",
+            // and the next try comes soon - the pictures fetched so far stay)
             if (keyRefused(err)) this.state.unauthorized = true
+            else if (!this.state.offlineSince) this.state.offlineSince = new Date().toISOString()
             this.log(`stopped: ${(err as Error).message} - the rest at the next sync`)
+            broken = true
             break
           }
           if (!(err instanceof NotAPicture)) this.log(`${x.id}: ${(err as Error).message}`)
@@ -669,7 +674,7 @@ export class ImmichPhotoSync {
         lib.albums = lib.albums.filter((a) => a.source !== 'immich' || a.assets.length > 0)
       })
       this.state.cacheFull = full
-      this.state.lastSync = new Date().toISOString()
+      if (!broken) this.state.lastSync = new Date().toISOString()
       await this.save()
     } catch (err) {
       this.log(`sync failed: ${(err as Error).message}`)
