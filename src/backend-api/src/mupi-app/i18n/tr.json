@@ -3259,7 +3259,6 @@
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox, boş zamanlarda geliştirilen özgür bir projedir. Kutuyu beğendiysen proje küçük bir bağıştan memnun olur.",
  "Zur Spendenseite": "Bağış sayfasına git",
  "Reihenfolge der Uhren": "Göstergelerin sırası",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Bir göstergeyi tutamağından tut ve başka bir yere taşı. Ekranda her zaman iki gösterge yan yana görünür.",
  "Verschieben": "Taşı",
  "Luftfeuchte": "Nem",
  "Windrichtung": "Rüzgâr yönü",
@@ -3899,5 +3898,6 @@
  "Motive": "Konular",
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Hiçbir şey bulunamadı: Synology Photos tanıma (kişiler, yerler, konular) kutunun hesabı için kapalı ya da henüz adı olan bir şey yok.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Akıllı albümler kendiliğinden değişir: kutu onları diğerleri gibi eşitler.",
- "{} Foto": "{} fotoğraf"
+ "{} Foto": "{} fotoğraf",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Bir göstergeyi tutamağından tut ve başka bir yere taşı. Küçük bir ekran iki göstergeyi yan yana, geniş bir ekran sığdığı kadarını gösterir."
 }

@@ -165,6 +165,22 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
 
 const GAP = 24 // between two dials
 const MARGIN = 16 // the least room at the sides of the row
+// what a dial needs besides its own height: the line of text under it, the status line at the bottom, the scroll bar
+const ROOM = 30 + 26 + 4 + 16
+
+/**
+ * How many dials the row shows side by side and how large each is, for a page of the given size. The dials are as large as
+ * the height lets them be; on a page that is wide enough for more than two of them (a wide display) the row shows as many as
+ * fit - so the distance of two dials stays what it is on the small display - and the whole set when it fits. A narrow page
+ * keeps two, as large as the width allows.
+ */
+export function viewFor(width, height, total = 6) {
+  const byHeight = Math.max(120, height - ROOM)
+  const fit = Math.floor((width - 2 * MARGIN + GAP) / (byHeight + GAP))
+  const n = Math.max(2, Math.min(fit, Math.max(2, total)))
+  const size = Math.max(120, Math.floor(Math.min(byHeight, (width - 2 * MARGIN - (n - 1) * GAP) / n)))
+  return { n, size }
+}
 
 const PROVIDERS = { openmeteo: 'Open-Meteo', metno: 'MET Norway' }
 
@@ -190,8 +206,9 @@ export function activate(api) {
       mount(content) {
         const box = document.createElement('div')
         box.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column'
-        // (the dials in a row you swipe through, as the artists' round covers on the start page: always two dials are shown,
-        // side by side in the middle; when you let go, the row snaps so that the two dials nearest to the middle stand there)
+        // (the dials in a row you swipe through, as the artists' round covers on the start page: two dials are shown side by side
+        // in the middle - more on a wide display, as many as fit; when you let go, the row snaps so that the dials nearest to the
+        // middle stand there)
         const row = document.createElement('div')
         row.style.cssText = `flex:1;min-height:0;display:flex;align-items:center;gap:${GAP}px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;touch-action:pan-x;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent;cursor:grab`
         const foot = document.createElement('div')
@@ -206,30 +223,35 @@ export function activate(api) {
         // (what each dial showed last: a new answer moves the pointers from there to the new value, as on the club's page)
         const shown = new Map()
         let lastSize = 0
+        let lastKey = ''
+        let total = 6 // how many dials there are (set when they are drawn)
 
-        // (two dials side by side as large as the page allows: not wider than half of it, not higher than the page lets room for
-        // a line of text under the dial, the status line at the bottom and the scroll bar)
-        const dialSize = () => Math.max(120, Math.floor(Math.min((content.clientWidth - 2 * MARGIN - GAP) / 2, content.clientHeight - 30 - 26 - 4 - 16)))
+        // (the dials side by side as large as the page allows: not higher than the page lets room for a line of text under the
+        // dial, the status line at the bottom and the scroll bar; two at the least, as many as fit on a wide page)
+        const view = () => viewFor(content.clientWidth, content.clientHeight, total)
 
         // Every dial is drawn again from the last answer: when the values come (`moving`: the pointers swing to them) and when the
         // page changes its size (a dial has a fixed size; the pointers stand at once).
         const draw = (moving) => {
           if (!ss || !data) return
-          const size = dialSize()
-          // (the pair shown stays when the row is drawn again: the number of the dial on the left)
+          const dials = orderDials(dialsFor(data, unitsOf(settings)), settings?.order)
+          total = dials.length
+          const { n, size } = view()
+          // (the dials shown stay when the row is drawn again: the number of the dial on the left)
           const first = lastSize ? Math.round(row.scrollLeft / (lastSize + GAP)) : 0
           lastSize = size
+          lastKey = `${n}x${size}`
           row.textContent = ''
-          // (room on both sides: the first two dials stand in the middle at the start, the last two at the end; a dial snaps
+          // (room on both sides: the first dials stand in the middle at the start, the last ones at the end; a dial snaps
           // to this place on the left)
-          const side = Math.max(MARGIN, Math.floor((row.clientWidth - 2 * size - GAP) / 2))
+          const side = Math.max(MARGIN, Math.floor((row.clientWidth - n * size - (n - 1) * GAP) / 2))
           row.style.paddingInline = `${side}px`
           row.style.scrollPaddingLeft = `${side}px`
-          // (only the two dials are seen: the next one does not look in from the side. A mask, not a clip: the whole row still takes the swipe)
+          // (only these dials are seen: the next one does not look in from the side. A mask, not a clip: the whole row still takes the swipe)
           const mask = `linear-gradient(to right, transparent ${side - 8}px, #000 ${side}px, #000 calc(100% - ${side}px), transparent calc(100% - ${side - 8}px))`
           row.style.maskImage = mask
           row.style.webkitMaskImage = mask
-          for (const dial of orderDials(dialsFor(data, unitsOf(settings)), settings?.order)) {
+          for (const dial of dials) {
             const cell = document.createElement('div')
             cell.style.cssText = 'flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;scroll-snap-align:start'
             const canvas = document.createElement('canvas')
@@ -309,9 +331,9 @@ export function activate(api) {
             shown.set(dial.id, value)
             caption.textContent = dial.caption
           }
-          // (the last dial cannot be the left one of a pair)
-          if (row.lastElementChild) row.lastElementChild.style.scrollSnapAlign = 'none'
-          row.scrollLeft = Math.min(first, Math.max(0, row.children.length - 2)) * (size + GAP)
+          // (the last dials cannot be the left one of the dials shown)
+          for (const cell of [...row.children].slice(Math.max(0, row.children.length - n + 1))) cell.style.scrollSnapAlign = 'none'
+          row.scrollLeft = Math.min(first, Math.max(0, row.children.length - n)) * (size + GAP)
         }
 
         // A mouse drags the row too (a finger swipes it by itself)
@@ -363,7 +385,8 @@ export function activate(api) {
                 clearTimeout(resizeTimer)
                 // (the first call of the observer comes at once, with the size the dials already have: it must not cut the swing short)
                 resizeTimer = setTimeout(() => {
-                  if (dialSize() !== lastSize) draw(false)
+                  const { n, size } = view()
+                  if (`${n}x${size}` !== lastKey) draw(false)
                 }, 200)
               })
         observer?.observe(content)

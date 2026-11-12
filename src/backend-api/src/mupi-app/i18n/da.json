@@ -3259,7 +3259,6 @@
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox er et frit projekt, der udvikles i fritiden. Hvis du kan lide boksen, er projektet glad for en lille donation.",
  "Zur Spendenseite": "Til donationssiden",
  "Reihenfolge der Uhren": "Urenes rækkefølge",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Tag fat i et ur i grebet og flyt det til et andet sted. Skærmen viser altid to ure ved siden af hinanden.",
  "Verschieben": "Flyt",
  "Luftfeuchte": "Luftfugtighed",
  "Windrichtung": "Vindretning",
@@ -3899,5 +3898,6 @@
  "Motive": "Motiver",
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Intet fundet: genkendelsen i Synology Photos (personer, steder, motiver) er slået fra for boksens konto, eller der er endnu intet med navn.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Smarte album ændrer sig af sig selv: boksen synkroniserer dem som alle andre.",
- "{} Foto": "{} foto"
+ "{} Foto": "{} foto",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Tag fat i et ur i grebet og flyt det til et andet sted. Et lille display viser to målere ved siden af hinanden, et bredt så mange, som der er plads til."
 }
