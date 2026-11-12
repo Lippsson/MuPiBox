@@ -88,6 +88,7 @@ import { withVolumeLock } from '../volume-lock'
 import { spotifyLoginAge } from './spotify-auth-age'
 import { btBattery, headphonesPlaying } from '../audio-output'
 import { playbackSnapshot } from '../playback-snapshot'
+import { tileKeyOfRow, tileParam } from './tile-key'
 import { CACHE_DIR, LOGS_DIR, SERVER_CONFIG_DIR, WWW_DIR } from '../paths'
 import {
   REQUESTED_SCOPES,
@@ -1933,6 +1934,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     let url = ''
     // (a radio station's or podcast's picture for the display, which opens the player for it: it knows none itself)
     let cover = ''
+    // the tile of the start page it belongs to (5.1, Kachel-Limit: the player counts and limits by it)
+    let tile = tileKeyOfRow(item)
     const ownCover = (v: unknown) => (typeof v === 'string' && /^(\/|https?:\/\/)/.test(v) ? v : '')
     // One album of an entry that subscribes a whole Spotify artist (only artistid): the app lists the artist's albums
     // and plays the one tapped - only for an artist that is in the library.
@@ -1995,6 +1998,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
           return
         }
         const artist = episode.show || String(item.artist ?? '')
+        // (a podcast without an artist of its own: the start page shows it under the feed's name)
+        tile = tileKeyOfRow(item, episode.show)
         url = `rss/${enc(episode.url)}/${enc(episode.title)}:title:artist:${enc(artist)}`
         cover = ownCover(item.cover_override) || episode.cover
         break
@@ -2020,7 +2025,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         return
     }
     try {
-      const r = await fetch(`http://127.0.0.1:5005/current/${url}?src=eltern${cover ? `&cover=${encodeURIComponent(cover)}` : ''}`, { signal: AbortSignal.timeout(5000) })
+      const r = await fetch(`http://127.0.0.1:5005/current/${url}?src=eltern${cover ? `&cover=${encodeURIComponent(cover)}` : ''}${tileParam(tile)}`, { signal: AbortSignal.timeout(5000) })
       if (!r.ok) {
         const errBody = await r.json().catch(() => ({ error: `player rejected play (HTTP ${r.status})` }))
         res.status(r.status).json(errBody)
@@ -2067,7 +2072,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     }
     try {
       const param = parts.map(encodeURIComponent).join(':')
-      const r = await fetch(`http://127.0.0.1:5005/current/musicsearch/library/album/${param}?src=eltern`, { signal: AbortSignal.timeout(5000) })
+      const r = await fetch(`http://127.0.0.1:5005/current/musicsearch/library/album/${param}?src=eltern${tileParam(`lib:${parts.join('/')}`)}`, { signal: AbortSignal.timeout(5000) })
       if (!r.ok) {
         const errBody = await r.json().catch(() => ({ error: `player rejected play (HTTP ${r.status})` }))
         res.status(r.status).json(errBody)
@@ -2086,7 +2091,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       return
     }
     try {
-      const r = await fetch(`http://127.0.0.1:5005/current/musicsearch/nas/${encodeURIComponent(nasPath)}?src=eltern`, {
+      const r = await fetch(`http://127.0.0.1:5005/current/musicsearch/nas/${encodeURIComponent(nasPath)}?src=eltern${tileParam(`nas:${nasPath}`)}`, {
         signal: AbortSignal.timeout(5000),
       })
       if (!r.ok) {

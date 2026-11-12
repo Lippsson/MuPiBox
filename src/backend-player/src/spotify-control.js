@@ -540,6 +540,9 @@ function graceSongBoundary() {
   if (quietHoursState.state === 'grace' && quietHoursState.graceMode === 'track') {
     finalizeQuietHoursBlock('next track would start during grace period', true)
   }
+  if (tileState.state === 'grace' && tileState.graceMode === 'track') {
+    finalizeTileBlock('next track would start during grace period', true)
+  }
 }
 player.on('track-change', graceSongBoundary)
 player.on('playlist-finish', () => {
@@ -548,6 +551,9 @@ player.on('playlist-finish', () => {
   }
   if (quietHoursState.state === 'grace') {
     finalizeQuietHoursBlock('playlist finished during grace period', true)
+  }
+  if (tileState.state === 'grace') {
+    finalizeTileBlock('playlist finished during grace period', true)
   }
   // (a stream that ended or broke off before it played: no loading any more - it stayed on until the 90-s guard, and
   // the display took the box for playing meanwhile. A reconnect below starts a loading of its own.)
@@ -946,6 +952,13 @@ function loadPlaytimeCheckpoint() {
       photoTimeState.dayKey = data.photoDayKey || today.dayKey
       photoTimeState.usedSeconds = Number(data.photoUsedSeconds) || 0
     }
+    // (the tiles' counts of the same day)
+    if (data && data.tileDate === today.dateStr && data.tileUsed && typeof data.tileUsed === 'object') {
+      tileState.date = data.tileDate
+      for (const [k, v] of Object.entries(data.tileUsed)) {
+        if (TILE_KEY.test(k) && Number.isFinite(Number(v)) && Number(v) >= 0) tileState.used[k] = Math.floor(Number(v))
+      }
+    }
     if (data && data.date === today.dateStr) {
       playtimeState.date = data.date
       playtimeState.dayKey = data.dayKey || today.dayKey
@@ -969,7 +982,7 @@ function writeCombinedWorking() {
   const inAllowOverride = now < ovr.allowUntil
 
   if (!ptCfg.enabled && !qhCfg.enabled && !inForceBlock && !inAllowOverride) {
-    fs.writeFile(PLAYTIME_WORKING_PATH, JSON.stringify({ enabled: false, photos: photoTimeStatus() }), () => {})
+    fs.writeFile(PLAYTIME_WORKING_PATH, JSON.stringify({ enabled: false, photos: photoTimeStatus(), tiles: tileStatus() }), () => {})
     return
   }
 
@@ -1028,6 +1041,7 @@ function writeCombinedWorking() {
       forceBlockUntil: ovr.forceBlockUntil,
     },
     photos: photoTimeStatus(),
+    tiles: tileStatus(),
   }
   fs.writeFile(PLAYTIME_WORKING_PATH, JSON.stringify(payload), () => {})
 }
@@ -1041,7 +1055,10 @@ function writePlaytimeCheckpoint() {
     photoDayKey: photoTimeState.dayKey,
     photoUsedSeconds: photoTimeState.usedSeconds,
     photoResetApplied: photoTimeState.resetApplied,
+    tileDate: tileState.date,
+    tileUsed: tileState.used,
   }
+  tileLastCheckpointUsed = JSON.stringify(tileState.used)
   // (a file of its own first, then renamed: a power cut mid-write left half a file, and the day's count began at 0)
   const tmp = `${PLAYTIME_CHECKPOINT_PATH}.tmp`
   fs.writeFile(tmp, JSON.stringify(payload), (err) => {
@@ -1157,6 +1174,182 @@ function photoTimeStatus() {
     counting: photosOpen(),
     warnMinutes: cfg.warnMinutes,
     idlePauseSeconds: cfg.idlePauseSeconds,
+  }
+}
+
+// === Tile time (5.1, "Kachel-Limit": a day's limit per tile of the start page) ===
+// The display, the app and Home Assistant say with every start which tile of the start page it belongs to (?tile=, the
+// key as the display forms it: artist:<category>:<name>, lib:<category>/<folder>, nas:<path>, single:<category>:<id>).
+// The time is counted per tile while something plays - every tile played today, also one without a limit (the app shows
+// it). A tile with a limit (playtimeLimit.tileLimits) used up: what plays of it ends as at the end of the listening time
+// (its grace mode, radio at once), then its starts are refused (423 tile_limit_reached) until the next day, minutes
+// added or "free today" (playtimeLimit.tileToday). It counts on the listening time as before; starts without a tile
+// count for the listening time only. The parents' release (allowUntil) lifts these blocks too.
+const TILE_KEY = /^(artist|lib|nas|single):[^\n]{1,400}$/
+const tileState = {
+  date: '',
+  used: {}, // key -> seconds today
+  current: null, // the tile of what plays (or was played last)
+  state: 'normal', // of the current tile: 'normal' | 'grace' | 'blocked'
+  graceMode: null,
+  stopUnlessEpisode: false,
+  graceEndsAt: null,
+}
+let tileGraceIdle = 0
+let tileLastCheckpointUsed = ''
+
+function readTileConfig() {
+  const raw = muPiBoxConfig?.playtimeLimit || {}
+  const limits = new Map()
+  for (const t of Array.isArray(raw.tileLimits) ? raw.tileLimits : []) {
+    const m = Number(t?.minutes)
+    if (typeof t?.key === 'string' && TILE_KEY.test(t.key) && Number.isInteger(m) && m >= 1 && m <= 1440) {
+      limits.set(t.key, { name: typeof t.name === 'string' ? t.name.slice(0, 200) : '', minutes: m })
+    }
+  }
+  const today = raw.tileToday && typeof raw.tileToday === 'object' ? raw.tileToday : {}
+  return { limits, today }
+}
+
+// a tile's allowance today: its minutes with the ones added for today, and whether it is free today; null: no limit
+function tileAllowance(cfg, key, dateStr) {
+  const l = cfg.limits.get(key)
+  if (!l) return null
+  const t = cfg.today.date === dateStr ? cfg.today : {}
+  const b = Number(t.bonus && typeof t.bonus === 'object' ? t.bonus[key] : 0)
+  const bonus = Number.isFinite(b) && b > 0 ? Math.min(1440, b) : 0
+  return { name: l.name, minutes: Math.min(1440, l.minutes + bonus), bonus, free: Array.isArray(t.free) && t.free.includes(key) }
+}
+
+function tileUsedUp(key, cfg = readTileConfig()) {
+  if (!key || isAllowOverrideActive()) return false
+  const a = tileAllowance(cfg, key, tileState.date)
+  if (!a || a.free) return false
+  return (tileState.used[key] ?? 0) >= a.minutes * 60
+}
+
+// A folder (lib:, nas:) is named as what plays - an album inside the tile's folder: it counts for the tile with a limit
+// whose folder it is in (the start page's tile; a NAS collection split into its subfolders has one per subfolder)
+function resolveTile(key, cfg = readTileConfig()) {
+  if (!key) return null
+  const m = /^(lib|nas):(.*)$/.exec(key)
+  if (!m) return key
+  let best = null
+  for (const k of cfg.limits.keys()) {
+    if (!k.startsWith(`${m[1]}:`)) continue
+    const p = k.slice(m[1].length + 1)
+    if ((m[2] === p || m[2].startsWith(`${p}/`)) && (!best || k.length > best.length)) best = k
+  }
+  return best ?? key
+}
+
+// What plays of the current tile ends: as finalizePlaytimeBlock, for this tile only
+function finalizeTileBlock(reason, immediate = false) {
+  if (isAllowOverrideActive()) return
+  console.log(`${new Date().toLocaleString()}: [TileTime] Finalizing block of ${tileState.current} (${reason})`)
+  tileState.state = 'blocked'
+  tileState.graceEndsAt = null
+  const stopNow = () => {
+    const wasSpotify = currentMeta.currentPlayer === 'spotify'
+    try {
+      stop()
+    } catch (e) {
+      console.error(`${new Date().toLocaleString()}: [TileTime] Error stopping playback:`, e)
+    }
+    if (wasSpotify) silenceSpotifyOnDisplay('tile limit')
+  }
+  if (immediate) stopNow()
+  else fadeOutThen(stopNow)
+  writePlaytimeCheckpoint()
+}
+
+// The tile of a new start (or none): its state machine starts anew
+function setCurrentTile(key) {
+  if (key === tileState.current) return
+  tileState.current = key
+  tileState.state = 'normal'
+  tileState.graceMode = null
+  tileState.stopUnlessEpisode = false
+  tileState.graceEndsAt = null
+  tileGraceIdle = 0
+}
+
+function tileTickStep() {
+  const pt = readPlaytimeConfig()
+  const now = new Date()
+  const today = getLogicalDay(now, pt.resetHour)
+  if (today.dateStr !== tileState.date) {
+    tileState.date = today.dateStr
+    tileState.used = {}
+    tileState.state = 'normal'
+    tileState.graceEndsAt = null
+    writePlaytimeCheckpoint()
+  }
+  const key = tileState.current
+  if (!key) return
+  if (isActuallyPlaying()) tileState.used[key] = (tileState.used[key] ?? 0) + 1
+  const cfg = readTileConfig()
+  const a = tileAllowance(cfg, key, today.dateStr)
+  const reached = !isAllowOverrideActive() && !!a && !a.free && tileState.used[key] >= a.minutes * 60
+  if (reached) {
+    if (tileState.state === 'normal') {
+      const graceMode = effectiveGraceMode(pt.graceMode)
+      if (graceMode !== 'stop' && isActuallyPlaying()) {
+        tileState.state = 'grace'
+        tileState.graceMode = graceMode
+        tileState.stopUnlessEpisode = stopUnlessEpisode(pt.graceMode)
+        tileState.graceEndsAt = Date.now() + graceCapMs(pt)
+        console.log(`${now.toLocaleString()}: [TileTime] Limit of ${key} reached (${a.minutes} min). Letting the ${graceMode} finish.`)
+        writePlaytimeCheckpoint()
+      } else if (isActuallyPlaying()) {
+        finalizeTileBlock(`limit reached (${a.minutes} min, ${currentMeta.currentType === 'radio' ? 'radio stream' : 'no grace configured'})`)
+      } else {
+        // (nothing of it plays: nothing to stop - its starts are refused from now on)
+        tileState.state = 'blocked'
+      }
+    } else if (tileState.state === 'grace') {
+      tileGraceIdle = isActuallyPlaying() ? 0 : tileGraceIdle + 1
+      if (tileState.graceEndsAt !== null && Date.now() >= tileState.graceEndsAt) {
+        finalizeTileBlock(`grace safety limit reached (${tileState.graceMode})`)
+      } else if (tileGraceIdle >= GRACE_IDLE_LIMIT_S) {
+        tileGraceIdle = 0
+        finalizeTileBlock('nothing playing any more during the grace period')
+      }
+    }
+  } else if (tileState.state !== 'normal') {
+    // (minutes added, free today, the limit raised or the parents' release)
+    console.log(`${now.toLocaleString()}: [TileTime] ${key} released`)
+    tileState.state = 'normal'
+    tileState.graceEndsAt = null
+  }
+  if (Date.now() - playtimeLastCheckpointAt >= PLAYTIME_CHECKPOINT_INTERVAL_MS && JSON.stringify(tileState.used) !== tileLastCheckpointUsed) {
+    writePlaytimeCheckpoint()
+  }
+}
+
+// What the display, the app and the bot read (in /tmp/playtime.json, under tiles): every tile with a limit, and the
+// tile of what plays
+function tileStatus() {
+  const cfg = readTileConfig()
+  const list = []
+  for (const [key, l] of cfg.limits) {
+    const a = tileAllowance(cfg, key, tileState.date)
+    const used = tileState.used[key] ?? 0
+    list.push({
+      key,
+      name: l.name,
+      limitMinutes: a.minutes,
+      bonusMinutes: a.bonus,
+      free: a.free,
+      usedSeconds: used,
+      remainingSeconds: a.free ? null : Math.max(0, a.minutes * 60 - used),
+      blocked: tileUsedUp(key, cfg),
+    })
+  }
+  const cur = tileState.current
+  return {
+    list,
+    current: cur ? { key: cur, state: tileState.state, usedSeconds: tileState.used[cur] ?? 0, limited: cfg.limits.has(cur) } : null,
   }
 }
 
@@ -1277,6 +1470,7 @@ async function spotifyLastTrackOfAlbum(album) {
 function spotifyGraceFinalize(reason) {
   if (playtimeState.state === 'grace') finalizePlaytimeBlock(reason, true)
   if (quietHoursState.state === 'grace') finalizeQuietHoursBlock(reason, true)
+  if (tileState.state === 'grace') finalizeTileBlock(reason, true)
   spotifyGraceItemId = null
   spotifyGracePos = null
   spotifyGraceMisses = 0
@@ -1288,7 +1482,8 @@ function spotifyGraceMissed(why) {
   spotifyGraceMisses++
   const waitingForKind =
     (playtimeState.state === 'grace' && playtimeState.stopUnlessEpisode) ||
-    (quietHoursState.state === 'grace' && quietHoursState.stopUnlessEpisode)
+    (quietHoursState.state === 'grace' && quietHoursState.stopUnlessEpisode) ||
+    (tileState.state === 'grace' && tileState.stopUnlessEpisode)
   if (waitingForKind && spotifyGraceMisses >= SPOTIFY_GRACE_MAX_MISSES) {
     log.warn(`${now()}: [Spotify Control] Grace check: no playback state (${why}) - "stop" chosen, stopping now`)
     spotifyGraceFinalize('spotify: no playback state, "stop" chosen')
@@ -1299,6 +1494,7 @@ async function spotifyGraceCheck() {
   const modes = []
   if (playtimeState.state === 'grace') modes.push(playtimeState.graceMode)
   if (quietHoursState.state === 'grace') modes.push(quietHoursState.graceMode)
+  if (tileState.state === 'grace') modes.push(tileState.graceMode)
   if (modes.length === 0) {
     spotifyGraceItemId = null
     spotifyGracePos = null
@@ -1332,7 +1528,8 @@ async function spotifyGraceCheck() {
       // "stop" was chosen and it is a song, not a podcast episode: no grace at all
       if (playtimeState.state === 'grace' && playtimeState.stopUnlessEpisode) finalizePlaytimeBlock('spotify: song, "stop" chosen')
       if (quietHoursState.state === 'grace' && quietHoursState.stopUnlessEpisode) finalizeQuietHoursBlock('spotify: song, "stop" chosen')
-      if (playtimeState.state !== 'grace' && quietHoursState.state !== 'grace') {
+      if (tileState.state === 'grace' && tileState.stopUnlessEpisode) finalizeTileBlock('spotify: song, "stop" chosen')
+      if (playtimeState.state !== 'grace' && quietHoursState.state !== 'grace' && tileState.state !== 'grace') {
         spotifyGraceItemId = null
         spotifyGracePos = null
         return
@@ -1375,7 +1572,7 @@ async function spotifyGraceCheck() {
   } finally {
     spotifyGraceBusy = false
     // (the grace period over: the next one starts with a poll at once)
-    const stillGrace = playtimeState.state === 'grace' || quietHoursState.state === 'grace'
+    const stillGrace = playtimeState.state === 'grace' || quietHoursState.state === 'grace' || tileState.state === 'grace'
     spotifyGraceNextAt = stillGrace ? Date.now() + nextInMs : 0
   }
 }
@@ -1580,6 +1777,7 @@ function combinedTick() {
   photoTimeTickStep()
   playtimeTickStep()
   quietHoursTickStep()
+  tileTickStep()
   writeCombinedWorking()
 }
 
@@ -4251,9 +4449,13 @@ app.use((req, res) => {
   let pathname = req.url
   let triggerSource = 'box'
   let triggerCover = ''
+  // the tile of the start page what starts belongs to (5.1, see "Tile time")
+  let triggerTile = null
   try {
     const u = new URL(req.url, 'http://localhost')
     pathname = u.pathname
+    const tile = u.searchParams.get('tile')
+    if (tile && TILE_KEY.test(tile)) triggerTile = tile
     const src = u.searchParams.get('src')
     if (src && /^[a-z0-9_-]{1,20}$/i.test(src)) triggerSource = src
     // (an announcement pauses the music and goes on afterwards: no start - the display jumped to the big player after
@@ -4290,6 +4492,20 @@ app.use((req, res) => {
     )
     res.status(423).send({ status: 'blocked', error: reason })
     return
+  }
+
+  // Tile time: a start of something new names its tile (or none: it counts for the listening time only); play, next,
+  // previous, seek go on with the current one. Its time used up (or what plays of it finishing in its grace period): refused.
+  const newStart = command.name.includes('spotify:') || ['library', 'nas', 'tidal', 'radio', 'rss'].some((s) => hasDirSegment(command, s))
+  if (isPlayInitiatingCommand(command) && !hasDirSegment(command, 'say')) {
+    const tile = newStart ? resolveTile(triggerTile) : tileState.current
+    const inGrace = tile !== null && tile === tileState.current && tileState.state === 'grace' && !isAllowOverrideActive()
+    if (tile && (tileUsedUp(tile) || inGrace)) {
+      console.log(`${new Date().toLocaleString()}: [TileTime] Rejected command (tile_limit_reached ${tile}): name=${command.name} dir=${command.dir}`)
+      res.status(423).send({ status: 'blocked', error: 'tile_limit_reached', tile })
+      return
+    }
+    if (newStart) setCurrentTile(tile)
   }
 
   // A Spotify start while Spotify blocks the requests: refused before anything changes (the pause flag of what was
