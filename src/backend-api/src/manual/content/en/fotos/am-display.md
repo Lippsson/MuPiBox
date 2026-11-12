@@ -25,7 +25,7 @@ In the large view:
 | Frame | **Show picture large** (fills the display) or **Show whole picture** |
 | Arrow top left | back to the album or to the albums |
 
-The buttons hide after a short while; a tap brings them back. A clip has a button for pause and play in the middle.
+The buttons hide after a short while; a tap brings them back. A clip has a button for pause and play in the middle, and **Quieter** and **Louder** with the box's volume at the bottom right (as in the player). They are not there in the slideshow, nor while an audio book plays: the clip is silent then anyway.
 
 With **Album starts as a slideshow**, an album starts with the slideshow straight away ([Switching on and settings](einschalten.md)).
 

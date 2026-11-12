@@ -25,7 +25,7 @@ In der großen Ansicht:
 | Rahmen | **Bild groß zeigen** (füllt das Display) oder **Ganzes Bild zeigen** |
 | Pfeil oben links | zurück zum Album bzw. zu den Alben |
 
-Die Knöpfe blenden sich nach kurzer Zeit aus; ein Tipp holt sie zurück. Bei einem Clip steht in der Mitte ein Knopf für Pause und Weiter.
+Die Knöpfe blenden sich nach kurzer Zeit aus; ein Tipp holt sie zurück. Bei einem Clip steht in der Mitte ein Knopf für Pause und Weiter, unten rechts **Leiser** und **Lauter** mit der Lautstärke der Box (wie im Player). Die gibt es nicht in der Diashow und nicht, solange ein Hörspiel läuft: Dann ist der Clip ohnehin stumm.
 
 Ist **Album startet als Diashow** eingeschaltet, beginnt ein Album gleich mit der Diashow ([Einschalten und Einstellungen](einschalten.md)).
 
