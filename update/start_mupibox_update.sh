@@ -467,6 +467,9 @@ if [ -z "$BRANCH" ]; then
 fi
 
 killall -s 9 -w -q -r chromium
+# The display's console in graphics mode from here on: in text mode its driver (fbcon) draws over the maintenance picture
+# now and then (the console's blue in stripes across it, whenever the cursor blinks or a line is written to tty1).
+python3 -c 'import fcntl,os;fcntl.ioctl(os.open("/dev/tty1",os.O_RDWR|os.O_NOCTTY),0x4B3A,1)' 2>/dev/null
 
 CONFIG="/etc/mupibox/mupiboxconfig.json"
 
