@@ -11624,17 +11624,18 @@ function mountHa(root, page) {
    its numbers and the card's space, an album with its pictures, uploading into it. A part of its own, beside the
    radio plays and the music: never in their lists, filters or "Hören". */
 
-const photoLib = { overview: null, nas: null, immich: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
-const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'] }
+const photoLib = { overview: null, nas: null, immich: null, synology: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
+const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'], synology: ['image', 'Synology Photos'] }
 const photoFile = (albumId, assetId, size) => `${API}/photos/file/${albumId}/${assetId}/${size}`
 
 async function loadPhotoOverview() {
-  const [r, nas, immich] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`), api(`${API}/photos/immich`)])
+  const [r, nas, immich, synology] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`), api(`${API}/photos/immich`), api(`${API}/photos/synology`)])
   if (!r.ok) throw new Error(`photos ${r.status}`)
   photoLib.overview = r.body
   // (the photo services: the NAS folders and Immich - their lines in the overview)
   photoLib.nas = nas.ok ? nas.body : null
   photoLib.immich = immich.ok ? immich.body : null
+  photoLib.synology = synology.ok ? synology.body : null
   photoLib.stale = false
 }
 
@@ -11652,6 +11653,8 @@ function photoServicesCard() {
     rows.push(navRow('fotonas', 'NAS-Ordner', sub, 'server'))
   }
   if (im?.connected) rows.push(navRow('fotoimmich', 'Immich', immichLine(im), 'grid'))
+  const sy = photoLib.synology
+  if (sy?.connected) rows.push(navRow('fotosynology', 'Synology Photos', synologyLine(sy), 'image'))
   return rows.length ? `<section class="card wide"><h2>Foto-Dienste</h2><div class="navlist">${rows.join('')}</div></section>` : ''
 }
 
@@ -11660,6 +11663,13 @@ function immichLine(im) {
   if (im.sync.unauthorized) return tr('Schlüssel abgelehnt')
   if (im.sync.offlineSince) return tr(`Nicht erreichbar seit ${relTime(im.sync.offlineSince).replace(/^vor /, '')}`)
   return tr(`Verbunden · ${im.settings.albumIds.length} ${im.settings.albumIds.length === 1 ? 'Album' : 'Alben'}`)
+}
+
+// Synology Photos' line: switched on with its albums, or why not
+function synologyLine(sy) {
+  if (sy.sync.unauthorized) return tr('Anmeldung abgelehnt')
+  if (sy.sync.offlineSince) return tr(`Nicht erreichbar seit ${relTime(sy.sync.offlineSince).replace(/^vor /, '')}`)
+  return tr(`Verbunden · ${sy.settings.albumIds.length} ${sy.settings.albumIds.length === 1 ? 'Album' : 'Alben'}`)
 }
 
 function photoAlbumRow(a, { toggle = true, sub = '' } = {}) {
@@ -11735,7 +11745,8 @@ function mountPhotoOverview(root, page) {
     openSheet(
       `<h2>Foto-Dienst verbinden</h2><p class="help" style="margin:0">Fotos werden nur aus deinem Heimnetz geladen.</p>
        <div class="navlist"><button class="navrow" data-svc="fotonas"><span class="tile">${icon('server', 18)}</span><span class="lbl"><b>NAS-Ordner</b><small>Ordner vom verbundenen NAS als Alben</small></span><span class="chev">${icon('chevron', 18)}</span></button>
-       <button class="navrow" data-svc="fotoimmich"><span class="tile">${icon('grid', 18)}</span><span class="lbl"><b>Immich</b><small>Dein eigener Fotodienst, per API-Schlüssel</small></span><span class="chev">${icon('chevron', 18)}</span></button></div>`,
+       <button class="navrow" data-svc="fotoimmich"><span class="tile">${icon('grid', 18)}</span><span class="lbl"><b>Immich</b><small>Dein eigener Fotodienst, per API-Schlüssel</small></span><span class="chev">${icon('chevron', 18)}</span></button>
+       <button class="navrow" data-svc="fotosynology"><span class="tile">${icon('image', 18)}</span><span class="lbl"><b>Synology Photos</b><small>Alben deines Synology-NAS, mit dem Konto des NAS</small></span><span class="chev">${icon('chevron', 18)}</span></button></div>`,
       (sheet, close) => {
         for (const b of sheet.querySelectorAll('[data-svc]')) {
           b.onclick = () => {
@@ -12509,14 +12520,7 @@ function photoImmichTop() {
   if (photoImmich.step) return photoImmichSteps()
   const s = d.sync
   const st = d.settings
-  let status
-  if (s.running) status = [`${icon('sync', 16)}${esc(s.total ? tr(`Abgleich läuft · ${s.done} von ${s.total} Fotos`) : tr('Abgleich läuft …'))}`, 'accent']
-  else if (s.unauthorized) status = [`${icon('info', 16)}${esc(tr('Schlüssel abgelehnt'))}`, 'danger']
-  else if (s.offlineSince) status = [`${icon('info', 16)}${esc(tr(`Nicht erreichbar seit ${relTime(s.offlineSince).replace(/^vor /, '')}`))}`, 'danger']
-  // (the last sync stopped before its end - Immich had trouble: it tries again soon)
-  else if (s.retry) status = [`${icon('info', 16)}${esc(tr('Abgleich unterbrochen · neuer Versuch in Kürze'))}`, 'warn']
-  else if (s.lastSync) status = [`${icon('check', 16)}${esc(tr(`Abgeglichen ${relTime(s.lastSync)}`))}`, 'ok']
-  else status = [esc(tr('Noch nicht abgeglichen')), '']
+  const status = photoServiceStatus(s, 'Schlüssel abgelehnt')
   const limit = st.cacheLimitMb * 1024 * 1024
   return [
     `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
@@ -12702,6 +12706,277 @@ function mountPhotoImmich(root, page) {
   )
 }
 
+/* Bibliothek › Fotos › Synology Photos (5.1): the NAS of the box with the same account at DSM - a test, the albums the
+   account sees (its own and the ones shared with it) and, once switched on, the service's page as Immich's (synology.ts) */
+const photoSyno = { data: null, step: 0, port: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+
+async function loadPhotoSynology() {
+  const r = await api(`${API}/photos/synology`)
+  if (!r.ok) throw new Error(`photos synology ${r.status}`)
+  photoSyno.data = r.body
+  // (not switched on yet: the assistant)
+  photoSyno.step = r.body.connected ? 0 : 1
+  photoSyno.port = r.body.settings.port ? String(r.body.settings.port) : ''
+  photoSyno.test = null
+  photoSyno.albums = null
+}
+
+const SYNO_ERRORS = {
+  noNas: ['Kein NAS verbunden', 'Verbinde zuerst unter Bibliothek › NAS dein Synology-NAS. Synology Photos nutzt dasselbe Konto.'],
+  unauthorized: ['Anmeldung abgelehnt', 'DSM nimmt Name oder Passwort des NAS-Kontos nicht an. Prüfe die Anmeldung unter Bibliothek › NAS.'],
+  noPhotos: ['Synology Photos nicht erlaubt', 'Erlaube dem Konto der Box in DSM unter Systemsteuerung › Benutzer und Gruppe › Bearbeiten › Anwendungen die App Synology Photos.'],
+  twoFactor: ['Zweite Bestätigung verlangt', 'Das Konto der Box nutzt die Zwei-Faktor-Anmeldung. Lege für die Box ein eigenes Konto ohne sie an.'],
+  blocked: ['Box von DSM gesperrt', 'DSM hat die Box nach zu vielen Fehlversuchen gesperrt. Gib sie in DSM unter Sicherheit › Schutz › Automatische Blockierung wieder frei.'],
+  expired: ['Passwort abgelaufen', 'Das Passwort des Kontos ist abgelaufen. Lege in DSM ein neues fest und melde die Box unter Bibliothek › NAS neu an.'],
+  certificate: ['Zertifikat passt nicht', 'DSM zeigt ein anderes Zertifikat als die NAS-Verbindung. Prüfe den DSM-Port oder melde das NAS unter Bibliothek › NAS neu an.'],
+  unreachable: ['DSM nicht erreichbar', 'Die Box erreicht DSM auf dem NAS nicht (Port 5001 mit https, sonst 5000). Prüfe Firewall und Port.'],
+}
+
+const SYNO_STEPS = [
+  ['test', 'Test'],
+  ['albums', 'Alben'],
+]
+
+function photoSynologySteps() {
+  const s = photoSyno.step
+  const d = photoSyno.data
+  const t = photoSyno.test
+  const bar = `<ol class="wz-steps" style="grid-template-columns:repeat(${SYNO_STEPS.length}, minmax(0, 1fr))">${SYNO_STEPS.map(([, label], i) => {
+    const n = i + 1
+    const done = n < s
+    return `<li class="${done ? 'done' : ''}${n === s ? ' current' : ''}"><button type="button" data-systep="${n}"${n === s ? ' aria-current="step"' : ''}${done ? '' : ' disabled'}><span class="bar"></span><span class="lbl">${done ? icon('check', 14) : `<i>${n}</i>`}${esc(tr(label))}</span></button></li>`
+  }).join('')}</ol>`
+  let body
+  let next = ''
+  if (s === 1 && !d.nas.connected) {
+    const [head, text] = SYNO_ERRORS.noNas
+    body = `<h2>${esc(tr(head))}</h2><div class="note warn">${icon('info', 18)}<span>${esc(tr(text))}</span></div><div class="navlist">${navRow('nas', 'NAS', 'Adresse, Konto, Zertifikat', 'server')}</div>`
+  } else if (s === 1 && !t?.ok) {
+    const err = t ? (SYNO_ERRORS[t.error] ?? SYNO_ERRORS.unreachable) : null
+    body = `<h2>Mit Synology Photos verbinden</h2><p class="help">Die Box meldet sich mit dem Konto des NAS bei Synology Photos an. Sie zeigt die Alben dieses Kontos und alle Alben, die mit ihm geteilt sind.</p>
+      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(d.nas.account ?? '–')}</dd></div></dl>
+      <ol class="ph-howto"><li>In DSM unter Systemsteuerung › Benutzer und Gruppe › Bearbeiten › Anwendungen „Synology Photos“ für dieses Konto erlauben.</li>
+      <li>In Synology Photos ein Album öffnen, „Teilen“ wählen und das Konto als Betrachter einladen.</li><li>Verbindung testen – danach wählst du die Alben.</li></ol>
+      <div class="field"><label for="sy-port">DSM-Port</label><input class="input mono" id="sy-port" inputmode="numeric" placeholder="${esc(tr('Standard (5001 bzw. 5000)'))}" value="${esc(photoSyno.port)}" ${NO_PW_MANAGER}>
+      <small>Nur nötig, wenn DSM auf deinem NAS einen anderen Port nutzt.</small></div>
+      ${err ? `<div class="note danger">${icon('info', 18)}<span><b>${esc(tr(err[0]))}</b> ${esc(tr(err[1]))}</span></div>` : ''}`
+    next = `<button class="btn primary" id="sy-test" ${photoSyno.testing ? 'disabled' : ''}>${esc(tr(photoSyno.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
+  } else if (s === 1) {
+    body = `<h2>Verbindung steht</h2><p class="help">Die Box kann die Alben des Kontos lesen.</p>
+      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(t.account ?? '–')}</dd></div><div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Davon mit dem Konto geteilt</dt><dd>${esc(String(t.shared))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.pictures))}</dd></div></dl>
+      ${t.albums ? '' : `<div class="note warn">${icon('info', 18)}<span>Noch keine Alben. Teile in Synology Photos ein Album mit dem Konto der Box und teste erneut.</span></div>`}`
+    next = t.albums ? `<button class="btn primary" id="sy-next">Weiter</button>` : `<button class="btn primary" id="sy-test">${esc(tr('Erneut testen'))}</button>`
+  } else {
+    const list = photoSyno.albums
+    const rows = !list
+      ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+      : list.error
+        ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+        : list.albums.length
+          ? `<div class="rows">${list.albums
+              .map(
+                (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/synology/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+                <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}${a.shared ? ` · ${esc(tr('Geteilt'))}` : ''}</small></span>
+                <button class="ph-check-box" role="checkbox" aria-checked="${photoSyno.chosen.has(a.id)}" data-sy="${esc(a.id)}" aria-label="${esc(a.name)}">${photoSyno.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
+              )
+              .join('')}</div>`
+          : `<p class="help" style="margin:0">Das Konto sieht noch keine Alben.</p>`
+    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Synology Photos` : 'Alben in Synology Photos'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="sy-all">Alle wählen</button>' : ''}</div>
+      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoSyno.chosen.size} ${photoSyno.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    next = `<button class="btn primary" id="sy-done">Fertig</button>`
+  }
+  // (the first step's way back: out of the assistant - to the service's page when switched on, else to the photos)
+  const back = s === 1 ? `<button class="btn" id="sy-cancel">Abbrechen</button>` : `<button class="btn" id="sy-back">${icon('back', 18)}Zurück</button>`
+  return [
+    `<section class="card wide wz">${bar}<div class="wz-count">${esc(tr(`Schritt ${s} von ${SYNO_STEPS.length}`))}</div>${body}
+      <div class="wz-foot">${back}<span class="wz-next">${next}</span></div></section>`,
+  ]
+}
+
+// the state of a photo service's sync as a line (the service's page, Immich and Synology Photos)
+function photoServiceStatus(s, refused) {
+  if (s.running) return [`${icon('sync', 16)}${esc(s.total ? tr(`Abgleich läuft · ${s.done} von ${s.total} Fotos`) : tr('Abgleich läuft …'))}`, 'accent']
+  if (s.unauthorized) return [`${icon('info', 16)}${esc(tr(refused))}`, 'danger']
+  if (s.offlineSince) return [`${icon('info', 16)}${esc(tr(`Nicht erreichbar seit ${relTime(s.offlineSince).replace(/^vor /, '')}`))}`, 'danger']
+  // (the last sync stopped before its end - the service had trouble: it tries again soon)
+  if (s.retry) return [`${icon('info', 16)}${esc(tr('Abgleich unterbrochen · neuer Versuch in Kürze'))}`, 'warn']
+  if (s.lastSync) return [`${icon('check', 16)}${esc(tr(`Abgeglichen ${relTime(s.lastSync)}`))}`, 'ok']
+  return [esc(tr('Noch nicht abgeglichen')), '']
+}
+
+function photoSynologyTop() {
+  const d = photoSyno.data
+  if (!d) return []
+  if (photoSyno.step) return photoSynologySteps()
+  const s = d.sync
+  const st = d.settings
+  const status = photoServiceStatus(s, 'Anmeldung abgelehnt')
+  const limit = st.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><h2>${esc(d.nas.account ? tr(`Verbunden – Konto „${d.nas.account}“`) : tr('Verbunden'))}</h2>
+      <div class="ph-nas-state ${status[1]}">${status[0]}</div>
+      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>DSM nimmt die Anmeldung des NAS-Kontos nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe das Konto und teste die Verbindung unten.</span></div>` : ''}
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob das NAS läuft.</span></div>` : ''}
+      ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr oder es ist nicht mehr geteilt.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr oder sie sind nicht mehr geteilt.`))}</span></div>` : ''}
+      ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="sy-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="sy-albums">Alben ändern</button></div></section>`,
+    `<section class="card wide"><h2>Fotos</h2>
+      <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live vom NAS – Videos gibt es dann nicht, und ohne Netz sind diese Alben gerade nicht da.</small></span>
+        <label class="switch"><input type="checkbox" id="sy-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="sy-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos aus Synology Photos erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(st.keepCopy && limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${st.keepCopy && limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      ${st.keepCopy
+        ? `<p class="help">Fotos aus Synology Photos liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="sy-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === st.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
+        : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
+    `<section class="card wide"><h2>Zugang</h2>
+      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(d.nas.account ?? '–')}</dd></div><div><dt>DSM-Port</dt><dd>${esc(st.port ? String(st.port) : tr('Standard'))}</dd></div></dl>
+      <p class="help">Die Box nutzt die Anmeldung des NAS (Bibliothek › NAS).</p>
+      <div class="btns"><button class="btn" id="sy-retest">Verbindung testen</button></div></section>`,
+    `<section class="card wide"><div class="navlist"><button class="navrow" id="sy-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Die Alben aus Synology Photos und ihre Fotos werden von der Box entfernt. Auf dem NAS bleibt alles erhalten.</small></span></button></div></section>`,
+  ]
+}
+
+async function photoSynologyLoadAlbums() {
+  photoSyno.albums = null
+  const r = await api(`${API}/photos/synology/albums`)
+  photoSyno.albums = r.ok ? r.body : { error: true }
+}
+
+function mountPhotoSynology(root, page) {
+  const d = photoSyno.data
+  window.clearTimeout(photoSyno.timer)
+  if (!d) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const take = (body) => {
+    photoSyno.data = body
+    photoLib.stale = true
+  }
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/synology`, { method: 'POST', body })
+    if (!r.ok) {
+      toast('Nicht gespeichert', 'info')
+      return false
+    }
+    take(r.body)
+    if (done) toast(done)
+    return true
+  }
+  const goStep = (n) => {
+    photoSyno.step = n
+    redraw()
+    window.scrollTo(0, 0)
+  }
+  // the assistant
+  $('#sy-cancel', root)?.addEventListener('click', () => (d.connected ? goStep(0) : go('fotos')))
+  $('#sy-back', root)?.addEventListener('click', () => goStep(d.connected && !photoSyno.test ? 0 : 1))
+  for (const b of root.querySelectorAll('[data-systep]')) b.onclick = () => goStep(Number(b.dataset.systep))
+  $('#sy-test', root)?.addEventListener('click', async () => {
+    const field = $('#sy-port', root)
+    if (field) photoSyno.port = field.value.trim()
+    const port = photoSyno.port ? Number(photoSyno.port) : 0
+    if (!Number.isInteger(port) || port < 0 || port > 65535) return toast('Bitte einen Port zwischen 1 und 65535 eintragen', 'info')
+    photoSyno.testing = true
+    photoSyno.test = null
+    redraw()
+    const r = await api(`${API}/photos/synology/test`, { method: 'POST', body: { port }, timeoutMs: 45000 })
+    photoSyno.testing = false
+    photoSyno.test = r.ok ? r.body : { ok: false, error: 'unreachable' }
+    redraw()
+  })
+  $('#sy-next', root)?.addEventListener('click', async () => {
+    // (the port is saved now - the album list comes from the box with it)
+    if (!(await save({ port: photoSyno.port ? Number(photoSyno.port) : 0 }))) return
+    photoSyno.chosen = new Set(photoSyno.data.settings.albumIds)
+    photoSyno.step = 2
+    redraw()
+    await photoSynologyLoadAlbums()
+    redraw()
+  })
+  for (const b of root.querySelectorAll('[data-sy]')) {
+    b.onclick = () => {
+      const id = b.dataset.sy
+      if (photoSyno.chosen.has(id)) photoSyno.chosen.delete(id)
+      else photoSyno.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#sy-all', root)?.addEventListener('click', () => {
+    for (const a of photoSyno.albums?.albums ?? []) photoSyno.chosen.add(a.id)
+    redraw()
+  })
+  $('#sy-done', root)?.addEventListener('click', async () => {
+    if (!(await save({ enabled: true, albumIds: [...photoSyno.chosen] }, photoSyno.chosen.size ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
+    photoSyno.step = 0
+    photoSyno.test = null
+    redraw()
+  })
+  if (photoSyno.step) return
+  // the service's page
+  if (d.sync.running) photoSyno.timer = window.setTimeout(async () => {
+    if (currentPage()?.id !== page.id || photoSyno.step) return
+    const r = await api(`${API}/photos/synology`)
+    if (r.ok) take(r.body)
+    redraw()
+  }, 3000)
+  $('#sy-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/synology/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    take(r.body)
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  $('#sy-albums', root)?.addEventListener('click', async () => {
+    photoSyno.chosen = new Set(d.settings.albumIds)
+    photoSyno.test = null
+    photoSyno.step = 2
+    redraw()
+    await photoSynologyLoadAlbums()
+    redraw()
+  })
+  $('#sy-retest', root)?.addEventListener('click', () => {
+    photoSyno.test = null
+    photoSyno.port = d.settings.port ? String(d.settings.port) : ''
+    goStep(1)
+  })
+  $('#sy-keep', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (!(await save({ keepCopy: on }, on ? 'Fotos werden auf der Box gespeichert' : 'Fotos kommen live vom NAS'))) e.target.checked = !on
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = async () => {
+            close()
+            if (await save({ [key]: Number(b.dataset.v) }, 'Gespeichert')) redraw()
+          }
+        }
+      },
+    )
+  $('#sy-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#sy-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#sy-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Verbindung trennen', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} aus Synology Photos und ihre Fotos werden von der Box entfernt. Auf dem NAS bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/synology/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoLib.stale = true
+      toast('Synology Photos getrennt')
+      go('fotos')
+    }),
+  )
+}
+
 async function loadPhotoAlbum() {
   let id = photoLib.albumId
   if (!id) {
@@ -12720,9 +12995,9 @@ async function loadPhotoAlbum() {
     const nas = await api(`${API}/photos/nas`)
     if (nas.ok) photoLib.nas = nas.body
   }
-  if (a.body.source === 'immich') {
-    const im = await api(`${API}/photos/immich`)
-    if (im.ok) photoLib.immich = im.body
+  if (a.body.source === 'immich' || a.body.source === 'synology') {
+    const sv = await api(`${API}/photos/${a.body.source}`)
+    if (sv.ok) photoLib[a.body.source] = sv.body
   }
 }
 
@@ -12743,7 +13018,7 @@ function photoAlbumTop() {
   return [
     `<section class="card wide">${photoAlbumRow(a, { sub: a.display ? 'Am Display sichtbar' : 'Am Display ausgeblendet' })}
       ${upload ? `<div class="btns"><button class="btn primary" id="ph-add">${icon('plus', 18)}Fotos hinzufügen</button>${a.assets.length ? `<button class="btn" id="ph-select">${icon('check', 18)}${sel ? 'Fertig' : 'Auswählen'}</button>` : ''}</div>` : ''}</section>`,
-    a.source === 'nas' ? photoNasAlbumCard(a) : a.source === 'immich' ? photoImmichAlbumCard(a) : '',
+    a.source === 'nas' ? photoNasAlbumCard(a) : a.source === 'immich' || a.source === 'synology' ? photoServiceAlbumCard(a) : '',
     upload
       ? `<section class="card wide"><h2>Album</h2><div class="navlist">
           <button class="navrow" id="ph-rename"><span class="tile">${icon('text', 18)}</span><span class="lbl"><b>Umbenennen</b></span><span class="chev">${icon('chevron', 18)}</span></button>
@@ -12768,16 +13043,21 @@ function photoNasAlbumCard(a) {
     <div class="navlist">${navRow('fotonas', 'NAS-Ordner', 'Ordner, Abgleich, Zwischenspeicher', 'server')}</div></section>`
 }
 
-// An Immich album: only looked at here - kept on the box or shown live, the last sync, "Jetzt abgleichen"
-function photoImmichAlbumCard(a) {
-  const im = photoLib.immich
-  const running = !!im?.sync.running
-  const last = im?.sync.lastSync ? relTime(im.sync.lastSync) : '–'
+// An album of a photo service (Immich, Synology Photos): only looked at here - kept on the box or shown live, the last
+// sync, "Jetzt abgleichen"
+function photoServiceAlbumCard(a) {
+  const syno = a.source === 'synology'
+  const sv = photoLib[a.source]
+  const running = !!sv?.sync.running
+  const last = sv?.sync.lastSync ? relTime(sv.sync.lastSync) : '–'
+  const note = syno
+    ? `<div class="note">${icon('info', 18)}<span>Dieses Album wird in Synology Photos verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.</span></div>`
+    : `<div class="note">${icon('info', 18)}<span>Dieses Album wird in Immich verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.</span></div>`
   return `<section class="card wide"><h2>Quelle</h2>
-    <div class="note">${icon('info', 18)}<span>Dieses Album wird in Immich verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.</span></div>
-    <dl class="kv"><div><dt>Dienst</dt><dd>Immich</dd></div><div><dt>Fotos</dt><dd>${esc(tr(a.live ? 'Live von Immich' : 'Auf der Box gespeichert'))}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
-    <div class="btns"><button class="btn" id="ph-immich-sync" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>
-    <div class="navlist">${navRow('fotoimmich', 'Immich', 'Alben, Abgleich, Zugang', 'grid')}</div></section>`
+    ${note}
+    <dl class="kv"><div><dt>Dienst</dt><dd>${syno ? 'Synology Photos' : 'Immich'}</dd></div><div><dt>Fotos</dt><dd>${esc(tr(a.live ? (syno ? 'Live vom NAS' : 'Live von Immich') : 'Auf der Box gespeichert'))}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
+    <div class="btns"><button class="btn" id="ph-service-sync" data-source="${esc(a.source)}" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>
+    <div class="navlist">${syno ? navRow('fotosynology', 'Synology Photos', 'Alben, Abgleich, Zugang', 'image') : navRow('fotoimmich', 'Immich', 'Alben, Abgleich, Zugang', 'grid')}</div></section>`
 }
 
 let photoPrepTimer = 0
@@ -12817,11 +13097,12 @@ function mountPhotoAlbum(root, page) {
     }
     ask()
   }
-  $('#ph-immich-sync', root)?.addEventListener('click', async (e) => {
+  $('#ph-service-sync', root)?.addEventListener('click', async (e) => {
+    const source = e.currentTarget.dataset.source
     e.currentTarget.disabled = true
-    const r = await api(`${API}/photos/immich/sync`, { method: 'POST', body: {} })
+    const r = await api(`${API}/photos/${source}/sync`, { method: 'POST', body: {} })
     if (!r.ok) return toast('Das hat nicht geklappt', 'info')
-    photoLib.immich = r.body
+    photoLib[source] = r.body
     toast('Abgleich gestartet')
     if (currentPage()?.id === page.id) renderPage(page, false)
   })
@@ -15136,6 +15417,7 @@ const CONTROLLERS = {
   fotoupload: { load: loadPhotoUpload, top: photoUploadTop, sections: () => [], mount: mountPhotoUpload },
   fotonas: { load: loadPhotoNas, top: photoNasTop, sections: () => [], mount: mountPhotoNas },
   fotoimmich: { load: loadPhotoImmich, top: photoImmichTop, sections: () => [], mount: mountPhotoImmich },
+  fotosynology: { load: loadPhotoSynology, top: photoSynologyTop, sections: () => [], mount: mountPhotoSynology },
   'g-fotos': { load: loadPhotoSettings, top: photoSettingsTop, sections: photoSettingsSections, mount: mountPhotoSettings, change: changePhotoSetting },
   mqtt: {
     load: loadMqtt,

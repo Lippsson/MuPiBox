@@ -1710,6 +1710,16 @@
    "sections": []
   },
   {
+   "id": "fotosynology",
+   "slug": "photo-synology",
+   "area": "bibliothek",
+   "parent": "fotos",
+   "title": "Synology Photos",
+   "description": "",
+   "icon": "image",
+   "sections": []
+  },
+  {
    "id": "theme",
    "slug": "theme",
    "area": "einstellungen",

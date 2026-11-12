@@ -45,6 +45,8 @@ import { startWeeklySummary } from './app-api/weekly-summary'
 import { startInstallationStatistics } from './app-api/telemetry'
 import { registerPhotoDisplayRoutes } from './app-api/photos/albums'
 import type { PhotoNasAccess } from './app-api/photos/nas'
+import { RemoteAway } from './app-api/photos/remote'
+import { DsmCertificate, DsmLoginRefused } from './app-api/photos/synology'
 import { startNightDim } from './app-api/night-dim'
 import { bootConfigPath } from './app-api/boot-paths'
 import { startSpeech } from './speech'
@@ -5511,6 +5513,70 @@ async function nasPathSelected(raw: string): Promise<boolean> {
 // the cover before comes back. An account without write permission: 'denied'.
 // The NAS for the photo display's NAS folders (5.1, app-api/photos/nas.ts): the same access as the audio folders, its
 // own choice of folders. A listing (undefined: no NAS signed in, or away), a file into a local one, whether one is set up.
+// Synology's own web API (DSM) on the NAS of the box, with its NAS account - for the albums of Synology Photos
+// (app-api/photos/synology.ts). The host of the NAS address, DSM's port (5001 with https, 5000 without, or the one set),
+// the certificate confirmed for the NAS (Synology uses one for DSM and WebDAV). One login, kept until DSM forgets it. A
+// refused login is not tried again for 10 minutes with the same account and password (DSM blocks an address after a few),
+// unless asked anew (the test).
+let dsmSid: { key: string; sid: string } | undefined
+let dsmLogin: Promise<string> | undefined
+let dsmRefused: { key: string; code: number; until: number } | undefined
+
+function dsmTarget(port?: number): { url: string; fingerprint?: string; account: string; password: string } | undefined {
+  const c = nasSettings(getMupiboxConfigSync())
+  if (!c?.address || !c.account || !c.password || !c.rememberMe) return undefined
+  const password = nasDecrypt(c.password)
+  if (password === undefined) return undefined
+  const u = new URL(nasResolveBase(c.address, Boolean(c.https)))
+  const https = u.protocol === 'https:'
+  return {
+    url: `${u.protocol}//${u.hostname}:${port || (https ? 5001 : 5000)}/webapi/entry.cgi`,
+    fingerprint: https ? c.certFingerprint || undefined : undefined,
+    account: c.account,
+    password,
+  }
+}
+
+async function dsmPost(target: { url: string; fingerprint?: string }, form: Record<string, string>, signal: AbortSignal): Promise<Response> {
+  try {
+    return await nasFetch({ base: target.url, auth: '', fingerprint: target.fingerprint }, target.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(form).toString(),
+      signal,
+    })
+  } catch (err) {
+    if (signal.aborted) throw err
+    if (err instanceof NasCertificateError) throw new DsmCertificate('the NAS certificate on the DSM port is not the one confirmed')
+    throw new RemoteAway(`DSM: ${(err as Error).message}`)
+  }
+}
+
+async function dsmSession(target: NonNullable<ReturnType<typeof dsmTarget>>, fresh: boolean): Promise<string> {
+  const key = crypto.createHash('sha256').update(`${target.url}\n${target.account}\n${target.password}`).digest('hex')
+  if (!fresh && dsmSid?.key === key) return dsmSid.sid
+  if (!fresh && dsmRefused?.key === key && Date.now() < dsmRefused.until) throw new DsmLoginRefused(dsmRefused.code)
+  if (!dsmLogin) {
+    dsmLogin = (async () => {
+      // (session "webui": DSM refuses "SynologyPhotos" to an account that may use the app - 402)
+      const r = await dsmPost(target, { api: 'SYNO.API.Auth', version: '7', method: 'login', account: target.account, passwd: target.password, session: 'webui', format: 'sid' }, AbortSignal.timeout(20_000))
+      const j = (await r.json().catch(() => null)) as { success?: boolean; data?: { sid?: string }; error?: { code?: number } } | null
+      if (j?.success === true && typeof j.data?.sid === 'string') {
+        dsmSid = { key, sid: j.data.sid }
+        dsmRefused = undefined
+        return j.data.sid
+      }
+      if (!j) throw new RemoteAway(`DSM: answered ${r.status}`)
+      const code = Number(j.error?.code) || 0
+      dsmRefused = { key, code, until: Date.now() + 10 * 60_000 }
+      throw new DsmLoginRefused(code)
+    })().finally(() => {
+      dsmLogin = undefined
+    })
+  }
+  return await dsmLogin
+}
+
 const photoNas: PhotoNasAccess = {
   async list(folder) {
     let files: NasFileEntry[] | undefined
@@ -5556,6 +5622,31 @@ const photoNas: PhotoNasAccess = {
   info() {
     const c = nasSettings(getMupiboxConfigSync())
     return { connected: Boolean(c?.address && c.account && c.password && c.rememberMe), name: c?.address ?? null }
+  },
+  async dsm(params, init = {}) {
+    const target = dsmTarget(init.port)
+    if (!target) throw new DsmLoginRefused(-1)
+    const signal = AbortSignal.any([...(init.signal ? [init.signal] : []), AbortSignal.timeout(init.timeoutMs ?? 30_000)])
+    for (let attempt = 0; ; attempt++) {
+      const sid = await dsmSession(target, init.fresh === true && attempt === 0)
+      const r = await dsmPost(target, { ...params, _sid: sid }, signal)
+      // (an answer in JSON may say the session is gone - 106 timed out, 107 a login elsewhere, 119 unknown: once more with
+      // a new login)
+      if (!/json/i.test(r.headers.get('content-type') ?? '')) return r
+      const text = await r.text()
+      let code = 0
+      try {
+        const j = JSON.parse(text) as { success?: boolean; error?: { code?: number } }
+        if (j?.success === false) code = Number(j.error?.code) || 0
+      } catch {
+        // (not JSON after all: passed on as it is)
+      }
+      if ([106, 107, 119].includes(code) && attempt === 0) {
+        if (dsmSid?.sid === sid) dsmSid = undefined
+        continue
+      }
+      return new Response(text, { status: r.status, headers: r.headers })
+    }
   },
 }
 
