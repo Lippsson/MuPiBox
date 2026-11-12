@@ -3876,5 +3876,6 @@
  "heute frei": "vapaa tänään",
  "Für heute aufgebraucht. Antippen für +10 min oder „Heute frei“.": "Käytetty tältä päivältä. Napauta: +10 min tai ”Vapaa tänään”.",
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Kuunteluaika, hiljaiset ajat, kuva-aika ja laatat nyt",
- "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Laatat, joilla on päiväraja: tila, +10 min, vapaa tänään"
+ "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Laatat, joilla on päiväraja: tila, +10 min, vapaa tänään",
+ "Diese Kachel ist für heute aufgebraucht.": "Tämä laatta on käytetty tältä päivältä."
 }

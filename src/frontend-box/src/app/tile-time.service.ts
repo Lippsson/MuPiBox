@@ -150,7 +150,8 @@ export class TileTimeService {
 
   /** "<tile> ist für heute vorbei": a tap on a used-up tile, a refused start, the end of what played of it */
   showOver(media: Media | null, key: string | null = null): void {
-    this.show({ kind: 'over', name: this.nameOf(key, media), media: media ?? (key ? this.startedMedia(key) : null) })
+    // (the tile's own picture when its key is known - a refused album is shown by its tile, as everywhere)
+    this.show({ kind: 'over', name: this.nameOf(key, media), media: (key ? this.startedMedia(key) : null) ?? media })
   }
 
   /** how often the player refused a start (423 tile_limit_reached): the player page leaves when it goes up */

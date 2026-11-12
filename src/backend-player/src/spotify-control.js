@@ -958,6 +958,8 @@ function loadPlaytimeCheckpoint() {
       for (const [k, v] of Object.entries(data.tileUsed)) {
         if (TILE_KEY.test(k) && Number.isFinite(Number(v)) && Number(v) >= 0) tileState.used[k] = Math.floor(Number(v))
       }
+      // (what is on the card already: not written again)
+      tileLastCheckpointUsed = tileCheckpointText()
     }
     if (data && data.date === today.dateStr) {
       playtimeState.date = data.date
@@ -1058,7 +1060,7 @@ function writePlaytimeCheckpoint() {
     tileDate: tileState.date,
     tileUsed: tileState.used,
   }
-  tileLastCheckpointUsed = JSON.stringify(tileState.used)
+  tileLastCheckpointUsed = tileCheckpointText()
   // (a file of its own first, then renamed: a power cut mid-write left half a file, and the day's count began at 0)
   const tmp = `${PLAYTIME_CHECKPOINT_PATH}.tmp`
   fs.writeFile(tmp, JSON.stringify(payload), (err) => {
@@ -1196,7 +1198,8 @@ const tileState = {
   graceEndsAt: null,
 }
 let tileGraceIdle = 0
-let tileLastCheckpointUsed = ''
+// (what the last checkpoint held of them - none at the start: no write at every start of the box)
+let tileLastCheckpointUsed = '{}'
 
 function readTileConfig() {
   const raw = muPiBoxConfig?.playtimeLimit || {}
@@ -1209,6 +1212,15 @@ function readTileConfig() {
   }
   const today = raw.tileToday && typeof raw.tileToday === 'object' ? raw.tileToday : {}
   return { limits, today }
+}
+
+// What makes a checkpoint worth writing: the counts of the tiles with a limit. The others are counted too (a limit
+// set later in the day starts from what was heard), but only kept in memory - else every minute of every playback was
+// a write to the SD card, also on a box without any tile limit.
+function tileCheckpointText(cfg = readTileConfig()) {
+  const out = {}
+  for (const k of cfg.limits.keys()) if (tileState.used[k]) out[k] = tileState.used[k]
+  return JSON.stringify(out)
 }
 
 // a tile's allowance today: its minutes with the ones added for today, and whether it is free today; null: no limit
@@ -1279,11 +1291,13 @@ function tileTickStep() {
   const now = new Date()
   const today = getLogicalDay(now, pt.resetHour)
   if (today.dateStr !== tileState.date) {
+    // (a new day - or the first tick after a start without a count of today: nothing to write then)
+    const hadCounts = tileCheckpointText() !== '{}'
     tileState.date = today.dateStr
     tileState.used = {}
     tileState.state = 'normal'
     tileState.graceEndsAt = null
-    writePlaytimeCheckpoint()
+    if (hadCounts) writePlaytimeCheckpoint()
   }
   const key = tileState.current
   if (!key) return
@@ -1322,7 +1336,7 @@ function tileTickStep() {
     tileState.state = 'normal'
     tileState.graceEndsAt = null
   }
-  if (Date.now() - playtimeLastCheckpointAt >= PLAYTIME_CHECKPOINT_INTERVAL_MS && JSON.stringify(tileState.used) !== tileLastCheckpointUsed) {
+  if (Date.now() - playtimeLastCheckpointAt >= PLAYTIME_CHECKPOINT_INTERVAL_MS && tileCheckpointText(cfg) !== tileLastCheckpointUsed) {
     writePlaytimeCheckpoint()
   }
 }
@@ -1349,7 +1363,7 @@ function tileStatus() {
   const cur = tileState.current
   return {
     list,
-    // (playing: the display's chip shows the tile's minutes only while it plays)
+    // (playing: the display's warning "Noch 5 Minuten" comes only while it plays)
     current: cur ? { key: cur, state: tileState.state, usedSeconds: tileState.used[cur] ?? 0, limited: cfg.limits.has(cur), playing: isActuallyPlaying() } : null,
   }
 }

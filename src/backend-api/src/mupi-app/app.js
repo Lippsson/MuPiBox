@@ -1228,7 +1228,7 @@ async function playbackAction(root, action) {
   if (!r.ok) {
     const code = r.body?.error ?? ''
     toast(
-      { playtime_limit_reached: 'Die Hörzeit für heute ist aufgebraucht.', quiet_hours_active: 'Gerade ist Ruhezeit.', no_active_track: 'Es ist nichts zum Fortsetzen da.' }[code] ??
+      { playtime_limit_reached: 'Die Hörzeit für heute ist aufgebraucht.', tile_limit_reached: 'Diese Kachel ist für heute aufgebraucht.', quiet_hours_active: 'Gerade ist Ruhezeit.', no_active_track: 'Es ist nichts zum Fortsetzen da.' }[code] ??
         'Das hat nicht geklappt',
       'info',
     )
@@ -1712,6 +1712,7 @@ function errorText(r, fallback = 'Das hat nicht geklappt') {
   return (
     {
       playtime_limit_reached: 'Die Hörzeit für heute ist aufgebraucht.',
+      tile_limit_reached: 'Diese Kachel ist für heute aufgebraucht.',
       quiet_hours_active: 'Gerade ist Ruhezeit.',
       spotify_blocked: 'Spotify lässt gerade keine Anfragen zu. Bitte später noch einmal versuchen.',
       spotify_id_missing: 'Dieser Eintrag hat keine Spotify-ID.',
