@@ -3575,7 +3575,6 @@
  "Fotos werden nur aus deinem Heimnetz geladen.": "Fotoğraflar yalnızca ev ağından yüklenir.",
  "Gespeichert – leer lassen, um ihn zu behalten": "Kayıtlı – korumak için boş bırak",
  "Immich getrennt": "Immich bağlantısı kesildi",
- "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.": "Immich anahtarı reddetti. Anahtarın tamamını kopyaladığını ve albümler ile fotoğraflar için okuma izni olduğunu kontrol et.",
  "Immich im Browser öffnen und anmelden.": "Immich’i tarayıcıda aç ve giriş yap.",
  "Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.": "Immich anahtarı artık kabul etmiyor. Kutu kayıtlı fotoğrafları göstermeye devam ediyor. Immich’te yeni bir anahtar oluşturup aşağıda değiştir.",
  "Immich-Version zu alt": "Immich sürümü çok eski",
@@ -3584,7 +3583,6 @@
  "Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).": "Canlı modda kutu yalnızca son gösterilen fotoğrafları saklar (en fazla 200 MB).",
  "Live von Immich": "Doğrudan Immich’ten",
  "Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.": "http:// veya https:// ve port ile. Yalnızca ev ağındaki bir sunucu yeterli.",
- "Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.": "“MuPiBox” adını gir ve yalnızca albümler ile fotoğraflar için okuma izni ver.",
  "Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.": "Immich’teki yeni fotoğraflar en geç bu süreden sonra ekranda görünür.",
  "Ordner vom verbundenen NAS als Alben": "Bağlı NAS’taki klasörler albüm olarak",
  "Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.": "Adresi ve Immich’in çalıştığını kontrol et. Kutu aynı ağda olmalı.",
@@ -3620,5 +3618,9 @@
  "{} {} und {} {} übernommen": "Eklendi: {} {} ve {} {}",
  "Fotos & Videos wählen": "Fotoğraf ve video seç",
  "{} Fotos und Videos": "{} fotoğraf ve video",
- "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Ayrıca SD karttaki tüm medya ve yüklenen fotoğraflar – birkaç GB olabilir ve sürebilir."
+ "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Ayrıca SD karttaki tüm medya ve yüklenen fotoğraflar – birkaç GB olabilir ve sürebilir.",
+ "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "“MuPiBox” adını gir. Immich izin sorarsa yalnızca şunları işaretle: album.read, asset.read ve asset.view (istersen user.read de – o zaman test hesap adını gösterir).",
+ "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich anahtarı reddetti. Anahtarın tamamını kopyaladığını kontrol et.",
+ "Rechte fehlen": "İzinler eksik",
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Anahtar geçerli ama bazı izinleri eksik. Immich’te album.read, asset.read ve asset.view içeren bir anahtar oluştur."
 }

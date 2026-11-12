@@ -3575,7 +3575,6 @@
  "Fotos werden nur aus deinem Heimnetz geladen.": "Фото завантажуються лише з твоєї домашньої мережі.",
  "Gespeichert – leer lassen, um ihn zu behalten": "Збережено — залиш порожнім, щоб зберегти",
  "Immich getrennt": "Immich відключено",
- "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.": "Immich відхилив ключ. Перевір, чи скопійовано ключ повністю і чи має він права на читання альбомів і фото.",
  "Immich im Browser öffnen und anmelden.": "Відкрий Immich у браузері й увійди.",
  "Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.": "Immich більше не приймає ключ. Пристрій і далі показує збережені фото. Створи в Immich новий ключ і заміни його нижче.",
  "Immich-Version zu alt": "Застаріла версія Immich",
@@ -3584,7 +3583,6 @@
  "Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).": "Наживо пристрій зберігає лише останні показані фото (не більше 200 МБ).",
  "Live von Immich": "Наживо з Immich",
  "Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.": "З http:// або https:// і портом. Достатньо сервера лише в домашній мережі.",
- "Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.": "Введи назву «MuPiBox» і дай лише права на читання альбомів і фото.",
  "Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.": "Нові фото з Immich з’являться на екрані не пізніше ніж через цей час.",
  "Ordner vom verbundenen NAS als Alben": "Папки підключеного NAS як альбоми",
  "Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.": "Перевір адресу й чи працює Immich. Пристрій має бути в тій самій мережі.",
@@ -3620,5 +3618,9 @@
  "{} {} und {} {} übernommen": "Додано: {} {} і {} {}",
  "Fotos & Videos wählen": "Вибрати фото й відео",
  "{} Fotos und Videos": "Фото й відео: {}",
- "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Плюс усі медіа на SD-картці та завантажені фото — може займати кілька ГБ і тривати."
+ "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Плюс усі медіа на SD-картці та завантажені фото — може займати кілька ГБ і тривати.",
+ "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Введи назву «MuPiBox». Якщо Immich спитає про права, познач лише ці: album.read, asset.read і asset.view (можна ще user.read — тоді перевірка покаже назву облікового запису).",
+ "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich відхилив ключ. Перевір, чи скопіював ключ повністю.",
+ "Rechte fehlen": "Бракує прав",
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Ключ підходить, але йому бракує прав. Створи в Immich ключ з album.read, asset.read і asset.view."
 }

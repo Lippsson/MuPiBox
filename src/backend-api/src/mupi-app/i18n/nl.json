@@ -3575,7 +3575,6 @@
  "Fotos werden nur aus deinem Heimnetz geladen.": "Foto’s worden alleen uit je thuisnetwerk geladen.",
  "Gespeichert – leer lassen, um ihn zu behalten": "Opgeslagen – leeg laten om hem te houden",
  "Immich getrennt": "Immich losgekoppeld",
- "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.": "Immich heeft de sleutel geweigerd. Controleer of je de hele sleutel hebt gekopieerd en of hij leesrechten heeft voor albums en foto’s.",
  "Immich im Browser öffnen und anmelden.": "Open Immich in de browser en meld je aan.",
  "Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.": "Immich accepteert de sleutel niet meer. De box toont de opgeslagen foto’s gewoon verder. Maak in Immich een nieuwe sleutel en vervang hem hieronder.",
  "Immich-Version zu alt": "Immich-versie te oud",
@@ -3584,7 +3583,6 @@
  "Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).": "Live bewaart de box alleen de laatst getoonde foto’s (hoogstens 200 MB).",
  "Live von Immich": "Live van Immich",
  "Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.": "Met http:// of https:// en poort. Een server alleen in het thuisnetwerk is genoeg.",
- "Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.": "Vul de naam „MuPiBox” in en geef alleen leesrechten voor albums en foto’s.",
  "Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.": "Nieuwe foto’s van Immich verschijnen uiterlijk na deze tijd op het display.",
  "Ordner vom verbundenen NAS als Alben": "Mappen van de verbonden NAS als albums",
  "Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.": "Controleer het adres en of Immich draait. De box moet in hetzelfde netwerk zitten.",
@@ -3620,5 +3618,9 @@
  "{} {} und {} {} übernommen": "{} {} en {} {} toegevoegd",
  "Fotos & Videos wählen": "Foto’s en video’s kiezen",
  "{} Fotos und Videos": "{} foto’s en video’s",
- "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Plus alle media op de SD-kaart en de geüploade foto’s – kan meerdere GB zijn en even duren."
+ "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Plus alle media op de SD-kaart en de geüploade foto’s – kan meerdere GB zijn en even duren.",
+ "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Voer de naam „MuPiBox” in. Vraagt Immich om rechten, vink dan alleen deze aan: album.read, asset.read en asset.view (eventueel ook user.read – dan toont de test je accountnaam).",
+ "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich heeft de sleutel geweigerd. Controleer of je de hele sleutel hebt gekopieerd.",
+ "Rechte fehlen": "Rechten ontbreken",
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "De sleutel klopt, maar mist rechten. Maak in Immich een sleutel aan met album.read, asset.read en asset.view."
 }

@@ -128,7 +128,15 @@ test('photo Immich: the test and an album against a server like Immich (old vers
     }
     const url = req.url ?? ''
     if (url === '/api/server/version') return version ? json(200, version) : json(404, {})
-    if (req.headers['x-api-key'] !== 'good-key-0123') return json(401, { message: 'Invalid API key' })
+    const key = req.headers['x-api-key']
+    if (key === 'no-albums-0123' && url.startsWith('/api/albums')) return json(403, { message: 'Missing required permission: album.read' })
+    if (key === 'no-view-01234' && url.startsWith('/api/assets/')) return json(403, { message: 'Missing required permission: asset.view' })
+    if (key === 'no-read-01234' && url === '/api/search/metadata') return json(403, { message: 'Missing required permission: asset.read' })
+    if (key !== 'good-key-0123' && !String(key).startsWith('no-')) return json(401, { message: 'Invalid API key' })
+    if (url === `/api/assets/${P}/thumbnail?size=thumbnail`) {
+      res.writeHead(200, { 'Content-Type': 'image/jpeg' })
+      return res.end(Buffer.from([0xff, 0xd8, 0xff, 0xd9]))
+    }
     if (url.startsWith('/api/albums?shared=true')) return json(200, [])
     if (url === '/api/albums') return json(200, [{ id: A, albumName: 'Urlaub', assetCount: 2, albumThumbnailAssetId: P }])
     if (url.startsWith(`/api/albums/${A}`)) return json(200, { id: A, albumName: 'Urlaub', assetCount: 2 })
@@ -144,6 +152,8 @@ test('photo Immich: the test and an album against a server like Immich (old vers
     const base = `http://127.0.0.1:${port}`
     assert.deepEqual(await testImmich(new ImmichClient(base, 'good-key-0123')), { ok: true, version: '1.120.2', account: 'Familie', albums: 1, assets: 2 })
     assert.deepEqual(await testImmich(new ImmichClient(base, 'wrong-key-0123')), { ok: false, error: 'unauthorized' })
+    // (a key with chosen rights: one missing is told apart from a wrong key)
+    for (const key of ['no-albums-0123', 'no-view-01234', 'no-read-01234']) assert.deepEqual(await testImmich(new ImmichClient(base, key)), { ok: false, error: 'permissions' }, key)
     const album = await new ImmichClient(base, 'good-key-0123').album(A)
     assert.equal(album.name, 'Urlaub')
     assert.deepEqual(album.assets.map((x) => x.id), [P])
@@ -155,6 +165,14 @@ test('photo Immich: the test and an album against a server like Immich (old vers
     server.close()
   }
   assert.deepEqual(await testImmich(new ImmichClient('http://127.0.0.1:1', 'good-key-0123')), { ok: false, error: 'unreachable' })
+})
+
+test('photo Immich: trouble of the server (or a proxy in front of it) counts as away, a missing picture does not', async () => {
+  const { immichDown, ImmichAway, ImmichRefused } = await import('./app-api/photos/immich')
+  assert.equal(immichDown(new ImmichAway('x')), true)
+  for (const status of [500, 502, 503, 504, 429]) assert.equal(immichDown(new ImmichRefused(status)), true, String(status))
+  for (const status of [400, 401, 403, 404]) assert.equal(immichDown(new ImmichRefused(status)), false, String(status))
+  assert.equal(immichDown(new Error('x')), false)
 })
 
 test('photo Immich: a clip length from its duration', async () => {

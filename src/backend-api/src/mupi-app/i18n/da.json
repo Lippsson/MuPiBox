@@ -3575,7 +3575,6 @@
  "Fotos werden nur aus deinem Heimnetz geladen.": "Fotos hentes kun fra dit hjemmenetværk.",
  "Gespeichert – leer lassen, um ihn zu behalten": "Gemt – lad feltet stå tomt for at beholde den",
  "Immich getrennt": "Immich afbrudt",
- "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.": "Immich afviste nøglen. Tjek, at du har kopieret hele nøglen, og at den har læserettigheder til album og fotos.",
  "Immich im Browser öffnen und anmelden.": "Åbn Immich i browseren, og log ind.",
  "Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.": "Immich accepterer ikke længere nøglen. Boksen viser fortsat de gemte fotos. Opret en ny nøgle i Immich, og erstat den nedenfor.",
  "Immich-Version zu alt": "Immich-versionen er for gammel",
@@ -3584,7 +3583,6 @@
  "Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).": "Live gemmer boksen kun de senest viste fotos (højst 200 MB).",
  "Live von Immich": "Live fra Immich",
  "Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.": "Med http:// eller https:// og port. En server kun i hjemmenetværket er nok.",
- "Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.": "Indtast navnet “MuPiBox”, og giv kun læserettigheder til album og fotos.",
  "Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.": "Nye fotos fra Immich vises på displayet senest efter denne tid.",
  "Ordner vom verbundenen NAS als Alben": "Mapper fra den forbundne NAS som album",
  "Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.": "Tjek adressen, og om Immich kører. Boksen skal være på samme netværk.",
@@ -3620,5 +3618,9 @@
  "{} {} und {} {} übernommen": "{} {} og {} {} tilføjet",
  "Fotos & Videos wählen": "Vælg fotos og videoer",
  "{} Fotos und Videos": "{} fotos og videoer",
- "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Desuden alle medier på SD-kortet og de uploadede fotos – kan fylde flere GB og tage tid."
+ "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Desuden alle medier på SD-kortet og de uploadede fotos – kan fylde flere GB og tage tid.",
+ "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Indtast navnet “MuPiBox”. Spørger Immich om rettigheder, så sæt kun flueben ved disse: album.read, asset.read og asset.view (gerne også user.read – så viser testen dit kontonavn).",
+ "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich afviste nøglen. Tjek, at du har kopieret hele nøglen.",
+ "Rechte fehlen": "Rettigheder mangler",
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Nøglen virker, men mangler rettigheder. Opret en nøgle i Immich med album.read, asset.read og asset.view."
 }

@@ -139,6 +139,10 @@ export class ImmichRefused extends Error {
     super(`Immich answered ${status}`)
   }
 }
+/** Immich cannot answer now: not reachable, or it (or a proxy in front of it) says it has trouble or too much to do */
+export const immichDown = (err: unknown): boolean => err instanceof ImmichAway || (err instanceof ImmichRefused && (err.status >= 500 || err.status === 429))
+/** The key is not (or no longer) accepted, or it lacks a right */
+const keyRefused = (err: unknown): boolean => err instanceof ImmichRefused && (err.status === 401 || err.status === 403)
 
 interface ImmichAlbum {
   id: string
@@ -267,9 +271,13 @@ export class ImmichClient {
 
 export type ImmichTest =
   | { ok: true; version: string; account: string | null; albums: number; assets: number }
-  | { ok: false; error: 'unreachable' | 'unauthorized' | 'unsupportedVersion' }
+  | { ok: false; error: 'unreachable' | 'unauthorized' | 'permissions' | 'unsupportedVersion' }
 
-/** The test of the assistant: the server there, new enough, the key accepted (it may read the albums) */
+/**
+ * The test of the assistant: the server there, new enough, the key accepted, and it has the rights the box needs - a key made
+ * with chosen rights answers 403 where one is missing: album.read (the albums), asset.view (the pictures, the clips), asset.read
+ * (the pictures of an album, searched in newer versions). user.read only gives the name of the account.
+ */
 export async function testImmich(client: ImmichClient): Promise<ImmichTest> {
   let v: Awaited<ReturnType<ImmichClient['version']>>
   try {
@@ -284,8 +292,24 @@ export async function testImmich(client: ImmichClient): Promise<ImmichTest> {
   try {
     list = await client.albums()
   } catch (err) {
-    if (err instanceof ImmichRefused && (err.status === 401 || err.status === 403)) return { ok: false, error: 'unauthorized' }
+    if (err instanceof ImmichRefused && err.status === 401) return { ok: false, error: 'unauthorized' }
+    if (err instanceof ImmichRefused && err.status === 403) return { ok: false, error: 'permissions' }
     return { ok: false, error: 'unreachable' }
+  }
+  // (the other rights, tried on an album with a picture: anything but a refusal - an older Immich without the search, say - is no
+  // missing right)
+  const sample = list.find((a) => typeof a.albumThumbnailAssetId === 'string' && UUID.test(a.albumThumbnailAssetId))
+  if (sample) {
+    const denied = async (attempt: () => Promise<unknown>) => {
+      try {
+        await attempt()
+        return false
+      } catch (err) {
+        return err instanceof ImmichRefused && err.status === 403
+      }
+    }
+    if (await denied(async () => (await client.picture(sample.albumThumbnailAssetId as string, 'thumbnail')).body?.cancel())) return { ok: false, error: 'permissions' }
+    if (await denied(() => client.json('/api/search/metadata', { method: 'POST', body: { albumIds: [sample.id], page: 1, size: 1 } }))) return { ok: false, error: 'permissions' }
   }
   // (the account: only when the key may read it - a key with the album rights only has no name to show)
   const me = await client.json<{ name?: string; email?: string }>('/api/users/me').catch(() => null)
@@ -626,10 +650,16 @@ export class ImmichPhotoSync {
           }
         } catch (err) {
           if (err instanceof PhotoAborted || stop.signal.aborted) return
-          if (!(err instanceof NotAPicture)) this.log(`${x.id}: ${(err as Error).message}`)
           for (const f of photoFiles(out)) await fsp.rm(f, { force: true }).catch(() => undefined)
-          // (Immich went away in the middle: the rest at the next sync)
-          if (err instanceof ImmichAway) break
+          // (Immich went away in the middle, or it has trouble - a proxy in front of it answering 502, say -, or the key is no
+          // longer accepted: not one try per picture, the rest at the next sync)
+          if (immichDown(err) || keyRefused(err)) {
+            // (a key without the right for the pictures: the app says so, as for one refused)
+            if (keyRefused(err)) this.state.unauthorized = true
+            this.log(`stopped: ${(err as Error).message} - the rest at the next sync`)
+            break
+          }
+          if (!(err instanceof NotAPicture)) this.log(`${x.id}: ${(err as Error).message}`)
         } finally {
           await fsp.rm(part, { force: true }).catch(() => undefined)
           this.state.done++
@@ -728,7 +758,7 @@ export async function sendImmichLive(req: Request, res: Response, assetRef: stri
       res.setHeader('Cache-Control', 'private, no-store')
       await pipeline(Readable.fromWeb(r.body as import('node:stream/web').ReadableStream), res)
     } catch (err) {
-      if (err instanceof ImmichAway || (err instanceof ImmichRefused && (err.status === 401 || err.status === 403))) liveFailedAt = Date.now()
+      if (immichDown(err) || keyRefused(err)) liveFailedAt = Date.now()
       if (!res.headersSent) res.status(404).end()
       else res.destroy()
     }
@@ -763,7 +793,7 @@ export async function sendImmichLive(req: Request, res: Response, assetRef: stri
     void pruneLive()
   } catch (err) {
     // (Immich away or the key refused - not a single picture it does not have)
-    if (err instanceof ImmichAway || (err instanceof ImmichRefused && (err.status === 401 || err.status === 403))) liveFailedAt = Date.now()
+    if (immichDown(err) || keyRefused(err)) liveFailedAt = Date.now()
     if (!res.headersSent) res.status(404).end()
   }
 }

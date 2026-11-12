@@ -12419,7 +12419,8 @@ async function loadPhotoImmich() {
 
 const IMMICH_ERRORS = {
   unreachable: ['Server nicht erreichbar', 'Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.'],
-  unauthorized: ['Schlüssel ungültig', 'Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.'],
+  unauthorized: ['Schlüssel ungültig', 'Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.'],
+  permissions: ['Rechte fehlen', 'Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.'],
   unsupportedVersion: ['Immich-Version zu alt', 'Diese Version wird nicht unterstützt. Bitte Immich aktualisieren (ab Version {}).'],
 }
 
@@ -12451,7 +12452,7 @@ function photoImmichSteps() {
     const kept = photoImmichKeyKept()
     body = `<h2>API-Schlüssel anlegen</h2><p class="help">Damit die Box deine Alben lesen darf.</p>
       <ol class="ph-howto"><li>Immich im Browser öffnen und anmelden.</li><li>Kontoeinstellungen › API-Schlüssel › „Neuer API-Schlüssel“.</li>
-      <li>Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.</li><li>Schlüssel kopieren und hier einfügen.</li></ol>
+      <li>Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).</li><li>Schlüssel kopieren und hier einfügen.</li></ol>
       <div class="field"><label for="im-key">API-Schlüssel</label><div class="input-wrap"><input class="input mono has-eye" id="im-key" type="password" value="${esc(photoImmich.key)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um ihn zu behalten') : '')}" ${NO_PW_MANAGER} spellcheck="false"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
       <small>Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
     next = `<button class="btn primary" id="im-test" ${photoImmich.testing ? 'disabled' : ''}>${esc(tr(photoImmich.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
@@ -12463,7 +12464,7 @@ function photoImmichSteps() {
     } else {
       const [head, text] = IMMICH_ERRORS[t?.error] ?? IMMICH_ERRORS.unreachable
       body = `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text.replace('{}', photoImmich.data?.minVersion ?? '1.106')))}</span></div>`
-      next = t?.error === 'unauthorized' ? `<button class="btn primary" data-imstep="2">Schlüssel ändern</button>` : `<button class="btn primary" data-imstep="1">Adresse ändern</button>`
+      next = t?.error === 'unauthorized' || t?.error === 'permissions' ? `<button class="btn primary" data-imstep="2">Schlüssel ändern</button>` : `<button class="btn primary" data-imstep="1">Adresse ändern</button>`
     }
   } else {
     const list = photoImmich.albums

@@ -3575,7 +3575,6 @@
  "Fotos werden nur aus deinem Heimnetz geladen.": "Foton hämtas bara från ditt hemnätverk.",
  "Gespeichert – leer lassen, um ihn zu behalten": "Sparad – lämna tomt för att behålla den",
  "Immich getrennt": "Immich frånkopplat",
- "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.": "Immich avvisade nyckeln. Kontrollera att du kopierade hela nyckeln och att den har läsrätt för album och foton.",
  "Immich im Browser öffnen und anmelden.": "Öppna Immich i webbläsaren och logga in.",
  "Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.": "Immich godtar inte längre nyckeln. Boxen visar fortfarande de sparade fotona. Skapa en ny nyckel i Immich och ersätt den nedan.",
  "Immich-Version zu alt": "Immich-versionen är för gammal",
@@ -3584,7 +3583,6 @@
  "Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).": "Live behåller boxen bara de senast visade fotona (högst 200 MB).",
  "Live von Immich": "Live från Immich",
  "Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.": "Med http:// eller https:// och port. En server bara i hemnätverket räcker.",
- "Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.": "Ange namnet ”MuPiBox” och ge bara läsrätt för album och foton.",
  "Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.": "Nya foton från Immich visas på skärmen senast efter den här tiden.",
  "Ordner vom verbundenen NAS als Alben": "Mappar från den anslutna NAS:en som album",
  "Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.": "Kontrollera adressen och att Immich körs. Boxen måste vara i samma nätverk.",
@@ -3620,5 +3618,9 @@
  "{} {} und {} {} übernommen": "{} {} och {} {} tillagda",
  "Fotos & Videos wählen": "Välj foton och videor",
  "{} Fotos und Videos": "{} foton och videor",
- "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Dessutom alla medier på SD-kortet och de uppladdade fotona – kan bli flera GB och ta tid."
+ "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Dessutom alla medier på SD-kortet och de uppladdade fotona – kan bli flera GB och ta tid.",
+ "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Ange namnet ”MuPiBox”. Frågar Immich efter behörigheter, kryssa bara i dessa: album.read, asset.read och asset.view (gärna även user.read – då visar testet ditt kontonamn).",
+ "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich avvisade nyckeln. Kontrollera att du kopierade hela nyckeln.",
+ "Rechte fehlen": "Behörigheter saknas",
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Nyckeln fungerar, men saknar behörigheter. Skapa en nyckel i Immich med album.read, asset.read och asset.view."
 }

@@ -3575,7 +3575,6 @@
  "Fotos werden nur aus deinem Heimnetz geladen.": "Fotky se načítají jen z tvé domácí sítě.",
  "Gespeichert – leer lassen, um ihn zu behalten": "Uloženo – nech prázdné, aby zůstal",
  "Immich getrennt": "Immich odpojen",
- "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.": "Immich klíč odmítl. Zkontroluj, zda jsi zkopíroval celý klíč a zda má práva ke čtení alb a fotek.",
  "Immich im Browser öffnen und anmelden.": "Otevři Immich v prohlížeči a přihlas se.",
  "Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.": "Immich už klíč nepřijímá. Box dál ukazuje uložené fotky. Vytvoř v Immich nový klíč a nahraď ho níže.",
  "Immich-Version zu alt": "Verze Immich je příliš stará",
@@ -3584,7 +3583,6 @@
  "Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).": "Při živém zobrazení si box ponechá jen naposledy zobrazené fotky (nejvýš 200 MB).",
  "Live von Immich": "Živě z Immich",
  "Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.": "S http:// nebo https:// a portem. Stačí server jen v domácí síti.",
- "Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.": "Zadej název „MuPiBox“ a dej jen práva ke čtení alb a fotek.",
  "Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.": "Nové fotky z Immich se na displeji objeví nejpozději po této době.",
  "Ordner vom verbundenen NAS als Alben": "Složky z připojeného NAS jako alba",
  "Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.": "Zkontroluj adresu a zda Immich běží. Box musí být ve stejné síti.",
@@ -3620,5 +3618,9 @@
  "{} {} und {} {} übernommen": "Přidáno: {} {} a {} {}",
  "Fotos & Videos wählen": "Vybrat fotky a videa",
  "{} Fotos und Videos": "Fotky a videa: {}",
- "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Navíc všechna média na SD kartě a nahrané fotky – může mít několik GB a trvat."
+ "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Navíc všechna média na SD kartě a nahrané fotky – může mít několik GB a trvat.",
+ "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Zadej název „MuPiBox“. Pokud se Immich zeptá na oprávnění, zaškrtni jen tato: album.read, asset.read a asset.view (klidně i user.read – pak test ukáže název tvého účtu).",
+ "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich klíč odmítl. Zkontroluj, že jsi zkopíroval celý klíč.",
+ "Rechte fehlen": "Chybí oprávnění",
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Klíč funguje, ale chybí mu oprávnění. Vytvoř v Immich klíč s album.read, asset.read a asset.view."
 }

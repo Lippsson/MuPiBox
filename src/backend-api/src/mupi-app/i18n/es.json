@@ -3575,7 +3575,6 @@
  "Fotos werden nur aus deinem Heimnetz geladen.": "Las fotos solo se cargan desde tu red doméstica.",
  "Gespeichert – leer lassen, um ihn zu behalten": "Guardada: déjalo vacío para conservarla",
  "Immich getrennt": "Immich desconectado",
- "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.": "Immich ha rechazado la clave. Comprueba que copiaste la clave entera y que tiene permisos de lectura para álbumes y fotos.",
  "Immich im Browser öffnen und anmelden.": "Abre Immich en el navegador e inicia sesión.",
  "Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.": "Immich ya no acepta la clave. La caja sigue mostrando las fotos guardadas. Crea una clave nueva en Immich y sustitúyela abajo.",
  "Immich-Version zu alt": "Versión de Immich demasiado antigua",
@@ -3584,7 +3583,6 @@
  "Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).": "En directo, la caja solo guarda las últimas fotos mostradas (como máximo 200 MB).",
  "Live von Immich": "En directo desde Immich",
  "Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.": "Con http:// o https:// y puerto. Basta un servidor solo en la red doméstica.",
- "Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.": "Escribe el nombre «MuPiBox» y da solo permisos de lectura para álbumes y fotos.",
  "Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.": "Las fotos nuevas de Immich aparecen en la pantalla como muy tarde tras este tiempo.",
  "Ordner vom verbundenen NAS als Alben": "Carpetas del NAS conectado como álbumes",
  "Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.": "Comprueba la dirección y que Immich funciona. La caja debe estar en la misma red.",
@@ -3620,5 +3618,9 @@
  "{} {} und {} {} übernommen": "Añadidos: {} {} y {} {}",
  "Fotos & Videos wählen": "Elegir fotos y vídeos",
  "{} Fotos und Videos": "{} fotos y vídeos",
- "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Además todos los medios de la tarjeta SD y las fotos subidas: puede ocupar varios GB y tardar."
+ "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Además todos los medios de la tarjeta SD y las fotos subidas: puede ocupar varios GB y tardar.",
+ "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Escribe el nombre «MuPiBox». Si Immich pide permisos, marca solo estos: album.read, asset.read y asset.view (también user.read si quieres; así la prueba muestra el nombre de tu cuenta).",
+ "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich ha rechazado la clave. Comprueba que has copiado la clave completa.",
+ "Rechte fehlen": "Faltan permisos",
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "La clave es válida, pero le faltan permisos. Crea en Immich una clave con album.read, asset.read y asset.view."
 }

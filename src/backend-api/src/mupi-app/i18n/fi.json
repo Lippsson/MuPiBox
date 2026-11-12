@@ -3575,7 +3575,6 @@
  "Fotos werden nur aus deinem Heimnetz geladen.": "Kuvat ladataan vain kotiverkostasi.",
  "Gespeichert – leer lassen, um ihn zu behalten": "Tallennettu – jätä tyhjäksi säilyttääksesi sen",
  "Immich getrennt": "Immich irrotettu",
- "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.": "Immich hylkäsi avaimen. Tarkista, että kopioit koko avaimen ja että sillä on lukuoikeus albumeihin ja kuviin.",
  "Immich im Browser öffnen und anmelden.": "Avaa Immich selaimessa ja kirjaudu sisään.",
  "Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.": "Immich ei enää hyväksy avainta. Laite näyttää edelleen tallennetut kuvat. Luo Immichissä uusi avain ja vaihda se alla.",
  "Immich-Version zu alt": "Immich-versio liian vanha",
@@ -3584,7 +3583,6 @@
  "Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).": "Suoratilassa laite säilyttää vain viimeksi näytetyt kuvat (enintään 200 Mt).",
  "Live von Immich": "Suoraan Immichistä",
  "Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.": "http:// tai https:// ja portti. Pelkästään kotiverkossa oleva palvelin riittää.",
- "Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.": "Anna nimeksi ”MuPiBox” ja anna vain lukuoikeus albumeihin ja kuviin.",
  "Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.": "Uudet kuvat Immichistä näkyvät näytöllä viimeistään tämän ajan jälkeen.",
  "Ordner vom verbundenen NAS als Alben": "Yhdistetyn NAS:n kansiot albumeina",
  "Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.": "Tarkista osoite ja että Immich on käynnissä. Laitteen on oltava samassa verkossa.",
@@ -3620,5 +3618,9 @@
  "{} {} und {} {} übernommen": "Lisätty: {} {} ja {} {}",
  "Fotos & Videos wählen": "Valitse kuvia ja videoita",
  "{} Fotos und Videos": "{} kuvaa ja videota",
- "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Lisäksi kaikki SD-kortin mediat ja ladatut kuvat – voi olla useita gigatavuja ja kestää."
+ "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Lisäksi kaikki SD-kortin mediat ja ladatut kuvat – voi olla useita gigatavuja ja kestää.",
+ "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Anna nimeksi ”MuPiBox”. Jos Immich kysyy oikeuksia, valitse vain nämä: album.read, asset.read ja asset.view (halutessasi myös user.read – silloin testi näyttää tilisi nimen).",
+ "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich hylkäsi avaimen. Tarkista, että kopioit koko avaimen.",
+ "Rechte fehlen": "Oikeuksia puuttuu",
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Avain toimii, mutta siltä puuttuu oikeuksia. Luo Immichissä avain, jolla on album.read, asset.read ja asset.view."
 }

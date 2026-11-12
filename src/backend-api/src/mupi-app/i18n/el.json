@@ -3575,7 +3575,6 @@
  "Fotos werden nur aus deinem Heimnetz geladen.": "Οι φωτογραφίες φορτώνονται μόνο από το οικιακό σου δίκτυο.",
  "Gespeichert – leer lassen, um ihn zu behalten": "Αποθηκευμένο – άφησέ το κενό για να μείνει",
  "Immich getrennt": "Το Immich αποσυνδέθηκε",
- "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast und ob er Leserechte für Alben und Fotos hat.": "Το Immich απέρριψε το κλειδί. Έλεγξε ότι αντέγραψες ολόκληρο το κλειδί και ότι έχει δικαιώματα ανάγνωσης για άλμπουμ και φωτογραφίες.",
  "Immich im Browser öffnen und anmelden.": "Άνοιξε το Immich στον περιηγητή και συνδέσου.",
  "Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.": "Το Immich δεν δέχεται πια το κλειδί. Το κουτί δείχνει ακόμη τις αποθηκευμένες φωτογραφίες. Φτιάξε νέο κλειδί στο Immich και αντικατέστησέ το παρακάτω.",
  "Immich-Version zu alt": "Πολύ παλιά έκδοση Immich",
@@ -3584,7 +3583,6 @@
  "Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).": "Σε ζωντανή προβολή το κουτί κρατά μόνο τις τελευταίες φωτογραφίες (έως 200 MB).",
  "Live von Immich": "Ζωντανά από το Immich",
  "Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.": "Με http:// ή https:// και θύρα. Αρκεί ένας διακομιστής μόνο στο οικιακό δίκτυο.",
- "Name „MuPiBox“ eingeben und nur Leserechte für Alben und Fotos geben.": "Γράψε το όνομα «MuPiBox» και δώσε μόνο δικαιώματα ανάγνωσης για άλμπουμ και φωτογραφίες.",
  "Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.": "Νέες φωτογραφίες από το Immich εμφανίζονται στην οθόνη το αργότερο μετά από αυτόν τον χρόνο.",
  "Ordner vom verbundenen NAS als Alben": "Φάκελοι από το συνδεδεμένο NAS ως άλμπουμ",
  "Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.": "Έλεγξε τη διεύθυνση και αν λειτουργεί το Immich. Το κουτί πρέπει να είναι στο ίδιο δίκτυο.",
@@ -3620,5 +3618,9 @@
  "{} {} und {} {} übernommen": "Προστέθηκαν: {} {} και {} {}",
  "Fotos & Videos wählen": "Επιλογή φωτογραφιών και βίντεο",
  "{} Fotos und Videos": "{} φωτογραφίες και βίντεο",
- "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Επιπλέον όλα τα μέσα της κάρτας SD και οι φωτογραφίες που ανέβηκαν – μπορεί να είναι αρκετά GB και να διαρκέσει."
+ "Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.": "Επιπλέον όλα τα μέσα της κάρτας SD και οι φωτογραφίες που ανέβηκαν – μπορεί να είναι αρκετά GB και να διαρκέσει.",
+ "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Γράψε το όνομα «MuPiBox». Αν το Immich ζητήσει δικαιώματα, τσέκαρε μόνο αυτά: album.read, asset.read και asset.view (αν θες και user.read – τότε η δοκιμή δείχνει το όνομα του λογαριασμού σου).",
+ "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Το Immich απέρριψε το κλειδί. Έλεγξε ότι αντέγραψες ολόκληρο το κλειδί.",
+ "Rechte fehlen": "Λείπουν δικαιώματα",
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Το κλειδί είναι σωστό, αλλά του λείπουν δικαιώματα. Δημιούργησε στο Immich ένα κλειδί με album.read, asset.read και asset.view."
 }
