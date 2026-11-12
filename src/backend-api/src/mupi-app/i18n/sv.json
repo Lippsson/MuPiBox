@@ -3361,7 +3361,6 @@
  "Tempo der Diashow": "Bildspelets tempo",
  "Videos": "Videor",
  "Videos anzeigen": "Visa videor",
- "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.": "Visa foton och korta videor på boxens skärm: uppladdade från mobilen, från en NAS-mapp eller från Immich.",
  "Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.": "Visar ett bildspel när ingen har använt boxen på ett tag.",
  "{} {} gelöscht": "Borttaget: {} {}",
  "{} {} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.": "Ta bort {} {} från boxen? Det går inte att ångra.",
@@ -3672,5 +3671,6 @@
  "DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.": "DSM godtar inte längre inloggningen. Boxen visar fortfarande de sparade fotona. Kontrollera konto och lösenord nedan.",
  "DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.": "DSM visar ett annat certifikat än det bekräftade. Har det förnyats på NAS:en, kontrollera det nya fingeravtrycket och bekräfta det.",
  "Gespeichert – leer lassen, um es zu behalten": "Sparat – lämna tomt för att behålla det",
- "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Som i webbläsaren för DSM, oftast med port 5001. Utan angivelse använder boxen https och 5001."
+ "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Som i webbläsaren för DSM, oftast med port 5001. Utan angivelse använder boxen https och 5001.",
+ "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.": "Visa foton och korta videor på boxens skärm: uppladdade från mobilen, från en NAS-mapp, från Immich eller Synology Photos."
 }

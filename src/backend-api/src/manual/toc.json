@@ -176,6 +176,85 @@
     ]
   },
   {
+    "id": "fotos",
+    "title": {
+      "de": "Fotos",
+      "en": "Photos"
+    },
+    "children": [
+      {
+        "id": "einschalten",
+        "title": {
+          "de": "Einschalten und Einstellungen",
+          "en": "Switching on and settings"
+        }
+      },
+      {
+        "id": "am-display",
+        "title": {
+          "de": "Fotos am Display",
+          "en": "Photos on the display"
+        }
+      },
+      {
+        "id": "hochladen",
+        "title": {
+          "de": "Fotos hochladen",
+          "en": "Uploading photos"
+        }
+      },
+      {
+        "id": "bildzeit",
+        "title": {
+          "de": "Bildzeit",
+          "en": "Picture time"
+        }
+      },
+      {
+        "id": "bildschirmschoner",
+        "title": {
+          "de": "Bildschirmschoner",
+          "en": "Screensaver"
+        }
+      },
+      {
+        "id": "nas-ordner",
+        "title": {
+          "de": "NAS-Ordner",
+          "en": "NAS folders"
+        }
+      },
+      {
+        "id": "immich",
+        "title": {
+          "de": "Immich",
+          "en": "Immich"
+        }
+      },
+      {
+        "id": "synology-photos",
+        "title": {
+          "de": "Synology Photos",
+          "en": "Synology Photos"
+        }
+      },
+      {
+        "id": "speichern-oder-live",
+        "title": {
+          "de": "Foto-Dienste: speichern oder live",
+          "en": "Photo services: keep or live"
+        }
+      },
+      {
+        "id": "probleme",
+        "title": {
+          "de": "Wenn Fotos fehlen",
+          "en": "When photos are missing"
+        }
+      }
+    ]
+  },
+  {
     "id": "hardware",
     "title": {
       "de": "Hardware und Zubehör",

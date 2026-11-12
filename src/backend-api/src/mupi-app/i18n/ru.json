@@ -3361,7 +3361,6 @@
  "Tempo der Diashow": "Скорость слайд-шоу",
  "Videos": "Видео",
  "Videos anzeigen": "Показывать видео",
- "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.": "Показывайте фото и короткие видео на дисплее бокса: загруженные с телефона, из папки NAS или из Immich.",
  "Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.": "Показывает слайд-шоу, когда боксом какое-то время никто не пользуется.",
  "{} {} gelöscht": "Удалено: {} {}",
  "{} {} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.": "Удалить с бокса: {} {}? Это нельзя отменить.",
@@ -3672,5 +3671,6 @@
  "DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.": "DSM больше не принимает вход. Устройство продолжает показывать сохранённые фото. Проверьте аккаунт и пароль ниже.",
  "DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.": "DSM показывает другой сертификат, чем подтверждённый. Если его обновили на NAS, проверьте новый отпечаток и подтвердите его.",
  "Gespeichert – leer lassen, um es zu behalten": "Сохранён — оставьте пустым, чтобы сохранить",
- "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Как в браузере для DSM, обычно с портом 5001. Без указания устройство использует https и 5001."
+ "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Как в браузере для DSM, обычно с портом 5001. Без указания устройство использует https и 5001.",
+ "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.": "Показывайте фото и короткие видео на дисплее бокса: загруженные с телефона, из папки NAS, из Immich или Synology Photos."
 }

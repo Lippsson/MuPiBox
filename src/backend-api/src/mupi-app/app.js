@@ -13377,7 +13377,7 @@ function photoSettingsTop() {
   if (!d.settings.enabled) {
     return [
       `<section class="card photo-off"><div class="photo-hero"><span class="photo-hero-ic">${icon('image', 30)}</span><h2>Fotos am Display</h2>
-        <p class="help">Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.</p></div>
+        <p class="help">Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.</p></div>
         <div class="row"><span class="lbl"><b>Fotoanzeige</b><small>Standardmäßig aus.</small></span><label class="switch"><input type="checkbox" id="ph-on" role="switch" aria-label="Fotoanzeige"><span></span></label></div></section>`,
       `<div class="note wide">${icon('info', 18)}<span>Nach dem Einschalten erscheinen „Fotos“ in der Bibliothek und die Bildzeit unter Spielzeit. Am Display kommt der Reiter „Fotos“ dazu, sobald ein Album freigegeben ist.</span></div>`,
       `<div class="note wide">${icon('lock', 18)}<span>Fotos bleiben auf der Box in deinem Heimnetz. Es gibt keine Links zum Teilen.</span></div>`,

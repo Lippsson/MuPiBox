@@ -41,3 +41,5 @@ Mit **Auswahl speichern** übernimmst du die Wahl. **Ausgewählte herunterladen*
 Ein **Profil** merkt sich die Ordner-Auswahl (Anzeigen, Ausblenden, Laden) für ein NAS und Konto, nicht das Passwort. **Auswahl als Profil speichern** legt ein neues an, zum Beispiel für jedes Kind eines. Mit **Laden** neben einem Profil wechselst du zu dessen Auswahl, **Löschen** entfernt es. Das Profil „Standard“ bleibt immer.
 
 Auf dem Display erscheinen die angezeigten Ordner im Reiter **NAS** oder in der Kategorie, die du gewählt hast. Den Reiter NAS kannst du bei Bedarf ausblenden ([Die Startseite](../bedienung/startseite.md)).
+
+Fotos vom NAS wählst du getrennt davon unter **Bibliothek › Fotos** ([NAS-Ordner](../fotos/nas-ordner.md)).

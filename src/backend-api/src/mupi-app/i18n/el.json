@@ -3361,7 +3361,6 @@
  "Tempo der Diashow": "Ταχύτητα προβολής διαφανειών",
  "Videos": "Βίντεο",
  "Videos anzeigen": "Εμφάνιση βίντεο",
- "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.": "Δείξε φωτογραφίες και σύντομα βίντεο στην οθόνη του κουτιού: ανεβασμένα από το κινητό, από φάκελο NAS ή από το Immich.",
  "Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.": "Δείχνει μια προβολή διαφανειών, όταν κανείς δεν αγγίζει το κουτί για λίγο.",
  "{} {} gelöscht": "Διαγράφηκαν: {} {}",
  "{} {} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.": "Διαγραφή από το κουτί: {} {}; Αυτό δεν αναιρείται.",
@@ -3672,5 +3671,6 @@
  "DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.": "Το DSM δεν δέχεται πια τη σύνδεση. Το κουτί συνεχίζει να δείχνει τις αποθηκευμένες φωτογραφίες. Έλεγξε λογαριασμό και κωδικό παρακάτω.",
  "DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.": "Το DSM δείχνει άλλο πιστοποιητικό από το επιβεβαιωμένο. Αν ανανεώθηκε στο NAS, έλεγξε το νέο αποτύπωμα και επιβεβαίωσέ το.",
  "Gespeichert – leer lassen, um es zu behalten": "Αποθηκευμένος – άφησέ το κενό για να μείνει",
- "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Όπως στον browser για το DSM, συνήθως με θύρα 5001. Χωρίς αυτή το κουτί παίρνει https και 5001."
+ "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Όπως στον browser για το DSM, συνήθως με θύρα 5001. Χωρίς αυτή το κουτί παίρνει https και 5001.",
+ "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.": "Δείξε φωτογραφίες και σύντομα βίντεο στην οθόνη του κουτιού: ανεβασμένα από το κινητό, από φάκελο NAS, από το Immich ή το Synology Photos."
 }

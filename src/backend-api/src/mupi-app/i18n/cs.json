@@ -3361,7 +3361,6 @@
  "Tempo der Diashow": "Rychlost prezentace",
  "Videos": "Videa",
  "Videos anzeigen": "Zobrazovat videa",
- "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.": "Zobrazujte fotky a krátká videa na displeji boxu: nahraná z telefonu, ze složky na NAS nebo z Immich.",
  "Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.": "Spustí prezentaci, když na boxu chvíli nikdo nic nedělá.",
  "{} {} gelöscht": "Smazáno: {} {}",
  "{} {} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.": "Smazat z Boxu: {} {}? To nelze vrátit zpět.",
@@ -3672,5 +3671,6 @@
  "DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.": "DSM už nepřijímá přihlášení. Box dál ukazuje uložené fotky. Zkontroluj účet a heslo níže.",
  "DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.": "DSM ukazuje jiný certifikát než potvrzený. Pokud byl na NAS obnoven, zkontroluj nový otisk a potvrď ho.",
  "Gespeichert – leer lassen, um es zu behalten": "Uloženo – nech prázdné, aby zůstalo",
- "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Jako v prohlížeči pro DSM, obvykle s portem 5001. Bez něj box použije https a 5001."
+ "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Jako v prohlížeči pro DSM, obvykle s portem 5001. Bez něj box použije https a 5001.",
+ "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.": "Zobrazujte fotky a krátká videa na displeji boxu: nahraná z telefonu, ze složky na NAS, z Immich nebo Synology Photos."
 }

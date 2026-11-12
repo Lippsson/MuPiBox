@@ -3361,7 +3361,6 @@
  "Tempo der Diashow": "Tempo van de diavoorstelling",
  "Videos": "Video's",
  "Videos anzeigen": "Video’s tonen",
- "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.": "Toon foto’s en korte video’s op het display van de box: geüpload vanaf de telefoon, uit een NAS-map of uit Immich.",
  "Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.": "Toont een diavoorstelling als niemand de box een tijdje gebruikt.",
  "{} {} gelöscht": "Verwijderd: {} {}",
  "{} {} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.": "{} {} van de box verwijderen? Dit kan niet ongedaan worden gemaakt.",
@@ -3672,5 +3671,6 @@
  "DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.": "DSM accepteert de aanmelding niet meer. De box toont de opgeslagen foto’s verder. Controleer account en wachtwoord hieronder.",
  "DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.": "DSM toont een ander certificaat dan het bevestigde. Is het op de NAS vernieuwd, controleer dan de nieuwe vingerafdruk en bevestig die.",
  "Gespeichert – leer lassen, um es zu behalten": "Opgeslagen – laat leeg om het te houden",
- "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Zoals in de browser voor DSM, meestal met poort 5001. Zonder opgave neemt de box https en 5001."
+ "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Zoals in de browser voor DSM, meestal met poort 5001. Zonder opgave neemt de box https en 5001.",
+ "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.": "Toon foto’s en korte video’s op het display van de box: geüpload vanaf de telefoon, uit een NAS-map, uit Immich of Synology Photos."
 }

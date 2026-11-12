@@ -8,6 +8,7 @@ In der App unter **Spielzeit** bestimmst du, wann und wie lange die Box spielt.
 | [Ruhezeiten](ruhezeiten.md) | Zeitfenster, in denen die Box schweigt, zum Beispiel Hausaufgaben und Schlafenszeit |
 | [Sofort-Aktionen und Schlaftimer](schlaftimer.md) | Bonus-Zeit, Sperren aufheben, sofort Ruhe, Ausschalten nach Zeit |
 | [Hör-Verlauf](hoer-verlauf.md) | was in den letzten Tagen gehört wurde |
+| [Bildzeit](../fotos/bildzeit.md) | wie lange am Tag Fotos angeschaut werden dürfen (nur mit eingeschalteter Fotoanzeige) |
 
 ## Was das Kind sieht
 

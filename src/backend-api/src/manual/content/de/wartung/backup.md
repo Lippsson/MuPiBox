@@ -7,7 +7,7 @@
 | Art | Inhalt |
 | --- | --- |
 | **Konfigurations-Backup** | die Einstellungen (`mupiboxconfig.json`), die Bibliothek (`data.json`) und die eigenen Cover |
-| **Voll-Backup** | zusätzlich **alle Medien der SD-Karte**. Kann mehrere GB groß werden und dauern |
+| **Voll-Backup** | zusätzlich **alle Medien der SD-Karte** und die hochgeladenen Fotos und Videos ([Fotos](../fotos/hochladen.md#sicherung)). Kann mehrere GB groß werden und dauern |
 
 Tippe bei der gewünschten Art auf **Herunterladen**. Die Datei landet auf deinem PC oder Handy. Bewahre sie nicht nur auf der Box selbst auf.
 

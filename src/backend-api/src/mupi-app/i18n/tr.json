@@ -3361,7 +3361,6 @@
  "Tempo der Diashow": "Slayt gösterisi hızı",
  "Videos": "Videolar",
  "Videos anzeigen": "Videoları göster",
- "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.": "Fotoğrafları ve kısa videoları kutunun ekranında göster: telefondan yüklenen, bir NAS klasöründen veya Immich’ten.",
  "Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.": "Bir süre kimse kutuyu kullanmadığında slayt gösterisi gösterir.",
  "{} {} gelöscht": "Silindi: {} {}",
  "{} {} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.": "Kutudan silinsin mi: {} {}? Bu geri alınamaz.",
@@ -3672,5 +3671,6 @@
  "DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.": "DSM artık oturumu kabul etmiyor. Kutu kayıtlı fotoğrafları göstermeye devam ediyor. Aşağıdan hesabı ve parolayı kontrol et.",
  "DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.": "DSM, onaylanandan farklı bir sertifika gösteriyor. NAS’ta yenilendiyse yeni parmak izini kontrol et ve onayla.",
  "Gespeichert – leer lassen, um es zu behalten": "Kaydedildi – korumak için boş bırak",
- "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Tarayıcıda DSM için olduğu gibi, genelde port 5001 ile. Belirtilmezse kutu https ve 5001 kullanır."
+ "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Tarayıcıda DSM için olduğu gibi, genelde port 5001 ile. Belirtilmezse kutu https ve 5001 kullanır.",
+ "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.": "Fotoğrafları ve kısa videoları kutunun ekranında göster: telefondan yüklenen, bir NAS klasöründen, Immich’ten veya Synology Photos’tan."
 }

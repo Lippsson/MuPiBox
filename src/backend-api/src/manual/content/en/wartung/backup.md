@@ -7,7 +7,7 @@
 | Kind | Content |
 | --- | --- |
 | **Configuration backup** | the settings (`mupiboxconfig.json`), the library (`data.json`) and your own covers |
-| **Full backup** | additionally **all media on the SD card**. Can be several GB in size and take a while |
+| **Full backup** | additionally **all media on the SD card** and the uploaded photos and videos ([Photos](../fotos/hochladen.md#backup)). Can be several GB in size and take a while |
 
 Tap **Download** next to the kind you want. The file lands on your PC or phone. Do not keep it only on the box itself.
 

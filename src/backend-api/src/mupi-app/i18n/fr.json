@@ -3361,7 +3361,6 @@
  "Tempo der Diashow": "Vitesse du diaporama",
  "Videos": "Vidéos",
  "Videos anzeigen": "Afficher les vidéos",
- "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.": "Affiche des photos et de courtes vidéos sur l'écran de la box : envoyées depuis le téléphone, depuis un dossier du NAS ou depuis Immich.",
  "Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.": "Affiche un diaporama quand personne n'utilise la box pendant un moment.",
  "{} {} gelöscht": "Supprimées : {} {}",
  "{} {} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.": "Supprimer de la box : {} {} ? Cette action est irréversible.",
@@ -3672,5 +3671,6 @@
  "DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.": "DSM n’accepte plus la connexion. La box continue d’afficher les photos enregistrées. Vérifie le compte et le mot de passe ci-dessous.",
  "DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.": "DSM présente un autre certificat que celui confirmé. S’il a été renouvelé sur le NAS, vérifie la nouvelle empreinte et confirme-la.",
  "Gespeichert – leer lassen, um es zu behalten": "Enregistré – laisse vide pour le garder",
- "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Comme dans le navigateur pour DSM, en général avec le port 5001. Sans précision, la box prend https et 5001."
+ "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Comme dans le navigateur pour DSM, en général avec le port 5001. Sans précision, la box prend https et 5001.",
+ "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.": "Affiche des photos et de courtes vidéos sur l'écran de la box : envoyées depuis le téléphone, depuis un dossier du NAS, depuis Immich ou Synology Photos."
 }

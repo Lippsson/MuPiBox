@@ -3361,7 +3361,6 @@
  "Tempo der Diashow": "Velocidade da apresentação",
  "Videos": "Vídeos",
  "Videos anzeigen": "Mostrar vídeos",
- "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.": "Mostra fotos e vídeos curtos no ecrã da caixa: enviados do telemóvel, de uma pasta do NAS ou do Immich.",
  "Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.": "Mostra uma apresentação quando ninguém usa a caixa durante algum tempo.",
  "{} {} gelöscht": "Eliminadas: {} {}",
  "{} {} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.": "Eliminar da caixa: {} {}? Isto não pode ser desfeito.",
@@ -3672,5 +3671,6 @@
  "DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.": "O DSM já não aceita o início de sessão. A caixa continua a mostrar as fotos guardadas. Verifica a conta e a palavra-passe abaixo.",
  "DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.": "O DSM mostra um certificado diferente do confirmado. Se foi renovado no NAS, verifica a nova impressão digital e confirma-a.",
  "Gespeichert – leer lassen, um es zu behalten": "Guardada – deixa vazio para a manter",
- "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Como no navegador para o DSM, normalmente com a porta 5001. Sem indicação, a caixa usa https e 5001."
+ "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Como no navegador para o DSM, normalmente com a porta 5001. Sem indicação, a caixa usa https e 5001.",
+ "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.": "Mostra fotos e vídeos curtos no ecrã da caixa: enviados do telemóvel, de uma pasta do NAS, do Immich ou do Synology Photos."
 }

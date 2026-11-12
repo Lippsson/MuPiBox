@@ -3361,7 +3361,6 @@
  "Tempo der Diashow": "Diaesityksen nopeus",
  "Videos": "Videot",
  "Videos anzeigen": "Näytä videot",
- "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner oder aus Immich.": "Näytä kuvia ja lyhyitä videoita boksin näytöllä: puhelimesta ladattuina, NAS-kansiosta tai Immichistä.",
  "Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.": "Näyttää diaesityksen, kun boksia ei ole käytetty hetkeen.",
  "{} {} gelöscht": "Poistettu: {} {}",
  "{} {} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.": "Poistetaanko laatikosta: {} {}? Tätä ei voi perua.",
@@ -3672,5 +3671,6 @@
  "DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.": "DSM ei enää hyväksy kirjautumista. Laite näyttää edelleen tallennetut kuvat. Tarkista tili ja salasana alla.",
  "DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.": "DSM näyttää eri varmenteen kuin vahvistetun. Jos se uusittiin NAS:ssa, tarkista uusi sormenjälki ja vahvista se.",
  "Gespeichert – leer lassen, um es zu behalten": "Tallennettu – jätä tyhjäksi säilyttääksesi",
- "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Kuten selaimessa DSM:lle, yleensä portilla 5001. Ilman sitä laite käyttää https:ää ja porttia 5001."
+ "Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.": "Kuten selaimessa DSM:lle, yleensä portilla 5001. Ilman sitä laite käyttää https:ää ja porttia 5001.",
+ "Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich oder Synology Photos.": "Näytä kuvia ja lyhyitä videoita boksin näytöllä: puhelimesta ladattuina, NAS-kansiosta, Immichistä tai Synology Photosista."
 }
