@@ -203,6 +203,8 @@ export function activate(api) {
   function open() {
     api.overlay.open({
       title: settings?.placeName ? `Wetter – ${settings.placeName}` : 'Wetter',
+      // (the dials use the whole height; the back arrow floats in the corner, where the round dial leaves room)
+      flush: true,
       mount(content) {
         const box = document.createElement('div')
         box.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column'
