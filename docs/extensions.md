@@ -212,8 +212,9 @@ Dazu liefert der Kern selbst: `GET /api/app/extensions` (Katalog und Installiert
   Seiten (Startseite, Sperrbildschirm …): `mount` wird für jeden Platz mit einem leeren Element aufgerufen und gibt zurück, was den
   Platz wieder aufräumt (Zeitgeber, Beobachter). Farben erbt das Element (`currentColor`).
 - `api.fetchApi('/…')` – GET auf den eigenen API-Teil (`/api/ext/<id>/…`), JSON oder `null`
-- `api.overlay.open({ title, mount(content) })` / `api.overlay.close()` – eine Vollbild-Seite über dem Display mit Titelleiste und
-  Zurück-Knopf; `mount` füllt den Inhalt und gibt zurück, was beim Schließen aufräumt. Immer nur eine Seite.
+- `api.overlay.open({ title, mount(content), flush })` / `api.overlay.close()` – eine Vollbild-Seite über dem Display mit Zurück-Pfeil
+  oben links; `mount` füllt den Inhalt und gibt zurück, was beim Schließen aufräumt. Mit `flush: true` reicht der Inhalt bis zum
+  oberen Rand und der Pfeil schwebt darüber (für Seiten, die jeden Pixel Höhe brauchen). Immer nur eine Seite.
 - `api.winamp.onEject(fn)` – der Auswurf-Knopf im Winamp-Fenster: gibt `fn()` `true` zurück, ist er erledigt, sonst öffnet er die Bibliothek
 - `api.player.open(media)` – öffnet den Player mit diesem Album; `api.player.noResumeFolder(folder)` hält Alben dieses Ordners aus „Fortsetzen“ heraus
 

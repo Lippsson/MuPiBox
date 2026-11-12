@@ -36,6 +36,8 @@ export interface OverlayPage {
   title: string
   /** Fills the content area; what it returns is called when the page is closed. */
   mount(content: HTMLElement): (() => void) | void
+  /** The content area runs up to the top edge and the back button floats in the corner above it (for pages that want every pixel of height). */
+  flush?: boolean
 }
 
 /** What an extension's display.js gets (docs/extensions.md, "Display"). */
@@ -124,7 +126,9 @@ export class ExtensionHostService {
       'position:fixed;inset:0;z-index:100000;display:flex;flex-direction:column;box-sizing:border-box;background:var(--ion-background-color,#121212);color:var(--ion-text-color,#fff);font-family:var(--ion-font-family,inherit)'
     const bar = document.createElement('div')
     // (only the arrow in the corner: the page says what it is by itself, and the room goes to the page)
-    bar.style.cssText = 'flex:none;display:flex;align-items:center;height:60px;padding:0 12px'
+    bar.style.cssText = page.flush
+      ? 'position:absolute;top:0;left:0;z-index:1;display:flex;align-items:center;height:60px;padding:0 12px'
+      : 'flex:none;display:flex;align-items:center;height:60px;padding:0 12px'
     root.setAttribute('aria-label', page.title)
     const back = document.createElement('button')
     back.type = 'button'
