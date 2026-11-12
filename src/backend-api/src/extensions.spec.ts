@@ -213,12 +213,17 @@ describe('the weather extension of this repository', () => {
   })
 })
 
-describe('the users extension of this repository', () => {
-  const extDir = path.join(process.cwd(), '..', '..', 'extensions')
-  const users = JSON.parse(readFileSync(path.join(extDir, 'users', 'manifest.json'), 'utf8')) as Manifest
-  it('has a manifest the installer accepts, with a roster of four routes of its own', () => {
-    assert.strictEqual(checkManifest(users, files('api.js', 'display.js', 'icon.svg')), null)
-    assert.strictEqual(users.ui?.items[0].type, 'roster')
+// (the users extension that tried it out is no longer in this repository - multi-user comes into the box itself)
+describe('a roster in the app (hostApi 4)', () => {
+  const roster = { type: 'roster', label: 'Liste', list: '/api/ext/xy/list', add: '/api/ext/xy/add', remove: '/api/ext/xy/remove', select: '/api/ext/xy/select', color: '/api/ext/xy/color', restore: '/api/ext/xy/restore', addFrom: true }
+  const manifest = (item: Record<string, unknown>, hostApi = 4) => base({ id: 'xy', hostApi, api: 'api.js', ui: { title: 'T', items: [item] } }) as unknown as Manifest
+  it('is taken with the addresses of its own API part', () => {
+    assert.strictEqual(checkManifest(manifest(roster), files('api.js')), null)
+  })
+  it('is refused with an address of another extension, before hostApi 4 or with a bad addFrom', () => {
+    assert.ok(checkManifest(manifest({ ...roster, list: '/api/ext/other/list' }), files('api.js')))
+    assert.ok(checkManifest(manifest(roster, 3), files('api.js')))
+    assert.ok(checkManifest(manifest({ ...roster, addFrom: 'yes' }), files('api.js')))
   })
 })
 

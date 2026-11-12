@@ -9,7 +9,6 @@ Since MuPiBox 5.1 you can add **extensions**: extra functions that not every box
 | [USB CD drive](cd-laufwerk.md) | play audio CDs from a USB drive |
 | [Time in the header](uhrzeit.md) | the time at the top of the display, digital or analog |
 | [Weather](wetter.md) | the weather of a place as dials on the display |
-| [Users](benutzer.md) | several users on one box, each with their own settings and library |
 
 > [!WARNING]
 > An extension is a program that runs on the box **without protection**. Only install extensions from the catalog or from sources you trust.
