@@ -3622,5 +3622,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Wpisz nazwę „MuPiBox”. Jeśli Immich zapyta o uprawnienia, zaznacz tylko te: album.read, asset.read i asset.view (można też user.read – wtedy test pokaże nazwę konta).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich odrzucił klucz. Sprawdź, czy skopiowano cały klucz.",
  "Rechte fehlen": "Brak uprawnień",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Klucz działa, ale brakuje mu uprawnień. Utwórz w Immich klucz z album.read, asset.read i asset.view."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Klucz działa, ale brakuje mu uprawnień. Utwórz w Immich klucz z album.read, asset.read i asset.view.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Synchronizacja przerwana · wkrótce kolejna próba"
 }

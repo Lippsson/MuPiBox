@@ -3622,5 +3622,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Γράψε το όνομα «MuPiBox». Αν το Immich ζητήσει δικαιώματα, τσέκαρε μόνο αυτά: album.read, asset.read και asset.view (αν θες και user.read – τότε η δοκιμή δείχνει το όνομα του λογαριασμού σου).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Το Immich απέρριψε το κλειδί. Έλεγξε ότι αντέγραψες ολόκληρο το κλειδί.",
  "Rechte fehlen": "Λείπουν δικαιώματα",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Το κλειδί είναι σωστό, αλλά του λείπουν δικαιώματα. Δημιούργησε στο Immich ένα κλειδί με album.read, asset.read και asset.view."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Το κλειδί είναι σωστό, αλλά του λείπουν δικαιώματα. Δημιούργησε στο Immich ένα κλειδί με album.read, asset.read και asset.view.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Ο συγχρονισμός διακόπηκε · νέα προσπάθεια σύντομα"
 }

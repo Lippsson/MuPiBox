@@ -3622,5 +3622,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Voer de naam „MuPiBox” in. Vraagt Immich om rechten, vink dan alleen deze aan: album.read, asset.read en asset.view (eventueel ook user.read – dan toont de test je accountnaam).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich heeft de sleutel geweigerd. Controleer of je de hele sleutel hebt gekopieerd.",
  "Rechte fehlen": "Rechten ontbreken",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "De sleutel klopt, maar mist rechten. Maak in Immich een sleutel aan met album.read, asset.read en asset.view."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "De sleutel klopt, maar mist rechten. Maak in Immich een sleutel aan met album.read, asset.read en asset.view.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Synchronisatie onderbroken · zo meteen een nieuwe poging"
 }

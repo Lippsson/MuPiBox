@@ -12513,6 +12513,8 @@ function photoImmichTop() {
   if (s.running) status = [`${icon('sync', 16)}${esc(s.total ? tr(`Abgleich läuft · ${s.done} von ${s.total} Fotos`) : tr('Abgleich läuft …'))}`, 'accent']
   else if (s.unauthorized) status = [`${icon('info', 16)}${esc(tr('Schlüssel abgelehnt'))}`, 'danger']
   else if (s.offlineSince) status = [`${icon('info', 16)}${esc(tr(`Nicht erreichbar seit ${relTime(s.offlineSince).replace(/^vor /, '')}`))}`, 'danger']
+  // (the last sync stopped before its end - Immich had trouble: it tries again soon)
+  else if (s.retry) status = [`${icon('info', 16)}${esc(tr('Abgleich unterbrochen · neuer Versuch in Kürze'))}`, 'warn']
   else if (s.lastSync) status = [`${icon('check', 16)}${esc(tr(`Abgeglichen ${relTime(s.lastSync)}`))}`, 'ok']
   else status = [esc(tr('Noch nicht abgeglichen')), '']
   const limit = st.cacheLimitMb * 1024 * 1024

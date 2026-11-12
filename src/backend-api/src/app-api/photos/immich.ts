@@ -335,6 +335,9 @@ interface SyncState {
   unauthorized: boolean
   /** albums chosen that Immich no longer has */
   missing: number
+  /** the last sync stopped before its end (Immich away or in trouble): the next one comes soon - only a sync that gets to its
+   *  end clears it, not a live picture that came meanwhile */
+  retry: boolean
 }
 
 // the size of a picture as Immich knows it, turned as it is shown (EXIF orientation 5-8: on its side)
@@ -356,7 +359,7 @@ const takenOf = (x: ImmichAsset) => {
 }
 
 export class ImmichPhotoSync {
-  private state: SyncState = { running: false, done: 0, total: 0, lastSync: null, offlineSince: null, cacheFull: false, unauthorized: false, missing: 0 }
+  private state: SyncState = { running: false, done: 0, total: 0, lastSync: null, offlineSince: null, cacheFull: false, unauthorized: false, missing: 0, retry: false }
   private lastTry = 0
   private again = false
   private stop: AbortController | null = null
@@ -371,6 +374,7 @@ export class ImmichPhotoSync {
         this.state.offlineSince = typeof s.offlineSince === 'string' ? s.offlineSince : null
         this.state.cacheFull = s.cacheFull === true
         this.state.unauthorized = s.unauthorized === true
+        this.state.retry = s.retry === true
       })
       .catch(() => undefined)
   }
@@ -401,7 +405,7 @@ export class ImmichPhotoSync {
       const cfg = this.deps.getMupiboxConfig()
       const s = immichSettings(cfg)
       if (!photoSettings(cfg).enabled || s.syncMinutes === 0 || this.state.running || !s.url) return
-      const every = (this.state.offlineSince ? Math.min(15, s.syncMinutes) : s.syncMinutes) * 60_000
+      const every = (this.state.offlineSince || this.state.retry ? Math.min(15, s.syncMinutes) : s.syncMinutes) * 60_000
       if (Date.now() - this.lastTry >= every) void this.run()
     }
     setTimeout(() => {
@@ -429,10 +433,10 @@ export class ImmichPhotoSync {
   }
 
   private async save(): Promise<void> {
-    const { lastSync, offlineSince, cacheFull, unauthorized } = this.state
+    const { lastSync, offlineSince, cacheFull, unauthorized, retry } = this.state
     await fsp.mkdir(PHOTOS_DIR, { recursive: true }).catch(() => undefined)
     const tmp = `${STATE_FILE}.${process.pid}.tmp`
-    await fsp.writeFile(tmp, JSON.stringify({ lastSync, offlineSince, cacheFull, unauthorized })).catch(() => undefined)
+    await fsp.writeFile(tmp, JSON.stringify({ lastSync, offlineSince, cacheFull, unauthorized, retry })).catch(() => undefined)
     await fsp.rename(tmp, STATE_FILE).catch(() => undefined)
   }
 
@@ -481,6 +485,7 @@ export class ImmichPhotoSync {
               this.log('the key is not accepted any more, the pictures on the box stay')
             } else {
               if (!this.state.offlineSince) this.state.offlineSince = new Date().toISOString()
+              this.state.retry = true
               this.log(`not reachable (${(err as Error).message}), the pictures on the box stay`)
             }
             await this.save()
@@ -538,6 +543,7 @@ export class ImmichPhotoSync {
         for (const { album, was } of plan) if (!was) await fsp.rm(albumDir(album), { recursive: true, force: true }).catch(() => undefined)
         this.state.cacheFull = false
         this.state.lastSync = new Date().toISOString()
+        this.state.retry = false
         await this.save()
         return
       }
@@ -662,6 +668,7 @@ export class ImmichPhotoSync {
             else if (!this.state.offlineSince) this.state.offlineSince = new Date().toISOString()
             this.log(`stopped: ${(err as Error).message} - the rest at the next sync`)
             broken = true
+            if (!keyRefused(err)) this.state.retry = true
             break
           }
           if (!(err instanceof NotAPicture)) this.log(`${x.id}: ${(err as Error).message}`)
@@ -674,7 +681,7 @@ export class ImmichPhotoSync {
         lib.albums = lib.albums.filter((a) => a.source !== 'immich' || a.assets.length > 0)
       })
       this.state.cacheFull = full
-      if (!broken) this.state.lastSync = new Date().toISOString()
+      if (!broken) Object.assign(this.state, { lastSync: new Date().toISOString(), retry: false })
       await this.save()
     } catch (err) {
       this.log(`sync failed: ${(err as Error).message}`)
@@ -694,7 +701,7 @@ export class ImmichPhotoSync {
     })
     await fsp.rm(IMMICH_PHOTO_DIR, { recursive: true, force: true }).catch(() => undefined)
     await fsp.rm(IMMICH_LIVE_DIR, { recursive: true, force: true }).catch(() => undefined)
-    Object.assign(this.state, { lastSync: null, offlineSince: null, cacheFull: false, unauthorized: false, missing: 0 })
+    Object.assign(this.state, { lastSync: null, offlineSince: null, cacheFull: false, unauthorized: false, missing: 0, retry: false })
     await this.save()
     return gone.length
   }

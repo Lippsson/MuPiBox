@@ -3622,5 +3622,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Indtast navnet “MuPiBox”. Spørger Immich om rettigheder, så sæt kun flueben ved disse: album.read, asset.read og asset.view (gerne også user.read – så viser testen dit kontonavn).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich afviste nøglen. Tjek, at du har kopieret hele nøglen.",
  "Rechte fehlen": "Rettigheder mangler",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Nøglen virker, men mangler rettigheder. Opret en nøgle i Immich med album.read, asset.read og asset.view."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Nøglen virker, men mangler rettigheder. Opret en nøgle i Immich med album.read, asset.read og asset.view.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Synkronisering afbrudt · nyt forsøg om lidt"
 }

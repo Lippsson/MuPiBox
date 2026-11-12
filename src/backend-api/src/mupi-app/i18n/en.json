@@ -3638,5 +3638,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Enter the name “MuPiBox”. If Immich asks for permissions, tick only these: album.read, asset.read and asset.view (user.read too if you like – then the test shows your account name).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich rejected the key. Check that you copied the whole key.",
  "Rechte fehlen": "Permissions missing",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "The key works, but it lacks permissions. Create a key in Immich with album.read, asset.read and asset.view."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "The key works, but it lacks permissions. Create a key in Immich with album.read, asset.read and asset.view.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Sync interrupted · trying again shortly"
 }

@@ -3622,5 +3622,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "“MuPiBox” adını gir. Immich izin sorarsa yalnızca şunları işaretle: album.read, asset.read ve asset.view (istersen user.read de – o zaman test hesap adını gösterir).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich anahtarı reddetti. Anahtarın tamamını kopyaladığını kontrol et.",
  "Rechte fehlen": "İzinler eksik",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Anahtar geçerli ama bazı izinleri eksik. Immich’te album.read, asset.read ve asset.view içeren bir anahtar oluştur."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Anahtar geçerli ama bazı izinleri eksik. Immich’te album.read, asset.read ve asset.view içeren bir anahtar oluştur.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Eşitleme yarıda kaldı · kısa süre içinde yeniden denenecek"
 }

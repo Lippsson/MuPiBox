@@ -3622,5 +3622,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Escreve o nome «MuPiBox». Se o Immich pedir permissões, marca só estas: album.read, asset.read e asset.view (se quiseres também user.read – assim o teste mostra o nome da tua conta).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "O Immich recusou a chave. Verifica se copiaste a chave inteira.",
  "Rechte fehlen": "Faltam permissões",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "A chave é válida, mas faltam-lhe permissões. Cria no Immich uma chave com album.read, asset.read e asset.view."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "A chave é válida, mas faltam-lhe permissões. Cria no Immich uma chave com album.read, asset.read e asset.view.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Sincronização interrompida · nova tentativa em breve"
 }

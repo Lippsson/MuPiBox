@@ -3622,5 +3622,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Введите имя «MuPiBox». Если Immich спросит о правах, отметьте только эти: album.read, asset.read и asset.view (можно ещё user.read — тогда проверка покажет имя аккаунта).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich отклонил ключ. Проверьте, что скопировали ключ целиком.",
  "Rechte fehlen": "Не хватает прав",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Ключ подходит, но у него не хватает прав. Создайте в Immich ключ с album.read, asset.read и asset.view."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Ключ подходит, но у него не хватает прав. Создайте в Immich ключ с album.read, asset.read и asset.view.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Синхронизация прервана · скоро новая попытка"
 }

@@ -3622,5 +3622,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Anna nimeksi ”MuPiBox”. Jos Immich kysyy oikeuksia, valitse vain nämä: album.read, asset.read ja asset.view (halutessasi myös user.read – silloin testi näyttää tilisi nimen).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich hylkäsi avaimen. Tarkista, että kopioit koko avaimen.",
  "Rechte fehlen": "Oikeuksia puuttuu",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Avain toimii, mutta siltä puuttuu oikeuksia. Luo Immichissä avain, jolla on album.read, asset.read ja asset.view."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Avain toimii, mutta siltä puuttuu oikeuksia. Luo Immichissä avain, jolla on album.read, asset.read ja asset.view.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Synkronointi keskeytyi · uusi yritys pian"
 }

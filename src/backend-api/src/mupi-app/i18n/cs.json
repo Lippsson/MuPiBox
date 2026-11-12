@@ -3622,5 +3622,6 @@
  "Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).": "Zadej název „MuPiBox“. Pokud se Immich zeptá na oprávnění, zaškrtni jen tato: album.read, asset.read a asset.view (klidně i user.read – pak test ukáže název tvého účtu).",
  "Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.": "Immich klíč odmítl. Zkontroluj, že jsi zkopíroval celý klíč.",
  "Rechte fehlen": "Chybí oprávnění",
- "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Klíč funguje, ale chybí mu oprávnění. Vytvoř v Immich klíč s album.read, asset.read a asset.view."
+ "Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.": "Klíč funguje, ale chybí mu oprávnění. Vytvoř v Immich klíč s album.read, asset.read a asset.view.",
+ "Abgleich unterbrochen · neuer Versuch in Kürze": "Synchronizace přerušena · brzy nový pokus"
 }
