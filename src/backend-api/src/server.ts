@@ -5537,7 +5537,8 @@ function dsmTarget(port?: number): { url: string; fingerprint?: string; account:
   }
 }
 
-async function dsmPost(target: { url: string; fingerprint?: string }, form: Record<string, string>, signal: AbortSignal): Promise<Response> {
+// (stop: the caller's own abort - passed on as it is; the time limit running out in signal is DSM not answering)
+async function dsmPost(target: { url: string; fingerprint?: string }, form: Record<string, string>, signal: AbortSignal, stop?: AbortSignal): Promise<Response> {
   try {
     return await nasFetch({ base: target.url, auth: '', fingerprint: target.fingerprint }, target.url, {
       method: 'POST',
@@ -5546,7 +5547,7 @@ async function dsmPost(target: { url: string; fingerprint?: string }, form: Reco
       signal,
     })
   } catch (err) {
-    if (signal.aborted) throw err
+    if (stop?.aborted) throw err
     if (err instanceof NasCertificateError) throw new DsmCertificate('the NAS certificate on the DSM port is not the one confirmed')
     throw new RemoteAway(`DSM: ${(err as Error).message}`)
   }
@@ -5629,11 +5630,14 @@ const photoNas: PhotoNasAccess = {
     const signal = AbortSignal.any([...(init.signal ? [init.signal] : []), AbortSignal.timeout(init.timeoutMs ?? 30_000)])
     for (let attempt = 0; ; attempt++) {
       const sid = await dsmSession(target, init.fresh === true && attempt === 0)
-      const r = await dsmPost(target, { ...params, _sid: sid }, signal)
+      const r = await dsmPost(target, { ...params, _sid: sid }, signal, init.signal)
       // (an answer in JSON may say the session is gone - 106 timed out, 107 a login elsewhere, 119 unknown: once more with
       // a new login)
       if (!/json/i.test(r.headers.get('content-type') ?? '')) return r
-      const text = await r.text()
+      const text = await r.text().catch((err: Error) => {
+        if (init.signal?.aborted) throw err
+        throw new RemoteAway(`DSM: ${err.message}`)
+      })
       let code = 0
       try {
         const j = JSON.parse(text) as { success?: boolean; error?: { code?: number } }

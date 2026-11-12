@@ -353,11 +353,11 @@ export function registerPhotoSynologyRoutes(router: Router, deps: PhotoSynologyD
       cacheBytes: (await photoBytes(SYNOLOGY_PHOTO_DIR)) + (await photoBytes(SYNOLOGY_LIVE_DIR)),
     }
   }
-  // (the test and the album list before it is switched on: with the port typed in)
+  // (the test and the album list before it is switched on: with the port typed in - 0 the usual one; none given: the one kept)
   const tryClient = (port?: unknown) => {
     if (!deps.nas?.dsm || !deps.nas.info().connected) return null
     const p = Number(port)
-    return new SynologyClient(deps.nas, Number.isInteger(p) && p > 0 && p < 65536 ? p : synologySettings(deps.getMupiboxConfig()).port)
+    return new SynologyClient(deps.nas, port !== undefined && Number.isInteger(p) && p >= 0 && p < 65536 ? p : synologySettings(deps.getMupiboxConfig()).port)
   }
 
   router.get('/photos/synology', requireSession, async (_req, res) => {

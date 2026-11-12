@@ -173,6 +173,8 @@ test('photo Immich: trouble of the server (or a proxy in front of it) counts as 
   for (const status of [500, 502, 503, 504, 429]) assert.equal(immichDown(new ImmichRefused(status)), true, String(status))
   for (const status of [400, 401, 403, 404]) assert.equal(immichDown(new ImmichRefused(status)), false, String(status))
   assert.equal(immichDown(new Error('x')), false)
+  // (a time limit that ran out - also while the answer was read - is the service not answering)
+  assert.equal(immichDown(new DOMException('timed out', 'TimeoutError')), true)
 })
 
 test('photo Immich: a clip length from its duration', async () => {

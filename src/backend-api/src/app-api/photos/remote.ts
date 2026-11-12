@@ -40,7 +40,10 @@ export class RemoteRefused extends Error {
   }
 }
 /** The service cannot answer now: not reachable, or it (or a proxy in front of it) says it has trouble or too much to do */
-export const remoteDown = (err: unknown): boolean => err instanceof RemoteAway || (err instanceof RemoteRefused && (err.status >= 500 || err.status === 429))
+// (a time limit that ran out - asking, or reading the answer - is the service not answering. Where a request of the box
+// itself may be called off - the sync stopped, the display gone - that is checked before.)
+const timedOut = (err: unknown): boolean => err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')
+export const remoteDown = (err: unknown): boolean => err instanceof RemoteAway || timedOut(err) || (err instanceof RemoteRefused && (err.status >= 500 || err.status === 429))
 /** The key or the login is not (or no longer) accepted, or it lacks a right */
 export const remoteRefusedKey = (err: unknown): boolean => err instanceof RemoteRefused && (err.status === 401 || err.status === 403)
 
@@ -540,7 +543,8 @@ export class RemoteLive {
         res.setHeader('Cache-Control', 'private, no-store')
         await pipeline(Readable.fromWeb(r.body as import('node:stream/web').ReadableStream), res)
       } catch (err) {
-        if (remoteDown(err) || remoteRefusedKey(err)) this.failedAt = Date.now()
+        // (the display went away - its own abort, not the service)
+        if (!stop.signal.aborted && (remoteDown(err) || remoteRefusedKey(err))) this.failedAt = Date.now()
         if (!res.headersSent) res.status(404).end()
         else res.destroy()
       }
