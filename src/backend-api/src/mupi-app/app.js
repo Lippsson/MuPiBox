@@ -92,6 +92,9 @@ async function boot() {
   }
   loadBoxName()
   loadVersion()
+  // (extensions with a page of their own: before the first page is drawn - the address may be one of theirs, and a page of the
+  // core may have moved to one; a box that does not answer this in time starts without them)
+  await withinBoot(loadExtPages()).catch(() => undefined)
   // (back and forward: popstate; an address typed or a link with #/…: hashchange)
   window.addEventListener('popstate', routeIfMoved)
   window.addEventListener('hashchange', routeIfMoved)
@@ -170,8 +173,9 @@ function currentId() {
   const name = decodeURIComponent(location.hash.replace(/^#\/?/, ''))
   // (the page "Eigenes Theme" is gone: its settings are on the theme page)
   if (name === 'custom-theme' || name === 'eigenes') return 'theme'
-  if (state.bySlug.has(name)) return state.bySlug.get(name)
-  return state.pages.has(name) ? name : 'start'
+  const id = state.bySlug.has(name) ? state.bySlug.get(name) : state.pages.has(name) ? name : 'start'
+  // (a page of the core that an extension shows on its own page while it is on, see setExtPages)
+  return extPages.adopted.get(id) ?? id
 }
 function currentPage() {
   return state.pages.get(currentId())
@@ -407,7 +411,11 @@ function renderPageNav(page) {
 }
 
 // The pages a settings group's page leads to (its nav rows, card after card)
-const groupNav = (g) => (g?.sections || []).flatMap((s) => (s.items || []).filter((i) => i.type === 'nav').map((i) => i.target))
+// (the pages of extensions - they have no card in the schema - stand after "Erweiterungen", as on the page of the group itself)
+const groupNav = (g) =>
+  (g?.sections || [])
+    .flatMap((s) => (s.items || []).filter((i) => i.type === 'nav' && !extPages.adopted.has(i.target)).map((i) => i.target))
+    .flatMap((id) => (id === 'erweiterungen' ? [id, ...extPages.list.filter((e) => state.pages.get(e.pageId)?.parent === g.id).map((e) => e.pageId)] : [id]))
 // The settings group of a page: the one it belongs to, or - a page of another area - the one listing it (Spotify and
 // the NAS are pages of the library that Dienste lists too)
 function groupOf(page) {
@@ -550,7 +558,7 @@ async function renderPage(page, reload = true) {
   try {
     parts.push(...customTop(page))
     // a connected page may put its own values into the schema's building blocks (lists, charts, …)
-    const sections = ctrl?.sections?.(page) ?? page.sections ?? []
+    const sections = withoutAdopted(ctrl?.sections?.(page) ?? page.sections ?? [])
     // (kept for the handlers: a select's options may come from the box, see findItem)
     state.shown = { id: page.id, sections }
     for (const sec of sections) parts.push(renderSection(sec))
@@ -8861,6 +8869,8 @@ function pinsInUse(without) {
   if (without !== 'led' && d.shim?.ledPin) used.push(String(d.shim.ledPin))
   if (without !== 'fan' && d.fan?.active && d.fan?.gpio) used.push(String(d.fan.gpio))
   if (d.rotary?.active) used.push('26', '24', '10')
+  // (pins an extension holds - the buttons of the buttons extension, say)
+  used.push(...(d.extPins ?? []).map(String))
   return used
 }
 
@@ -9771,11 +9781,16 @@ const SYS_GROUPS = [
 ]
 
 function systemTop() {
+  // (the pages of extensions that have one: under "Die Box", after the extensions themselves)
+  const withExtensions = (ids) => {
+    const at = ids.indexOf('erweiterungen') + 1
+    return at ? [...ids.slice(0, at), ...extPages.list.map((e) => e.pageId), ...ids.slice(at)] : ids
+  }
   return SYS_GROUPS.map(([title, ids]) => {
-    const rows = ids
+    const rows = withExtensions(ids)
       .map((id) => state.pages.get(id))
       .filter(Boolean)
-      .map((p) => navRow(p.id, p.title, p.description, p.icon, `<span class="nav-badge" id="sysb-${p.id}"></span>`))
+      .map((p) => navRow(p.id, p.title, p.extId ? 'Einstellungen der Erweiterung' : p.description, p.icon, `<span class="nav-badge" id="sysb-${p.id}"></span>`))
       .join('')
     return `<section class="card nav-card"><div class="group-title">${esc(title)}</div><div class="navlist">${rows}</div></section>`
   })
@@ -14373,6 +14388,8 @@ async function loadExtensions() {
   const r = await api(`${API}/extensions`)
   if (!r.ok) throw new Error(`extensions ${r.status}`)
   Object.assign(exts, { installed: [], catalog: [], catalogError: null }, r.body)
+  // (an extension switched on or off, installed or removed: its page comes or goes with it)
+  setExtPages(exts.installed.filter((e) => e.enabled && e.ui?.place === 'system').map((e) => ({ id: e.id, title: e.ui.title, adopt: e.ui.adopt ?? [] })))
   for (const e of exts.installed) {
     for (const [k, t] of Object.entries(e.settingTypes ?? {})) state.values.set(`ext.${e.id}.${k}`, t === 'secret' ? '' : e.settings?.[k])
   }
@@ -14413,6 +14430,7 @@ const EXT_WHO = {
   'MuPiBox (power LED)': 'MuPiBox (Betriebs-LED)',
   'MuPiBox (fan)': 'MuPiBox (Lüfter)',
   'MuPiBox (rotary encoder)': 'MuPiBox (Drehgeber)',
+  'MuPiBox (rotary encoder, switched off)': 'Drehregler (ausgeschaltet)',
   'MuPiBox (MuPiHAT, I2C)': 'MuPiBox (MuPiHAT, I²C)',
   'the boot configuration (spi: SPI bus)': 'die Boot-Konfiguration (spi: SPI-Bus)',
   'the boot configuration (enable_uart: serial port)': 'die Boot-Konfiguration (enable_uart: serielle Schnittstelle)',
@@ -14566,14 +14584,59 @@ async function extensionAction(path, id, askTitle, askText, askOk, doneText) {
   watchExtensionJob(id, doneText)
 }
 
-// The "Details" of an extension: what it is and sets up, and - when it is installed and on - its settings (declared in its manifest)
-function extensionDetails(e, installed) {
-  const fields = installed && e.enabled && e.ui ? e.ui.items : []
+// The fields of an extension's settings as its manifest declares them (ui.items): the HTML of the form, and whether it has text
+// fields - they are saved with a "Speichern" button (data-xsave), everything else at once
+// The groups of a form: a heading and the fields after it, up to the next heading. Groups that follow each other with the same
+// label, the later ones optional ("Taster", "Taster", "Taster" ...), are a series: one "+" adds the next of them.
+function extGroups(fields) {
+  const groups = []
+  fields.forEach((it, index) => {
+    if (it.type === 'heading') {
+      const before = groups[groups.length - 1]
+      const follows = before && it.optional && before.heading.label === it.label
+      groups.push({ index, heading: it, keys: [], last: index, series: follows ? before.series : index, nr: follows ? before.nr + 1 : 1 })
+    } else if (groups.length) {
+      const g = groups[groups.length - 1]
+      if (it.key) g.keys.push(it.key)
+      g.last = index
+    }
+  })
+  return groups
+}
+
+function extFormHtml(e, fields) {
   const type = (it) => e.settingTypes?.[it.key]
-  const form = fields
-    .map((it) => {
+  const groups = extGroups(fields)
+  // (a second choice beside a field with choices - by how much, beside "louder": a list, shown while the field has one of the
+  // values of `when`, see dep() in extFormMount)
+  const extra = (it) => {
+    const x = it.extra
+    if (!x) return ''
+    const now = e.settings?.[x.key]
+    return `<select class="input ext-extra" data-xsel="${esc(x.key)}" data-xof="${esc(it.key)}" data-xwhen="${esc(JSON.stringify(x.when.map(String)))}" aria-label="${esc(x.label ?? it.label)}" title="${esc(x.label ?? '')}">${x.choices.map((c) => `<option value="${esc(c.value)}"${c.value === now ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>`
+  }
+  const one = (it, index) => {
       const k = esc(it.key)
       const help = it.help ? `<small class="help">${esc(it.help)}</small>` : ''
+      if (it.type === 'heading') {
+        // a line that starts a group of fields (button 1, button 2 ...): a name the user gives it (rename: the label stands there
+        // while it has none), and a button that takes the group away again (optional)
+        // (one of a series has its number: "Taster 1", "Taster 2")
+        const g = groups.find((x) => x.index === index)
+        const title = groups.filter((x) => x.series === g.series).length > 1 ? `${it.label} ${g.nr}` : it.label
+        const name = it.rename ? `<input class="input ext-group-name" type="text" maxlength="30" data-xname="${esc(it.rename)}" value="${esc(e.settings?.[it.rename] ?? '')}" placeholder="${esc(title)}" aria-label="Name" autocomplete="off" ${NO_PW_MANAGER}>` : `<h3>${esc(title)}</h3>`
+        const del = it.optional ? `<button type="button" class="ext-group-del" data-xdel="${index}" aria-label="Entfernen" title="Entfernen"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : ''
+        return `<div class="ext-group" data-ext-dep="${esc(it.dep ?? '')}"><div class="ext-group-head">${name}${del}</div>${help}</div>`
+      }
+      if (type(it) === 'gpio') {
+        // a GPIO pin: chosen from the pins of the box - the ones that are taken cannot be chosen (filled in by extFormMount).
+        // The label stands left of the list.
+        return `<div class="field ext-pin" data-ext-dep="${esc(it.dep ?? '')}"><label for="xg-${k}">${esc(it.label)}</label><select class="input" id="xg-${k}" data-xgpio="${k}" translate="no"><option value="0">–</option></select>${help}</div>`
+      }
+      if (it.type === 'roster') {
+        // a list the extension keeps itself (the users of the box, say): to look at, to add to, to take from and to choose from
+        return `<div class="field"><label>${esc(it.label)}</label><ul class="ext-roster" data-xroster="${index}" aria-live="polite"></ul><div class="row" style="gap:8px"><input class="input" type="text" maxlength="24" data-xradd="${index}" placeholder="Name" autocomplete="off" aria-label="${esc(it.label)}" ${NO_PW_MANAGER}><button type="button" class="btn" data-xraddgo="${index}">Anlegen</button></div>${help}</div>`
+      }
       if (type(it) === 'boolean') {
         return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
       }
@@ -14590,197 +14653,597 @@ function extensionDetails(e, installed) {
         const label = (v) => it.choices.find((c) => c.value === v).label
         return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><ol class="ext-order" data-xorder="${k}">${sorted.map((v) => `<li data-v="${esc(v)}"><button type="button" class="ext-grip" aria-label="Verschieben"></button><span>${esc(label(v))}</span></li>`).join('')}</ol>${help}</div>`
       }
+      if (it.choices && it.choices.length > 5) {
+        // (a choice from many: a list to pick from instead of a row of buttons)
+        const now = e.settings?.[it.key]
+        const select = `<select class="input" id="xs-${k}" data-xsel="${k}">${it.choices.map((c) => `<option value="${esc(c.value)}"${c.value === now ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>`
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xs-${k}">${esc(it.label)}</label>${it.extra ? `<div class="ext-with">${select}${extra(it)}</div>` : select}${help}</div>`
+      }
       if (it.choices) {
         const now = e.settings?.[it.key]
-        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label><div class="seg" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')}</div>${help}</div>`
+        const seg = `<div class="seg" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')}</div>`
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label>${it.extra ? `<div class="ext-with">${seg}${extra(it)}</div>` : seg}${help}</div>`
       }
       const secret = type(it) === 'secret'
       const kind = secret ? 'password' : type(it) === 'number' ? 'number' : 'text'
       return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xk-${k}">${esc(it.label)}</label><input class="input" id="xk-${k}" type="${kind}" data-xk="${k}" data-secret="${secret}" value="${secret ? '' : esc(e.settings?.[it.key] ?? '')}" placeholder="${secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : ''}" ${NO_PW_MANAGER}>${help}</div>`
+  }
+  const form = fields
+    .map((it, index) => {
+      // (every field knows its group, data-xgroup: the index of its heading; after the last field of a series stands its "+")
+      const g = groups.findLast((x) => x.index <= index)
+      const html = one(it, index).replace('<div ', `<div data-xgroup="${g ? g.index : ''}" `)
+      const lastOfSeries = g && g.last === index && groups.findLast((x) => x.series === g.series) === g && groups.some((x) => x.series === g.series && x.heading.optional)
+      return lastOfSeries ? `${html}<div class="ext-add" data-xaddrow="${g.series}"><button type="button" class="btn" data-xadd="${g.series}"><span aria-hidden="true">+</span> <span>${esc(g.heading.label)}</span></button></div>` : html
     })
     .join('')
-  const hasText = fields.some((it) => type(it) !== 'boolean' && !it.choices && it.type !== 'lookup')
+  const hasText = fields.some((it) => type(it) !== 'boolean' && type(it) !== 'gpio' && !it.choices && it.type !== 'lookup' && it.type !== 'roster' && it.type !== 'heading')
+  return { form, hasText }
+}
+
+// ... and the form set up: `sheet` is the element the form is in (the sheet of the details, or the card on the extension's own
+// page), saved() is called after the "Speichern" button stored its fields
+function extFormMount(sheet, e, fields, saved) {
+  const type = (it) => e.settingTypes?.[it.key]
+  // (a group that is optional is there when its switch says so - or while one of its pins is chosen: settings from before the
+  // switch existed)
+  const groups = extGroups(fields)
+  const groupOn = (g) => !g.heading.optional || e.settings?.[g.heading.optional] === true || g.keys.some((k) => e.settingTypes?.[k] === 'gpio' && Number(e.settings?.[k] ?? 0) !== 0)
+  // (a field that depends on a switch is shown while the switch is on, one that depends on a pin while a pin is chosen - and
+  // only while its group is there)
+  // (what a group is called: the name the user gave it, else its heading - with its number when it is one of a series)
+  const groupTitle = (g) => {
+    const named = g.heading.rename ? String(e.settings?.[g.heading.rename] ?? '') : ''
+    const many = groups.filter((x) => x.series === g.series).length > 1
+    return named || (many ? `${tr(g.heading.label)} ${g.nr}` : tr(g.heading.label))
+  }
+  const dep = () => {
+    for (const d of sheet.querySelectorAll('[data-xgroup]')) {
+      const name = d.dataset.extDep
+      const g = d.dataset.xgroup === '' ? null : groups.find((x) => String(x.index) === d.dataset.xgroup)
+      const on = !name ? true : e.settingTypes?.[name] === 'gpio' ? Number(e.settings?.[name] ?? 0) !== 0 : sheet.querySelector(`[data-xk="${CSS.escape(name)}"]`)?.checked !== false
+      d.hidden = !on || (g ? !groupOn(g) : false)
+    }
+    // (the second choice beside a field: there while the field has one of its values)
+    for (const x of sheet.querySelectorAll('[data-xwhen]')) x.hidden = !JSON.parse(x.dataset.xwhen).includes(String(e.settings?.[x.dataset.xof]))
+    // (the "+" of a series, while one of its groups is not there yet)
+    for (const row of sheet.querySelectorAll('[data-xaddrow]')) row.hidden = !groups.some((g) => String(g.series) === row.dataset.xaddrow && !groupOn(g))
+  }
+  dep()
+  // (the list of the pins is drawn again when a name or a group changes: it names the groups)
+  let redrawPins = () => {}
+  const save = async (values, quiet) => {
+    const r = await api(`${API}/ext/${e.id}/settings`, { method: 'POST', body: { values } })
+    if (!r.ok) {
+      // (a pin: the box says who has it)
+      if (r.body?.error === 'gpio_taken') toast(`GPIO ${r.body.pin} ist schon belegt: ${(r.body.holders ?? []).map(extWho).join(', ')}`, 'info')
+      else if (r.body?.error === 'gpio_twice') toast(`GPIO ${r.body.pin} ist in dieser Erweiterung schon vergeben`, 'info')
+      else toast(r.body?.error ? 'Das sieht nicht richtig aus' : 'Nicht gespeichert', 'info')
+      return false
+    }
+    if (!quiet) toast('Gespeichert')
+    return r.body
+  }
+  for (const input of sheet.querySelectorAll('input[type="checkbox"][data-xk]')) {
+    input.onchange = async () => {
+      dep()
+      const ok = await save({ [input.dataset.xk]: input.checked }, false)
+      if (ok) e.settings[input.dataset.xk] = input.checked
+      else input.checked = !input.checked
+    }
+  }
+  // (the name of a group: saved when the field is left or with Enter)
+  for (const input of sheet.querySelectorAll('input[data-xname]')) {
+    const key = input.dataset.xname
+    input.onchange = async () => {
+      const value = input.value.trim()
+      if (value === (e.settings?.[key] ?? '')) return
+      const ok = await save({ [key]: value }, false)
+      if (ok) e.settings[key] = value
+      input.value = e.settings?.[key] ?? ''
+      redrawPins()
+    }
+    input.onkeydown = (ev) => {
+      if (ev.key === 'Enter') input.blur()
+    }
+  }
+  // (one more of a series: the first that is not there yet)
+  for (const button of sheet.querySelectorAll('button[data-xadd]')) {
+    button.onclick = async () => {
+      const g = groups.find((x) => String(x.series) === button.dataset.xadd && !groupOn(x))
+      if (!g) return
+      const ok = await save({ [g.heading.optional]: true }, true)
+      if (!ok) return
+      e.settings[g.heading.optional] = true
+      dep()
+      const head = sheet.querySelector(`.ext-group[data-xgroup="${g.index}"]`)
+      head?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      head?.querySelector('input[data-xname]')?.focus({ preventScroll: true })
+    }
+  }
+  // (a group taken away: its pins are free again and its name is gone; what its presses do stays as it was set)
+  for (const button of sheet.querySelectorAll('button[data-xdel]')) {
+    button.onclick = async () => {
+      const g = groups.find((x) => String(x.index) === button.dataset.xdel)
+      if (!g) return
+      const pins = g.keys.filter((k) => e.settingTypes?.[k] === 'gpio')
+      const name = g.heading.rename ? String(e.settings?.[g.heading.rename] ?? '') : ''
+      const used = name !== '' || pins.some((k) => Number(e.settings?.[k] ?? 0) !== 0)
+      if (used && !(await ask('Entfernen', `„${groupTitle(g)}“ wird entfernt, seine Pins sind danach wieder frei.`, 'Entfernen'))) return
+      const values = { [g.heading.optional]: false, ...Object.fromEntries(pins.map((k) => [k, 0])) }
+      if (g.heading.rename) values[g.heading.rename] = ''
+      const ok = await save(values, true)
+      if (!ok) return
+      Object.assign(e.settings, values)
+      const input = g.heading.rename ? sheet.querySelector(`input[data-xname="${CSS.escape(g.heading.rename)}"]`) : null
+      if (input) input.value = ''
+      redrawPins()
+      dep()
+    }
+  }
+  // (a choice from many: saved at once, as a switch is)
+  for (const select of sheet.querySelectorAll('select[data-xsel]')) {
+    const key = select.dataset.xsel
+    select.onchange = async () => {
+      const value = type({ key }) === 'number' ? Number(select.value) : select.value
+      const ok = await save({ [key]: value }, false)
+      if (ok) e.settings[key] = value
+      else select.value = String(e.settings?.[key] ?? '')
+      dep()
+    }
+  }
+  // (GPIO pins: every pin of the header to choose from. A pin something else holds - the box says who - and a pin another field
+  // of this extension has cannot be chosen. Saved at once; the fields that depend on the pin show then.)
+  const pinSelects = [...sheet.querySelectorAll('select[data-xgpio]')]
+  if (pinSelects.length) {
+    let taken = new Map()
+    // (pins that are free but meant for something that is switched off, the rotary encoder: they can be chosen, with a word)
+    let hints = new Map()
+    // (what a field is called in the list of another one: the name of its group, "Taster 2")
+    const groupOf = (key) => {
+      const g = groups.find((x) => x.keys.includes(key))
+      return g ? groupTitle(g) : tr(fields.find((it) => it.key === key)?.label ?? key)
+    }
+    const draw = () => {
+      for (const select of pinSelects) {
+        const now = Number(e.settings?.[select.dataset.xgpio] ?? 0)
+        select.textContent = ''
+        const add = (value, text, disabled) => {
+          const option = document.createElement('option')
+          option.value = String(value)
+          option.textContent = text
+          option.disabled = disabled
+          option.selected = value === now
+          select.append(option)
+        }
+        add(0, tr('Kein Pin'), false)
+        for (const pin of Object.keys(GPIO_HEADER).map(Number)) {
+          const other = pinSelects.find((o) => o !== select && Number(e.settings?.[o.dataset.xgpio] ?? 0) === pin)
+          // (its own pin stays its own, whatever holds it right now - the extension itself reads it)
+          const who = pin === now ? '' : other ? groupOf(other.dataset.xgpio) : (taken.get(pin) ?? []).map(extWho).join(', ')
+          const hint = who ? '' : (hints.get(pin) ?? []).map(extWho).join(', ')
+          add(pin, `GPIO ${pin} (Pin ${GPIO_HEADER[pin]})${who ? ` – ${tr('belegt')}: ${who}` : hint ? ` – ${hint}` : ''}`, !!who)
+        }
+      }
+    }
+    const loadTaken = async () => {
+      const r = await api(`${API}/ext/${e.id}/gpio`, { timeoutMs: 20000 })
+      if (r.ok && Array.isArray(r.body?.pins)) taken = new Map(r.body.pins.map((p) => [Number(p.pin), p.holders ?? []]))
+      if (r.ok) hints = new Map((r.body?.hints ?? []).map((p) => [Number(p.pin), p.holders ?? []]))
+      draw()
+    }
+    for (const select of pinSelects) {
+      select.onchange = async () => {
+        const key = select.dataset.xgpio
+        const value = Number(select.value)
+        const ok = await save({ [key]: value }, false)
+        if (ok) e.settings[key] = value
+        // (not saved: who holds what may have changed meanwhile)
+        else await loadTaken()
+        draw()
+        dep()
+      }
+    }
+    redrawPins = draw
+    draw()
+    loadTaken()
+  }
+  // (a search: the places that fit, one tap takes one - its values are saved at once)
+  for (const item of fields.filter((it) => it.type === 'lookup')) {
+    const input = sheet.querySelector(`#xl-${CSS.escape(item.key)}`)
+    const list = sheet.querySelector(`[data-xresults="${CSS.escape(item.key)}"]`)
+    let latest = 0
+    let timer = 0
+    const search = async () => {
+      clearTimeout(timer)
+      const q = input.value.trim()
+      const mine = ++latest
+      // (the hint stands under the field, where it is seen; a toast is gone before it is read)
+      if (q.length < 2) {
+        list.textContent = 'Bitte mindestens zwei Buchstaben eingeben.'
+        return
+      }
+      list.textContent = 'Suche …'
+      const r = await api(`${item.search}?q=${encodeURIComponent(q)}`, { timeoutMs: 20000 })
+      // (a newer search was started while this one ran: its answer counts)
+      if (mine !== latest) return
+      list.textContent = ''
+      if (!r.ok || !Array.isArray(r.body)) {
+        list.textContent = 'Die Suche hat nicht geklappt. Die Box braucht dafür das Internet.'
+        return
+      }
+      if (r.body.length === 0) list.textContent = 'Nichts gefunden.'
+      for (const hit of r.body.slice(0, 10)) {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.className = 'btn'
+        b.style.textAlign = 'left'
+        b.textContent = String(hit.label)
+        b.onclick = async () => {
+          const ok = await save(hit.values, false)
+          if (!ok) return
+          Object.assign(e.settings, hit.values)
+          sheet.querySelector(`[data-xcurrent="${CSS.escape(item.key)}"]`).textContent = String(e.settings[item.key] ?? '–')
+          list.textContent = ''
+          input.value = ''
+        }
+        list.append(b)
+      }
+    }
+    sheet.querySelector(`[data-xlookup="${CSS.escape(item.key)}"]`).onclick = search
+    // (a block body: an arrow that returns false for the other keys would cancel them, and no letter would appear)
+    input.onkeydown = (ev) => {
+      if (ev.key === 'Enter') search()
+    }
+    // (it searches while one types, a moment after the last letter)
+    input.oninput = () => {
+      clearTimeout(timer)
+      if (input.value.trim().length < 2) {
+        latest++
+        list.textContent = ''
+        return
+      }
+      timer = setTimeout(search, 400)
+    }
+  }
+  // (a list to put in order: a row is taken at its grip and dragged - finger or mouse - or moved with the arrow keys; saved when it is let go)
+  for (const list of sheet.querySelectorAll('[data-xorder]')) {
+    const key = list.dataset.xorder
+    const order = () => [...list.children].map((li) => li.dataset.v)
+    let saved = order()
+    const keep = async () => {
+      const now = order()
+      if (now.join() === saved.join()) return
+      const ok = await save({ [key]: now.join(',') }, false)
+      if (ok) {
+        saved = now
+        e.settings[key] = now.join(',')
+        return
+      }
+      // (not saved: the list goes back to the order it had)
+      for (const v of saved) list.append(list.querySelector(`[data-v="${CSS.escape(v)}"]`))
+    }
+    let drag = null
+    list.addEventListener('pointerdown', (ev) => {
+      const grip = ev.target.closest?.('.ext-grip')
+      if (!grip || (ev.pointerType === 'mouse' && ev.button !== 0)) return
+      const li = grip.closest('li')
+      drag = { li, grab: ev.clientY - li.getBoundingClientRect().top }
+      li.classList.add('dragging')
+      grip.setPointerCapture(ev.pointerId)
+      ev.preventDefault()
+    })
+    list.addEventListener('pointermove', (ev) => {
+      if (!drag) return
+      const { li } = drag
+      li.style.transform = ''
+      // (it stands before the first other row whose middle is below the pointer)
+      const next = [...list.children].find((o) => o !== li && o.getBoundingClientRect().top + o.offsetHeight / 2 > ev.clientY)
+      if (next !== li.nextElementSibling) list.insertBefore(li, next ?? null)
+      li.style.transform = `translateY(${ev.clientY - drag.grab - li.getBoundingClientRect().top}px)`
+    })
+    const letGo = () => {
+      if (!drag) return
+      drag.li.classList.remove('dragging')
+      drag.li.style.transform = ''
+      drag = null
+      keep()
+    }
+    list.addEventListener('pointerup', letGo)
+    list.addEventListener('pointercancel', letGo)
+    list.addEventListener('keydown', (ev) => {
+      const li = ev.target.closest?.('li')
+      if (!li || (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown')) return
+      ev.preventDefault()
+      if (ev.key === 'ArrowUp' && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling)
+      else if (ev.key === 'ArrowDown' && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li)
+      else return
+      li.querySelector('.ext-grip').focus()
+      keep()
+    })
+  }
+  // (a roster: the extension's list route says who is there and who is the current one; a change goes through the add, remove
+  // and select routes. Choosing takes the box a while - it restarts - so the app waits for it and then loads itself again.)
+  fields.forEach((item, index) => {
+    if (item.type !== 'roster') return
+    const list = sheet.querySelector(`[data-xroster="${index}"]`)
+    const input = sheet.querySelector(`[data-xradd="${index}"]`)
+    let busy = false
+    const post = (route, body) => api(route, { method: 'POST', body, timeoutMs: 20000 })
+    const draw = async () => {
+      const r = await api(item.list, { timeoutMs: 15000 })
+      if (!r.ok || !Array.isArray(r.body?.users)) {
+        list.textContent = 'Die Liste konnte nicht geladen werden.'
+        return null
+      }
+      list.textContent = ''
+      for (const u of r.body.users) {
+        const li = document.createElement('li')
+        // (the colour the user has on the display; a tap on it offers the colours nobody has)
+        if (/^#[0-9a-fA-F]{6}$/.test(String(u.color ?? ''))) {
+          const dot = document.createElement(item.color ? 'button' : 'span')
+          dot.className = 'ext-roster-dot'
+          dot.style.background = u.color
+          if (item.color) {
+            dot.type = 'button'
+            dot.setAttribute('aria-label', `${u.name}: Farbe wählen`)
+            dot.onclick = () => {
+              const open = li.nextElementSibling?.classList.contains('ext-roster-palette')
+              for (const old of list.querySelectorAll('.ext-roster-palette')) old.remove()
+              if (open) return
+              const free = (r.body.colors ?? []).filter((c) => !r.body.users.some((o) => o.id !== u.id && o.color === c))
+              const palette = document.createElement('li')
+              palette.className = 'ext-roster-palette'
+              for (const c of free) {
+                const swatch = document.createElement('button')
+                swatch.type = 'button'
+                swatch.className = 'ext-roster-dot'
+                swatch.style.background = c
+                swatch.setAttribute('aria-pressed', String(c === u.color))
+                swatch.setAttribute('aria-label', c)
+                swatch.onclick = async () => {
+                  if (c !== u.color) {
+                    const done = await post(item.color, { id: u.id, color: c })
+                    if (!done.ok) toast('Hat nicht geklappt', 'info')
+                  }
+                  draw()
+                }
+                palette.append(swatch)
+              }
+              li.after(palette)
+            }
+          }
+          li.append(dot)
+        }
+        const name = document.createElement('span')
+        name.className = 'ext-roster-name'
+        name.textContent = u.name
+        li.append(name)
+        if (u.id === r.body.current) {
+          li.classList.add('current')
+          const mark = document.createElement('span')
+          mark.className = 'ext-roster-mark'
+          mark.textContent = 'Aktiv'
+          li.append(mark)
+        } else {
+          const go = document.createElement('button')
+          go.type = 'button'
+          go.className = 'btn'
+          go.textContent = 'Wechseln'
+          go.onclick = () => choose(u)
+          li.append(go)
+        }
+        const del = document.createElement('button')
+        del.type = 'button'
+        del.className = 'btn'
+        del.textContent = 'Löschen'
+        del.setAttribute('aria-label', `${u.name}: Löschen`)
+        del.disabled = u.id === r.body.current || r.body.users.length < 2
+        del.onclick = () => remove(u)
+        li.append(del)
+        list.append(li)
+      }
+      return r.body
+    }
+    const choose = async (u) => {
+      if (busy) return
+      if (!(await ask('Benutzer wechseln', `Die Box lädt die Einstellungen und die Bibliothek von „${u.name}“ und startet dabei neu. Das dauert etwa eine halbe Minute.`, 'Wechseln'))) return
+      busy = true
+      const r = await post(item.select, { id: u.id })
+      if (!r.ok) {
+        busy = false
+        return toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+      }
+      toast('Wird gewechselt …')
+      list.textContent = 'Wird gewechselt …'
+      // (the box restarts: it answers again when it is through; the app loads itself again then, with the settings of the user)
+      const until = Date.now() + 120_000
+      const wait = async () => {
+        const st = await api(item.list, { timeoutMs: 5000 })
+        if (st.ok && st.body?.current === u.id && !st.body?.busy) return location.reload()
+        if (Date.now() < until) setTimeout(wait, 3000)
+        else {
+          busy = false
+          toast('Die Box antwortet nicht – bitte kurz warten und die App neu laden.', 'info')
+        }
+      }
+      setTimeout(wait, 8000)
+    }
+    const remove = async (u) => {
+      if (busy) return
+      if (!(await ask('Benutzer löschen', `„${u.name}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.`, 'Löschen'))) return
+      const r = await post(item.remove, { id: u.id })
+      if (!r.ok) toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+      else toast('Gelöscht')
+      draw()
+    }
+    const add = async () => {
+      const name = input.value.trim()
+      if (!name || busy) return
+      const r = await post(item.add, { name })
+      if (!r.ok) return toast(r.body?.error === 'exists' ? 'Den Namen gibt es schon' : r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+      input.value = ''
+      toast('Angelegt')
+      draw()
+    }
+    if (item.color) {
+      const hint = document.createElement('small')
+      hint.className = 'help'
+      hint.textContent = 'Tippe auf einen Farbpunkt, um die Farbe zu ändern.'
+      list.after(hint)
+    }
+    sheet.querySelector(`[data-xraddgo="${index}"]`).onclick = add
+    input.onkeydown = (ev) => {
+      if (ev.key === 'Enter') add()
+    }
+    draw()
+  })
+  // (a choice from a few: saved at once, as a switch is)
+  for (const group of sheet.querySelectorAll('[data-xseg]')) {
+    const key = group.dataset.xseg
+    for (const b of group.querySelectorAll('button')) {
+      b.onclick = async () => {
+        const value = type({ key }) === 'number' ? Number(b.dataset.v) : b.dataset.v
+        const ok = await save({ [key]: value }, false)
+        if (!ok) return
+        e.settings[key] = value
+        for (const o of group.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b))
+        dep()
+      }
+    }
+  }
+  const saveButton = sheet.querySelector('[data-xsave]')
+  if (saveButton) {
+    saveButton.onclick = async () => {
+      const values = {}
+      for (const input of sheet.querySelectorAll('input.input[data-xk]')) {
+        // (a secret that was not typed stays as it is)
+        if (input.dataset.secret === 'true' && !input.value.trim()) continue
+        values[input.dataset.xk] = input.type === 'number' ? Number(input.value) : input.value.trim()
+      }
+      if (!Object.keys(values).length) return toast('Bitte etwas eintragen', 'info')
+      const ok = await save(values, false)
+      if (!ok) return
+      await saved?.()
+    }
+  }
+}
+
+// The "Details" of an extension: what it is and sets up, and - when it is installed and on - its settings (declared in its manifest)
+function extensionDetails(e, installed) {
+  // (an extension with a page of its own has its settings there: the details lead to it)
+  const ownPage = installed && e.enabled && e.ui?.place === 'system' && state.pages.has(`ext-${e.id}`) ? `ext-${e.id}` : null
+  const fields = installed && e.enabled && e.ui && !ownPage ? e.ui.items : []
+  const { form, hasText } = extFormHtml(e, fields)
   openSheet(
     `<h2>${esc(e.name)} <small>${esc(e.version)}</small></h2>
      <p class="help" style="margin:0">${esc(e.description)}</p>
      <div class="ext-review" translate="no">${extReportHtml({ resources: e.resources, system: e.system ?? {} })}</div>
      ${e.ui ? `<h3>${esc(e.ui.title)}</h3><p class="help" style="margin:0">${esc(e.ui.help ?? '')}</p>` : ''}
      ${installed && !e.enabled && e.ui ? '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>' : ''}
+     ${ownPage ? `<div class="btns"><button class="btn primary" data-xpage>Zu den Einstellungen</button></div>` : ''}
      ${form}
      <div class="btns">${hasText ? '<button class="btn primary" data-xsave>Speichern</button>' : ''}<button class="btn" data-close>Schließen</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = close
-      // (a field that depends on a switch is shown while the switch is on)
-      const dep = () => {
-        for (const d of sheet.querySelectorAll('[data-ext-dep]')) {
-          const on = d.dataset.extDep ? sheet.querySelector(`[data-xk="${CSS.escape(d.dataset.extDep)}"]`)?.checked !== false : true
-          d.hidden = !on
-        }
-      }
-      dep()
-      const save = async (values, quiet) => {
-        const r = await api(`${API}/ext/${e.id}/settings`, { method: 'POST', body: { values } })
-        if (!r.ok) {
-          toast(r.body?.error ? 'Das sieht nicht richtig aus' : 'Nicht gespeichert', 'info')
-          return false
-        }
-        if (!quiet) toast('Gespeichert')
-        return r.body
-      }
-      for (const input of sheet.querySelectorAll('input[type="checkbox"][data-xk]')) {
-        input.onchange = async () => {
-          dep()
-          const ok = await save({ [input.dataset.xk]: input.checked }, false)
-          if (ok) e.settings[input.dataset.xk] = input.checked
-          else input.checked = !input.checked
-        }
-      }
-      // (a search: the places that fit, one tap takes one - its values are saved at once)
-      for (const item of fields.filter((it) => it.type === 'lookup')) {
-        const input = sheet.querySelector(`#xl-${CSS.escape(item.key)}`)
-        const list = sheet.querySelector(`[data-xresults="${CSS.escape(item.key)}"]`)
-        let latest = 0
-        let timer = 0
-        const search = async () => {
-          clearTimeout(timer)
-          const q = input.value.trim()
-          const mine = ++latest
-          // (the hint stands under the field, where it is seen; a toast is gone before it is read)
-          if (q.length < 2) {
-            list.textContent = 'Bitte mindestens zwei Buchstaben eingeben.'
-            return
-          }
-          list.textContent = 'Suche …'
-          const r = await api(`${item.search}?q=${encodeURIComponent(q)}`, { timeoutMs: 20000 })
-          // (a newer search was started while this one ran: its answer counts)
-          if (mine !== latest) return
-          list.textContent = ''
-          if (!r.ok || !Array.isArray(r.body)) {
-            list.textContent = 'Die Suche hat nicht geklappt. Die Box braucht dafür das Internet.'
-            return
-          }
-          if (r.body.length === 0) list.textContent = 'Nichts gefunden.'
-          for (const hit of r.body.slice(0, 10)) {
-            const b = document.createElement('button')
-            b.type = 'button'
-            b.className = 'btn'
-            b.style.textAlign = 'left'
-            b.textContent = String(hit.label)
-            b.onclick = async () => {
-              const ok = await save(hit.values, false)
-              if (!ok) return
-              Object.assign(e.settings, hit.values)
-              sheet.querySelector(`[data-xcurrent="${CSS.escape(item.key)}"]`).textContent = String(e.settings[item.key] ?? '–')
-              list.textContent = ''
-              input.value = ''
-            }
-            list.append(b)
-          }
-        }
-        sheet.querySelector(`[data-xlookup="${CSS.escape(item.key)}"]`).onclick = search
-        // (a block body: an arrow that returns false for the other keys would cancel them, and no letter would appear)
-        input.onkeydown = (ev) => {
-          if (ev.key === 'Enter') search()
-        }
-        // (it searches while one types, a moment after the last letter)
-        input.oninput = () => {
-          clearTimeout(timer)
-          if (input.value.trim().length < 2) {
-            latest++
-            list.textContent = ''
-            return
-          }
-          timer = setTimeout(search, 400)
-        }
-      }
-      // (a list to put in order: a row is taken at its grip and dragged - finger or mouse - or moved with the arrow keys; saved when it is let go)
-      for (const list of sheet.querySelectorAll('[data-xorder]')) {
-        const key = list.dataset.xorder
-        const order = () => [...list.children].map((li) => li.dataset.v)
-        let saved = order()
-        const keep = async () => {
-          const now = order()
-          if (now.join() === saved.join()) return
-          const ok = await save({ [key]: now.join(',') }, false)
-          if (ok) {
-            saved = now
-            e.settings[key] = now.join(',')
-            return
-          }
-          // (not saved: the list goes back to the order it had)
-          for (const v of saved) list.append(list.querySelector(`[data-v="${CSS.escape(v)}"]`))
-        }
-        let drag = null
-        list.addEventListener('pointerdown', (ev) => {
-          const grip = ev.target.closest?.('.ext-grip')
-          if (!grip || (ev.pointerType === 'mouse' && ev.button !== 0)) return
-          const li = grip.closest('li')
-          drag = { li, grab: ev.clientY - li.getBoundingClientRect().top }
-          li.classList.add('dragging')
-          grip.setPointerCapture(ev.pointerId)
-          ev.preventDefault()
-        })
-        list.addEventListener('pointermove', (ev) => {
-          if (!drag) return
-          const { li } = drag
-          li.style.transform = ''
-          // (it stands before the first other row whose middle is below the pointer)
-          const next = [...list.children].find((o) => o !== li && o.getBoundingClientRect().top + o.offsetHeight / 2 > ev.clientY)
-          if (next !== li.nextElementSibling) list.insertBefore(li, next ?? null)
-          li.style.transform = `translateY(${ev.clientY - drag.grab - li.getBoundingClientRect().top}px)`
-        })
-        const letGo = () => {
-          if (!drag) return
-          drag.li.classList.remove('dragging')
-          drag.li.style.transform = ''
-          drag = null
-          keep()
-        }
-        list.addEventListener('pointerup', letGo)
-        list.addEventListener('pointercancel', letGo)
-        list.addEventListener('keydown', (ev) => {
-          const li = ev.target.closest?.('li')
-          if (!li || (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown')) return
-          ev.preventDefault()
-          if (ev.key === 'ArrowUp' && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling)
-          else if (ev.key === 'ArrowDown' && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li)
-          else return
-          li.querySelector('.ext-grip').focus()
-          keep()
-        })
-      }
-      // (a choice from a few: saved at once, as a switch is)
-      for (const group of sheet.querySelectorAll('[data-xseg]')) {
-        const key = group.dataset.xseg
-        for (const b of group.querySelectorAll('button')) {
-          b.onclick = async () => {
-            const value = type({ key }) === 'number' ? Number(b.dataset.v) : b.dataset.v
-            const ok = await save({ [key]: value }, false)
-            if (!ok) return
-            e.settings[key] = value
-            for (const o of group.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b))
-          }
-        }
-      }
-      const saveButton = sheet.querySelector('[data-xsave]')
-      if (saveButton) {
-        saveButton.onclick = async () => {
-          const values = {}
-          for (const input of sheet.querySelectorAll('input.input[data-xk]')) {
-            // (a secret that was not typed stays as it is)
-            if (input.dataset.secret === 'true' && !input.value.trim()) continue
-            values[input.dataset.xk] = input.type === 'number' ? Number(input.value) : input.value.trim()
-          }
-          if (!Object.keys(values).length) return toast('Bitte etwas eintragen', 'info')
-          const ok = await save(values, false)
-          if (!ok) return
-          await loadExtensions()
+      const page = sheet.querySelector('[data-xpage]')
+      if (page) {
+        page.onclick = () => {
           close()
-          renderPage(currentPage(), false)
+          go(ownPage)
         }
       }
+      extFormMount(sheet, e, fields, async () => {
+        await loadExtensions()
+        close()
+        renderPage(currentPage(), false)
+      })
     },
   )
+}
+
+/* Extensions with a page of their own (manifest: ui.place "system", hostApi 5): a page under Einstellungen › System › "Die Box"
+   with the settings of the extension - and with the pages of the core it takes over while it is on (ui.adopt): "Drehregler und
+   Taster" is shown there instead of under Audio while the buttons extension is on. */
+
+// the pins of the header: BCM number -> the number of the pin on the board
+const GPIO_HEADER = { 2: 3, 3: 5, 4: 7, 5: 29, 6: 31, 7: 26, 8: 24, 9: 21, 10: 19, 11: 23, 12: 32, 13: 33, 14: 8, 15: 10, 16: 36, 17: 11, 18: 12, 19: 35, 20: 38, 21: 40, 22: 15, 23: 16, 24: 18, 25: 22, 26: 37, 27: 13 }
+// what an extension may take over: the name in its manifest -> the page of the core
+const EXT_ADOPTABLE = { rotary: 'drehregler' }
+// (what the first card of such a page is called on the page of the extension: short, beside the extension's own card)
+const EXT_ADOPTED_TITLE = { drehregler: 'Drehregler' }
+// list: the pages there are now; adopted: page of the core -> the page of the extension that shows it
+const extPages = { list: [], adopted: new Map() }
+
+// list: [{ id, title, adopt }] - the extensions that are on and have a page of their own
+function setExtPages(list) {
+  for (const old of extPages.list) {
+    state.pages.delete(old.pageId)
+    state.bySlug.delete(old.pageId)
+    delete CONTROLLERS[old.pageId]
+  }
+  state.schema.pages = state.schema.pages.filter((p) => !p.extId)
+  extPages.adopted.clear()
+  extPages.list = list
+    .filter((e) => /^[a-z][a-z0-9-]{1,30}$/.test(String(e?.id)))
+    .map((e) => ({ id: e.id, title: String(e.title ?? e.id), pageId: `ext-${e.id}`, adopt: (Array.isArray(e.adopt) ? e.adopt : []).map((a) => EXT_ADOPTABLE[a]).filter((id) => id && state.pages.has(id)) }))
+  for (const e of extPages.list) {
+    // (a page of the core goes to one extension only: the first that asks)
+    for (const id of e.adopt) if (!extPages.adopted.has(id)) extPages.adopted.set(id, e.pageId)
+    e.adopt = e.adopt.filter((id) => extPages.adopted.get(id) === e.pageId)
+    const page = { id: e.pageId, slug: e.pageId, area: 'einstellungen', parent: 'g-system', title: e.title, description: '', icon: state.pages.get(e.adopt[0])?.icon || 'plug', sections: [], extId: e.id }
+    state.pages.set(page.id, page)
+    state.bySlug.set(page.slug, page.id)
+    state.schema.pages.push(page)
+    CONTROLLERS[page.id] = extPageController(e)
+  }
+}
+
+// (when the app starts: without the catalog of the extensions page, which waits for GitHub)
+async function loadExtPages() {
+  const r = await api(`${API}/extensions/pages`)
+  if (r.ok && Array.isArray(r.body)) setExtPages(r.body)
+}
+
+// A page an extension took over is not listed where it was: no nav row leads to it there
+function withoutAdopted(sections) {
+  if (!extPages.adopted.size) return sections
+  const moved = (i) => i.type === 'nav' && extPages.adopted.has(i.target)
+  return sections.map((sec) => ((sec.items || []).some(moved) ? { ...sec, items: sec.items.filter((i) => !moved(i)) } : sec)).filter((sec, i) => sec === sections[i] || sec.items.length > 0)
+}
+
+function extPageController(entry) {
+  const own = { e: null }
+  const adopted = () => entry.adopt.map((id) => ({ page: state.pages.get(id), ctrl: CONTROLLERS[id] })).filter((a) => a.page && a.ctrl)
+  return {
+    async load() {
+      const r = await api(`${API}/ext/${entry.id}/info`)
+      if (!r.ok) throw new Error(`extension ${r.status}`)
+      own.e = r.body
+      await Promise.all(adopted().map((a) => a.ctrl.load?.(a.page)))
+    },
+    top() {
+      const e = own.e
+      if (!e?.ui) return []
+      const { form, hasText } = extFormHtml(e, e.enabled ? e.ui.items : [])
+      return [
+        `<section class="card wide ext-page" id="ext-page-card"><h2>${esc(e.ui.heading ?? e.ui.title)}</h2><p class="help" style="margin:0">${esc(e.ui.help ?? '')}</p>
+         ${e.enabled ? form : '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>'}
+         ${hasText ? '<div class="btns"><button class="btn primary" data-xsave>Speichern</button></div>' : ''}</section>`,
+      ]
+    },
+    // (the pages of the core that moved here: their cards under the extension's own, the first with the title of its page)
+    sections: () => adopted().flatMap((a) => (a.ctrl.sections?.(a.page) ?? a.page.sections ?? []).map((sec, i) => ({ ...sec, title: i === 0 ? (EXT_ADOPTED_TITLE[a.page.id] ?? (sec.title || a.page.title)) : sec.title || '' }))),
+    change(key, v, page) {
+      const owner = adopted().find((a) => (a.page.sections || []).some((sec) => (sec.items || []).some((it) => it.key === key)))
+      return owner?.ctrl.change?.(key, v, page)
+    },
+    mount(root, page) {
+      const card = $('#ext-page-card', root)
+      if (card && own.e?.enabled && own.e.ui) extFormMount(card, own.e, own.e.ui.items, () => renderPage(page, true))
+      for (const a of adopted()) a.ctrl.mount?.(root, a.page)
+    },
+  }
 }
 
 const CONTROLLERS = {
@@ -15917,6 +16380,13 @@ const CONTROLLERS = {
       const body = key === 'rotary' ? { active: v } : key === 'rotStep' ? { step: v } : key === 'btnFn' ? { button: BTN_FN.find(([l]) => l === v)?.[1] } : null
       if (!body) return
       const r = await api(`${API}/rotary`, { method: 'POST', body })
+      if (r.body?.error === 'gpio_taken') {
+        // (one of its pins - 26, 24, 10 - is a button of an extension: it stays off)
+        state.values.set('rotary', false)
+        const el = $('input[data-key="rotary"]')
+        if (el) el.checked = false
+        return toast(`GPIO ${r.body.pin} ist schon belegt: ${tr(`Erweiterung ${r.body.by}`)}`, 'info')
+      }
       return toast(r.ok ? (key === 'rotary' ? (v ? 'Drehregler an' : 'Drehregler aus') : 'Gespeichert') : 'Nicht gespeichert', r.ok ? 'ok' : 'info')
     },
   },

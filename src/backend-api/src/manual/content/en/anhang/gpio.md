@@ -25,6 +25,10 @@ On your box this table shows **only the pins that are in use there** with the cu
 > [!WARNING]
 > Two devices must **not** share a pin. For LED and fan choose pins that are not otherwise used above. The app warns if you choose a pin for an accessory that another enabled accessory already uses.
 
+## Pins for your own buttons
+
+With the extension [Buttons & GPIO Input](../erweiterungen/buttons.md) you connect your own buttons to free GPIO pins. Which pins are free on your box is shown by the extension's own list: pins in use cannot be chosen there, and the list says who holds them. Other [extensions](../erweiterungen/index.md) can hold pins too; the box checks that before installing.
+
 ## Where else is the pin setting?
 
 The pin for switching off is in **two** places, and both must match:

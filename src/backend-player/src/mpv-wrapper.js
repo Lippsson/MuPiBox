@@ -14,6 +14,7 @@ const os = require('node:os')
 const path = require('node:path')
 const debug = require('debug')('mpv-wrapper')
 const { createShuffler } = require('./shuffle.js')
+const { takesLoadfileIndex, loadfileCommand, targetAfterEnd } = require('./mpv-compat.js')
 
 // Whether this mpv's "loadfile" takes an index before its options (0.38 and later; Debian 12 has 0.35): asked once
 // ("mpv --version"), a version that cannot be read counts as an older one
@@ -22,9 +23,7 @@ function loadfileTakesIndex(binary) {
   if (!loadfileIndex.has(binary)) {
     let takes = false
     try {
-      const out = require('node:child_process').execFileSync(binary, ['--version'], { timeout: 5000, encoding: 'utf8' })
-      const m = /mpv v?(\d+)\.(\d+)/.exec(out)
-      takes = !!m && (Number(m[1]) > 0 || Number(m[2]) >= 38)
+      takes = takesLoadfileIndex(require('node:child_process').execFileSync(binary, ['--version'], { timeout: 5000, encoding: 'utf8' }))
     } catch {
       // (not there or not answering: the older form)
     }
@@ -279,7 +278,7 @@ const createPlayer = (options = {}) => {
         else if (msg.name === 'eof-reached' && msg.data === true && shuffleOn) {
           // the track played to its end (keep-open holds it there): the next one is chosen here (a list of one track: it
           // starts again with repeat, else it ends - keep-open held it at its end, without "finished" for the player)
-          const target = playlistCount > 1 ? shuffler.next(playlistPos, playlistCount, repeatOn) : repeatOn ? 0 : -1
+          const target = targetAfterEnd({ shuffler, playlistPos, playlistCount, repeatOn })
           if (target >= 0) send(['playlist-play-index', target])
           // (the round is over: the album ends as any album does - mpv goes idle, the player says "finished")
           else send(['stop'])
@@ -471,9 +470,7 @@ const createPlayer = (options = {}) => {
     send(['set_property', 'pause', false])
     // (mpv 0.38 and later take an index before the options; Debian 12 has 0.35, where the options come third)
     const withIndex = loadfileTakesIndex(binary)
-    entries.forEach((entry, i) =>
-      send(withIndex ? ['loadfile', String(entry.file), i === 0 ? 'replace' : 'append', -1, entry.options ?? ''] : ['loadfile', String(entry.file), i === 0 ? 'replace' : 'append', entry.options ?? '']),
-    )
+    entries.forEach((entry, i) => send(loadfileCommand(withIndex, entry, i)))
   }
   // A question to mpv whose answer is waited for ([{ command, ...}] as mpv's JSON IPC takes it); null when mpv does not answer
   out.command = (command) => ask(command)

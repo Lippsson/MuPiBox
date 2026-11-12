@@ -37,6 +37,16 @@ const walk = (sub) => {
   }
 }
 walk('')
+// Text files go in with LF line ends, whatever the checkout made of them: git on Windows (core.autocrlf) hands them out with
+// CRLF - a udev rule or a unit file with those does not work on the box, and the same extension would get another checksum on
+// another machine. Done on the bytes (a CR right before an LF goes), so nothing depends on how the text is encoded.
+const TEXT = /\.(js|mjs|cjs|json|svg|css|html|txt|md|rules|service|timer|sh|py)$/i
+const readPacked = (rel) => {
+  const raw = readFileSync(path.join(dir, rel))
+  if (!TEXT.test(rel) || !raw.includes(13)) return raw
+  return Buffer.from(raw.filter((byte, i) => !(byte === 13 && raw[i + 1] === 10)))
+}
+
 // (the manifest first)
 files.sort((a, b) => (a === 'manifest.json' ? -1 : b === 'manifest.json' ? 1 : a < b ? -1 : 1))
 
@@ -59,7 +69,7 @@ const parts = []
 const central = []
 let offset = 0
 for (const rel of files) {
-  const data = readFileSync(path.join(dir, rel))
+  const data = readPacked(rel)
   const packed = deflateRawSync(data, { level: 9 })
   const useDeflate = packed.length < data.length
   const body = useDeflate ? packed : data
@@ -120,7 +130,7 @@ try {
 // the icon goes into the catalog as a small data address, so the page of the extensions shows it before the extension is installed
 let icon
 if (manifest.icon && /\.svg$/i.test(manifest.icon)) {
-  const svg = readFileSync(path.join(dir, manifest.icon))
+  const svg = readPacked(manifest.icon)
   if (svg.length <= 4096) icon = `data:image/svg+xml;base64,${svg.toString('base64')}`
 }
 const entry = {

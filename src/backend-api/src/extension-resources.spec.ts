@@ -6,6 +6,7 @@ import {
   addUnit,
   checkResources,
   coreResources,
+  idleCoreGpio,
   emptyTaken,
   findConflicts,
   gatherTaken,
@@ -161,6 +162,11 @@ describe('extension resources: reading the box', () => {
       [4, 17, 27, 13],
     )
     assert.ok(base.ports.some((p) => p.port === 8200))
+    // (the pins of the rotary encoder are free while it is off - and named as its own for whoever chooses a pin)
+    assert.deepEqual(idleCoreGpio({ rotary: { active: false } }).map((g) => g.pin), [26, 24, 10])
+    assert.deepEqual(idleCoreGpio(undefined).map((g) => g.pin), [26, 24, 10])
+    assert.deepEqual(idleCoreGpio({ rotary: { active: true } }), [])
+    assert.deepEqual(coreResources({ rotary: { active: true } }).gpio.map((g) => g.pin), [26, 24, 10])
     const fan = coreResources({ fan: { fan_active: true, fan_gpio: '12' } })
     assert.deepEqual(
       fan.gpio.map((g) => g.pin),

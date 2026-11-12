@@ -1397,7 +1397,7 @@ function isPlayInitiatingCommand(command) {
   if (['library', 'nas', 'tidal', 'radio', 'rss', 'say'].some((segment) => hasDirSegment(command, segment))) {
     return true
   }
-  if (['play', 'next', 'previous', 'seek+30', 'seek-30'].includes(command.name)) return true
+  if (['play', 'next', 'previous', 'replay', 'seek+30', 'seek-30'].includes(command.name)) return true
   if (command.name?.startsWith('seekpos:')) return true
   return false
 }
@@ -2230,6 +2230,33 @@ function previous() {
     }
     log.debug(`${now()}: [Spotify Control] Current Tracknr: ${currentMeta.currentTracknr}`)
     player.previous()
+  }
+}
+
+// "From the beginning" (a long press on a button of the box, see the buttons extension): the album or the playlist starts
+// again with its first track. A radio station has no beginning; with nothing loaded there is nothing to start.
+function replay() {
+  if (currentMeta.currentPlayer === 'spotify') {
+    // spotify:<kind>:<id>[:<track>:<position>] - without the place to go on at it is the first track, from its start
+    const parts = String(currentMeta.activeSpotifyId ?? '').split(':')
+    if (parts.length < 3 || parts[0] !== 'spotify' || !parts[2]) return
+    forgetSpotifyState()
+    currentMeta.activeSpotifyId = parts.slice(0, 3).join(':')
+    playbackGeneration++
+    currentMeta.finished = false
+    currentMeta.pause = false
+    log.debug(`${now()}: [Spotify Control] From the beginning: ${currentMeta.activeSpotifyId}`)
+    playMe()
+  } else if (currentMeta.currentPlayer === 'mplayer') {
+    if (currentMeta.currentType === 'radio') return
+    log.debug(`${now()}: [Spotify Control] From the beginning (track ${currentMeta.currentTracknr})`)
+    if (isCuePlayback()) return seekToCueTrack(1)
+    // (the first track is playing: back to its start - a jump to the track one is on does nothing)
+    if (currentMeta.currentTracknr > 1) return jumpToTrack(1)
+    // (an album that is no folder - a CD - knows where its track starts in the whole, as in seek())
+    const albumStart = albumNow()?.seek?.(0, player.trackIndex?.() ?? 0)
+    if (typeof albumStart === 'number') player.exec('seek', [albumStart, '2'])
+    else player.seekPercent(0)
   }
 }
 
@@ -4403,6 +4430,7 @@ app.use((req, res) => {
   else if (command.name === 'stop') stop()
   else if (command.name === 'next') next()
   else if (command.name === 'previous') previous()
+  else if (command.name === 'replay') replay()
   else if (/^[+-]\d{1,2}$/.test(command.name)) {
     // +5 / -5 as before; other steps (1..10) come from the rotary encoder
     const step = Math.min(10, Math.max(1, Math.abs(Number.parseInt(command.name, 10))))

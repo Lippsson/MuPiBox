@@ -1,5 +1,23 @@
 [
   {
+    "id": "buttons",
+    "name": "Buttons & GPIO Input",
+    "version": "1.2.1",
+    "description": "Physische Taster an den GPIO-Pins steuern die Box: Play/Pause, Titel, Lautstärke und mehr. Mit Tastern für kurzes und langes Drücken (Dual Action) und Doppeltastern mit sechs Funktionen. Die Einstellungen stehen unter System › Buttons & GPIO Input.",
+    "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB4PSI3NiIgeT0iMzAwIiB3aWR0aD0iMzYwIiBoZWlnaHQ9IjEyMCIgcng9IjI4IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIvPjxwYXRoIGQ9Ik0xNTYgMzAwdi02NGExMDAgMTAwIDAgMCAxIDIwMCAwdjY0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIvPjxwYXRoIGQ9Ik0yNTYgOTJWNDRNMTUwIDEyNGwtMzAtMzZNMzYyIDEyNGwzMC0zNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPgo=",
+    "hostApi": 5,
+    "url": "https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/dist/buttons-1.2.1.mpx",
+    "sha256": "68809a81592c497bbb62c9f4ff12d96be2247f3f4ba62612240fd897ec62731e",
+    "size": 12830,
+    "resources": {},
+    "system": {
+      "udev": 0,
+      "units": [],
+      "groups": [],
+      "packages": []
+    }
+  },
+  {
     "id": "cd",
     "name": "USB-CD-Laufwerk",
     "version": "1.0.1",
@@ -29,6 +47,24 @@
     "url": "https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/dist/clock-1.0.1.mpx",
     "sha256": "35572447eb81754cd44505b536ceea4b561b2be13682da77bc97562e0ae80ee0",
     "size": 2893,
+    "resources": {},
+    "system": {
+      "udev": 0,
+      "units": [],
+      "groups": [],
+      "packages": []
+    }
+  },
+  {
+    "id": "users",
+    "name": "Benutzer",
+    "version": "1.2.0",
+    "description": "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.",
+    "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIxNzYiIGN5PSIxNTYiIHI9IjY4IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIvPjxwYXRoIGQ9Ik01MiA0MjBhMTI0IDEyNCAwIDAgMSAyNDggMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjM2MCIgY3k9IjE5NiIgcj0iNDgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iY3VycmVudENvbG9yIiBzdHJva2Utd2lkdGg9IjI4Ii8+PHBhdGggZD0iTTM0MCAzMDBhMTA0IDEwNCAwIDAgMSAxMjQgMTIwIiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+Cg==",
+    "hostApi": 4,
+    "url": "https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/dist/users-1.2.0.mpx",
+    "sha256": "f2a345f519c3f00376d286fb7fd245df7c62b0900275b9d9e1645434821d2718",
+    "size": 8614,
     "resources": {},
     "system": {
       "udev": 0,
