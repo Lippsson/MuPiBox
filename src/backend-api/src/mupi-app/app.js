@@ -12758,7 +12758,7 @@ function mountPhotoImmich(root, page) {
 
 /* Bibliothek › Fotos › Synology Photos (5.1): a login of its own at DSM (address, account, password) - the assistant
    (login, test with the certificate, albums) and, once switched on, the service's page as Immich's (synology.ts) */
-const photoSyno = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0, tab: 'albums', tree: new Map(), open: new Set(), parent: new Map() }
+const photoSyno = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0, tab: 'albums', tree: new Map(), open: new Set(), parent: new Map(), smart: null }
 
 async function loadPhotoSynology() {
   const r = await api(`${API}/photos/synology`)
@@ -12773,7 +12773,7 @@ async function loadPhotoSynology() {
   photoSyno.fingerprint = d.settings.certFingerprint || ''
   photoSyno.test = null
   photoSyno.albums = null
-  Object.assign(photoSyno, { tab: 'albums', tree: new Map(), open: new Set(), parent: new Map() })
+  Object.assign(photoSyno, { tab: 'albums', tree: new Map(), open: new Set(), parent: new Map(), smart: null })
 }
 
 // the choice is albums and folders: the albums the account sees, the folders of its personal space and the ones of the
@@ -12782,7 +12782,33 @@ const SYNO_TABS = [
   ['albums', 'Alben'],
   ['personal', 'Persönlicher Bereich'],
   ['shared', 'Gemeinsamer Bereich'],
+  ['smart', 'Intelligent'],
 ]
+// the smart albums Synology Photos makes of the personal space: what the box offers besides the people
+const SYNO_SMART = { recent: ['Zuletzt hinzugefügt', 'time'], favorites: ['Favoriten', 'heart'], videos: ['Videos', 'image'] }
+
+async function photoSynoLoadSmart() {
+  photoSyno.smart = null
+  const r = await api(`${API}/photos/synology/smart`)
+  photoSyno.smart = r.ok ? r.body : { error: true }
+}
+
+function photoSynoSmartRows() {
+  const d = photoSyno.smart
+  if (!d) return `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+  if (d.error) return `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+  const row = (ref, name, sub, ic) => `<div class="entry ph-im-album"><span class="ph-thumb">${icon(ic, 20)}</span>
+      <span class="lbl"><b translate="no">${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>
+      <button class="ph-check-box" role="checkbox" aria-checked="${photoSyno.chosen.has(ref)}" data-sypick="${esc(ref)}" aria-label="${esc(name)}">${photoSyno.chosen.has(ref) ? icon('check', 16) : ''}</button></div>`
+  const collections = d.collections.map((c) => row(c.ref, tr(SYNO_SMART[c.kind]?.[0] ?? c.kind), '', SYNO_SMART[c.kind]?.[1] ?? 'image')).join('')
+  const people = d.peopleError
+    ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr('Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.'))}</span></div>`
+    : d.people.length
+      ? `<div class="rows">${d.people.map((x) => row(x.ref, x.name, x.count ? tr(`${x.count} ${x.count === 1 ? 'Foto' : 'Fotos'}`) : '', 'image')).join('')}</div>`
+      : `<p class="help" style="margin:0">${esc(tr('Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.'))}</p>`
+  return `<div class="rows">${collections}</div><h3 style="margin:12px 0 4px">${esc(tr('Personen'))}</h3>${people}
+    <p class="help" style="margin:0">${esc(tr('Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.'))}</p>`
+}
 const synoRef = (space, id) => `${space === 'shared' ? 't' : 'f'}${id}`
 
 async function photoSynoBrowse(space, id) {
@@ -12896,8 +12922,8 @@ function photoSynologySteps() {
           : `<p class="help" style="margin:0">Das Konto sieht noch keine Alben.</p>`
     const tab = photoSyno.tab
     const tabs = `<div class="seg" role="tablist">${SYNO_TABS.map(([id, label]) => `<button role="tab" aria-pressed="${tab === id}" aria-selected="${tab === id}" data-sytab="${id}">${esc(tr(label))}</button>`).join('')}</div>`
-    const inner = tab === 'albums' ? rows : `<div class="ph-tree">${photoSynoFolderRows(tab, '0', 0)}</div><p class="help" style="margin:0">${esc(tr('Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.'))}</p>`
-    body = `<div class="card-head"><h2>${esc(tr(tab === 'albums' ? (list?.albums ? `${list.albums.length} Alben in Synology Photos` : 'Alben in Synology Photos') : 'Ordner in Synology Photos'))}</h2>${tab === 'albums' && list?.albums?.length ? '<button class="btn sm" id="sy-all">Alle wählen</button>' : ''}</div>
+    const inner = tab === 'albums' ? rows : tab === 'smart' ? photoSynoSmartRows() : `<div class="ph-tree">${photoSynoFolderRows(tab, '0', 0)}</div><p class="help" style="margin:0">${esc(tr('Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.'))}</p>`
+    body = `<div class="card-head"><h2>${esc(tr(tab === 'albums' ? (list?.albums ? `${list.albums.length} Alben in Synology Photos` : 'Alben in Synology Photos') : tab === 'smart' ? 'Intelligente Alben in Synology Photos' : 'Ordner in Synology Photos'))}</h2>${tab === 'albums' && list?.albums?.length ? '<button class="btn sm" id="sy-all">Alle wählen</button>' : ''}</div>
       ${tabs}${inner}<p class="help" style="margin:0">${esc(tr(`${photoSyno.chosen.size} gewählt`))}</p>`
     next = `<button class="btn primary" id="sy-done">Fertig</button>`
   }
@@ -13054,7 +13080,12 @@ function mountPhotoSynology(root, page) {
       const tab = b.dataset.sytab
       photoSyno.tab = tab
       redraw()
-      if (tab !== 'albums' && !photoSyno.tree.has(`${tab}:0`)) {
+      if (tab === 'smart') {
+        if (!photoSyno.smart) {
+          await photoSynoLoadSmart()
+          redraw()
+        }
+      } else if (tab !== 'albums' && !photoSyno.tree.has(`${tab}:0`)) {
         await photoSynoBrowse(tab, '0')
         redraw()
       }

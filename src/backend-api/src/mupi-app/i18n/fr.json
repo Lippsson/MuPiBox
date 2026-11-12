@@ -3869,5 +3869,12 @@
  "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Un dossier choisi montre aussi les photos des dossiers qu’il contient.",
  "{} gewählt": "{} choisi(s)",
  "Ordner in Synology Photos": "Dossiers dans Synology Photos",
- "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Pas encore d'albums. Tu peux quand même choisir des dossiers."
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Pas encore d'albums. Tu peux quand même choisir des dossiers.",
+ "Intelligent": "Intelligent",
+ "Zuletzt hinzugefügt": "Ajoutés récemment",
+ "Favoriten": "Favoris",
+ "Personen": "Personnes",
+ "Intelligente Alben in Synology Photos": "Albums intelligents dans Synology Photos",
+ "Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.": "Aucune personne trouvée : la reconnaissance faciale de Synology Photos est désactivée pour le compte de la box, ou aucune personne n'a encore de nom.",
+ "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Les albums intelligents changent d'eux-mêmes : la box les synchronise comme les autres. Ils valent pour l'espace personnel du compte."
 }

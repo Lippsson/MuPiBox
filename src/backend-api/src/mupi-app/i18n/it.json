@@ -3869,5 +3869,12 @@
  "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Una cartella scelta mostra anche le foto delle cartelle che contiene.",
  "{} gewählt": "{} scelti",
  "Ordner in Synology Photos": "Cartelle in Synology Photos",
- "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ancora nessun album. Puoi comunque scegliere delle cartelle."
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ancora nessun album. Puoi comunque scegliere delle cartelle.",
+ "Intelligent": "Intelligente",
+ "Zuletzt hinzugefügt": "Aggiunti di recente",
+ "Favoriten": "Preferiti",
+ "Personen": "Persone",
+ "Intelligente Alben in Synology Photos": "Album intelligenti in Synology Photos",
+ "Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.": "Nessuna persona trovata: il riconoscimento facciale di Synology Photos è disattivato per l’account del box, oppure non ci sono ancora persone con un nome.",
+ "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Gli album intelligenti cambiano da soli: il box li sincronizza come tutti gli altri. Valgono per lo spazio personale dell’account."
 }
