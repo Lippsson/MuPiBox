@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, CUSTOM_ELEMENTS_SCHEMA, computed, effect, inject, output, signal, untracked, viewChild } from '@angular/core'
+import { ChangeDetectionStrategy, Component, CUSTOM_ELEMENTS_SCHEMA, computed, DestroyRef, effect, inject, output, signal, untracked, viewChild } from '@angular/core'
 import { of } from 'rxjs'
 import { environment } from 'src/environments/environment'
 import { type DisplayTextKey, DisplayTextsService } from '../display-texts.service'
@@ -480,6 +480,11 @@ export class PhotoAlbumsComponent {
   protected readonly fullScrollbar = signal(false)
 
   constructor() {
+    // (the tab left within the seconds of a note or a name read out: its timers go with it)
+    inject(DestroyRef).onDestroy(() => {
+      window.clearTimeout(this.hintTimer)
+      window.clearTimeout(this.speakingTimer)
+    })
     inject(HttpClient)
       .get<MupiboxConfig>(`${environment.backend.apiUrl}/config`)
       .subscribe({

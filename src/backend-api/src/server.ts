@@ -2714,9 +2714,6 @@ app.post('/api/playtime/limit', localOrElternSession, async (req, res) => {
   }
 })
 
-// POST /api/quiethours/now  body: { minutes?: number }
-// Sets `playbackOverride.forceBlockUntil = now + minutes*60_000`. Forces playback
-// off immediately (kid sees the override overlay). Default 60 min.
 // POST /api/phototime  body: { action: 'extend' | 'free', minutes?: number }
 // Today's photo time (5.1, Spielzeit › Bildzeit) for the Telegram bot: as the app's /api/app/photos/time, from the box
 // itself (the bot) or with the parents' sign-in. "extend" adds minutes for today, "free" lifts the limit for today;
@@ -2768,6 +2765,9 @@ app.post('/api/tiletime', localOrElternSession, async (req, res) => {
   res.status(200).json({ ok: true })
 })
 
+// POST /api/quiethours/now  body: { minutes?: number }
+// Sets `playbackOverride.forceBlockUntil = now + minutes*60_000`. Forces playback
+// off immediately (kid sees the override overlay). Default 60 min.
 app.post('/api/quiethours/now', localOrElternSession, async (req, res) => {
   const minutes = req.body?.minutes !== undefined ? Number(req.body.minutes) : 60
   if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440) {

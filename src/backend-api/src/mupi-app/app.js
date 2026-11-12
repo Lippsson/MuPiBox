@@ -3126,7 +3126,8 @@ function openLibGroup(g) {
      <div class="btns">${groupBtn}<button class="btn" data-close>Schließen</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = close
-      void mountTileLimit(sheet, tileKeys, tileNameOfItem(items[0]) || g.artist)
+      // (each tile with its own name - the display's name of it - when the group is several of them)
+      void mountTileLimit(sheet, tileKeys, Object.fromEntries(tileKeys.map((k) => [k, tileNameOfItem(items.find((it) => tileKeyOfItem(it) === k)) || g.artist])))
       if (sub) mountSubControls(sheet, sub, close, libSubDone)
       sheet.querySelector('[data-unsub]')?.addEventListener('click', () => {
         close()
@@ -5198,7 +5199,10 @@ async function wireTidalRange(item, sheet) {
   // (an artist whose albums carry their episode's number: the range counts those - for an entry without a range yet, or
   // one saved that way; a range saved by positions before stays as it is)
   const hasRange = Number(item.range_from) >= 1 || Number(item.range_to) >= 1
-  const byNumber = !!r.body?.numbered && (item.range_by === 'number' || !hasRange)
+  // (one saved by numbers stays so while any album has a number, as the box counts it - "numbered" may flip with new
+  // singles; "numbered" only chooses for a new range)
+  const anyNumber = (r.body?.albums ?? []).some((al) => al.number != null)
+  const byNumber = item.range_by === 'number' ? anyNumber : !!r.body?.numbered && !hasRange
   sheet.tidalByNumber = byNumber
   const keyOf = (al) => (byNumber ? (al.number ?? null) : al.position)
   const albums = [...(r.body?.albums ?? [])].sort((a, b) => (keyOf(a) ?? Infinity) - (keyOf(b) ?? Infinity) || a.position - b.position)
@@ -11851,6 +11855,8 @@ function immichLine(im) {
 // Synology Photos' line: switched on with its albums, or why not
 function synologyLine(sy) {
   if (sy.sync.unauthorized) return tr('Anmeldung abgelehnt')
+  // (renewed at the service - its page tests it anew and asks to confirm it)
+  if (sy.sync.certificate) return tr('Zertifikat geändert – bitte neu bestätigen')
   if (sy.sync.offlineSince) return tr(`Nicht erreichbar seit ${relTime(sy.sync.offlineSince).replace(/^vor /, '')}`)
   return tr(`Verbunden · ${sy.settings.albumIds.length} ${sy.settings.albumIds.length === 1 ? 'Album' : 'Alben'}`)
 }

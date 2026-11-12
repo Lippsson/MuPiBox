@@ -516,7 +516,9 @@ def episode_number(name, artist=""):
     with the series it counts in: the text before it, without the artist's name and punctuation - (series, number);
     None without a number."""
     text = name or ""
-    m = EPISODE_WORD.search(text) or EPISODE_LEAD.search(text)
+    # (the number that comes first: "012/Die Schatzinsel (Teil 2)" is episode 12, not part 2)
+    word, lead = EPISODE_WORD.search(text), EPISODE_LEAD.search(text)
+    m = lead if lead and (not word or lead.start(1) < word.start(1)) else word
     if not m:
         return None
     n = int(m.group(1))
@@ -541,7 +543,9 @@ def narrowed(result, q):
             return None
     lo, hi = num(q.get("from")), num(q.get("to"))
     excluded = {x for x in (q.get("exclude") or "").split(",") if x.isdigit()}
-    by_number = q.get("by") == "number" and result.get("numbered")
+    # (a range saved by numbers stays one while any album has a number: "numbered" is worked out anew on every call and
+    # could flip with new singles - "Folge 1-20" then meant positions 1-20, other albums without a word)
+    by_number = q.get("by") == "number" and any(al.get("number") is not None for al in result["albums"])
     for al in result["albums"]:
         key = al.get("number") if by_number else al["position"]
         if key is None:

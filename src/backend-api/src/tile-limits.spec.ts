@@ -30,6 +30,15 @@ describe('setTileLimit', () => {
     )
   })
 
+  it('gives each tile its own name when they come with one each', () => {
+    const cfg: Record<string, unknown> = {}
+    assert.equal(setTileLimit(cfg, ['artist:music:A', 'artist:music:B'], { 'artist:music:A': 'A', 'artist:music:B': 'B' }, 15), null)
+    assert.deepEqual(
+      tileLimitsOf(cfg).map((t) => t.name),
+      ['A', 'B'],
+    )
+  })
+
   it('refuses what is no tile or no time', () => {
     const cfg: Record<string, unknown> = {}
     assert.notEqual(setTileLimit(cfg, ['other:x'], '', 30), null)

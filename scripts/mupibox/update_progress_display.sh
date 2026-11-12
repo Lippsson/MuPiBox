@@ -85,6 +85,10 @@ while :; do
 			fi
 			;;
 	esac
+	# (the display started again meanwhile - an update that stopped starts it at once: nothing more drawn over it)
+	if pgrep -x chromium >/dev/null || pgrep -x chromium-browse >/dev/null; then
+		break
+	fi
 	# (the lock is not handed on: a picture program that stays would keep it)
 	"${SCREEN}" update "${W_PCT}" "${W_PART}" 9>&-
 	echo "${W_PCT} ${W_PART} $(cut -d. -f1 /proc/uptime)" > "${SHOWN}"

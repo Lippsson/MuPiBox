@@ -51,4 +51,10 @@ if [ -n "${PCT}" ] && [ -n "${PART}" ]; then
 	/usr/bin/fbv ${FBV_OPTS} -c -y "${PROGRESS_PIC}" </dev/tty1 >/dev/tty1 2>/dev/null &
 	exit 0
 fi
-/usr/bin/fbv ${FBV_OPTS} -c -y "${PIC}" &
+# (without a terminal - the app's update runs in a unit - fbv shows nothing: then on the display's; from a terminal as
+# always)
+if [ -t 0 ] || [ ! -w /dev/tty1 ]; then
+	/usr/bin/fbv ${FBV_OPTS} -c -y "${PIC}" &
+else
+	/usr/bin/fbv ${FBV_OPTS} -c -y "${PIC}" </dev/tty1 >/dev/tty1 2>/dev/null &
+fi

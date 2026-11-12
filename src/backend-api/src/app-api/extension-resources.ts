@@ -196,8 +196,14 @@ export function parseBootGpio(text: string): { pin: number; by: string }[] {
     'spi1-3cs': [16, 17, 18, 19, 20, 21],
     i2s: [18, 19, 20, 21],
     'i2s-gpio28-31': [],
+    // (the 3.5 mm sound over PWM on the pins: audio remapped, the PWM overlays)
+    audremap: [12, 13],
+    pwm: [18],
+    'pwm-2chan': [18, 19],
   }
-  const i2sCards = /^(hifiberry-|iqaudio-|justboom-|allo-|audioinjector|rpi-cirrus|pcm5102|googlevoicehat|adau7002|applepi-dac|dionaudio-|fe-pi-audio|i-sabre-q2m|rpi-dac|rpi-proto|sc16is|merus-amp)/
+  // (max98357a: the amplifier of the MuPiHAT and the box's own I2S amplifier - its pins were offered for buttons, and a
+  // button there made the speaker silent until the next restart)
+  const i2sCards = /^(hifiberry-|iqaudio-|justboom-|allo-|audioinjector|rpi-cirrus|pcm5102|googlevoicehat|adau7002|applepi-dac|dionaudio-|fe-pi-audio|i-sabre-q2m|rpi-dac|rpi-proto|sc16is|merus-amp|max98357a|i2s-dac)/
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (line.startsWith('#') || !line) continue
@@ -298,7 +304,11 @@ export function coreResources(config: Record<string, unknown> | undefined): { po
   if (fan.fan_active === true || fan.fan_active === 'true') take(fan.fan_gpio, 'MuPiBox (fan)')
   if (rotaryOn(config)) for (const p of ROTARY_GPIO) take(p, 'MuPiBox (rotary encoder)')
   const hat = section('mupihat')
-  if (hat.hat_active === true || hat.hat_active === 'true') for (const p of [2, 3]) take(p, 'MuPiBox (MuPiHAT, I2C)')
+  if (hat.hat_active === true || hat.hat_active === 'true') {
+    for (const p of [2, 3]) take(p, 'MuPiBox (MuPiHAT, I2C)')
+    // (its amplifier on I2S - also before its overlay is written to the boot configuration)
+    for (const p of [18, 19, 21]) take(p, 'MuPiBox (MuPiHAT, sound)')
+  }
   return { ports, gpio }
 }
 

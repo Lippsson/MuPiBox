@@ -765,7 +765,8 @@ export function buildApp(deps: HaDeps): Express {
           return void res.json({ success: true })
         }
         const r = await playerCommand(command)
-        if (r.status === 423) return fail(res, 409, 'provider_unavailable', 'Playing is blocked right now (listening time or quiet hours)')
+        if (r.status === 423)
+          return fail(res, 409, 'provider_unavailable', r.body.error === 'tile_limit_reached' ? 'This tile is used up for today' : 'Playing is blocked right now (listening time or quiet hours)')
         if (!r.ok) return fail(res, 503, 'temporarily_unavailable', `The player answered ${r.status}`)
         log(`${command} from "${client.client_name}"`)
         return void res.json({ success: true })

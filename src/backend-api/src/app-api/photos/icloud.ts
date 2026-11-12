@@ -126,6 +126,11 @@ interface AlbumRecords {
 // the key to an album (20 minutes), its records with their addresses (until the first of them runs out)
 const accesses = new Map<string, Access>()
 const recordsOf = new Map<string, AlbumRecords>()
+// the reads of an album for the pictures shown live, while they run: one for all who ask (the grid asks for six at a
+// time - six reads of the whole album, all its records in memory, and Apple answered 429)
+const reading = new Map<string, Promise<AlbumRecords>>()
+// Apple refused the key of an album resolved before (before its time): resolved anew, once
+class KeyRefused extends RemoteAway {}
 
 const num = (f: Field | undefined): number => (typeof f?.value === 'number' ? f.value : Number(f?.value) || 0)
 const str = (f: Field | undefined): string => (typeof f?.value === 'string' ? f.value : '')
@@ -144,7 +149,8 @@ export class IcloudClient implements RemoteClient {
 
   constructor(private readonly keys: string[]) {}
 
-  private async post(url: string, body: unknown, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  // resolve: the album's link resolved - only Apple's no there means the album is gone
+  private async post(url: string, body: unknown, signal?: AbortSignal, resolve = false): Promise<Record<string, unknown>> {
     let r: globalThis.Response
     try {
       r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body), signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20_000)]), redirect: 'error' })
@@ -154,8 +160,12 @@ export class IcloudClient implements RemoteClient {
     }
     if (!r.ok) {
       await r.body?.cancel().catch(() => undefined)
-      // (a link no longer public, an album deleted: Apple says no for it - the album is gone)
-      throw new RemoteRefused(r.status === 429 || r.status >= 500 ? r.status : 404, LABEL)
+      if (r.status === 429 || r.status >= 500) throw new RemoteRefused(r.status, LABEL)
+      // (a link no longer public, an album deleted: Apple says no when it is resolved - the album is gone)
+      if (resolve || r.status === 404) throw new RemoteRefused(404, LABEL)
+      // (reading a resolved album, any other no - its key refused before its time, a change at Apple: not taken for
+      // "gone" - that deleted the albums kept on the box; tried again at the next sync)
+      throw r.status === 401 || r.status === 403 ? new KeyRefused(`${LABEL}: ${r.status}`) : new RemoteAway(`${LABEL}: ${r.status}`)
     }
     try {
       return obj(await r.json())
@@ -169,7 +179,7 @@ export class IcloudClient implements RemoteClient {
     const kept = accesses.get(key)
     if (!fresh && kept && Date.now() < kept.until) return kept
     const q = `remapEnums=true&getCurrentSyncToken=true&sharing_url_key=${encodeURIComponent(key)}`
-    const j = await this.post(`${CLOUDKIT}/public/records/resolve?${q}`, { shortGUIDs: [{ value: key }] }, signal)
+    const j = await this.post(`${CLOUDKIT}/public/records/resolve?${q}`, { shortGUIDs: [{ value: key }] }, signal, true)
     const r = obj((Array.isArray(j.results) ? j.results : [])[0])
     const anon = obj(r.anonymousPublicAccess)
     const share = obj(r.share)
@@ -184,13 +194,20 @@ export class IcloudClient implements RemoteClient {
   }
 
   /** The album's records: its pictures and clips with their renditions' addresses */
-  private async read(key: string, signal: AbortSignal | undefined, videos: boolean): Promise<AlbumRecords> {
-    const a = await this.access(key, signal)
+  private async read(key: string, signal: AbortSignal | undefined, videos: boolean, fresh = false): Promise<AlbumRecords> {
+    const a = await this.access(key, signal, fresh)
     const q = `remapEnums=true&getCurrentSyncToken=true&sharing_url_key=${encodeURIComponent(key)}&publicAccessAuthToken=${encodeURIComponent(a.token)}`
     const all: CkRecord[] = []
     let syncToken: string | undefined
     for (let page = 0; page < 200; page++) {
-      const j = await this.post(`${a.partition}/database/1/com.apple.photos.cloud/production/shared/changes/zone?${q}`, { zones: [{ zoneID: a.zoneID, reverse: false, ...(syncToken ? { syncToken } : {}) }] }, signal)
+      let j: Record<string, unknown>
+      try {
+        j = await this.post(`${a.partition}/database/1/com.apple.photos.cloud/production/shared/changes/zone?${q}`, { zones: [{ zoneID: a.zoneID, reverse: false, ...(syncToken ? { syncToken } : {}) }] }, signal)
+      } catch (err) {
+        // (the key refused before its time: the link resolved anew - a link no longer public is "gone" there)
+        if (err instanceof KeyRefused && !fresh) return this.read(key, signal, videos, true)
+        throw err
+      }
       const z = obj((Array.isArray(j.zones) ? j.zones : [])[0])
       if (Array.isArray(z.records)) all.push(...(z.records as CkRecord[]))
       syncToken = typeof z.syncToken === 'string' ? z.syncToken : undefined
@@ -245,7 +262,16 @@ export class IcloudClient implements RemoteClient {
   // an item's address: from the records read (read again when its addresses run out within two minutes)
   private async urlOf(albumRef: string, ref: string, kind: 'grid' | 'full' | 'clip', signal?: AbortSignal): Promise<string> {
     let r = recordsOf.get(albumRef)
-    if (!r || Date.now() > r.until - 120_000 || !r.urls.has(ref)) r = await this.read(albumRef, signal, true)
+    if (!r || Date.now() > r.until - 120_000 || !r.urls.has(ref)) {
+      // (one read for all who ask meanwhile - without the signal of the first: its end would end it for the others;
+      // each of its requests has its own time limit)
+      let p = reading.get(albumRef)
+      if (!p) {
+        p = this.read(albumRef, undefined, true).finally(() => reading.delete(albumRef))
+        reading.set(albumRef, p)
+      }
+      r = await p
+    }
     const u = r.urls.get(ref)?.[kind] ?? (kind === 'grid' ? r.urls.get(ref)?.full : undefined)
     if (!u) throw new RemoteRefused(404, LABEL)
     return u

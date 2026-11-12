@@ -318,7 +318,14 @@ export function registerUpdateRoutes(router: Router, deps: UpdatesDeps): void {
     } finally {
       await fsp.rm(tmp, { recursive: true, force: true })
     }
-    const r = await run('sudo', ['systemd-run', `--unit=${UNIT}`, '--collect', '--quiet', '--working-directory=/home/dietpi', '/bin/bash', `${STATE_DIR}/run.sh`, kind], 15000)
+    // (KillMode=process: at the end of run.sh systemd ends only it, not what it started - the display (kiosk) started
+    // again after an update that failed, and the picture "Update abgebrochen" still being drawn, were ended with the
+    // unit otherwise: the display stayed dark or on the last step)
+    const r = await run(
+      'sudo',
+      ['systemd-run', `--unit=${UNIT}`, '--collect', '--quiet', '--property=KillMode=process', '--working-directory=/home/dietpi', '/bin/bash', `${STATE_DIR}/run.sh`, kind],
+      15000,
+    )
     if (!r.ok) {
       res.status(500).json({ error: `could not start the update ${r.stderr.slice(0, 200)}` })
       return

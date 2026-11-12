@@ -1263,6 +1263,9 @@ export class MediaService {
                 cover: a.cover ?? undefined,
                 artistcover: item.artistcover_override ?? item.artistcover ?? item.cover,
                 release_date: a.date || (a.year ? String(a.year) : undefined),
+                // (the order chosen in the library's sheet: the album list sorts by the tile's first album - without
+                // it here every TIDAL artist was A-Z)
+                sorting: item.sorting,
                 index: item.index,
                 row,
               }) as Media,
@@ -1271,7 +1274,7 @@ export class MediaService {
         catchError(() => {
           this.tidalFailures++
           return of([
-            { type: 'tidal', tidalKind: 'artist', id: item.id, artist: item.artist, category: item.category, index: item.index, unavailable: true, row } as Media,
+            { type: 'tidal', tidalKind: 'artist', id: item.id, artist: item.artist, category: item.category, sorting: item.sorting, index: item.index, unavailable: true, row } as Media,
           ])
         }),
       )

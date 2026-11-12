@@ -102,8 +102,10 @@ export function applyPhotoprismSettings(cfg: Record<string, unknown>, patch: unk
   // (the password kept belongs to the address it was given for: another one gets it only typed in anew)
   const moved = cleanPhotoprismUrl(next.url) !== beforeUrl
   if (p.password !== undefined) {
-    if (typeof p.password !== 'string' || !p.password || p.password.length > 200) return 'password'
-    next.password = encrypt(p.password)
+    if (typeof p.password !== 'string' || !p.password.trim() || p.password.length > 200) return 'password'
+    // (trimmed as the test does: an app password pasted with a blank or a line break at its end passed the test and
+    // was refused right after saving)
+    next.password = encrypt(p.password.trim())
   } else if (moved && next.password) return 'password'
   if (p.certFingerprint !== undefined) {
     if (typeof p.certFingerprint !== 'string' || (p.certFingerprint !== '' && !FINGERPRINT.test(p.certFingerprint))) return 'certFingerprint'
@@ -236,8 +238,16 @@ export class PhotoprismClient implements RemoteClient {
 
   /** A thumbnail or a video by its address with the preview token; a token renewed in PhotoPrism: read again once */
   private async preview(make: (token: string) => string, init: { signal?: AbortSignal; range?: string; timeoutMs?: number } = {}): Promise<globalThis.Response> {
-    const ask = async (fresh: boolean) =>
-      this.request(make(await this.previewToken(init.signal, fresh)), { signal: init.signal, timeoutMs: init.timeoutMs, headers: init.range ? { Range: init.range } : {}, bare: true })
+    const ask = async (fresh: boolean) => {
+      const r = await this.request(make(await this.previewToken(init.signal, fresh)), { signal: init.signal, timeoutMs: init.timeoutMs, headers: init.range ? { Range: init.range } : {}, bare: true })
+      // (an original PhotoPrism cannot read - its storage not mounted: it answers 200 with an icon in SVG or a text, which
+      // was kept as the picture and never fetched again; this one picture is left out - a sync goes on with the others)
+      if (/svg|text|html/i.test(r.headers.get('content-type') ?? '')) {
+        await r.body?.cancel().catch(() => undefined)
+        throw new RemoteRefused(404, LABEL)
+      }
+      return r
+    }
     try {
       return await ask(false)
     } catch (err) {

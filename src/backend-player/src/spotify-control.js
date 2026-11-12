@@ -1196,8 +1196,20 @@ const tileState = {
   graceMode: null,
   stopUnlessEpisode: false,
   graceEndsAt: null,
+  // the key the start named (an album inside a folder: its own folder) - current is the tile with a limit it belongs to,
+  // found anew every second (a limit set while it plays counts at once)
+  raw: null,
 }
 let tileGraceIdle = 0
+
+// What a second of playing counts for: the key the start named and, for a folder, every folder above it - a limit set
+// later on one of them starts from what was heard of it today
+function tileCountKeys(raw) {
+  const m = /^(lib|nas):(.*)$/.exec(raw ?? '')
+  if (!m) return raw ? [raw] : []
+  const parts = m[2].split('/').filter(Boolean)
+  return parts.map((_, i) => `${m[1]}:${parts.slice(0, i + 1).join('/')}`)
+}
 // (what the last checkpoint held of them - none at the start: no write at every start of the box)
 let tileLastCheckpointUsed = '{}'
 
@@ -1276,7 +1288,13 @@ function finalizeTileBlock(reason, immediate = false) {
 }
 
 // The tile of a new start (or none): its state machine starts anew
-function setCurrentTile(key) {
+// raw: the key the start named (or none); current is the tile with a limit it belongs to (see tileTickStep)
+function setCurrentTile(raw) {
+  tileState.raw = raw
+  switchTile(resolveTile(raw))
+}
+
+function switchTile(key) {
   if (key === tileState.current) return
   tileState.current = key
   tileState.state = 'normal'
@@ -1299,10 +1317,12 @@ function tileTickStep() {
     tileState.graceEndsAt = null
     if (hadCounts) writePlaytimeCheckpoint()
   }
-  const key = tileState.current
-  if (!key) return
-  if (isActuallyPlaying()) tileState.used[key] = (tileState.used[key] ?? 0) + 1
+  if (!tileState.raw) return
   const cfg = readTileConfig()
+  // (the limits as they are now: one set on its folder while it plays takes over at once)
+  switchTile(resolveTile(tileState.raw, cfg))
+  const key = tileState.current
+  if (isActuallyPlaying()) for (const k of tileCountKeys(tileState.raw)) tileState.used[k] = (tileState.used[k] ?? 0) + 1
   const a = tileAllowance(cfg, key, today.dateStr)
   const reached = !isAllowOverrideActive() && !!a && !a.free && tileState.used[key] >= a.minutes * 60
   if (reached) {
@@ -4520,7 +4540,6 @@ app.use((req, res) => {
       res.status(423).send({ status: 'blocked', error: 'tile_limit_reached', tile })
       return
     }
-    if (newStart) setCurrentTile(tile)
   }
 
   // A Spotify start while Spotify blocks the requests: refused before anything changes (the pause flag of what was
@@ -4549,6 +4568,9 @@ app.use((req, res) => {
   // set (the display showed the play button while the new one played), and a local or NAS album kept the episode
   // picture of a podcast played before it (radio and podcasts set their own below, Spotify brings its own).
   const newMedia = command.name.includes('spotify:') || ['library', 'nas', 'tidal', 'radio', 'rss'].some((segment) => hasDirSegment(command, segment))
+  // (the tile of what starts now - only here, once the start is not refused any more: a Spotify start refused while
+  // Spotify blocks the box left what played counting for the other tile)
+  if (newStart && isPlayInitiatingCommand(command) && !hasDirSegment(command, 'say')) setCurrentTile(triggerTile)
   if (newMedia) {
     resetLocalShuffle()
     playbackRequest++

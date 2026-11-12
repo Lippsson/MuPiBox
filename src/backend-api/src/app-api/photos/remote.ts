@@ -129,9 +129,15 @@ export interface RemoteSyncState {
   /** the last sync stopped before its end (the service away or in trouble): the next one comes soon - only a sync that
    *  gets to its end clears it, not a live picture that came meanwhile */
   retry: boolean
+  /** away because its certificate is not the one confirmed (renewed - Let's Encrypt every 60 to 90 days): the app says
+   *  so - to be confirmed anew - instead of only "not reachable" */
+  certificate?: boolean
 }
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
+// (pinned-fetch.ts's CertificateError, known by its certificate: that file builds on this one - imported here, the two
+// would need each other before either is ready)
+const certificateRefused = (err: unknown): boolean => err instanceof RemoteAway && 'certificate' in err
 
 export class RemotePhotoSync {
   private state: RemoteSyncState = { running: false, done: 0, total: 0, lastSync: null, offlineSince: null, cacheFull: false, unauthorized: false, missing: 0, retry: false }
@@ -169,6 +175,7 @@ export class RemotePhotoSync {
     if (this.state.offlineSince || this.state.unauthorized) {
       this.state.offlineSince = null
       this.state.unauthorized = false
+      this.state.certificate = false
       void this.save()
     }
   }
@@ -264,6 +271,7 @@ export class RemotePhotoSync {
             } else {
               if (!this.state.offlineSince) this.state.offlineSince = new Date().toISOString()
               this.state.retry = true
+              this.state.certificate = certificateRefused(err)
               this.log(`not reachable (${(err as Error).message}), the pictures on the box stay`)
             }
             await this.save()
@@ -271,7 +279,7 @@ export class RemotePhotoSync {
           }
         }
       }
-      Object.assign(this.state, { offlineSince: null, unauthorized: false, missing })
+      Object.assign(this.state, { offlineSince: null, unauthorized: false, missing, certificate: false })
 
       // the albums: new ones go into the list with their first picture (live: at once); gone or no longer chosen out
       const live = !s.keepCopy
@@ -384,6 +392,9 @@ export class RemotePhotoSync {
         const id = newId()
         const out = assetBase(album, id)
         const clip = x.kind === 'video'
+        // (the kind of the picture as the service sends it: an original in HEIC - an iPhone photo Nextcloud makes no
+        // preview of - goes through heif-convert; taken for a JPEG it was dropped and fetched again at every sync)
+        let ext = '.jpg'
         try {
           if (clip) {
             const r = await client.clip(album.ref ?? '', x, { signal: stop.signal })
@@ -397,12 +408,13 @@ export class RemotePhotoSync {
               await r.body?.cancel().catch(() => undefined)
               continue
             }
+            if (/image\/hei[cf]/i.test(r.headers.get('content-type') ?? '')) ext = '.heic'
             await fsp.writeFile(part, Buffer.from(await r.arrayBuffer()))
           }
           await fsp.mkdir(albumDir(album), { recursive: true })
           // (a clip: kept as it came, made in the background - video.ts)
           if (clip) await fsp.rename(part, `${out}.pending`)
-          const facts = clip ? { w: 0, h: 0, taken: null } : await processPhoto(part, out, '.jpg', stop.signal)
+          const facts = clip ? { w: 0, h: 0, taken: null } : await processPhoto(part, out, ext, stop.signal)
           let newBytes = 0
           for (const f of photoFiles(out)) newBytes += (await fsp.stat(f).catch(() => ({ size: 0 }))).size
           if (used - oldBytes + newBytes > limit) {
@@ -516,7 +528,10 @@ export class RemoteLive {
    * login within 5 s - it is back, the albums show again. At most every 10 s.
    */
   async checkNow(): Promise<void> {
-    if (!this.away() || Date.now() - this.lastCheck < 10_000) return
+    // (a login refused: at most every 15 minutes - the display asks every 2 minutes, and a server that counts failed
+    // logins (Nextcloud's brute-force protection, fail2ban) locked the box out, also after the password was right again)
+    const gap = this.sync.status().unauthorized ? 15 * 60_000 : 10_000
+    if (!this.away() || Date.now() - this.lastCheck < gap) return
     this.lastCheck = Date.now()
     const client = this.sync.client()
     if (!client) return

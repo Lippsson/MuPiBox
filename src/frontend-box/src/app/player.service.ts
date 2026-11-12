@@ -335,7 +335,9 @@ export class PlayerService {
       // (its tile's day's limit is used up: the player refused it - the bar says so, the player page goes back)
       error: (e: HttpErrorResponse) => {
         const body = e.error as { error?: unknown; tile?: unknown } | null
-        if (e.status === 423 && body?.error === 'tile_limit_reached') {
+        // (only a start: a play, next or seek refused while the tile's last track finishes - its grace - changes nothing,
+        // as for the listening time; taken for a refused start, the page left and stopped that track)
+        if (media && e.status === 423 && body?.error === 'tile_limit_reached') {
           this.logService.log(`[PlayerService] start refused, the tile is used up for today: ${String(body.tile ?? '')}`)
           this.tileTime.refused(typeof body.tile === 'string' ? body.tile : null, media ?? null)
         }

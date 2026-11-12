@@ -152,6 +152,18 @@ export class AppComponent {
       if (!this.currentMediaService.shouldPersistResume()) return
       void this.persistResumeOnCap()
     })
+    // The same when a tile's day's limit (5.1) ends what plays - also on a box with only tile limits (the listening time
+    // off: the effect above returns early) and while it plays on in the background
+    let prevTile = ''
+    effect(() => {
+      const tile = playtimeService.status().tiles?.current
+      const now = tile ? `${tile.key}|${tile.state}` : ''
+      const before = prevTile
+      prevTile = now
+      if (!tile || tile.state === 'normal' || before !== `${tile.key}|normal`) return
+      if (!this.currentMediaService.shouldPersistResume()) return
+      void this.persistResumeOnCap()
+    })
   }
 
   // Waking the display by a tap: the panel showed only what was drawn anew after it came on - black, apart from

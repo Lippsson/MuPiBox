@@ -521,6 +521,8 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     let photosRestored = false
     let usersRestored = false
     const files: { name: string; size: number }[] = []
+    // entries left out (see below): not unpacked
+    const skipped: string[] = []
     for (const line of lines.slice(2, -1)) {
       const m =
         /^([-d])[rwxsStT-]{9}\s+\S+\s+unx\s+(\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s(.+)$/.exec(line) ??
@@ -543,6 +545,12 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         !name.includes('\\') &&
         (photo || user || RESTORE_FILES.includes(name) || (isDir && (RESTORE_DIRS.includes(name) || inMedia)) || (!isDir && inMedia && !FORBIDDEN_MEDIA.test(name)))
       if (!allowed) {
+        // (a file or folder of the users' data this box does not know - another version of the extension, a name with
+        // a blank: left out, the rest restored; it made the whole backup refused before)
+        if (name.startsWith(`${USERS_DATA}/`) && !name.includes('..') && !name.includes('\\')) {
+          skipped.push(name)
+          continue
+        }
         bad = name
         break
       }
@@ -597,7 +605,9 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
       const rest = files.some((f) => !LIBRARY_ENTRIES.includes(f.name))
       // (the photos' list comes from the backup: nothing on the box writes it meanwhile - a sync, a clip being made)
       if (photosRestored) await freezeLibrary()
-      const r = rest ? await run('sudo', ['unzip', '-o', file, '-d', '/', '-x', ...LIBRARY_ENTRIES], 3600000) : { ok: true }
+      // (unzip takes -x as patterns: the names of the entries left out with their wildcards escaped)
+      const left = skipped.map((s) => s.replace(/[[\]*?]/g, (c) => `\\${c}`))
+      const r = rest ? await run('sudo', ['unzip', '-o', file, '-d', '/', '-x', ...LIBRARY_ENTRIES, ...left], 3600000) : { ok: true }
       if (!r.ok || !libraryEntry) return r
       return { ok: await withDataLock(() => installFileAs(`${LIBRARY}/data.json`, library)).then((done) => done === true) }
     })()
@@ -618,7 +628,11 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     // (unpacked as root: the photos the server's again - it adds and deletes there)
     if (photosRestored) await run('sudo', ['chown', '-R', 'dietpi:dietpi', '/home/dietpi/.mupibox/data/photos'], 300000)
     // (the same for the users' profiles: the extension writes them as the server)
-    if (usersRestored) await run('sudo', ['chown', '-R', 'dietpi:dietpi', `/${USERS_DATA}`], 300000)
+    if (usersRestored) {
+      await run('sudo', ['chown', '-R', 'dietpi:dietpi', `/${USERS_DATA}`], 300000)
+      // (on a fresh box unzip made the folders above it as root: installing an extension then failed - EACCES)
+      await run('sudo', ['chown', 'dietpi:dietpi', '/home/dietpi/.mupibox/data/extensions', '/home/dietpi/.mupibox/data/extensions/data'], 30000)
+    }
     // the restored config brought up to the installed version (as the admin interface), its version kept
     await run('sudo', ['/usr/local/bin/mupibox/conf_update.sh'], 300000)
     await deps.updateMupiboxConfig((cfg) => {

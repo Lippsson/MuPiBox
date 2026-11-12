@@ -41,12 +41,17 @@ export function setTileLimit(cfg: Record<string, unknown>, keys: unknown, name: 
   if (!list.length || list.length > 50 || !list.every((k) => typeof k === 'string' && TILE_KEY.test(k))) return 'keys must be tile keys'
   const m = minutes === null || minutes === undefined ? 0 : Number(minutes)
   if (!Number.isInteger(m) || m < 0 || m > 1440) return 'minutes must be 0-1440'
-  const label = typeof name === 'string' ? name.trim().slice(0, 200) : ''
+  // (one name for all, or one per key: a group of the app that is several tiles on the display - each its own name)
+  const names = name && typeof name === 'object' && !Array.isArray(name) ? (name as Record<string, unknown>) : null
+  const labelOf = (key: string) => {
+    const n = names ? names[key] : name
+    return typeof n === 'string' ? n.trim().slice(0, 200) : ''
+  }
   const block = { ...obj(cfg.playtimeLimit) }
   const kept = tileLimitsOf(cfg).filter((t) => !list.includes(t.key))
   if (m > 0) {
     if (kept.length + list.length > MAX_TILES) return 'too many tiles with a limit'
-    for (const key of list as string[]) kept.push({ key, name: label, minutes: m })
+    for (const key of list as string[]) kept.push({ key, name: labelOf(key), minutes: m })
   }
   block.tileLimits = kept
   if (m === 0) {

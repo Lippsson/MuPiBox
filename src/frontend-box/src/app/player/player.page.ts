@@ -367,6 +367,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
   // Tracks the playtime state across ticks so we can detect transitions
   // (normal -> grace, grace -> blocked, etc.) and persist resume on time.
   private prevPlaytimeState: PlaytimePlayState | 'unknown' = 'unknown'
+  // (the same for the tile of what plays: "<key>|<state>")
+  private prevTileState = ''
   private destroyRef = inject(DestroyRef)
   private externalNavigator = inject(ExternalPlaybackNavigatorService)
   public readonly spotify$: Observable<CurrentSpotify>
@@ -420,6 +422,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
         seenRefusals = n
         if (!this.onPage || this.isLeaving) return
         this.isLeaving = true
+        // (the player changed nothing: no STOP on the way out - it would end what plays - and no resume saved)
+        this.stoppedFromOutside = true
         this.playing = false
         this.updateProgression = false
         this.leavePage('the player refused it: its tile is used up for today')
@@ -965,6 +969,11 @@ export class PlayerPage implements OnInit, AfterViewInit {
   // for a ±5s position improvement that the kid won't notice.
   private checkPlaytimeForResume() {
     const status = this.playtimeService.status()
+    // a tile's day's limit (5.1) reached - also on a box with only tile limits (the listening time off): saved as for it
+    const tile = status.tiles?.current
+    const tileNow = tile ? `${tile.key}|${tile.state}` : ''
+    if (tile && tile.state !== 'normal' && this.prevTileState === `${tile.key}|normal`) this.saveResumeFiles()
+    this.prevTileState = tileNow
     if (!status.enabled) {
       this.prevPlaytimeState = 'unknown'
       return
