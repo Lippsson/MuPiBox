@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Προεπιλογή: αλφαβητικά, οι αριθμοί ως αριθμοί – «Folge 2» πριν από «Folge 10».",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Επεισόδιο» είναι ο αριθμός στον τίτλο (π.χ. «Folge 12»). Κενό = όλα· άλμπουμ χωρίς αριθμό δεν ανήκουν τότε σε κανένα εύρος.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Χρόνος ακρόασης, ώρες ησυχίας και χρόνος φωτογραφιών τώρα",
- "Bildzeit: Minuten für heute dazu": "Χρόνος φωτογραφιών: λεπτά επιπλέον για σήμερα"
+ "Bildzeit: Minuten für heute dazu": "Χρόνος φωτογραφιών: λεπτά επιπλέον για σήμερα",
+ "Persönlicher Bereich": "Προσωπικός χώρος",
+ "Gemeinsamer Bereich": "Κοινόχρηστος χώρος",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Αυτός ο χώρος δεν είναι διαθέσιμος: το Synology Photos δεν τον έχει ρυθμίσει ή ο λογαριασμός του κουτιού δεν μπορεί να τον δει.",
+ "In diesem Bereich gibt es keine Ordner.": "Σε αυτόν τον χώρο δεν υπάρχουν φάκελοι.",
+ "Keine weiteren Ordner": "Δεν υπάρχουν άλλοι φάκελοι",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Ένας επιλεγμένος φάκελος δείχνει και τις φωτογραφίες των φακέλων που περιέχει.",
+ "{} gewählt": "Επιλέχθηκαν: {}",
+ "Ordner in Synology Photos": "Φάκελοι στο Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Δεν υπάρχουν ακόμη άλμπουμ. Μπορείς όμως να επιλέξεις φακέλους."
 }

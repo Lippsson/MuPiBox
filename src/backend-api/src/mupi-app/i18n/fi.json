@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Oletus: aakkosjärjestys, numerot numeroina – ”Folge 2” ennen ”Folge 10”.",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "”Jakso” on otsikon numero (esim. ”Folge 12”). Tyhjä = kaikki; albumit ilman numeroa eivät silloin kuulu mihinkään väliin.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Kuunteluaika, hiljaiset ajat ja kuva-aika nyt",
- "Bildzeit: Minuten für heute dazu": "Kuva-aika: lisäminuutteja tälle päivälle"
+ "Bildzeit: Minuten für heute dazu": "Kuva-aika: lisäminuutteja tälle päivälle",
+ "Persönlicher Bereich": "Henkilökohtainen tila",
+ "Gemeinsamer Bereich": "Jaettu tila",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Tämä tila ei ole käytettävissä: Synology Photos ei ole ottanut sitä käyttöön, tai laatikon tili ei saa nähdä sitä.",
+ "In diesem Bereich gibt es keine Ordner.": "Tässä tilassa ei ole kansioita.",
+ "Keine weiteren Ordner": "Ei muita kansioita",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Valittu kansio näyttää myös sen sisällä olevien kansioiden kuvat.",
+ "{} gewählt": "{} valittu",
+ "Ordner in Synology Photos": "Synology Photosin kansiot",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ei vielä albumeita. Voit silti valita kansioita."
 }

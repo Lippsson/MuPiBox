@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standart: alfabetik, sayılar sayı olarak – “Folge 2”, “Folge 10”dan önce.",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "“Bölüm”, başlıktaki numaradır (ör. “Folge 12”). Boş = tümü; numarası olmayan albümler o zaman hiçbir aralığa girmez.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Dinleme süresi, sessiz saatler ve fotoğraf süresi şimdi",
- "Bildzeit: Minuten für heute dazu": "Fotoğraf süresi: bugün için ek dakikalar"
+ "Bildzeit: Minuten für heute dazu": "Fotoğraf süresi: bugün için ek dakikalar",
+ "Persönlicher Bereich": "Kişisel alan",
+ "Gemeinsamer Bereich": "Paylaşılan alan",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Bu alan kullanılamıyor: Synology Photos bunu kurmamış ya da kutunun hesabı onu göremiyor.",
+ "In diesem Bereich gibt es keine Ordner.": "Bu alanda klasör yok.",
+ "Keine weiteren Ordner": "Başka klasör yok",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Seçilen klasör, içindeki klasörlerdeki fotoğrafları da gösterir.",
+ "{} gewählt": "{} seçildi",
+ "Ordner in Synology Photos": "Synology Photos klasörleri",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Henüz albüm yok. Yine de klasör seçebilirsin."
 }

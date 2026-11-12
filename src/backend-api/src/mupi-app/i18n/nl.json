@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standaard: alfabetisch, getallen als getallen – „Folge 2” vóór „Folge 10”.",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "„Aflevering” is het nummer in de titel (bijv. „Folge 12”). Leeg = alle; albums zonder nummer horen dan bij geen bereik.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Speeltijd, rusttijden en fototijd nu",
- "Bildzeit: Minuten für heute dazu": "Fototijd: extra minuten voor vandaag"
+ "Bildzeit: Minuten für heute dazu": "Fototijd: extra minuten voor vandaag",
+ "Persönlicher Bereich": "Persoonlijke ruimte",
+ "Gemeinsamer Bereich": "Gedeelde ruimte",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Deze ruimte is niet beschikbaar: Synology Photos heeft hem niet ingesteld, of het account van de box mag hem niet zien.",
+ "In diesem Bereich gibt es keine Ordner.": "In deze ruimte zijn geen mappen.",
+ "Keine weiteren Ordner": "Geen andere mappen",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Een gekozen map toont ook de foto’s in de mappen daarin.",
+ "{} gewählt": "{} gekozen",
+ "Ordner in Synology Photos": "Mappen in Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Nog geen albums. Mappen kun je toch kiezen."
 }

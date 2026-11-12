@@ -5,6 +5,10 @@
 // (remote.ts); Synology's thumbnails ("xl" for the full view, "sm" for the grid) are the pictures. A clip comes as it is on
 // the NAS (4K HEVC from a phone, say) and is made on the box (video.ts) - so live albums show no clips. The password is kept
 // encrypted and never shown again.
+//
+// What is chosen is an album ("12") or a folder of Synology Photos: "f<id>" in the personal space, "t<id>" in the shared
+// space (Synology calls it "team space", API SYNO.FotoTeam). A folder is one album on the display with its pictures and
+// those of the folders below it (as for the NAS folders).
 
 import path from 'node:path'
 import type { Request, Response, Router } from 'express'
@@ -24,8 +28,11 @@ export interface PhotoSynologyDeps {
 
 const ALBUMS_MAX = 100
 const STATE_FILE = path.join(PHOTOS_DIR, 'synology-sync.json')
-// an album's id in Synology Photos (a number)
-const ALBUM_ID = /^\d{1,12}$/
+// what the box keeps of a choice: an album's id in Synology Photos (a number), or a folder's: f<id> personal, t<id> shared space
+const ALBUM_ID = /^[ft]?\d{1,12}$/
+// how deep and how wide the folders below a chosen one are followed
+const FOLDER_DEPTH = 8
+const FOLDERS_MAX = 400
 const FINGERPRINT = /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/i
 // how many items one question asks for
 const PAGE = 500
@@ -153,6 +160,17 @@ interface SynoItem {
   }
 }
 
+interface SynoFolder {
+  id: number
+  name?: string
+}
+
+/** A folder's name as shown: Synology gives its path ("/2023/Italy") - the last part; a number when there is none */
+export function folderName(name: unknown, id: number): string {
+  const last = typeof name === 'string' ? name.split('/').filter(Boolean).pop() : undefined
+  return last?.trim() || `Ordner ${id}`
+}
+
 // the albums the account sees, for a minute: own ones and the ones shared with it (those are read with their passphrase)
 let albumCache: { at: number; key: string; list: Map<string, SynoAlbum & { shared: boolean }> } | null = null
 
@@ -174,7 +192,7 @@ export class SynologyClient implements RemoteClient {
     return j as T
   }
 
-  private async raw(params: Record<string, string>, init: { signal?: AbortSignal; timeoutMs?: number; fresh?: boolean } = {}): Promise<globalThis.Response> {
+  protected async raw(params: Record<string, string>, init: { signal?: AbortSignal; timeoutMs?: number; fresh?: boolean } = {}): Promise<globalThis.Response> {
     return dsmCall(this.target, params, init)
   }
 
@@ -213,6 +231,19 @@ export class SynologyClient implements RemoteClient {
     return list
   }
 
+  /** What a choice is: an album, or a folder of the personal or of the shared space ("Team" for Synology) */
+  static kindOf(ref: string): { kind: 'album' | 'personal' | 'shared'; id: string } | null {
+    if (!ALBUM_ID.test(ref)) return null
+    if (ref.startsWith('f')) return { kind: 'personal', id: ref.slice(1) }
+    if (ref.startsWith('t')) return { kind: 'shared', id: ref.slice(1) }
+    return { kind: 'album', id: ref }
+  }
+
+  /** The API names of a space: its own for the shared space */
+  private static api(kind: 'personal' | 'shared'): string {
+    return kind === 'shared' ? 'SYNO.FotoTeam' : 'SYNO.Foto'
+  }
+
   /** How an album's pictures are asked for: its own by its id, one shared with the account by its passphrase */
   private async albumParams(ref: string, signal?: AbortSignal): Promise<Record<string, string>> {
     let a = (await this.albums(signal)).get(ref)
@@ -222,8 +253,73 @@ export class SynologyClient implements RemoteClient {
     return a.shared && a.passphrase ? { passphrase: a.passphrase } : { album_id: ref }
   }
 
+  /** The folders directly in a folder of a space (id '0': the top of the space) */
+  async folders(kind: 'personal' | 'shared', id: string, signal?: AbortSignal): Promise<{ id: string; name: string }[]> {
+    if (!/^\d{1,12}$/.test(id)) throw new RemoteRefused(404, 'Synology')
+    const out: { id: string; name: string }[] = []
+    for (let offset = 0; offset < 5000; offset += PAGE) {
+      const d = await this.call<{ list?: SynoFolder[] }>({ api: `${SynologyClient.api(kind)}.Browse.Folder`, method: 'list', version: '1', id, offset: String(offset), limit: String(PAGE) }, signal)
+      const page = Array.isArray(d.list) ? d.list : []
+      for (const f of page) if (f && Number.isInteger(f.id) && !out.some((x) => x.id === String(f.id))) out.push({ id: String(f.id), name: folderName(f.name, f.id) })
+      if (page.length < PAGE) break
+    }
+    return out
+  }
+
+  // a folder's name (Synology gives a path); a question that does not work out gives a name from its number - the pictures
+  // are what counts, and a NAS that is away answers the next question the same way
+  private async folderLabel(kind: 'personal' | 'shared', id: string, signal: AbortSignal): Promise<string> {
+    try {
+      const d = await this.call<{ folder?: SynoFolder } & Partial<SynoFolder>>({ api: `${SynologyClient.api(kind)}.Browse.Folder`, method: 'get', version: '1', id }, signal)
+      const f = d.folder ?? d
+      return folderName(f.name, Number(id))
+    } catch (err) {
+      if (signal.aborted || (err instanceof RemoteRefused && err.status === 404)) throw err
+      return folderName(undefined, Number(id))
+    }
+  }
+
+  /** The pictures in a folder and in the folders below it */
+  private async folder(kind: 'personal' | 'shared', id: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[] }> {
+    const api = SynologyClient.api(kind)
+    const name = await this.folderLabel(kind, id, signal)
+    const items = new Map<string, RemoteItem>()
+    const extra = JSON.stringify(['thumbnail', 'resolution', 'orientation', 'video_meta'])
+    const todo: { id: string; depth: number }[] = [{ id, depth: 0 }]
+    const seen = new Set<string>([id])
+    while (todo.length) {
+      const here = todo.shift()!
+      for (let offset = 0; offset < 20_000; offset += PAGE) {
+        const d = await this.call<{ list?: SynoItem[] }>({ api: `${api}.Browse.Item`, method: 'list', version: '1', folder_id: here.id, offset: String(offset), limit: String(PAGE), additional: extra }, signal)
+        const page = Array.isArray(d.list) ? d.list : []
+        for (const x of page) {
+          const item = itemOf(x, videos)
+          if (item && !items.has(item.ref)) items.set(item.ref, item)
+        }
+        if (page.length < PAGE) break
+      }
+      if (here.depth >= FOLDER_DEPTH) continue
+      let below: { id: string }[]
+      try {
+        below = await this.folders(kind, here.id, signal)
+      } catch (err) {
+        // (a folder below that is gone or not for this account leaves the rest of them as they are)
+        if (err instanceof RemoteRefused && (err.status === 404 || err.status === 403)) continue
+        throw err
+      }
+      for (const f of below) {
+        if (seen.has(f.id) || seen.size >= FOLDERS_MAX) continue
+        seen.add(f.id)
+        todo.push({ id: f.id, depth: here.depth + 1 })
+      }
+    }
+    return { name, items: [...items.values()] }
+  }
+
   async album(ref: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[] }> {
-    if (!ALBUM_ID.test(ref)) throw new RemoteRefused(404, 'Synology')
+    const what = SynologyClient.kindOf(ref)
+    if (!what) throw new RemoteRefused(404, 'Synology')
+    if (what.kind !== 'album') return this.folder(what.kind, what.id, signal, videos)
     const where = await this.albumParams(ref, signal)
     const name = String((await this.albums(signal)).get(ref)?.name ?? '')
     const items: RemoteItem[] = []
@@ -240,11 +336,19 @@ export class SynologyClient implements RemoteClient {
     return { name, items }
   }
 
+  /** The API and the parameters a picture of a choice is asked with (a folder's pictures need no album) */
+  private async source(ref: string, signal?: AbortSignal): Promise<{ api: string; where: Record<string, string> }> {
+    const what = SynologyClient.kindOf(ref)
+    if (!what) throw new RemoteRefused(404, 'Synology')
+    if (what.kind !== 'album') return { api: SynologyClient.api(what.kind), where: {} }
+    return { api: 'SYNO.Foto', where: await this.albumParams(ref, signal) }
+  }
+
   /** A picture: Synology's "xl" (about 1280 px) for the full view and the box, its "sm" for the grid - WebP */
   async picture(albumRef: string, item: { ref: string; ver: string }, size: 'full' | 'grid', signal?: AbortSignal): Promise<globalThis.Response> {
-    const where = await this.albumParams(albumRef, signal)
+    const { api, where } = await this.source(albumRef, signal)
     const r = await this.raw(
-      { api: 'SYNO.Foto.Thumbnail', method: 'get', version: '2', mode: 'download', id: item.ref, type: 'unit', size: size === 'full' ? 'xl' : 'sm', cache_key: item.ver, ...(where.passphrase ? { passphrase: where.passphrase } : {}) },
+      { api: `${api}.Thumbnail`, method: 'get', version: '2', mode: 'download', id: item.ref, type: 'unit', size: size === 'full' ? 'xl' : 'sm', cache_key: item.ver, ...(where.passphrase ? { passphrase: where.passphrase } : {}) },
       { signal },
     )
     return this.file(r)
@@ -252,9 +356,9 @@ export class SynologyClient implements RemoteClient {
 
   /** A clip as it is on the NAS (made on the box) */
   async clip(albumRef: string, item: { ref: string }, init: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<globalThis.Response> {
-    const where = await this.albumParams(albumRef, init.signal)
+    const { api, where } = await this.source(albumRef, init.signal)
     const r = await this.raw(
-      { api: 'SYNO.Foto.Download', method: 'download', version: '2', unit_id: JSON.stringify([Number(item.ref)]), ...(where.passphrase ? { passphrase: where.passphrase } : {}) },
+      { api: `${api}.Download`, method: 'download', version: '2', unit_id: JSON.stringify([Number(item.ref)]), ...(where.passphrase ? { passphrase: where.passphrase } : {}) },
       { signal: init.signal, timeoutMs: init.timeoutMs ?? 30 * 60_000 },
     )
     return this.file(r)
@@ -352,6 +456,7 @@ function synologyClient(deps: PhotoSynologyDeps, cfg: MupiboxConfig | undefined)
  *   GET  /api/app/photos/synology            the settings, the NAS (its account), the sync's state, albums, cache
  *   POST /api/app/photos/synology/test       the login of the NAS's account and its albums
  *   GET  /api/app/photos/synology/albums     the albums the account sees (to tick) with their numbers
+ *   GET  /api/app/photos/synology/folders    the folders of the personal or the shared space (?space=&id=) to tick
  *   GET  /api/app/photos/synology/thumb/:id  an album's picture for that list (through the box)
  *   POST /api/app/photos/synology            {enabled?, albumIds?, keepCopy?, syncMinutes?, cacheLimitMb?, port?}
  *   POST /api/app/photos/synology/sync       a sync now
@@ -450,10 +555,33 @@ export function registerPhotoSynologyRoutes(router: Router, deps: PhotoSynologyD
     }
   })
 
+  // the folders of a space of Synology Photos to tick: ?space=personal|shared&id=<folder, 0: the top>
+  router.get('/photos/synology/folders', requireSession, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    const client = tryClient()
+    if (!client) return void res.status(409).json({ error: 'not_connected' })
+    const space = req.query.space === 'shared' ? 'shared' : req.query.space === 'personal' ? 'personal' : null
+    const id = typeof req.query.id === 'string' && /^\d{1,12}$/.test(req.query.id) ? req.query.id : '0'
+    if (!space) return void res.status(400).json({ error: 'space' })
+    try {
+      const list = await client.folders(space, id, AbortSignal.timeout(20_000))
+      const prefix = space === 'shared' ? 't' : 'f'
+      res.json({
+        space,
+        id,
+        folders: list.map((f) => ({ id: f.id, ref: `${prefix}${f.id}`, name: f.name })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })),
+      })
+    } catch (err) {
+      // (the shared space may be off, or not for this account: the app says so instead of "not reachable")
+      if (err instanceof RemoteRefused && (err.status === 403 || err.status === 404 || err.status === 502)) return void res.status(409).json({ error: 'not_available' })
+      res.status(err instanceof RemoteRefused && err.status === 401 ? 401 : 502).json({ error: err instanceof RemoteRefused ? 'unauthorized' : 'unreachable' })
+    }
+  })
+
   router.get('/photos/synology/thumb/:id', requireSession, async (req: Request, res: Response) => {
     const client = tryClient()
     const id = String(req.params.id)
-    if (!client || !ALBUM_ID.test(id)) return void res.status(404).end()
+    if (!client || !/^\d{1,12}$/.test(id)) return void res.status(404).end()
     try {
       const a = (await client.albums()).get(id)
       const t = a?.additional?.thumbnail

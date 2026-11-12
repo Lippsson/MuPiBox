@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standard : alphabétique, les nombres comme nombres – « Folge 2 » avant « Folge 10 ».",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "« Épisode » est le numéro dans le titre (p. ex. « Folge 12 »). Vide = tous ; les albums sans numéro n’appartiennent alors à aucune plage.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Temps d’écoute, heures calmes et temps photos maintenant",
- "Bildzeit: Minuten für heute dazu": "Temps photos : minutes en plus pour aujourd’hui"
+ "Bildzeit: Minuten für heute dazu": "Temps photos : minutes en plus pour aujourd’hui",
+ "Persönlicher Bereich": "Espace personnel",
+ "Gemeinsamer Bereich": "Espace partagé",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Cet espace n'est pas disponible : Synology Photos ne l'a pas configuré, ou le compte de la box n'a pas le droit de le voir.",
+ "In diesem Bereich gibt es keine Ordner.": "Il n'y a aucun dossier dans cet espace.",
+ "Keine weiteren Ordner": "Pas d'autres dossiers",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Un dossier choisi montre aussi les photos des dossiers qu’il contient.",
+ "{} gewählt": "{} choisi(s)",
+ "Ordner in Synology Photos": "Dossiers dans Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Pas encore d'albums. Tu peux quand même choisir des dossiers."
 }

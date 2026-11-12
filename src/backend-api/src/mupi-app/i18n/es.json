@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Estándar: alfabético, los números como números: «Folge 2» antes que «Folge 10».",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Episodio» es el número del título (p. ej. «Folge 12»). Vacío = todos; los álbumes sin número no entran entonces en ningún rango.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Tiempo de escucha, horas de silencio y tiempo de fotos ahora",
- "Bildzeit: Minuten für heute dazu": "Tiempo de fotos: minutos extra para hoy"
+ "Bildzeit: Minuten für heute dazu": "Tiempo de fotos: minutos extra para hoy",
+ "Persönlicher Bereich": "Espacio personal",
+ "Gemeinsamer Bereich": "Espacio compartido",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Este espacio no está disponible: Synology Photos no lo ha configurado o la cuenta de la caja no puede verlo.",
+ "In diesem Bereich gibt es keine Ordner.": "No hay carpetas en este espacio.",
+ "Keine weiteren Ordner": "No hay más carpetas",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Una carpeta elegida muestra también las fotos de las carpetas que contiene.",
+ "{} gewählt": "{} elegido(s)",
+ "Ordner in Synology Photos": "Carpetas en Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Aún no hay álbumes. Aun así puedes elegir carpetas."
 }

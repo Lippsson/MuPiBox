@@ -3876,5 +3876,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Default: alphabetical, numbers as numbers – “Folge 2” before “Folge 10”.",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "“Episode” is the number in the title (e.g. “Folge 12”). Empty = all; albums without a number then belong to no range.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Playtime, quiet hours and photo time now",
- "Bildzeit: Minuten für heute dazu": "Photo time: minutes added for today"
+ "Bildzeit: Minuten für heute dazu": "Photo time: minutes added for today",
+ "Persönlicher Bereich": "Personal space",
+ "Gemeinsamer Bereich": "Shared space",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "This space is not available: Synology Photos has not set it up, or the box's account may not see it.",
+ "In diesem Bereich gibt es keine Ordner.": "There are no folders in this space.",
+ "Keine weiteren Ordner": "No more folders",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "A chosen folder also shows the photos in the folders inside it.",
+ "{} gewählt": "{} chosen",
+ "Ordner in Synology Photos": "Folders in Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "No albums yet. You can still choose folders."
 }

@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Стандарт: по алфавиту, числа как числа — «Folge 2» перед «Folge 10».",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Эпизод» — это номер в названии (например, «Folge 12»). Пусто = все; альбомы без номера тогда не входят ни в один диапазон.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Время прослушивания, тихие часы и время фото сейчас",
- "Bildzeit: Minuten für heute dazu": "Время фото: дополнительные минуты на сегодня"
+ "Bildzeit: Minuten für heute dazu": "Время фото: дополнительные минуты на сегодня",
+ "Persönlicher Bereich": "Личное пространство",
+ "Gemeinsamer Bereich": "Общее пространство",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Это пространство недоступно: Synology Photos его не настроило, или учётная запись коробки не может его видеть.",
+ "In diesem Bereich gibt es keine Ordner.": "В этом пространстве нет папок.",
+ "Keine weiteren Ordner": "Других папок нет",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Выбранная папка показывает и фото из папок внутри неё.",
+ "{} gewählt": "Выбрано: {}",
+ "Ordner in Synology Photos": "Папки в Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Альбомов пока нет. Папки всё равно можно выбрать."
 }

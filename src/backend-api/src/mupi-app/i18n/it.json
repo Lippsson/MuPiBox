@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standard: alfabetico, i numeri come numeri – «Folge 2» prima di «Folge 10».",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Episodio» è il numero nel titolo (ad es. «Folge 12»). Vuoto = tutti; gli album senza numero non rientrano allora in nessun intervallo.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Tempo di ascolto, ore di silenzio e tempo foto ora",
- "Bildzeit: Minuten für heute dazu": "Tempo foto: minuti in più per oggi"
+ "Bildzeit: Minuten für heute dazu": "Tempo foto: minuti in più per oggi",
+ "Persönlicher Bereich": "Spazio personale",
+ "Gemeinsamer Bereich": "Spazio condiviso",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Questo spazio non è disponibile: Synology Photos non lo ha configurato, oppure l'account del box non può vederlo.",
+ "In diesem Bereich gibt es keine Ordner.": "In questo spazio non ci sono cartelle.",
+ "Keine weiteren Ordner": "Nessun’altra cartella",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Una cartella scelta mostra anche le foto delle cartelle che contiene.",
+ "{} gewählt": "{} scelti",
+ "Ordner in Synology Photos": "Cartelle in Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ancora nessun album. Puoi comunque scegliere delle cartelle."
 }

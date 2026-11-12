@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standard: abecedně, čísla jako čísla – „Folge 2“ před „Folge 10“.",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "„Díl“ je číslo v názvu (např. „Folge 12“). Prázdné = vše; alba bez čísla pak nepatří do žádného rozsahu.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Čas poslechu, klidový čas a čas fotek teď",
- "Bildzeit: Minuten für heute dazu": "Čas fotek: minuty navíc pro dnešek"
+ "Bildzeit: Minuten für heute dazu": "Čas fotek: minuty navíc pro dnešek",
+ "Persönlicher Bereich": "Osobní prostor",
+ "Gemeinsamer Bereich": "Sdílený prostor",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Tento prostor není k dispozici: Synology Photos ho nenastavilo, nebo ho účet krabičky nesmí vidět.",
+ "In diesem Bereich gibt es keine Ordner.": "V tomto prostoru nejsou žádné složky.",
+ "Keine weiteren Ordner": "Žádné další složky",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Vybraná složka zobrazí i fotky ve složkách v ní.",
+ "{} gewählt": "Vybráno: {}",
+ "Ordner in Synology Photos": "Složky v Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Zatím žádná alba. Složky přesto můžeš vybrat."
 }

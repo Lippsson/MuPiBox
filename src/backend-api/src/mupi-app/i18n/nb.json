@@ -3860,5 +3860,14 @@
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standard: alfabetisk, tall som tall – «Folge 2» før «Folge 10».",
  "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Episode» er nummeret i tittelen (f.eks. «Folge 12»). Tomt = alle; album uten nummer hører da ikke til noe område.",
  "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Spilletid, hviletider og bildetid nå",
- "Bildzeit: Minuten für heute dazu": "Bildetid: ekstra minutter i dag"
+ "Bildzeit: Minuten für heute dazu": "Bildetid: ekstra minutter i dag",
+ "Persönlicher Bereich": "Personlig område",
+ "Gemeinsamer Bereich": "Delt område",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Dette området er ikke tilgjengelig: Synology Photos har ikke satt det opp, eller kontoen til boksen har ikke lov til å se det.",
+ "In diesem Bereich gibt es keine Ordner.": "Det finnes ingen mapper i dette området.",
+ "Keine weiteren Ordner": "Ingen flere mapper",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "En valgt mappe viser også bildene i mappene i den.",
+ "{} gewählt": "{} valgt",
+ "Ordner in Synology Photos": "Mapper i Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ingen album ennå. Du kan likevel velge mapper."
 }

@@ -11,7 +11,7 @@ Die Fotoanzeige ist anfangs aus. Du schaltest sie unter **Einstellungen › Foto
 | **Hochladen** | Fotos und Videos vom Handy oder PC in ein Album der Box | [Fotos hochladen](hochladen.md) |
 | **NAS-Ordner** | Ordner vom NAS, mit dem die Box verbunden ist, werden Alben | [NAS-Ordner](nas-ordner.md) |
 | **Immich** | Alben eines Immich-Servers im Heimnetz | [Immich](immich.md) |
-| **Synology Photos** | Alben aus Synology Photos auf einem Synology-NAS | [Synology Photos](synology-photos.md) |
+| **Synology Photos** | Alben und Ordner aus Synology Photos auf einem Synology-NAS | [Synology Photos](synology-photos.md) |
 | **Nextcloud** | Alben der Nextcloud-App „Fotos“ | [Nextcloud](nextcloud.md) |
 | **PhotoPrism** | Alben eines PhotoPrism im Heimnetz | [PhotoPrism](photoprism.md) |
 | **iCloud** | geteilte Alben vom iPhone, per Link | [iCloud](icloud.md) |
