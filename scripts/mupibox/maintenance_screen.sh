@@ -14,6 +14,14 @@ FBV_OPTS=$(/usr/local/bin/mupibox/fbv_options.sh 2>/dev/null)
 KIND="${1:-update}"
 PCT="$2"
 PART="$3"
+
+# The console of the display (tty1) in graphics mode while the picture of an update or an installation stands: in text mode
+# its driver (fbcon) draws over the picture now and then - the console's background (blue) in stripes across it, whenever
+# the cursor blinks or a line is written to tty1. The mode stays when this script has ended; the display's start (X) and a
+# restart of the box set it as they need it. (KDSETMODE = 0x4B3A, KD_GRAPHICS = 1)
+case "${KIND}" in
+	update | install) python3 -c 'import fcntl,os;fcntl.ioctl(os.open("/dev/tty1",os.O_RDWR|os.O_NOCTTY),0x4B3A,1)' 2>/dev/null ;;
+esac
 CONFIG="/etc/mupibox/mupiboxconfig.json"
 OUT="/home/dietpi/MuPiBox/sysmedia/images/bootscreen"
 FALLBACK="/home/dietpi/MuPiBox/sysmedia/images/installation.jpg"
