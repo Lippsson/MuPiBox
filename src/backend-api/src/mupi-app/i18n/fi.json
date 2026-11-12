@@ -3878,5 +3878,6 @@
  "Tags": "Tunnisteet",
  "Motive": "Aiheet",
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Mitään ei löytynyt: Synology Photosin tunnistus (henkilöt, paikat, aiheet) on pois päältä laatikon tililtä, tai nimettyä ei ole vielä.",
- "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Älykkäät albumit muuttuvat itsestään: laatikko synkronoi ne kuten muutkin."
+ "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Älykkäät albumit muuttuvat itsestään: laatikko synkronoi ne kuten muutkin.",
+ "{} Foto": "{} kuva"
 }
