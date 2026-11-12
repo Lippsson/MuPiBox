@@ -271,6 +271,116 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .note { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: var(--mp-r); background: var(--mp-primary-soft); font-size: 14px; }
 .note.warn { background: var(--mp-warn-soft); }
 .note .ic { color: var(--mp-primary-text); margin-top: 1px; }
+/* Einstellungen › Fotos, switched off: what the photo display is (a circle with its picture, the name, a line) */
+.photo-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 8px 4px 14px; }
+.photo-hero-ic { width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; background: var(--mp-primary-soft); color: var(--mp-primary-text); }
+.photo-hero h2 { margin: 6px 0 0; font-family: var(--mp-font-display); }
+.photo-hero .help { margin: 0; max-width: 34em; }
+/* Bibliothek › Fotos: an album's line (its picture with the source's mark), the numbers, the card's space, the grid */
+.ph-album { gap: 12px; }
+.ph-album-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ph-album .lbl { min-width: 0; }
+.ph-album .lbl b, .ph-album .lbl small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-thumb { position: relative; flex: none; width: 56px; height: 56px; border-radius: 12px; display: grid; place-items: center; background: var(--mp-primary-soft); color: var(--mp-primary-text); }
+.ph-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+.hidden-album .ph-thumb img { filter: grayscale(1); opacity: 0.7; }
+.ph-src { position: absolute; right: -4px; bottom: -4px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--mp-surface); border: 1.5px solid var(--mp-border); color: var(--mp-muted); }
+.ph-state { font-size: 12px; font-weight: 700; color: var(--mp-muted); }
+.ph-state.ok { color: var(--mp-success); }
+.ph-grip { color: var(--mp-muted); flex: none; }
+.ph-down svg { transform: rotate(180deg); }
+.ph-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.ph-stat { padding: 10px 12px; border-radius: var(--mp-r); background: var(--mp-chip); }
+.ph-stat small { display: block; color: var(--mp-muted); }
+.ph-stat b { font-family: var(--mp-font-display); font-size: 24px; }
+.ph-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--mp-track); margin: 8px 0; }
+.ph-bar i { display: block; height: 100%; }
+.ph-b-photos { background: var(--mp-primary); }
+.ph-b-other { background: var(--mp-accent); }
+.ph-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--mp-muted); }
+.ph-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ph-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--mp-track); }
+.ph-legend i.ph-b-photos { background: var(--mp-primary); }
+.ph-legend i.ph-b-other { background: var(--mp-accent); }
+.ph-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.ph-tile { position: relative; aspect-ratio: 1; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: var(--mp-track); cursor: pointer; }
+.ph-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph-tile.chosen { box-shadow: 0 0 0 3px var(--mp-primary); }
+.ph-cover-pill { position: absolute; left: 6px; top: 6px; padding: 2px 8px; border-radius: 10px; background: var(--mp-primary); color: var(--mp-on-primary); font-size: 12px; font-weight: 700; }
+.ph-check { position: absolute; right: 6px; top: 6px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 2px solid #fff; background: rgba(0, 0, 0, 0.35); color: transparent; }
+.ph-tile.chosen .ph-check { background: var(--mp-primary); color: var(--mp-on-primary); border-color: var(--mp-primary); }
+.ph-actionbar { position: sticky; bottom: calc(var(--mp-tab-h) + 8px); display: flex; gap: 10px; justify-content: flex-end; padding: 10px 12px; border-radius: var(--mp-r); background: var(--mp-surface); border: 1px solid var(--mp-border); z-index: 5; }
+.ph-view { position: relative; display: grid; place-items: center; }
+.ph-view img { max-width: 100%; max-height: 62vh; border-radius: 10px; touch-action: pan-y; }
+/* a clip: its player in the full view, the note while it is being made; in the grid its length and the note */
+.ph-view video { max-width: 100%; max-height: 62vh; border-radius: 10px; background: #000; }
+.ph-view-prep { margin: 40px 0; color: var(--mp-muted); font-weight: 700; }
+.ph-video-pill { position: absolute; left: 6px; bottom: 6px; padding: 2px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.62); color: #fff; font-size: 12px; font-weight: 700; }
+.ph-prep { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: var(--mp-track); color: var(--mp-accent-text); font-weight: 700; text-align: center; padding: 4px; }
+.ph-prep small { font-size: 11px; }
+.chip.accent { background: var(--mp-accent-soft); color: var(--mp-accent-text); }
+.ph-view .ph-prev, .ph-view .ph-next { position: absolute; top: 50%; transform: translateY(-50%); }
+.ph-view .ph-prev { left: 4px; }
+.ph-view .ph-next { right: 4px; }
+.tile.danger { background: var(--mp-danger-soft); color: var(--mp-danger); }
+.danger-text { color: var(--mp-danger); }
+/* Fotos hochladen (Bibliothek › Fotos): the choice, the run with a line per file, the end */
+.note.danger { background: var(--mp-danger-soft); color: var(--mp-danger); }
+/* Bibliothek › Fotos › NAS-Ordner: the folder tree (indented per level), the sync's state */
+.ph-tree { display: flex; flex-direction: column; }
+.ph-tree-row { display: flex; align-items: center; gap: 8px; min-height: 44px; padding-left: calc(var(--d, 0) * 22px); border-top: 1px solid var(--mp-border); }
+.ph-tree-row:first-child { border-top: 0; }
+.ph-tree-row .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ph-tree-row .lbl b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-tree-row .lbl small { color: var(--mp-muted); font-size: 12px; }
+.ph-tree-arrow { width: 32px; height: 32px; flex: 0 0 32px; }
+.ph-tree-arrow svg { transition: transform 150ms; }
+.ph-tree-arrow.open svg { transform: rotate(90deg); }
+.ph-tree-ic { color: var(--mp-muted); display: grid; }
+.ph-check-box { width: 26px; height: 26px; flex: 0 0 26px; margin-right: 6px; border-radius: 7px; border: 2px solid var(--mp-border); background: var(--mp-surface); color: var(--mp-on-primary); display: grid; place-items: center; padding: 0; }
+.ph-check-box[aria-checked='true'] { background: var(--mp-primary); border-color: var(--mp-primary); }
+.ph-check-box[aria-checked='mixed'] { background: var(--mp-primary-soft, var(--mp-track)); border-color: var(--mp-primary); color: var(--mp-primary-text, var(--mp-primary)); }
+.ph-check-box:disabled { cursor: default; }
+.ph-chosen { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; }
+.ph-chosen > b { font-size: 13px; margin-right: 4px; }
+.ph-chosen .chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.ph-chosen .chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-chip-x { border: 0; background: none; padding: 0; width: 22px; height: 22px; display: grid; place-items: center; color: inherit; cursor: pointer; }
+.ph-nas-state { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-weight: 700; font-size: 14px; color: var(--mp-muted); }
+.ph-nas-state.ok { color: var(--mp-success); }
+.ph-nas-state.accent { color: var(--mp-primary-text, var(--mp-primary)); }
+.ph-nas-state.danger { color: var(--mp-danger); }
+/* Bibliothek › Fotos › Immich: the assistant's steps and how-to, the albums to tick */
+.ph-steps { height: 6px; border-radius: 3px; background: var(--mp-track); overflow: hidden; margin: 6px 0 12px; }
+.ph-steps i { display: block; height: 100%; width: var(--w, 0%); background: var(--mp-primary); border-radius: 3px; }
+.ph-howto { margin: 0 0 12px; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.ph-im-album { display: flex; align-items: center; gap: 12px; }
+.ph-im-album .ph-thumb { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 10px; overflow: hidden; display: grid; place-items: center; background: var(--mp-track); }
+.ph-im-album .ph-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ph-im-album .lbl { flex: 1; min-width: 0; }
+.input.bad { border-color: var(--mp-danger); }
+.note.danger b { display: block; margin-bottom: 2px; }
+.note.danger span { color: var(--mp-text); }
+.note.danger span b { color: var(--mp-text); }
+.link-btn { margin-top: 8px; padding: 0; border: 0; background: none; font: inherit; font-weight: 700; cursor: pointer; }
+.btn.soft { background: var(--mp-primary-soft); border-color: transparent; color: var(--mp-primary-text); }
+.photo-hero-ic.ok { background: var(--mp-success-soft); color: var(--mp-success); }
+.pu-big { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 8px; }
+.pu-big b { font-family: var(--mp-font-display); font-size: 26px; }
+.pu-big span { color: var(--mp-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pu-row .lbl b, .pu-row .lbl small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pu-thumb { flex: none; width: 44px; height: 44px; border-radius: 10px; overflow: hidden; display: grid; place-items: center; background: var(--mp-primary-soft); color: var(--mp-primary-text); }
+.pu-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.pu-pct { flex: none; display: flex; align-items: center; gap: 8px; }
+.pu-pct .track { width: 56px; height: 6px; border-radius: 3px; background: var(--mp-track); overflow: hidden; }
+.pu-pct .track i { display: block; height: 100%; width: var(--w, 0%); background: var(--mp-primary); }
+.pu-pct small { min-width: 3.2em; text-align: right; font-weight: 700; }
+.pu-row .chip { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.pu-row .lbl small.danger-text { color: var(--mp-danger); }
+@media (min-width: 960px) {
+  .ph-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .ph-actionbar { bottom: 12px; }
+}
 .note.warn .ic { color: var(--mp-warn); }
 
 /* list entries (devices, networks, chats, profiles) */
@@ -371,6 +481,17 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .tile-bar { height: 5px; border-radius: 3px; background: var(--mp-track); overflow: hidden; margin-top: auto; }
 .tile-bar i { display: block; height: 100%; border-radius: 3px; background: var(--mp-success); }
 .tile-bar[data-kind="accent"] i { background: var(--mp-accent); }
+/* "Heute" with the picture time of its own: a small row each for listening (accent) and pictures (primary) */
+.tile-two { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.tile-mini { display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 5px; row-gap: 3px; font-size: 13px; }
+.tile-mini .tile-mini-name { color: var(--mp-muted); font-weight: 600; }
+.tile-mini b { font-size: 14px; white-space: nowrap; }
+.tile-mini-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--mp-track); overflow: hidden; }
+.tile-mini-bar i { display: block; height: 100%; border-radius: 2px; background: var(--mp-accent); }
+.tile-mini[data-kind="primary"] .tile-mini-bar i { background: var(--mp-primary); }
+.tile-mini[data-kind="danger"] .tile-mini-bar i { background: var(--mp-danger); }
+.tile-mini > svg { color: var(--mp-accent-text); }
+.tile-mini:last-child > svg { color: var(--mp-primary-text); }
 .tile-bar[data-kind="warn"] i { background: var(--mp-warn); }
 .tile-bar[data-kind="danger"] i { background: var(--mp-danger); }
 .section-label { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--mp-muted); margin: 4px 2px -4px; }
@@ -1289,6 +1410,9 @@ textarea[hidden] { display: none; }
 .ext-roster .ext-roster-mark { font-size: 13px; color: var(--mp-primary); padding: 0 8px; }
 .ext-roster .btn { min-height: 36px; padding: 0 12px; }
 .ext-roster .btn:disabled { opacity: .4; }
+.ext-roster .ext-roster-name small { display: block; font-size: 12px; font-weight: 400; color: var(--mp-muted, inherit); opacity: .8; }
+.ext-roster-from { margin-top: 8px; }
+.ext-roster-trash li { border-style: dashed; }
 .ext-order .ext-grip { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: var(--mp-r-sm); background: transparent; cursor: grab; touch-action: none; }
 .ext-order .ext-grip::before { content: ''; width: 12px; height: 18px; background: radial-gradient(circle, var(--mp-muted) 1.6px, transparent 2px) 0 0 / 6px 6px; }
 .ext-order .ext-grip:focus-visible { outline: 2px solid var(--mp-primary); }

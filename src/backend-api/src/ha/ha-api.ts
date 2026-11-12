@@ -28,6 +28,7 @@ import { displayLoginLinkShown } from '../app-api/auth'
 import { compareVersions, officialVersions, parseInstalled } from '../app-api/updates'
 import { announce, speechOf } from '../speech'
 import { isLoopback } from '../request-guard'
+import { tileKeyOfRow } from '../app-api/tile-key'
 import { type PlaybackCovers, playbackSnapshot } from '../playback-snapshot'
 import { withVolumeLock } from '../volume-lock'
 import { haSleepTimer, parseHaSleepTimerRequest, SleepTimerError, sleepTimerAvailable, sleepTimerState, startSleepTimer, stopSleepTimer } from '../sleep-timer'
@@ -433,18 +434,21 @@ async function lastResumeStart(deps: HaDeps): Promise<{ url: string; type: strin
   const track = Math.max(1, int(m.resumelocalcurrentTracknr, 1))
   const pct = Math.max(0, Math.min(100, Math.round(Number(m.resumelocalprogressTime) || 0)))
   const type = String(m.type ?? '')
+  // the tile of the start page it belongs to (5.1, a day's limit per tile): the player counts and limits by it
+  const tileKey = tileKeyOfRow(m)
+  const tile = tileKey ? `?tile=${enc(tileKey)}` : ''
   if (type === 'library') {
     const folder =
       typeof m.libraryPath === 'string' && m.libraryPath
         ? m.libraryPath.split('/').filter(Boolean).map(enc).join(':')
         : `${enc(String(m.category ?? ''))}:${enc(String(m.artist ?? ''))}:${enc(String(m.title ?? ''))}`
-    return { url: `musicsearch/library/resume/${folder}:${track}:${pct}`, type }
+    return { url: `musicsearch/library/resume/${folder}:${track}:${pct}${tile}`, type }
   }
-  if (type === 'nas' && typeof m.nasPath === 'string' && m.nasPath) return { url: `musicsearch/nas/resume/${enc(m.nasPath)}:${track}:${pct}`, type }
+  if (type === 'nas' && typeof m.nasPath === 'string' && m.nasPath) return { url: `musicsearch/nas/resume/${enc(m.nasPath)}:${track}:${pct}${tile}`, type }
   if (type === 'spotify') {
     const ref = m.playlistid ? `playlist:${enc(String(m.playlistid))}` : m.id ? `album:${enc(String(m.id))}` : m.showid ? `episode:${enc(String(m.showid))}` : m.audiobookid ? `show:${enc(String(m.audiobookid))}` : ''
     if (!ref) return null
-    return { url: `spotify/now/spotify:${ref}:${Math.max(1, int(m.resumespotifytrack_number, 1))}:${Math.max(0, int(m.resumespotifyprogress_ms, 0))}`, type }
+    return { url: `spotify/now/spotify:${ref}:${Math.max(1, int(m.resumespotifytrack_number, 1))}:${Math.max(0, int(m.resumespotifyprogress_ms, 0))}${tile}`, type }
   }
   return null
 }
@@ -754,7 +758,8 @@ export function buildApp(deps: HaDeps): Express {
           const last = command === 'play' ? await lastResumeStart(deps) : null
           if (!last) return fail(res, 409, 'provider_unavailable', 'Nothing is loaded to play - start something on the box first')
           const r = await playerCommand(`current/${last.url}`)
-          if (r.status === 423) return fail(res, 409, 'provider_unavailable', 'Playing is blocked right now (listening time or quiet hours)')
+          if (r.status === 423)
+            return fail(res, 409, 'provider_unavailable', r.body.error === 'tile_limit_reached' ? 'This tile is used up for today' : 'Playing is blocked right now (listening time or quiet hours)')
           if (!r.ok) return fail(res, 503, 'temporarily_unavailable', `The player answered ${r.status}`)
           log(`play from "${client.client_name}": goes on with the last listened (${last.type})`)
           return void res.json({ success: true })

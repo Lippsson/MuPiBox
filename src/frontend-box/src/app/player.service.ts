@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http'
+import { HttpClient, type HttpErrorResponse } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import type { ServerHttpApiConfig } from '@backend-api/server.model'
 import { firstValueFrom, type Observable, timeout } from 'rxjs'
@@ -8,6 +8,8 @@ import { CurrentMediaService } from './current-media.service'
 import { LogService } from './log.service'
 import type { Media } from './media'
 import { SpotifyService } from './spotify.service'
+import { tileQuery } from './tile-key'
+import { TileTimeService } from './tile-time.service'
 
 export enum PlayerCmds {
   PLAY = 'play',
@@ -44,6 +46,7 @@ export class PlayerService {
     private logService: LogService,
     private spotifyService: SpotifyService,
     private currentMediaService: CurrentMediaService,
+    private tileTime: TileTimeService,
   ) {}
 
   getConfig() {
@@ -171,7 +174,7 @@ export class PlayerService {
     // knows what was playing if playtime/quiet stops it while the user is
     // off the player page.
     this.currentMediaService.set(media)
-    this.sendRequest(url)
+    this.sendRequest(url, media)
     return true
   }
 
@@ -196,7 +199,7 @@ export class PlayerService {
     }
 
     this.currentMediaService.set(media)
-    this.sendRequest(url)
+    this.sendRequest(url, media)
     return true
   }
 
@@ -212,7 +215,7 @@ export class PlayerService {
     // category:artist:title pointed at a folder that does not exist for them
     const url = `musicsearch/library/resume/${this.libraryFolderParam(media)}:${trackNr}:${progressPct}`
     this.currentMediaService.set(media)
-    this.sendRequest(url)
+    this.sendRequest(url, media)
     return true
   }
 
@@ -222,7 +225,7 @@ export class PlayerService {
     const trackNr = media.resumelocalcurrentTracknr || 1
     const progressPct = Math.round(media.resumelocalprogressTime || 0)
     this.currentMediaService.set(media)
-    this.sendRequest(`musicsearch/nas/resume/${encodeURIComponent(media.nasPath)}:${trackNr}:${progressPct}`)
+    this.sendRequest(`musicsearch/nas/resume/${encodeURIComponent(media.nasPath)}:${trackNr}:${progressPct}`, media)
     return true
   }
 
@@ -231,7 +234,7 @@ export class PlayerService {
     const trackNr = media.resumelocalcurrentTracknr || 1
     const progressPct = Math.round(media.resumelocalprogressTime || 0)
     this.currentMediaService.set(media)
-    this.sendRequest(`musicsearch/tidal/resume/${tidalRef(media)}:${trackNr}:${progressPct}${this.coverQuery(media)}`)
+    this.sendRequest(`musicsearch/tidal/resume/${tidalRef(media)}:${trackNr}:${progressPct}${this.coverQuery(media)}`, media)
     return true
   }
 
@@ -265,7 +268,8 @@ export class PlayerService {
       return
     }
 
-    this.sendRequest(url)
+    // (a Spotify jump is a start of its own for the player: it goes on with the tile of what plays)
+    this.sendRequest(url, media)
   }
 
   /**
@@ -322,10 +326,21 @@ export class PlayerService {
     return cover ? `?cover=${encodeURIComponent(cover)}` : ''
   }
 
-  private sendRequest(url: string) {
+  // media: what starts - the tile of the start page it belongs to goes with it (?tile=, see tile-key.ts)
+  private sendRequest(url: string, media?: Media) {
     const room = this.spotifyService.isPlayerReady() ? this.spotifyService.getDeviceId() : 'current'
     const baseUrl = `${environment.backend.playerUrl}/${room}/`
-    this.http.get(baseUrl + url).subscribe()
+    if (media) this.tileTime.noteStart(media)
+    this.http.get(baseUrl + url + (media ? tileQuery(url, media) : '')).subscribe({
+      // (its tile's day's limit is used up: the player refused it - the bar says so, the player page goes back)
+      error: (e: HttpErrorResponse) => {
+        const body = e.error as { error?: unknown; tile?: unknown } | null
+        if (e.status === 423 && body?.error === 'tile_limit_reached') {
+          this.logService.log(`[PlayerService] start refused, the tile is used up for today: ${String(body.tile ?? '')}`)
+          this.tileTime.refused(typeof body.tile === 'string' ? body.tile : null, media ?? null)
+        }
+      },
+    })
   }
 }
 

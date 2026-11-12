@@ -10,10 +10,11 @@ import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
-import { withLock } from '../file-lock'
+import { DATA_LOCK, withLock } from '../file-lock'
 import { requireCsrf, requireSession } from './middleware'
 import { bootConfigPath } from './boot-paths'
 import { LIBRARY_DIR, SERVER_CONFIG_DIR } from '../paths'
+import { freezeLibrary, thawLibrary } from './photos/store'
 
 export interface AdminDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -88,7 +89,20 @@ const RESTORE_DIRS = [
   'home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/',
   'home/dietpi/.mupibox/data/',
   'home/dietpi/.mupibox/data/library/',
+  'home/dietpi/.mupibox/data/photos/',
+  'home/dietpi/.mupibox/data/photos/upload/',
 ]
+// the photo display's uploaded pictures and clips (5.1, a full backup): the list of the albums and, below upload/, an
+// album's folder and its files - pictures in their sizes, made clips, clips still waiting to be made; nothing else there
+const PHOTO_LIBRARY = 'home/dietpi/.mupibox/data/photos/library.json'
+const PHOTO_UPLOAD = 'home/dietpi/.mupibox/data/photos/upload/'
+const PHOTO_FILE = /^home\/dietpi\/\.mupibox\/data\/photos\/upload\/[a-f0-9]{10}\/[a-f0-9]{10}(\.jpg|\.s\.jpg|\.b\.jpg|\.mp4|\.pending)$/
+const PHOTO_DIR = /^home\/dietpi\/\.mupibox\/data\/photos\/upload\/[a-f0-9]{10}\/$/
+// the users of the extension "Benutzer" (5.1): the list and each user's folder - the part of the config, the library, the
+// data, the play log, the settings of the extensions (the one signed in is the live state, the others only there)
+const USERS_DATA = 'home/dietpi/.mupibox/data/extensions/data/users'
+const USERS_FILE = /^home\/dietpi\/\.mupibox\/data\/extensions\/data\/users\/(users\.json|profiles\/[a-z0-9]{2,12}\/(config\.json|(library|data|settings)\/[A-Za-z0-9_.-]{1,80}\.json|logs\/play_log\.jsonl))$/
+const USERS_DIR = /^home\/dietpi\/\.mupibox\/data\/extensions\/(data\/(users\/(profiles\/([a-z0-9]{2,12}\/((library|data|settings|logs)\/)?)?)?)?)?$/
 // file types the web server runs or a browser runs as a page: never restored below media/ (see admin.php)
 const FORBIDDEN_MEDIA = /(\.(php\d?|phtml|phar|pht|pl|py|cgi|fcgi|sh|shtml|s?html?|xhtml|xht|svgz?|js|mjs|xml|xsl)|\/\.htaccess|\/\.user\.ini)$/i
 
@@ -126,7 +140,6 @@ async function installFileAs(target: string, source: string): Promise<boolean> {
 
 // The library's lock, the one the backend and the scripts take (file-lock.ts): the JSON editor, the library reset and
 // "Update settings" wrote data.json while the Smart-Sync or the media scan did, and one of the two changes was lost.
-const DATA_LOCK = '/tmp/.data.lock'
 const withDataLock = <T>(work: () => Promise<T>) => withLock(DATA_LOCK, 'app admin', work)
 
 let restoreRunning = false
@@ -419,7 +432,11 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     const zip = `/var/tmp/mupibox-backup-${process.pid}-${Date.now()}.zip`
     const present = (f: string) => fsp.access(f).then(() => true, () => false)
     const extras = (await Promise.all([BACKGROUND, ...BOOT_CUSTOM].map(async (f) => ((await present(f)) ? f : '')))).filter(Boolean)
-    const sources = [full ? '/home/dietpi/MuPiBox/media' : '/home/dietpi/MuPiBox/media/cover', ...BACKUP_FILES, ...extras]
+    // (full: the uploaded photos and clips too - those of NAS and Immich are fetched again)
+    const photos = full ? (await Promise.all([`/${PHOTO_LIBRARY}`, `/${PHOTO_UPLOAD}`].map(async (f) => ((await present(f)) ? f : '')))).filter(Boolean) : []
+    // (the users' profiles: with every backup - they hold libraries, as the backup holds the one of the box)
+    const users = (await present(`/${USERS_DATA}`)) ? [`/${USERS_DATA}`] : []
+    const sources = [full ? '/home/dietpi/MuPiBox/media' : '/home/dietpi/MuPiBox/media/cover', ...BACKUP_FILES, ...extras, ...photos, ...users]
     // the library under its name of before (LIBRARY_ENTRY_BEFORE): copied into a folder of its own, the zip made from
     // there (the other sources by their full path, stored without the leading /)
     const stage = `/var/tmp/mupibox-backup-${process.pid}-${Date.now()}.d`
@@ -430,7 +447,7 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         'sh',
         '-c',
         `mkdir -p '${path.dirname(staged)}' && { [ ! -e '${LIBRARY}/data.json' ] || cp '${LIBRARY}/data.json' '${staged}'; } && cd '${stage}' && ` +
-          `zip -q -r '${zip}' $([ -e '${staged}' ] && echo '${LIBRARY_ENTRY_BEFORE}') ${sources.map((s) => `'${s}'`).join(' ')}; ` +
+          `zip -q -r '${zip}' $([ -e '${staged}' ] && echo '${LIBRARY_ENTRY_BEFORE}') ${sources.map((s) => `'${s}'`).join(' ')} -x '*.tmp' '*.tmp[0-9]*' '*.part' '*.heic.jpg' '*.poster.jpg' '*/users/.staging/*' '*/users/.old/*' '*/users/trash/*'; ` +
           `chmod 644 '${zip}'; rm -rf '${stage}'`,
       ],
       full ? 3600000 : 120000,
@@ -501,6 +518,8 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     const unpacked = Number(/^\d+ files?, (\d+) bytes uncompressed/.exec(lines[lines.length - 1] ?? '')?.[1] ?? NaN)
     let bad = ''
     let count = 0
+    let photosRestored = false
+    let usersRestored = false
     const files: { name: string; size: number }[] = []
     for (const line of lines.slice(2, -1)) {
       const m =
@@ -515,10 +534,14 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
       const name = m[3].replace(/^\/+/, '')
       const isDir = type === 'd' || name.endsWith('/')
       const inMedia = name.startsWith('home/dietpi/MuPiBox/media/')
+      const photo = isDir ? PHOTO_DIR.test(name) : name === PHOTO_LIBRARY || PHOTO_FILE.test(name)
+      if (photo) photosRestored = true
+      const user = isDir ? USERS_DIR.test(name) : USERS_FILE.test(name)
+      if (user) usersRestored = true
       const allowed =
         !name.includes('..') &&
         !name.includes('\\') &&
-        (RESTORE_FILES.includes(name) || (isDir && (RESTORE_DIRS.includes(name) || inMedia)) || (!isDir && inMedia && !FORBIDDEN_MEDIA.test(name)))
+        (photo || user || RESTORE_FILES.includes(name) || (isDir && (RESTORE_DIRS.includes(name) || inMedia)) || (!isDir && inMedia && !FORBIDDEN_MEDIA.test(name)))
       if (!allowed) {
         bad = name
         break
@@ -572,6 +595,8 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         if (!readable) return { ok: false }
       }
       const rest = files.some((f) => !LIBRARY_ENTRIES.includes(f.name))
+      // (the photos' list comes from the backup: nothing on the box writes it meanwhile - a sync, a clip being made)
+      if (photosRestored) await freezeLibrary()
       const r = rest ? await run('sudo', ['unzip', '-o', file, '-d', '/', '-x', ...LIBRARY_ENTRIES], 3600000) : { ok: true }
       if (!r.ok || !libraryEntry) return r
       return { ok: await withDataLock(() => installFileAs(`${LIBRARY}/data.json`, library)).then((done) => done === true) }
@@ -582,10 +607,18 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         if (libraryDir) await fsp.rm(libraryDir, { recursive: true, force: true }).catch(() => undefined)
       })
     await cleanup()
+    // (the list as it is on the card now: read anew - after a failed restore changes go on, after one that worked the
+    // box restarts)
+    if (photosRestored) thawLibrary()
+    if (photosRestored && unzip.ok) await freezeLibrary()
     if (!unzip.ok) {
       res.status(500).json({ error: 'unzip failed' })
       return
     }
+    // (unpacked as root: the photos the server's again - it adds and deletes there)
+    if (photosRestored) await run('sudo', ['chown', '-R', 'dietpi:dietpi', '/home/dietpi/.mupibox/data/photos'], 300000)
+    // (the same for the users' profiles: the extension writes them as the server)
+    if (usersRestored) await run('sudo', ['chown', '-R', 'dietpi:dietpi', `/${USERS_DATA}`], 300000)
     // the restored config brought up to the installed version (as the admin interface), its version kept
     await run('sudo', ['/usr/local/bin/mupibox/conf_update.sh'], 300000)
     await deps.updateMupiboxConfig((cfg) => {

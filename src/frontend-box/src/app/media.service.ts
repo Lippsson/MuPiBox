@@ -1245,7 +1245,7 @@ export class MediaService {
     // app - do not stand in for this one)
     const row = `t:${item.id}${tidalRangeQuery(item)}`
     return this.http
-      .get<{ albums?: { id: string; name: string; cover?: string | null; year?: number | null }[] }>(
+      .get<{ albums?: { id: string; name: string; cover?: string | null; year?: number | null; date?: string | null }[] }>(
         `${this.getPlayerBackendUrl()}/tidal/artist/${encodeURIComponent(item.id)}/albums${tidalRangeQuery(item)}`,
       )
       .pipe(
@@ -1262,7 +1262,7 @@ export class MediaService {
                 category: item.category,
                 cover: a.cover ?? undefined,
                 artistcover: item.artistcover_override ?? item.artistcover ?? item.cover,
-                release_date: a.year ? String(a.year) : undefined,
+                release_date: a.date || (a.year ? String(a.year) : undefined),
                 index: item.index,
                 row,
               }) as Media,
@@ -1419,12 +1419,14 @@ export class MediaService {
   }
 }
 
-// The range (positions by release, 1 = the oldest) and the left-out albums of an entry of a whole TIDAL artist, as the
-// box's TIDAL service takes them (tidal_service.py narrowed; the parents' app sets them) - '' without any
+// The range (positions by release, 1 = the oldest - or the episodes' numbers in their names, range_by "number") and the
+// left-out albums of an entry of a whole TIDAL artist, as the box's TIDAL service takes them (tidal_service.py narrowed;
+// the parents' app sets them) - '' without any
 function tidalRangeQuery(item: Media): string {
   const q = new URLSearchParams()
   if (Number(item.range_from) >= 1) q.set('from', String(Math.floor(Number(item.range_from))))
   if (Number(item.range_to) >= 1) q.set('to', String(Math.floor(Number(item.range_to))))
+  if (item.range_by === 'number' && q.size) q.set('by', 'number')
   // (sorted: the same choice gives the same text - it is also the row of the entry, see tidalArtistAlbums)
   const ex = (Array.isArray(item.exclude_album_ids) ? item.exclude_album_ids : [])
     .map(String)

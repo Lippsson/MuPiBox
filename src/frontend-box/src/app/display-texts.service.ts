@@ -82,6 +82,46 @@ export const DEFAULT_DISPLAY_TEXTS = {
   // the Winamp theme without a skin yet (winamp-shell.component.ts): the line and the hint under it (the app's menu path)
   winampNoSkin: 'No Winamp skin installed',
   winampNoSkinHint: "Upload a .wsz skin in the parents' app: Settings › Appearance › Winamp skin",
+  // the photo display (5.1): an album's button and line, and what a screen reader says ({n} pictures, {a} album)
+  photosSlideshow: 'Slideshow',
+  photosCount: '{n} pictures',
+  photosCountOne: '1 picture',
+  photosOpen: 'Open album {a}, {n} pictures',
+  photosPicture: 'Picture {n}',
+  photosBackAlbums: 'Back to the albums',
+  photosBackAlbum: 'Back to the album',
+  photosPrev: 'Previous picture',
+  photosNext: 'Next picture',
+  photosPlay: 'Start slideshow',
+  photosPause: 'Pause slideshow',
+  photosSpeed: 'Speed: {s}',
+  photosSlow: 'slow',
+  photosMedium: 'medium',
+  photosFast: 'fast',
+  photosFill: 'Show picture large',
+  photosFit: 'Show whole picture',
+  // the picture time (Bildzeit): its chip ({n} minutes left), the warning, the pause page when it is used up
+  photosTimeRunning: 'Picture time left: {n} min, counting',
+  photosTimePaused: 'Picture time left: {n} min, paused',
+  photosWarn: '{n} more minutes of pictures',
+  photosWarnOne: '1 more minute of pictures',
+  // a day's limit per tile of the start page (5.1): used up, and its warning ({name} = the tile)
+  tileOver: '{name} is over for today',
+  tileWarn: '{n} more minutes of {name}',
+  tileWarnOne: '1 more minute of {name}',
+  photosPauseTitle: 'The pictures are taking a break',
+  photosPauseText: 'Picture time is over for today. Audio books and music still work.',
+  photosToListening: 'To the audio books',
+  photosParents: 'Parents',
+  photosParentsHint: "More picture time comes from the parents' app.",
+  // an album shown live from Immich while Immich is away: its stack, the note on a tap, the tab's page when none is there
+  photosAway: 'Not there right now',
+  photosAwayHint: 'These pictures are not there right now. Try again later.',
+  photosAllAwayTitle: 'The pictures are not there right now',
+  photosAllAwayText: 'Maybe the WiFi is gone. Try again in a moment.',
+  photosRetry: 'Try again',
+  photosVolDown: 'Quieter',
+  photosVolUp: 'Louder',
 }
 export type DisplayTextKey = keyof typeof DEFAULT_DISPLAY_TEXTS
 type TextSet = Partial<Record<DisplayTextKey, string>>

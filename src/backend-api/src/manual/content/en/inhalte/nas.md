@@ -41,3 +41,5 @@ With **Save selection** you apply the choice. **Download selected** copies the f
 A **profile** remembers the folder selection (show, hide, download) for one NAS and account, not the password. **Save selection as profile** creates a new one, for example one per child. With the button next to a profile you switch to its selection, **Delete** removes it. The default profile always stays.
 
 On the display the shown folders appear in the **NAS** tab or in the category you chose. You can hide the NAS tab if you like ([The start page](../bedienung/startseite.md)).
+
+Photos from the NAS are chosen separately under **Library › Photos** ([NAS folders](../fotos/nas-ordner.md)).

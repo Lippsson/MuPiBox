@@ -24,6 +24,17 @@ Der **Eltern-Bot** verbindet die Box mit Telegram. Er schickt dir Nachrichten un
 
 Beim Ausschalten sagt die Nachricht auch warum: leerer Akku, zu lange keine Wiedergabe (Leerlauf) oder ein normales Ausschalten.
 
+## Bildzeit
+
+Ist die [Fotoanzeige](../fotos/index.md) an, nennt `/status` auch die **Bildzeit** von heute: wie lange schon Fotos angesehen wurden, und mit eigenem Limit, wie viel noch übrig ist. Hat die Bildzeit ein eigenes Limit ([Bildzeit](../fotos/bildzeit.md)), gibt es dafür zwei Befehle, die auch als Knöpfe unter `/help` stehen:
+
+| Befehl | Wirkung |
+| --- | --- |
+| `/photoextend 10` | heute 10 Minuten Bildzeit dazu (ohne Zahl 10) |
+| `/photofree` | Bildzeit heute ohne Limit |
+
+Beides gilt nur heute, wie **+10 min** und **Heute frei** in der App.
+
 ## Anmelden mit einem Link
 
 Der Bot schickt dir mit `/login` einen **Link**, der dich in der App anmeldet, auch ohne Passwort ([Die App öffnen und anmelden](../erste-schritte/app-oeffnen.md)).

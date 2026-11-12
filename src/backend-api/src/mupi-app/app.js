@@ -253,6 +253,8 @@ function route() {
   routedHash = location.hash
   stopPageTimers()
   closeSheet() // (a sheet belongs to the page it was opened on)
+  // (an upload of photos belongs to its page: left, it stops - what came stays; its summary goes with the page)
+  if (page.id !== 'fotoupload') photoUploadLeft()
   renderChrome(page)
   renderPage(page)
   window.scrollTo(0, 0)
@@ -1348,15 +1350,31 @@ async function loadStatus(root) {
     plus.hidden = !p.enabled
     $('#quick', root)?.classList.toggle('three', !p.enabled)
   }
+  // (what was listened: with the limit "42 / 120 min" and its bar, else the minutes)
+  let hear
   if (p.enabled && Number.isFinite(p.limitMinutes)) {
     const used = Math.floor((p.usedSeconds ?? 0) / 60)
-    setTile(root, 'tile-spielzeit', `${used} / ${p.limitMinutes} min`, p.limitMinutes > 0 ? Math.min(100, (used / p.limitMinutes) * 100) : 100, p.state === 'blocked' ? 'danger' : 'accent')
+    hear = { text: `${used} / ${p.limitMinutes} min`, short: `${used}/${p.limitMinutes}`, pct: p.limitMinutes > 0 ? Math.min(100, (used / p.limitMinutes) * 100) : 100, kind: p.state === 'blocked' ? 'danger' : 'accent' }
   } else if (Number.isFinite(p.usedSeconds)) {
-    setTile(root, 'tile-spielzeit', `${Math.floor(p.usedSeconds / 60)} min`, null)
+    hear = { text: `${Math.floor(p.usedSeconds / 60)} min`, short: `${Math.floor(p.usedSeconds / 60)} min`, pct: null }
   } else {
     // (limit and quiet times off: the player keeps no count - the listening history has it)
     const log = await api(`${API}/playlog?range=today`)
-    setTile(root, 'tile-spielzeit', Number.isFinite(log.body?.totalMinutes) ? `${log.body.totalMinutes} min` : 'Kein Limit', null)
+    const m = log.body?.totalMinutes
+    hear = Number.isFinite(m) ? { text: `${m} min`, short: `${m} min`, pct: null } : { text: 'Kein Limit', short: '–', pct: null }
+  }
+  // the photo display with a picture time of its own (5.1): the tile is "Heute" with two small bars, listening and
+  // pictures (handoff §3.7); counted on the listening time, or no photos: as before
+  const ph = pt.body?.photos
+  if (ph?.enabled && ph.mode === 'separate') {
+    const used = Math.floor((ph.usedSeconds ?? 0) / 60)
+    const pics = ph.limited
+      ? { short: `${used}/${ph.limitMinutes}`, pct: ph.limitMinutes > 0 ? Math.min(100, (used / ph.limitMinutes) * 100) : 100, kind: ph.state === 'blocked' ? 'danger' : 'primary' }
+      : { short: ph.free ? tr(`${used} min · frei`) : `${used} min`, pct: null }
+    setTodayTile(root, hear, pics)
+  } else {
+    setTodayTile(root, null)
+    setTile(root, 'tile-spielzeit', hear.text, hear.pct, hear.kind)
   }
   // quiet time
   // (a parent's "Ruhe sofort" or "Sperren aufheben" comes before the planned times)
@@ -1395,6 +1413,33 @@ function setTile(root, id, text, pct, kind) {
     bar.querySelector('i').style.width = `${pct}%`
     bar.dataset.kind = kind ?? 'ok'
   }
+}
+
+// The tile "Heute gehört" as "Heute" with a small bar each for listening and pictures (the photo time of its own), or
+// back as it was (hear null)
+function setTodayTile(root, hear, pics) {
+  const el = $('#tile-spielzeit', root)
+  if (!el) return
+  const head = el.querySelector('.tile-head')
+  const label = [...head.childNodes].find((n) => n.nodeType === 3)
+  let two = el.querySelector('.tile-two')
+  if (!hear) {
+    if (label) label.textContent = tr('Heute gehört')
+    two?.remove()
+    el.querySelector('.tile-val').hidden = false
+    return
+  }
+  if (label) label.textContent = tr('Heute')
+  el.querySelector('.tile-val').hidden = true
+  el.querySelector('.tile-bar').hidden = true
+  if (!two) {
+    two = document.createElement('span')
+    two.className = 'tile-two'
+    el.append(two)
+  }
+  const row = (ic, name, x) =>
+    `<span class="tile-mini" data-kind="${x.kind ?? ''}">${icon(ic, 13)}<span class="tile-mini-name">${esc(tr(name))}</span><b>${esc(x.short)}</b>${x.pct == null ? '' : `<span class="tile-mini-bar"><i style="width:${x.pct}%"></i></span>`}</span>`
+  two.innerHTML = row('music', 'Hören', hear) + row('image', 'Bilder', pics)
 }
 
 // The next start of a quiet-time window, e.g. "ab 20:00" today or "Di ab 20:00"
@@ -1673,7 +1718,7 @@ function errorText(r, fallback = 'Das hat nicht geklappt') {
 
 /* Spielzeit: ring, instant actions, sleep timer, daily limits, quiet rules */
 
-const caps = { config: null, status: null, sleep: null, listened: null }
+const caps = { config: null, status: null, sleep: null, listened: null, photos: null }
 
 async function saveCaps(body, done = 'Gespeichert') {
   const r = await api(`${API}/caps-config`, { method: 'POST', body })
@@ -1694,7 +1739,16 @@ async function listenedToday() {
 }
 
 async function loadCaps() {
-  const [cfg, st, sleep, power] = await Promise.all([api(`${API}/caps-config`), api('/api/playtime'), api(`${API}/sleeptimer`), api(`${API}/power-config`)])
+  const [cfg, st, sleep, power, photos] = await Promise.all([
+    api(`${API}/caps-config`),
+    api('/api/playtime'),
+    api(`${API}/sleeptimer`),
+    api(`${API}/power-config`),
+    api(`${API}/photos/settings`),
+  ])
+  // (the picture time's card: only while the photo display is on)
+  if (photos.ok && photos.body?.settings?.enabled) setPhotoTimeValues(photos.body.settings)
+  else caps.photos = null
   // (the card "Ausschalten": the same values as the pages Automatisch ausschalten and Display - wish of hyperbit, all
   // the times in one place)
   if (power.ok) {
@@ -1727,6 +1781,7 @@ async function refreshPlaytime() {
   await listenedToday()
   drawRing()
   drawSleep()
+  drawPhotoTime()
 }
 
 // The ring of today: minutes left of the limit, plus what else holds the box right now
@@ -1813,6 +1868,109 @@ function capMinutes() {
 
 async function capAction(path, minutes, done) {
   const r = await api(path, { method: 'POST', body: { minutes } })
+  toast(r.ok ? done : errorText(r), r.ok ? 'ok' : 'info')
+  if (r.ok) setTimeout(() => refreshPlaytime(), 1500)
+}
+
+/* the picture time ("Bildzeit", 5.1): a card of its own on this page while the photo display is on - an account of
+   its own (limit per weekday, +10 min / free / reset for today) or counted on the listening time; the warning on the
+   display and the pause of the time while the grid lies untouched. The player counts (see spotify-control.js). */
+
+const PHOTO_WARN = [
+  ['Aus', 0],
+  ['2 Minuten vorher', 2],
+  ['5 Minuten vorher', 5],
+  ['10 Minuten vorher', 10],
+]
+const PHOTO_IDLE = [
+  ['Aus', 0],
+  ['Nach 1 Minute', 60],
+  ['Nach 2 Minuten', 120],
+  ['Nach 5 Minuten', 300],
+]
+const PHOTO_MODE = [
+  ['Eigenes Limit', 'separate'],
+  ['Zählt auf die Hörzeit', 'shared'],
+]
+const labelOf = (list, v, fallback) => (list.find(([, x]) => x === v) ?? list.find(([, x]) => x === fallback))[0]
+
+function setPhotoTimeValues(s) {
+  caps.photos = s
+  state.values.set('phMode', labelOf(PHOTO_MODE, s.limitMode, 'separate'))
+  state.values.set('phLimitOn', s.limitEnabled !== false)
+  DAY_KEYS.forEach((d, i) => state.values.set(`phl${i}`, Number(s.dailyMinutes?.[d] ?? 20)))
+  state.values.set('phWarn', labelOf(PHOTO_WARN, s.warnMinutes, 5))
+  state.values.set('phIdle', labelOf(PHOTO_IDLE, s.idlePauseSeconds, 120))
+}
+
+function photoTimeSection() {
+  const shared = caps.photos?.limitMode === 'shared'
+  return {
+    title: 'Bildzeit',
+    help: 'Bildzeit zählt nur, wenn am Display ein Album offen ist.',
+    items: [
+      { type: 'html', html: '<div id="ph-time"></div>' },
+      { type: 'seg', label: 'Bildzeit', key: 'phMode', options: PHOTO_MODE.map(([l]) => l) },
+      ...(shared
+        ? [{ type: 'note', text: 'Es gibt kein eigenes Bild-Limit. Ist die Hörzeit aufgebraucht, machen auch die Fotos Pause.' }]
+        : [
+            { type: 'toggle', label: 'Eigenes Tageslimit', key: 'phLimitOn', help: 'Aus: keine Grenze für Fotos.' },
+            {
+              type: 'buttons',
+              dep: 'phLimitOn',
+              buttons: [
+                ['+10 min', 'accent', 'phExtend'],
+                ['Heute frei', 'ghost', 'phFree'],
+                ['Zurücksetzen', 'ghost', 'phReset'],
+              ],
+            },
+            { type: 'days', dep: 'phLimitOn', keyPrefix: 'phl', default: [20, 20, 20, 20, 20, 20, 20] },
+          ]),
+      { type: 'select', label: 'Warnung vor Ablauf', key: 'phWarn', options: PHOTO_WARN.map(([l]) => l) },
+      {
+        type: 'select',
+        label: 'Pause bei Leerlauf im Raster',
+        key: 'phIdle',
+        options: PHOTO_IDLE.map(([l]) => l),
+        help: 'Liegt am Display ein Album offen und niemand tippt, zählt die Zeit nicht weiter.',
+      },
+    ],
+  }
+}
+
+// Today's picture time: what is left, a bar, what was used (from the player's status)
+function drawPhotoTime() {
+  const box = $('#ph-time')
+  if (!box) return
+  const p = caps.status?.photos
+  if (!p) {
+    box.innerHTML = ''
+    return
+  }
+  const used = Math.floor((p.usedSeconds ?? 0) / 60)
+  let html
+  if (p.mode === 'shared') html = `<p class="ring-line">${esc(tr(`Heute ${used} min Bilder angeschaut – sie zählen auf die Hörzeit.`))}</p>`
+  else if (!p.limitEnabled) html = `<p class="ring-line">${esc(tr(`Heute ${used} min Bilder angeschaut – ohne Grenze.`))}</p>`
+  else if (p.free) html = `<p class="ring-line">${esc(tr(`Heute frei – ${used} min Bilder angeschaut.`))}</p>`
+  else {
+    const left = Math.max(0, Math.ceil((p.remainingSeconds ?? 0) / 60))
+    const pct = p.limitMinutes > 0 ? Math.min(100, (used / p.limitMinutes) * 100) : 100
+    html = `<div class="bar"><div class="slider-head"><b>${esc(tr(`${left} min heute übrig`))}</b>${p.state === 'blocked' ? `<span class="chip danger">${esc(tr('Aufgebraucht'))}</span>` : ''}</div>
+      <div class="track"><i style="--w:${pct}%"></i></div><small class="help">${esc(tr(`${used} von ${p.limitMinutes} Minuten genutzt`))}</small></div>`
+  }
+  box.innerHTML = html
+}
+
+async function savePhotoTime(patch, done = 'Gespeichert') {
+  const r = await api(`${API}/photos/settings`, { method: 'POST', body: patch })
+  toast(r.ok ? done : 'Nicht gespeichert – bitte noch einmal versuchen', r.ok ? 'ok' : 'info')
+  if (r.ok && r.body?.settings) caps.photos = r.body.settings
+  if (r.ok) setTimeout(() => refreshPlaytime(), 1500)
+  return r.ok
+}
+
+async function photoTimeAction(action, done) {
+  const r = await api(`${API}/photos/time`, { method: 'POST', body: action === 'extend' ? { action, minutes: 10 } : { action } })
   toast(r.ok ? done : errorText(r), r.ok ? 'ok' : 'info')
   if (r.ok) setTimeout(() => refreshPlaytime(), 1500)
 }
@@ -2437,6 +2595,11 @@ async function loadLib() {
     api('/api/online-covers'),
     ...CATS.map(([c]) => api(`/api/library/artists?category=${c}`)),
   ])
+  // (the photos' line: its numbers, without holding up the library)
+  api(`${API}/photos/overview?light=1`).then((r) => {
+    lib.photos = r.ok ? r.body : null
+    drawLibPhotos()
+  })
   lib.items = Array.isArray(data.body) ? data.body : []
   lib.sync = sync.ok ? sync.body : null
   lib.nas = Array.isArray(nas.body) ? nas.body : []
@@ -2483,6 +2646,8 @@ const avatarColor = (name) => AVATAR_COLORS[[...String(name)].reduce((h, ch) => 
 function libTop() {
   return [
     `<button class="btn primary block lib-add" id="lib-add">${icon('plus', 18)}Hinzufügen</button>`,
+    // (the photo display's albums: a part of their own, only with the display switched on - see drawLibPhotos)
+    `<div class="wide" id="lib-photos" hidden></div>`,
     `<div class="lib-tiles wide" id="lib-tiles"></div>`,
     `<div class="search wide">${icon('search')}<input class="input" id="lib-q" type="search" placeholder="In der Bibliothek suchen" autocomplete="off" value="${esc(lib.q)}"></div>`,
     `<div class="pills wide" id="lib-cat">${[['all', 'Alle'], ...CATS.map(([c]) => [c, CAT_SHORT[c]]), ['nas', 'NAS']].map(([id, t]) => `<button aria-selected="${lib.cat === id}" data-v="${id}">${t}</button>`).join('')}</div>`,
@@ -2636,10 +2801,23 @@ function libSub(g) {
   return `${g.entries.length} ${g.cat === 'music' ? 'Alben' : 'Folgen'} · ${src}`
 }
 
+function drawLibPhotos() {
+  const box = $('#lib-photos')
+  if (!box) return
+  const p = lib.photos
+  box.hidden = !p?.enabled
+  if (!p?.enabled) return
+  const t = p.totals
+  const sub = t.albums ? `${t.albums} ${t.albums === 1 ? 'Album' : 'Alben'} · ${t.photos} ${t.photos === 1 ? 'Foto' : 'Fotos'}` : 'Noch keine Fotos'
+  box.innerHTML = `<section class="card nav-card"><div class="navlist">${navRow('fotos', 'Fotos', sub, 'image')}</div></section>`
+  box.querySelector('[data-go]').onclick = () => go('fotos')
+}
+
 function drawLib() {
   const list = $('#lib-list')
   if (!list || !lib.items) return
   drawLibTiles()
+  drawLibPhotos()
   libShown = libGroups()
   const total = libShown.reduce((n, g) => n + (g.kind === 'sub' || g.kind === 'pin' ? 0 : g.entries?.length || 1), 0)
   const all = lib.items.filter((it) => it && !it.isResume && it.category !== 'resume' && it.type !== 'library').length + Object.values(lib.local).reduce((n, l) => n + l.length, 0) + lib.nas.length
@@ -4849,12 +5027,13 @@ async function openTidalItem(x) {
   )
 }
 
-// The range (positions by release, 1 = the oldest) and the left-out albums of an entry of a whole TIDAL artist, as the
-// box's TIDAL service takes them (tidal_service.py narrowed) - '' without any
+// The range (positions by release, 1 = the oldest, or the episodes' numbers: range_by "number") and the left-out albums
+// of an entry of a whole TIDAL artist, as the box's TIDAL service takes them (tidal_service.py narrowed) - '' without any
 function tidalRangeQuery(it) {
   const q = new URLSearchParams()
   if (Number(it?.range_from) >= 1) q.set('from', String(Math.floor(it.range_from)))
   if (Number(it?.range_to) >= 1) q.set('to', String(Math.floor(it.range_to)))
+  if (it?.range_by === 'number' && q.size) q.set('by', 'number')
   const ex = (Array.isArray(it?.exclude_album_ids) ? it.exclude_album_ids : []).filter((x) => /^\d{1,15}$/.test(String(x)))
   if (ex.length) q.set('exclude', ex.join(','))
   return q.toString()
@@ -4863,8 +5042,11 @@ function tidalRangeQuery(it) {
 // The library's sheet of a whole TIDAL artist: the range and the albums left out (as a Spotify subscription has them
 // at its artist in the library) - saved with the sheet. The albums with their positions come from the service.
 function tidalRangeFields(item) {
-  return `<div class="section-label" style="margin:0">${esc('Folgen und Alben')}</div>
-    <p class="help" style="margin:0">${esc('„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = alle.')}</p>
+  const opts = SORTINGS.map(([v, l]) => `<option value="${v}"${(item.sorting ?? '') === v ? ' selected' : ''}>${esc(tr(l))}</option>`).join('')
+  return `<div class="field"><label for="e-tsort">${esc(tr('Reihenfolge am Display'))}</label><select class="input" id="e-tsort">${opts}</select>
+      <small>${esc(tr('Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.'))}</small></div>
+    <div class="section-label" style="margin:0">${esc('Folgen und Alben')}</div>
+    <p class="help" style="margin:0" id="e-thelp">${esc('„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = alle.')}</p>
     <div class="rule-times"><div class="field"><label for="e-tfrom">Folge von</label><input class="input" id="e-tfrom" type="number" min="1" value="${esc(item.range_from ?? '')}"></div>
       <div class="field"><label for="e-tto">Folge bis</label><input class="input" id="e-tto" type="number" min="1" value="${esc(item.range_to ?? '')}"></div></div>
     <div id="e-talbums"><p class="help">${esc('Lade die Alben von TIDAL …')}</p></div>`
@@ -4878,7 +5060,14 @@ async function wireTidalRange(item, sheet) {
     box.innerHTML = `<p class="help">${esc(tidalFailText(r))}</p>`
     return
   }
-  const albums = [...(r.body?.albums ?? [])].sort((a, b) => a.position - b.position)
+  // (an artist whose albums carry their episode's number: the range counts those - for an entry without a range yet, or
+  // one saved that way; a range saved by positions before stays as it is)
+  const hasRange = Number(item.range_from) >= 1 || Number(item.range_to) >= 1
+  const byNumber = !!r.body?.numbered && (item.range_by === 'number' || !hasRange)
+  sheet.tidalByNumber = byNumber
+  const keyOf = (al) => (byNumber ? (al.number ?? null) : al.position)
+  const albums = [...(r.body?.albums ?? [])].sort((a, b) => (keyOf(a) ?? Infinity) - (keyOf(b) ?? Infinity) || a.position - b.position)
+  if (byNumber) sheet.querySelector('#e-thelp').textContent = tr('„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.')
   const num = (id) => {
     const v = Number(sheet.querySelector(id).value)
     return v >= 1 ? Math.floor(v) : null
@@ -4889,8 +5078,9 @@ async function wireTidalRange(item, sheet) {
     box.innerHTML = albums.length
       ? `<div class="rows">${albums
           .map((al, i) => {
-            const inRange = (lo === null || al.position >= lo) && (hi === null || al.position <= hi)
-            return `<div class="entry${inRange ? '' : ' out'}"><span class="pos">${al.position}</span><span class="lib-thumb">${al.thumb || al.cover ? `<img src="${esc(al.thumb || al.cover)}" alt="" loading="lazy">` : ''}</span>
+            const key = keyOf(al)
+            const inRange = key === null ? lo === null && hi === null : (lo === null || key >= lo) && (hi === null || key <= hi)
+            return `<div class="entry${inRange ? '' : ' out'}"><span class="pos">${key ?? '–'}</span><span class="lib-thumb">${al.thumb || al.cover ? `<img src="${esc(al.thumb || al.cover)}" alt="" loading="lazy">` : ''}</span>
               <span class="lbl"><b translate="no">${esc(al.name)}</b><small>${esc([al.date?.slice(0, 4), inRange ? '' : 'außerhalb des Bereichs'].filter(Boolean).join(' · '))}</small></span>
               <label class="switch"><input type="checkbox" data-tal="${i}" ${inRange && !sheet.tidalExcluded.has(al.id) ? 'checked' : ''} ${inRange ? '' : 'disabled'} aria-label="${esc(al.name)} auf der Box"><span></span></label></div>`
           })
@@ -4921,6 +5111,16 @@ function readTidalRange(sheet, updated) {
   else delete updated.range_from
   if (to) updated.range_to = to
   else delete updated.range_to
+  // (counted by the episodes' numbers: kept with the entry, so the display and the box ask the same way)
+  if (sheet.tidalByNumber && (from || to)) updated.range_by = 'number'
+  else if (from || to) {
+    if (sheet.tidalByNumber === false) delete updated.range_by
+  } else delete updated.range_by
+  const sort = sheet.querySelector('#e-tsort')
+  if (sort) {
+    if (sort.value) updated.sorting = sort.value
+    else delete updated.sorting
+  }
   const ex = [...(sheet.tidalExcluded ?? [])]
   if (ex.length) updated.exclude_album_ids = ex
   else delete updated.exclude_album_ids
@@ -5079,7 +5279,11 @@ const up = { cat: 'audiobook', artist: '', album: '', items: [], cover: null, sk
 function formatBytes(n) {
   if (!Number.isFinite(n)) return '–'
   const gb = n / 1024 ** 3
-  return gb >= 1 ? `${gb.toLocaleString(LOCALE, { maximumFractionDigits: 1 })} GB` : `${Math.round(n / 1024 ** 2)} MB`
+  if (gb >= 1) return `${gb.toLocaleString(LOCALE, { maximumFractionDigits: 1 })} GB`
+  // (a photo or two: KB, below 10 MB with a decimal - "0 MB" for seven photos said nothing)
+  if (n < 1024 ** 2) return `${n > 0 ? Math.max(1, Math.round(n / 1024)) : 0} KB`
+  const mb = n / 1024 ** 2
+  return `${mb.toLocaleString(LOCALE, { maximumFractionDigits: mb < 10 ? 1 : 0 })} MB`
 }
 
 function uploadTop() {
@@ -6558,7 +6762,21 @@ async function nasLogin(root, page, fingerprint) {
       },
     )
   }
-  toast(r.body?.error ? `Anmeldung fehlgeschlagen: ${r.body.error}` : 'Anmeldung fehlgeschlagen', 'info')
+  toast(r.body?.error ? tr(`Anmeldung fehlgeschlagen: ${nasLoginError(r.body.error)}`) : 'Anmeldung fehlgeschlagen', 'info')
+}
+
+// The server's reasons for a failed NAS sign-in (English, also for the admin interface) in the app's words
+function nasLoginError(msg) {
+  const m = String(msg)
+  const status = /HTTP (d+)/.exec(m)
+  if (/^Could not reach the NAS/.test(m)) return tr('Das NAS ist nicht erreichbar. Prüfe die Adresse (mit WebDAV-Port) und ob die Box das NAS im Netz erreichen darf.')
+  if (/^Wrong account name or password/.test(m)) return tr('Benutzer oder Passwort falsch – oder der Benutzer darf WebDAV nicht nutzen.')
+  if (/lists no folders/.test(m)) return tr('Das NAS antwortet, zeigt aber keine Ordner. Prüfe den WebDAV-Port (Synology: 5006 für HTTPS, 5005 für HTTP) und ob der Benutzer WebDAV nutzen darf.')
+  if (/^WebDAV service not found/.test(m)) return tr('Unter dieser Adresse läuft kein WebDAV. Prüfe Adresse und Port und ob WebDAV auf dem NAS eingeschaltet ist.')
+  if (/not the one confirmed before/.test(m)) return tr('Das Zertifikat des NAS ist ein anderes als das bestätigte. Wurde es auf dem NAS erneuert, vergleiche den neuen Fingerabdruck und bestätige ihn.')
+  if (/not signed by a known authority/.test(m)) return tr('Das NAS nutzt ein selbst ausgestelltes Zertifikat. Prüfe den Fingerabdruck und bestätige ihn – oder nutze HTTP.')
+  if (status) return tr(`Das NAS antwortet mit HTTP ${status[1]}. Ist das die WebDAV-Adresse mit Port?`)
+  return m
 }
 
 function mountNas(root, page) {
@@ -9003,8 +9221,9 @@ async function loadTelegram() {
 // The bot's commands a parent uses most (the whole list: /command in Telegram, see telegram_i18n.py)
 const TG_COMMANDS = [
   ['/help', 'die wichtigsten Befehle als Knöpfe'],
-  ['/status', 'Spielzeit und Ruhezeiten jetzt'],
+  ['/status', 'Spielzeit, Ruhezeiten und Bildzeit jetzt'],
   ['/extend 30', 'Bonus-Minuten für heute'],
+  ['/photoextend 10', 'Bildzeit: Minuten für heute dazu'],
   ['/release 60', 'alle Sperren für eine Weile aufheben'],
   ['/quietnow 60', 'Wiedergabe für eine Weile sperren'],
   ['/pause', 'Wiedergabe anhalten'],
@@ -11133,7 +11352,7 @@ function backupTop() {
   return [
     `<section class="card"><h2>Sichern</h2>
       <div class="rows"><div class="entry"><span class="lbl"><b>Konfigurations-Backup</b><small>Einstellungen (mupiboxconfig.json), Bibliothek (data.json) und eigene Cover. Enthält auch Passwörter und Zugänge – gut aufbewahren.</small></span><a class="btn primary sm" href="${API}/backup?kind=config" download>Herunterladen</a></div>
-        <div class="entry"><span class="lbl"><b>Voll-Backup</b><small>Dazu alle Medien der SD-Karte – kann mehrere GB groß sein und dauern.</small></span><a class="btn sm" href="${API}/backup?kind=full" download>Herunterladen</a></div></div></section>`,
+        <div class="entry"><span class="lbl"><b>Voll-Backup</b><small>Dazu alle Medien der SD-Karte und die hochgeladenen Fotos – kann mehrere GB groß sein und dauern.</small></span><a class="btn sm" href="${API}/backup?kind=full" download>Herunterladen</a></div></div></section>`,
     `<section class="card"><h2>Einspielen</h2><p class="help">Eine Backup-Datei dieser App oder des Admin-Interface. Sie überschreibt Einstellungen und Bibliothek; danach startet die Box neu.</p>
       <input type="file" id="bk-file" accept=".zip,application/zip" hidden>
       <div class="btns"><button class="btn" id="bk-pick">Backup-Datei wählen</button><button class="btn danger" id="bk-go" disabled>Backup einspielen</button></div>
@@ -11437,6 +11656,2649 @@ function mountHa(root, page) {
       if (currentPage()?.id === page.id && (haState.data?.clients ?? []).length !== root.querySelectorAll('[data-ha-rm]').length) renderPage(page, false)
     }).catch(() => undefined))
   }
+}
+
+/* Bibliothek › Fotos (5.1, backend-api app-api/photos/albums.ts): the albums of the photo display - the overview with
+   its numbers and the card's space, an album with its pictures, uploading into it. A part of its own, beside the
+   radio plays and the music: never in their lists, filters or "Hören". */
+
+const photoLib = { overview: null, nas: null, immich: null, synology: null, nextcloud: null, icloud: null, photoprism: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
+const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'], synology: ['image', 'Synology Photos'], nextcloud: ['cloud', 'Nextcloud'], icloud: ['share', 'iCloud'], photoprism: ['prism', 'PhotoPrism'] }
+const photoFile = (albumId, assetId, size) => `${API}/photos/file/${albumId}/${assetId}/${size}`
+
+async function loadPhotoOverview() {
+  const [r, nas, immich, synology, nextcloud, icloud, photoprism] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`), api(`${API}/photos/immich`), api(`${API}/photos/synology`), api(`${API}/photos/nextcloud`), api(`${API}/photos/icloud`), api(`${API}/photos/photoprism`)])
+  if (!r.ok) throw new Error(`photos ${r.status}`)
+  photoLib.overview = r.body
+  // (the photo services: the NAS folders and Immich - their lines in the overview)
+  photoLib.nas = nas.ok ? nas.body : null
+  photoLib.immich = immich.ok ? immich.body : null
+  photoLib.synology = synology.ok ? synology.body : null
+  photoLib.nextcloud = nextcloud.ok ? nextcloud.body : null
+  photoLib.icloud = icloud.ok ? icloud.body : null
+  photoLib.photoprism = photoprism.ok ? photoprism.body : null
+  photoLib.stale = false
+}
+
+// "Foto-Dienste": the NAS folders and Immich - a line each with its state (Immich only once connected; before, the
+// button "Foto-Dienst verbinden" leads there)
+function photoServicesCard() {
+  const n = photoLib.nas
+  const im = photoLib.immich
+  const rows = []
+  if (n) {
+    const folders = n.settings.folders.length
+    let sub = folders ? tr(`${folders} Ordner · ${n.albums} ${n.albums === 1 ? 'Album' : 'Alben'}`) : tr('Ordner vom NAS als Alben')
+    if (!n.nas.connected) sub = tr('Noch kein NAS verbunden')
+    else if (folders && n.sync.offlineSince) sub = tr(`Nicht erreichbar seit ${relTime(n.sync.offlineSince).replace(/^vor /, '')}`)
+    rows.push(navRow('fotonas', 'NAS-Ordner', sub, 'server'))
+  }
+  if (im?.connected) rows.push(navRow('fotoimmich', 'Immich', immichLine(im), 'grid'))
+  const sy = photoLib.synology
+  if (sy?.connected) rows.push(navRow('fotosynology', 'Synology Photos', synologyLine(sy), 'image'))
+  const nc = photoLib.nextcloud
+  if (nc?.connected) rows.push(navRow('fotonextcloud', 'Nextcloud', synologyLine(nc), 'cloud'))
+  const pp = photoLib.photoprism
+  if (pp?.connected) rows.push(navRow('fotophotoprism', 'PhotoPrism', synologyLine(pp), 'prism'))
+  const ic = photoLib.icloud
+  if (ic?.connected) rows.push(navRow('fotoicloud', 'iCloud', ic.sync.offlineSince ? tr(`Nicht erreichbar seit ${relTime(ic.sync.offlineSince).replace(/^vor /, '')}`) : tr(`${ic.albumList.length} ${ic.albumList.length === 1 ? 'geteiltes Album' : 'geteilte Alben'}`), 'share'))
+  return rows.length ? `<section class="card wide"><h2>Foto-Dienste</h2><div class="navlist">${rows.join('')}</div></section>` : ''
+}
+
+// Immich's line: connected with its albums, or why not
+function immichLine(im) {
+  if (im.sync.unauthorized) return tr('Schlüssel abgelehnt')
+  if (im.sync.offlineSince) return tr(`Nicht erreichbar seit ${relTime(im.sync.offlineSince).replace(/^vor /, '')}`)
+  return tr(`Verbunden · ${im.settings.albumIds.length} ${im.settings.albumIds.length === 1 ? 'Album' : 'Alben'}`)
+}
+
+// Synology Photos' line: switched on with its albums, or why not
+function synologyLine(sy) {
+  if (sy.sync.unauthorized) return tr('Anmeldung abgelehnt')
+  if (sy.sync.offlineSince) return tr(`Nicht erreichbar seit ${relTime(sy.sync.offlineSince).replace(/^vor /, '')}`)
+  return tr(`Verbunden · ${sy.settings.albumIds.length} ${sy.settings.albumIds.length === 1 ? 'Album' : 'Alben'}`)
+}
+
+function photoAlbumRow(a, { toggle = true, sub = '' } = {}) {
+  const [ic, src] = PHOTO_SOURCE[a.source] ?? PHOTO_SOURCE.upload
+  const counts = `${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}${a.videos ? ` · ${a.videos} ${a.videos === 1 ? 'Video' : 'Videos'}` : ''} · ${src}`
+  const state = a.display ? `<small class="ph-state ok">Auf der Box</small>` : `<small class="ph-state">Am Display ausgeblendet</small>`
+  return `<div class="entry ph-album${a.display ? '' : ' hidden-album'}" data-album="${esc(a.id)}">
+    <button class="ph-album-open" data-open="${esc(a.id)}" aria-label="${esc(a.title)}">
+      <span class="ph-thumb">${a.cover ? `<img src="${esc(photoFile(a.id, a.cover, 's'))}" alt="" loading="lazy">` : icon('image', 22)}<span class="ph-src" title="${esc(src)}">${icon(ic, 13)}</span></span>
+      <span class="lbl"><b translate="no">${esc(a.title)}</b><small>${esc(sub || counts)}</small>${state}</span></button>
+    ${toggle ? `<label class="switch"><input type="checkbox" role="switch" data-show="${esc(a.id)}" ${a.display ? 'checked' : ''} aria-label="${esc(tr('Am Display zeigen'))}: ${esc(a.title)}"><span></span></label>` : ''}</div>`
+}
+
+function photoStorageBar(s) {
+  if (!s?.total) return ''
+  const used = s.total - s.free
+  const other = Math.max(0, used - s.photos)
+  const pct = (n) => `${Math.max(0, Math.min(100, (n / s.total) * 100)).toFixed(2)}%`
+  return `<div class="ph-storage"><div class="slider-head"><b>Speicher auf der Box</b><span class="help" style="margin:0">${esc(`${formatBytes(s.free)} frei von ${formatBytes(s.total)}`)}</span></div>
+    <div class="ph-bar" role="img" aria-label="${esc(`${formatBytes(s.photos)} Fotos, ${formatBytes(other)} anderes, ${formatBytes(s.free)} frei`)}"><i class="ph-b-photos" style="width:${pct(s.photos)}"></i><i class="ph-b-other" style="width:${pct(other)}"></i></div>
+    <div class="ph-legend"><span><i class="ph-b-photos"></i>${esc(`Fotos ${formatBytes(s.photos)}`)}</span><span><i class="ph-b-other"></i>${esc(`Hörspiele, Musik und System ${formatBytes(other)}`)}</span><span><i></i>frei</span></div></div>`
+}
+
+function photoOverviewTop() {
+  const o = photoLib.overview
+  if (!o) return []
+  if (!o.enabled) {
+    return [`<section class="card wide"><p class="help" style="margin:0">Die Fotoanzeige ist aus.</p><div class="navlist">${navRow('g-fotos', 'Fotoanzeige einschalten', 'Einstellungen › Fotos', 'image')}</div></section>`]
+  }
+  const buttons = `<div class="btns wide ph-actions"><button class="btn primary" id="ph-upload">${icon('up', 18)}Fotos hochladen</button><button class="btn" id="ph-connect">${icon('link', 18)}Foto-Dienst verbinden</button></div>`
+  if (!o.albums.length) {
+    return [
+      buttons,
+      `<section class="card wide"><div class="photo-hero"><span class="photo-hero-ic">${icon('image', 30)}</span><h2>Noch keine Fotos</h2>
+        <p class="help">Lade Fotos vom Handy hoch oder wähle Ordner von deinem NAS. Die Box zeigt sie als Alben am Display.</p></div>${photoStorageBar(o.storage)}</section>`,
+      photoServicesCard(),
+      `<div class="note wide">${icon('lock', 18)}<span>Fotos bleiben auf der Box in deinem Heimnetz. Es gibt keine Links zum Teilen.</span></div>`,
+    ]
+  }
+  const t = o.totals
+  const stat = (label, n) => `<div class="ph-stat"><small>${esc(tr(label))}</small><b>${esc(String(n))}</b></div>`
+  return [
+    buttons,
+    `<section class="card wide"><h2>Überblick</h2><div class="ph-stats">${stat('Fotos', t.photos)}${stat('Videos', t.videos)}${stat('Alben', t.albums)}</div>${photoStorageBar(o.storage)}</section>`,
+    `<section class="card wide"><div class="card-head"><h2>Alben am Display</h2>${o.albums.length > 1 ? '<button class="btn sm" id="ph-order">Reihenfolge</button>' : ''}</div>
+      <div class="rows">${o.albums.map((a) => photoAlbumRow(a)).join('')}</div>
+      <p class="help" style="margin:0">Ausgeblendete Alben bleiben auf der Box, am Display erscheinen sie nicht.</p></section>`,
+    photoServicesCard(),
+    `<section class="card wide"><h2>Anzeige</h2><div class="navlist">${navRow('g-fotos', 'Einstellungen der Fotoanzeige', 'Diashow, Videos, Bildschirmschoner', 'gear')}</div></section>`,
+  ]
+}
+
+async function photoShowSwitch(input, after) {
+  const r = await api(`${API}/photos/albums/${input.dataset.show}`, { method: 'POST', body: { display: input.checked } })
+  if (!r.ok) {
+    input.checked = !input.checked
+    return toast('Nicht gespeichert', 'info')
+  }
+  toast(input.checked ? 'Am Display sichtbar' : 'Am Display ausgeblendet')
+  after?.()
+}
+
+function mountPhotoOverview(root, page) {
+  const again = async () => {
+    await loadPhotoOverview().catch(() => undefined)
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  }
+  for (const b of root.querySelectorAll('[data-open]')) b.onclick = () => openPhotoAlbum(b.dataset.open)
+  for (const s of root.querySelectorAll('[data-show]')) s.onchange = () => photoShowSwitch(s, again)
+  $('#ph-upload', root)?.addEventListener('click', () => openPhotoUpload(null))
+  // (which service: the NAS folders, or Immich - its assistant)
+  $('#ph-connect', root)?.addEventListener('click', () =>
+    openSheet(
+      `<h2>Foto-Dienst verbinden</h2><p class="help" style="margin:0">Fotos werden nur aus deinem Heimnetz geladen.</p>
+       <div class="navlist"><button class="navrow" data-svc="fotonas"><span class="tile">${icon('server', 18)}</span><span class="lbl"><b>NAS-Ordner</b><small>Ordner vom verbundenen NAS als Alben</small></span><span class="chev">${icon('chevron', 18)}</span></button>
+       <button class="navrow" data-svc="fotoimmich"><span class="tile">${icon('grid', 18)}</span><span class="lbl"><b>Immich</b><small>Dein eigener Fotodienst, per API-Schlüssel</small></span><span class="chev">${icon('chevron', 18)}</span></button>
+       <button class="navrow" data-svc="fotosynology"><span class="tile">${icon('image', 18)}</span><span class="lbl"><b>Synology Photos</b><small>Alben deines Synology-NAS, mit eigenem Konto</small></span><span class="chev">${icon('chevron', 18)}</span></button>
+       <button class="navrow" data-svc="fotonextcloud"><span class="tile">${icon('cloud', 18)}</span><span class="lbl"><b>Nextcloud</b><small>Alben der Nextcloud-App „Fotos“, per App-Passwort</small></span><span class="chev">${icon('chevron', 18)}</span></button>
+       <button class="navrow" data-svc="fotophotoprism"><span class="tile">${icon('prism', 18)}</span><span class="lbl"><b>PhotoPrism</b><small>Alben deines PhotoPrism, per App-Passwort</small></span><span class="chev">${icon('chevron', 18)}</span></button>
+       <button class="navrow" data-svc="fotoicloud"><span class="tile">${icon('share', 18)}</span><span class="lbl"><b>iCloud</b><small>Geteilte Alben vom iPhone, per Link</small></span><span class="chev">${icon('chevron', 18)}</span></button></div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-svc]')) {
+          b.onclick = () => {
+            close()
+            go(b.dataset.svc)
+          }
+        }
+      },
+    ),
+  )
+  $('#ph-order', root)?.addEventListener('click', () => photoOrderSheet(again))
+}
+
+function openPhotoAlbum(id) {
+  // (another album: the question for the one before ends here - its answer must not draw it again)
+  window.clearTimeout(photoPrepTimer)
+  photoLib.albumId = id
+  photoLib.selecting = false
+  photoLib.chosen.clear()
+  try {
+    sessionStorage.setItem('mupi-photo-album', id)
+  } catch {}
+  go('fotoalbum')
+}
+
+// The order on the display: up and down - saved with "Fertig"
+function photoOrderSheet(after) {
+  const list = [...(photoLib.overview?.albums ?? [])]
+  const draw = (sheet) => {
+    sheet.querySelector('#ph-order-rows').innerHTML = list
+      .map(
+        (a, i) => `<div class="entry ph-album" data-i="${i}"><span class="ph-grip" aria-hidden="true">${icon('grid', 16)}</span>
+          <span class="ph-thumb">${a.cover ? `<img src="${esc(photoFile(a.id, a.cover, 's'))}" alt="">` : icon('image', 22)}</span>
+          <span class="lbl"><b translate="no">${esc(a.title)}</b></span>
+          <button class="icon-btn soft" data-up="${i}" ${i ? '' : 'disabled'} aria-label="${esc(tr('Nach oben'))}">${icon('up', 16)}</button>
+          <button class="icon-btn soft ph-down" data-down="${i}" ${i < list.length - 1 ? '' : 'disabled'} aria-label="${esc(tr('Nach unten'))}">${icon('up', 16)}</button></div>`,
+      )
+      .join('')
+    for (const b of sheet.querySelectorAll('[data-up]')) b.onclick = () => move(sheet, Number(b.dataset.up), -1)
+    for (const b of sheet.querySelectorAll('[data-down]')) b.onclick = () => move(sheet, Number(b.dataset.down), 1)
+  }
+  const move = (sheet, i, by) => {
+    const j = i + by
+    if (j < 0 || j >= list.length) return
+    ;[list[i], list[j]] = [list[j], list[i]]
+    draw(sheet)
+    sheet.querySelector(`[data-i="${j}"] [data-${by < 0 ? 'up' : 'down'}]`)?.focus()
+  }
+  openSheet(
+    `<h2>Reihenfolge</h2><p class="help" style="margin:0">Nutze die Pfeile. So erscheinen die Alben am Display.</p><div class="rows" id="ph-order-rows"></div>
+     <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Fertig</button></div>`,
+    (sheet, close) => {
+      draw(sheet)
+      sheet.querySelector('[data-close]').onclick = close
+      sheet.querySelector('[data-ok]').onclick = async () => {
+        const r = await api(`${API}/photos/albums/order`, { method: 'POST', body: { ids: list.map((a) => a.id) } })
+        if (!r.ok) return toast('Nicht gespeichert', 'info')
+        close()
+        toast('Gespeichert')
+        after?.()
+      }
+    },
+  )
+}
+
+// Uploading (Bibliothek › Fotos › Fotos hochladen): into an album chosen or a new one, the files one after the other with
+// their progress, the whole at the top; at the end what came and what was left out with its reason. Leaving the page
+// stops it (the file on its way too, on the box as well - see the upload's route and its ticket); what came stays.
+// Every upload is a run of its own: a stopped one still waiting for the box's answer never takes over the page's next
+// choice, and a new visit never brings an old run back to life.
+const PHOTO_SKIP = { format: 'Format wird nicht unterstützt', duplicate: 'Schon im Album', broken: 'Datei beschädigt', space: 'Kein Platz mehr', aborted: 'Abgebrochen', heif: 'HEIC wird gerade eingerichtet', failed: 'Hochladen fehlgeschlagen', large: 'Datei zu groß' }
+const PHOTO_UPLOAD_EXT = /\.(jpe?g|png|hei[cf]|webp|mp4|mov|m4v)$/i
+// (clips: kept as they come, made into what the Pi plays on the box - "Wird vorbereitet")
+const PHOTO_VIDEO_EXT = /\.(mp4|mov|m4v)$/i
+const photoVideoBytes = (items) => items.reduce((n, it) => n + (PHOTO_VIDEO_EXT.test(it.file.name) ? it.file.size : 0), 0)
+// (pictures the browser can show itself for the list - an iPhone's HEIC it cannot)
+const PHOTO_PREVIEW_EXT = /\.(jpe?g|png|webp)$/i
+const PHOTO_UNCONFIRMED = 'Abbruch von der Box nicht bestätigt – ein abgebrochenes Foto kann trotzdem im Album erscheinen.'
+const photoTicket = () => [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('')
+// the page's choice (form), and the run it started
+const photoUp = { mode: 'existing', albumId: '', newName: '', items: [], check: null, run: null }
+let photoRunSeq = 0
+// runs not ended yet (also stopped ones waiting for the box): the browser asks before the tab is closed
+const photoRunsActive = new Set()
+window.addEventListener('beforeunload', (e) => {
+  // (also a stopped run still waiting for the box: closed now, its cancel would not be asked again)
+  if (!photoRunsActive.size) return
+  e.preventDefault()
+  e.returnValue = ''
+})
+
+// a new visit of the page (from the overview, an album: with that album chosen)
+function openPhotoUpload(albumId) {
+  photoUploadReset()
+  photoUp.albumId = albumId ?? ''
+  go('fotoupload')
+}
+
+// the page's choice anew; a run still going (should one be) is stopped - it ends on its own, apart from the page
+function photoUploadReset() {
+  const run = photoUp.run
+  if (run && run.phase !== 'done') stopPhotoRun(run)
+  for (const it of photoUp.items) if (it.url) URL.revokeObjectURL(it.url)
+  Object.assign(photoUp, { mode: 'existing', newName: '', items: [], check: null, run: null })
+}
+
+// left for another page: a run stops (what came stays), a summary goes
+function photoUploadLeft() {
+  const run = photoUp.run
+  if (!run) return
+  if (run.phase === 'done') photoUploadReset()
+  else stopPhotoRun(run)
+}
+
+async function loadPhotoUpload() {
+  // (the overview: the albums to choose from and the card's space; not while a run shows - nothing changes then)
+  if (photoUp.run) return
+  await loadPhotoOverview()
+  const uploads = (photoLib.overview?.albums ?? []).filter((a) => a.source === 'upload')
+  if (!uploads.some((a) => a.id === photoUp.albumId)) photoUp.albumId = uploads[0]?.id ?? ''
+  if (!uploads.length) photoUp.mode = 'new'
+}
+
+const photoBytes = (items) => items.reduce((n, it) => n + it.file.size, 0)
+const photoCountText = (n) => tr(`${n} ${n === 1 ? 'Datei' : 'Dateien'}`)
+
+function photoUploadTop() {
+  const run = photoUp.run
+  if (run?.phase === 'running') return photoUploadRunningTop(run)
+  if (run?.phase === 'done') return photoUploadDoneTop(run)
+  const o = photoLib.overview
+  if (o && !o.enabled) {
+    return [`<section class="card wide"><p class="help" style="margin:0">Die Fotoanzeige ist aus.</p><div class="navlist">${navRow('g-fotos', 'Fotoanzeige einschalten', 'Einstellungen › Fotos', 'image')}</div></section>`]
+  }
+  const uploads = (o?.albums ?? []).filter((a) => a.source === 'upload')
+  const n = photoUp.items.length
+  const full = photoUp.check && photoUp.check.enough === false
+  // (getting ready - the album is made, the room checked: nothing to change meanwhile)
+  const busy = run?.phase === 'preparing'
+  return [
+    `<section class="card wide"><h2>Wohin?</h2>
+      ${uploads.length ? `<div class="seg" id="pu-mode"><button aria-pressed="${photoUp.mode === 'existing'}" data-v="existing">Vorhandenes Album</button><button aria-pressed="${photoUp.mode === 'new'}" data-v="new">Neues Album</button></div>` : ''}
+      ${photoUp.mode === 'existing' && uploads.length
+        ? `<div class="field"><label for="pu-album">Album</label><select class="input" id="pu-album">${uploads.map((a) => `<option value="${esc(a.id)}"${a.id === photoUp.albumId ? ' selected' : ''}>${esc(a.title)}</option>`).join('')}</select></div>`
+        : `<div class="field"><label for="pu-name">Name des Albums</label><input class="input" id="pu-name" maxlength="40" autocomplete="off" value="${esc(photoUp.newName)}"><small>So heißt das Album am Display.</small></div>`}
+    </section>`,
+    `<section class="card wide"><h2>Dateien</h2>
+      <div class="btns"><button class="btn block soft" id="pu-pick">${icon('image', 18)}Fotos &amp; Videos wählen</button></div>
+      <input type="file" id="pu-files" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,video/mp4,video/quicktime,.jpg,.jpeg,.png,.heic,.heif,.webp,.mp4,.mov,.m4v" hidden>
+      <div class="drop${n ? ' chosen' : ''}" id="pu-drop">Oder Fotos hierher ziehen.</div>
+      <small class="help" style="margin:0">JPEG, PNG, HEIC (iPhone), MP4, MOV</small>
+      ${n ? `<dl class="kv"><div><dt>Ausgewählt</dt><dd>${esc(`${photoCountText(n)} · ${formatBytes(photoBytes(photoUp.items))}`)}</dd></div></dl>` : ''}
+    </section>`,
+    full
+      ? `<div class="note danger wide">${icon('info', 18)}<span><b>Nicht genug Platz auf der Box</b><br>${esc(tr(`Für diese Auswahl fehlen etwa ${formatBytes(photoUp.check.missing || 0)}.`))} ${esc(tr('Wähle weniger Dateien oder lösche Alben, die du nicht mehr brauchst.'))}<br><button class="link-btn danger-text" id="pu-manage">Alben verwalten</button></span></div>`
+      : '',
+    `<section class="card wide"><div class="note">${icon('lock', 18)}<span>Die Box speichert Fotos verkleinert (ca. 1280 px) und entfernt Standortdaten. Die Originale bleiben auf deinem Gerät.</span></div>${photoStorageBar(o?.storage)}</section>`,
+    `<div class="btns wide"><button class="btn primary block" id="pu-start"${!n || full || busy ? ' disabled' : ''}>${icon('up', 18)}Hochladen</button></div>`,
+  ]
+}
+
+function photoUploadRow(it, i) {
+  const heic = /\.hei[cf]$/i.test(it.file.name)
+  const size = `${formatBytes(it.file.size)}${heic && it.state === 'ok' ? ` · ${tr('umgewandelt')}` : ''}`
+  let right
+  if (it.state === 'ok' && it.prep) right = `<span class="chip accent">${esc(tr('Wird vorbereitet'))}</span>`
+  else if (it.state === 'ok') right = `<span class="chip ok">${icon('check', 14)}${esc(tr('Fertig'))}</span>`
+  else if (it.state === 'skip') right = `<span class="chip danger">${esc(tr('Übersprungen'))}</span>`
+  else if (it.state === 'up') right = `<span class="pu-pct"><span class="track"><i style="--w:${it.pct}%"></i></span><small>${it.pct} %</small></span>`
+  else right = `<span class="chip">${esc(tr('Wartet'))}</span>`
+  return `<div class="entry pu-row" data-pu-row="${i}"><span class="pu-thumb">${it.url ? `<img src="${esc(it.url)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+    <span class="lbl"><b translate="no">${esc(it.file.name)}</b><small${it.state === 'skip' ? ' class="danger-text"' : ''}>${esc(it.state === 'skip' ? tr(PHOTO_SKIP[it.reason] ?? 'Hochladen fehlgeschlagen') : size)}</small></span>${right}</div>`
+}
+
+function photoRunProgress(run) {
+  const total = photoBytes(run.items) || 1
+  const done = run.items.reduce((n, it) => n + (it.state === 'ok' || it.state === 'skip' ? it.file.size : it.state === 'up' ? (it.file.size * it.pct) / 100 : 0), 0)
+  const files = run.items.filter((it) => it.state === 'ok' || it.state === 'skip').length
+  return { pct: Math.min(100, Math.floor((done / total) * 100)), done, files }
+}
+
+const photoRunSumText = (run, p) => tr(`${p.files} von ${run.items.length} Dateien · ${formatBytes(p.done)} von ${formatBytes(photoBytes(run.items))}`)
+
+function photoUploadRunningTop(run) {
+  const p = photoRunProgress(run)
+  return [
+    `<section class="card wide"><h2>Wird hochgeladen</h2>
+      <div class="pu-big"><b id="pu-pct">${p.pct} %</b><span>${esc(tr(`nach „${run.targetTitle}“`))}</span></div>
+      <div class="bar"><div class="track"><i id="pu-fill" style="--w:${p.pct}%"></i></div><small id="pu-sum">${esc(photoRunSumText(run, p))}</small></div>
+      <div class="btns"><button class="btn block" id="pu-stop"${run.stopped ? ' disabled' : ''}>${icon('close', 18)}Abbrechen</button></div></section>`,
+    `<div class="note wide">${icon('info', 18)}<span>Lass diese Seite offen, bis alles übertragen ist.</span></div>`,
+    `<section class="card wide"><h2>Dateien</h2><div class="rows" id="pu-rows">${run.items.map(photoUploadRow).join('')}</div></section>`,
+  ]
+}
+
+function photoUploadDoneTop(run) {
+  const ok = run.items.filter((it) => it.state === 'ok').length
+  const skipped = run.items.filter((it) => it.state === 'skip')
+  const vids = run.items.filter((it) => it.state === 'ok' && it.prep).length
+  const pics = ok - vids
+  const head = !ok
+    ? tr('Keine Fotos übernommen')
+    : !vids
+      ? tr(`${pics} ${pics === 1 ? 'Foto' : 'Fotos'} übernommen`)
+      : !pics
+        ? tr(`${vids} ${vids === 1 ? 'Video' : 'Videos'} übernommen`)
+        : tr(`${pics} ${pics === 1 ? 'Foto' : 'Fotos'} und ${vids} ${vids === 1 ? 'Video' : 'Videos'} übernommen`)
+  return [
+    `<section class="card wide"><div class="photo-hero"><span class="photo-hero-ic${ok ? ' ok' : ''}">${icon(ok ? 'check' : 'info', 34)}</span><h2>${esc(head)}</h2>
+      ${run.targetTitle ? `<p class="help">${esc(tr(`Im Album „${run.targetTitle}“.`))}${vids ? ` ${esc(tr('Videos bereitet die Box danach noch vor.'))}` : ''}</p>` : ''}
+      <div class="btns">${run.target ? '<button class="btn primary" id="pu-album">Zum Album</button>' : ''}<button class="btn" id="pu-more">Weitere hochladen</button></div></div></section>`,
+    run.unconfirmed ? `<div class="note warn wide">${icon('info', 18)}<span>${esc(tr(PHOTO_UNCONFIRMED))}</span></div>` : '',
+    skipped.length
+      ? `<section class="card wide"><div class="card-head"><h2>Übersprungen</h2><span class="chip danger">${skipped.length}</span></div><div class="rows">${skipped.map((it) => photoUploadRow(it, run.items.indexOf(it))).join('')}</div></section>`
+      : '',
+  ]
+}
+
+function mountPhotoUpload(root, page) {
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const run = photoUp.run
+  if (run?.phase === 'running') {
+    $('#pu-stop', root)?.addEventListener('click', () => {
+      stopPhotoRun(run)
+      redraw()
+    })
+    return
+  }
+  if (run?.phase === 'done') {
+    $('#pu-album', root)?.addEventListener('click', () => openPhotoAlbum(run.target))
+    $('#pu-more', root)?.addEventListener('click', () => {
+      const keep = run.target
+      photoUploadReset()
+      photoUp.albumId = keep
+      loadPhotoUpload().finally(redraw)
+    })
+    return
+  }
+  const mode = $('#pu-mode', root)
+  if (mode) {
+    mode.onclick = (e) => {
+      const b = e.target.closest('button')
+      if (!b || photoUp.run) return
+      photoUp.mode = b.dataset.v
+      redraw()
+    }
+  }
+  $('#pu-album', root)?.addEventListener('change', (e) => (photoUp.albumId = e.target.value))
+  $('#pu-name', root)?.addEventListener('input', (e) => (photoUp.newName = e.target.value))
+  $('#pu-manage', root)?.addEventListener('click', () => go('fotos'))
+  const input = $('#pu-files', root)
+  let choice = 0
+  const choose = async (list) => {
+    if (photoUp.run) return
+    const mine = ++choice
+    for (const it of photoUp.items) if (it.url) URL.revokeObjectURL(it.url)
+    const files = [...list]
+    const wrong = files.filter((f) => !PHOTO_UPLOAD_EXT.test(f.name))
+    photoUp.items = files.filter((f) => PHOTO_UPLOAD_EXT.test(f.name)).map((file) => ({ file, url: PHOTO_PREVIEW_EXT.test(file.name) ? URL.createObjectURL(file) : '', state: 'wait', pct: 0, reason: '' }))
+    if (wrong.length) toast(tr(`${wrong.length} ${wrong.length === 1 ? 'Datei' : 'Dateien'} in einem anderen Format ausgelassen`), 'info')
+    // (is there room for it on the box - before it starts, not halfway)
+    photoUp.check = null
+    if (photoUp.items.length) {
+      const r = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: photoUp.items.length, videoBytes: photoVideoBytes(photoUp.items) } })
+      // (a newer choice meanwhile: its own check counts)
+      if (mine !== choice) return
+      if (r.ok) photoUp.check = r.body
+    }
+    redraw()
+  }
+  $('#pu-pick', root)?.addEventListener('click', () => input.click())
+  input?.addEventListener('change', () => {
+    choose(input.files ?? [])
+    input.value = ''
+  })
+  const drop = $('#pu-drop', root)
+  if (drop) {
+    drop.ondragover = (e) => {
+      e.preventDefault()
+      drop.classList.add('over')
+    }
+    drop.ondragleave = () => drop.classList.remove('over')
+    drop.ondrop = (e) => {
+      e.preventDefault()
+      drop.classList.remove('over')
+      choose(e.dataTransfer?.files ?? [])
+    }
+  }
+  $('#pu-start', root)?.addEventListener('click', () => startPhotoUpload(page))
+}
+
+// the run is the one on the page: it may draw there
+const photoRunShown = (run) => photoUp.run === run && currentPage()?.id === 'fotoupload'
+
+async function startPhotoUpload(page) {
+  if (photoUp.run) return
+  if (!photoUp.items.length) return toast('Bitte Fotos wählen', 'info')
+  // the run starts here already: making the album and checking the room can be stopped like the files after them
+  const run = { id: ++photoRunSeq, phase: 'preparing', items: photoUp.items, target: '', targetTitle: '', stopped: false, unconfirmed: 0, current: null }
+  photoUp.run = run
+  photoRunsActive.add(run)
+  if (photoRunShown(run)) renderPage(page, false)
+  // (stopped while it got ready - the page left: nothing more; given back to the page's choice when it was the check)
+  const still = () => !run.stopped && photoUp.run === run
+  let target = photoUp.mode === 'existing' ? photoUp.albumId : ''
+  let title = (photoLib.overview?.albums ?? []).find((a) => a.id === target)?.title ?? ''
+  if (!target) {
+    title = photoUp.newName.trim()
+    if (!title) return photoRunGiveBack(run, page, 'Bitte einen Namen für das Album eintragen')
+    const r = await api(`${API}/photos/albums`, { method: 'POST', body: { title } })
+    if (!still()) return photoRunEnd(run, page)
+    if (!r.ok) return photoRunGiveBack(run, page, 'Das Album ließ sich nicht anlegen')
+    target = r.body.id
+    title = r.body.title
+  }
+  run.target = target
+  run.targetTitle = title
+  const check = await api(`${API}/photos/upload/check`, { method: 'POST', body: { files: run.items.length, videoBytes: photoVideoBytes(run.items) } })
+  if (!still()) return photoRunEnd(run, page)
+  if (check.ok && check.body?.enough === false) {
+    photoUp.check = check.body
+    return photoRunGiveBack(run, page)
+  }
+  run.phase = 'running'
+  if (photoRunShown(run)) renderPage(page, false)
+  for (const [i, it] of run.items.entries()) {
+    if (run.stopped) {
+      Object.assign(it, { state: 'skip', reason: 'aborted' })
+      photoRunPaint(run, i)
+      continue
+    }
+    it.state = 'up'
+    photoRunPaint(run, i)
+    const r = await photoPut(run, target, it, i)
+    // (this file was stopped or lost on its way - stopped, its time ran out, the WLAN went: the box has to confirm
+    // that it did not keep it; without, it may still turn up)
+    if (r.cancelling && !(await r.cancelling)) run.unconfirmed++
+    if (r.ok && r.body?.ok) Object.assign(it, { state: 'ok', pct: 100, prep: r.body.preparing === true })
+    else Object.assign(it, { state: 'skip', reason: r.aborted ? 'aborted' : (r.body?.skipped ?? (r.body?.error === 'heif_missing' ? 'heif' : 'failed')) })
+    photoRunPaint(run, i)
+  }
+  photoRunEnd(run, page)
+}
+
+// back to the page's choice (the name missing, no room, the album not made): nothing was sent
+function photoRunGiveBack(run, page, message) {
+  photoRunsActive.delete(run)
+  if (photoUp.run === run) photoUp.run = null
+  if (message) toast(message, 'info')
+  if (currentPage()?.id === page.id) renderPage(page, false)
+}
+
+function photoRunEnd(run, page) {
+  photoRunsActive.delete(run)
+  run.phase = 'done'
+  // (the overview is asked anew where it is needed next - not taken away: a new visit of this page may show it)
+  photoLib.stale = true
+  const ok = run.items.filter((it) => it.state === 'ok').length
+  if (photoRunShown(run)) return renderPage(page, false)
+  // (the page was left meanwhile, or opened anew: a toast says how it ended - the box's missing answer first)
+  if (run.unconfirmed) toast(PHOTO_UNCONFIRMED, 'info')
+  else if (run.stopped) toast(ok ? tr(`Hochladen abgebrochen – ${ok} übernommen`) : 'Hochladen abgebrochen', 'info')
+}
+
+// one file: PUT with its progress (fetch has none for what it sends), at most 5 minutes - a slow WLAN and the Pi's work
+// on a big picture; then the next one. Not ended by an answer (stopped, timed out, the connection lost): the box is
+// told with the ticket - it does not make the picture, or takes it out again when it was just placed.
+function photoPut(run, target, it, i) {
+  return new Promise((resolve) => {
+    const ticket = photoTicket()
+    const xhr = new XMLHttpRequest()
+    const cur = { xhr, ticket, cancelling: null, aborted: false }
+    run.current = cur
+    const done = (res) => {
+      run.current = null
+      resolve({ ...res, cancelling: cur.cancelling, aborted: cur.aborted })
+    }
+    const lost = () => {
+      cur.cancelling ??= cancelPhotoUpload(ticket)
+      done({ ok: false, body: {} })
+    }
+    xhr.open('PUT', `${API}/photos/upload?album=${encodeURIComponent(target)}&name=${encodeURIComponent(it.file.name)}&ticket=${ticket}`)
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+    if (state.csrf) xhr.setRequestHeader('x-mupibox-csrf', state.csrf)
+    // (a clip: up to 1 GB over the WLAN - more time)
+    xhr.timeout = PHOTO_VIDEO_EXT.test(it.file.name) ? 45 * 60_000 : 5 * 60_000
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return
+      // (sent is not yet made: 95 % at most until the box answers)
+      it.pct = Math.min(95, Math.floor((e.loaded / e.total) * 95))
+      photoRunPaint(run, i)
+    }
+    xhr.onload = () => {
+      let body = {}
+      try {
+        body = JSON.parse(xhr.responseText)
+      } catch {}
+      done({ ok: xhr.status >= 200 && xhr.status < 300, body })
+    }
+    xhr.onerror = lost
+    xhr.onabort = lost
+    xhr.ontimeout = lost
+    xhr.send(it.file)
+  })
+}
+
+// stopped (Abbrechen, the page left): no further file, the one on its way is stopped - in the browser and on the box
+function stopPhotoRun(run) {
+  if (run.stopped || run.phase === 'done') return
+  run.stopped = true
+  const cur = run.current
+  if (cur) {
+    cur.aborted = true
+    cur.cancelling ??= cancelPhotoUpload(cur.ticket)
+    cur.xhr.abort()
+  }
+}
+
+// the running page drawn anew in its parts only (a whole new page for every percent would flicker)
+function photoRunPaint(run, i) {
+  if (!photoRunShown(run) || run.phase !== 'running') return
+  const row = document.querySelector(`[data-pu-row="${i}"]`)
+  if (row) row.outerHTML = photoUploadRow(run.items[i], i)
+  const p = photoRunProgress(run)
+  const pct = document.getElementById('pu-pct')
+  if (pct) pct.textContent = `${p.pct} %`
+  document.getElementById('pu-fill')?.style.setProperty('--w', `${p.pct}%`)
+  const sum = document.getElementById('pu-sum')
+  if (sum) sum.textContent = photoRunSumText(run, p)
+}
+
+// a few tries (the phone's WLAN may be gone for a moment): true when the box confirmed it
+async function cancelPhotoUpload(ticket) {
+  for (let i = 0; i < 4; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 2000))
+    const r = await api(`${API}/photos/upload/cancel`, { method: 'POST', body: { ticket }, timeoutMs: 8000 }).catch(() => null)
+    if (r?.ok && r.body?.ok) return true
+  }
+  return false
+}
+
+/* Bibliothek › Fotos › NAS-Ordner (5.1): folders of the NAS the box is signed in to as albums - the tree to choose
+   them (loaded when opened), subfolders as albums of their own or not, how often the box syncs, what the cache may
+   take; the sync's state. The access to the NAS is the one of Bibliothek › NAS. */
+
+const photoNas = { data: null, tree: new Map(), open: new Set(), chosen: null, subs: true, timer: 0 }
+const NAS_SYNC = [
+  ['Alle 15 Min.', 15],
+  ['Jede Stunde', 60],
+  ['Alle 6 Stunden', 360],
+  ['Täglich', 1440],
+  ['Nur von Hand', 0],
+]
+const NAS_CACHE = [
+  ['500 MB', 500],
+  ['1 GB', 1024],
+  ['2 GB', 2048],
+  ['4 GB', 4096],
+  ['8 GB', 8192],
+  ['Ohne Grenze', 0],
+]
+
+async function loadPhotoNas() {
+  const r = await api(`${API}/photos/nas`)
+  if (!r.ok) throw new Error(`photos nas ${r.status}`)
+  photoNas.data = r.body
+  // (the choice on this page: what the box has, until "Übernehmen")
+  photoNas.chosen = new Set(r.body.settings.folders)
+  photoNas.subs = r.body.settings.subfoldersAsAlbums
+  // (every visit asks the NAS anew: folders added or renamed there meanwhile, or it was away the last time)
+  photoNas.tree.clear()
+  photoNas.open.clear()
+  if (r.body.nas.connected) await photoNasBrowse('/')
+}
+
+async function photoNasBrowse(path) {
+  const r = await api(`${API}/photos/nas/browse?path=${encodeURIComponent(path)}`)
+  photoNas.tree.set(path, r.ok ? r.body : { error: r.body?.error ?? 'nas_unreachable', folders: [] })
+}
+
+function photoNasStatus(d) {
+  const s = d.sync
+  if (s.running) return [`${icon('sync', 16)}${esc(s.total ? tr(`Abgleich läuft · ${s.done} von ${s.total} Fotos`) : tr('Abgleich läuft …'))}`, 'accent']
+  if (s.offlineSince) return [`${icon('info', 16)}${esc(tr(`Nicht erreichbar seit ${relTime(s.offlineSince).replace(/^vor /, '')}`))}`, 'danger']
+  if (s.lastSync) return [`${icon('check', 16)}${esc(tr(`Abgeglichen ${relTime(s.lastSync)}`))}`, 'ok']
+  return [esc(tr('Noch nicht abgeglichen')), '']
+}
+
+function photoNasFolderRows(path, depth) {
+  const node = photoNas.tree.get(path)
+  if (!node) return `<div class="ph-tree-row" style="--d:${depth}"><span class="help">${esc(tr('Wird geladen …'))}</span></div>`
+  if (node.error) return `<div class="ph-tree-row" style="--d:${depth}"><span class="help danger-text" style="flex:1">${esc(tr('Dieser Ordner lässt sich gerade nicht lesen.'))}</span><button class="btn sm" data-retry="${esc(path)}">${esc(tr('Erneut versuchen'))}</button></div>`
+  if (!node.folders.length && depth === 0) return `<p class="help" style="margin:0">Auf dem NAS gibt es hier keine Ordner.</p>`
+  return node.folders
+    .map((f) => {
+      const open = photoNas.open.has(f.path)
+      const on = photoNas.chosen.has(f.path)
+      // (a folder below one that is chosen: in it already)
+      const inside = [...photoNas.chosen].some((c) => f.path.startsWith(`${c}/`))
+      const more = f.folders !== 0
+      const count = f.pictures === null ? '' : tr(`${f.pictures} ${f.pictures === 1 ? 'Foto' : 'Fotos'}`)
+      return `<div class="ph-tree-row" style="--d:${depth}">
+          <button class="icon-btn ph-tree-arrow${open ? ' open' : ''}" data-tree="${esc(f.path)}" ${more ? '' : 'disabled'} aria-label="${esc(tr(open ? 'Zuklappen' : 'Aufklappen'))}" aria-expanded="${open}">${more ? icon('chevron', 16) : ''}</button>
+          <span class="ph-tree-ic">${icon('folder', 18)}</span>
+          <span class="lbl"><b translate="no">${esc(f.name)}</b>${count ? `<small>${esc(count)}</small>` : ''}</span>
+          <button class="ph-check-box" role="checkbox" aria-checked="${on ? 'true' : inside ? 'mixed' : 'false'}" data-pick="${esc(f.path)}" ${inside ? 'disabled' : ''} aria-label="${esc(f.name)}">${on || inside ? icon('check', 16) : ''}</button>
+        </div>${open ? photoNasFolderRows(f.path, depth + 1) : ''}`
+    })
+    .join('')
+}
+
+function photoNasTop() {
+  const d = photoNas.data
+  if (!d) return []
+  if (!d.nas.connected) {
+    return [
+      `<section class="card wide"><div class="photo-hero"><span class="photo-hero-ic">${icon('server', 30)}</span><h2>Noch kein NAS verbunden</h2>
+        <p class="help">Verbinde zuerst dein NAS. Danach kannst du hier Ordner als Alben wählen.</p></div>
+        <div class="navlist">${navRow('nas', 'Zu Bibliothek › NAS', 'Zugang zum NAS', 'server')}</div></section>`,
+    ]
+  }
+  const s = d.sync
+  const [status, kind] = photoNasStatus(d)
+  const saved = d.settings.folders
+  const changed = saved.length !== photoNas.chosen.size || saved.some((f) => !photoNas.chosen.has(f)) || d.settings.subfoldersAsAlbums !== photoNas.subs
+  const limit = d.settings.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><p class="help" style="margin:0">${esc(tr(`Verbunden mit dem NAS „${d.nas.name ?? ''}“. Zugang ändern unter Bibliothek › NAS.`))}</p>
+      <div class="ph-nas-state ${kind}">${status}</div>
+      <dl class="kv"><div><dt>Ordner</dt><dd>${esc(String(saved.length))}</dd></div><div><dt>Alben</dt><dd>${esc(tr(`${d.albums} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob das NAS läuft.</span></div>` : ''}
+      ${!s.running && !s.offlineSince && saved.length && s.found === 0 ? `<div class="note warn">${icon('info', 18)}<span>In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.</span></div>` : ''}
+      ${s.cacheFull ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Ordner.</span></div>` : ''}
+      ${s.failed?.length ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(`Nicht lesbar: ${s.failed.join(', ')}`))}</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="nas-sync" ${s.running || !saved.length ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div></section>`,
+    `<section class="card wide"><h2>Ordner</h2><p class="help">Jeder gewählte Ordner wird ein Album.</p>
+      ${photoNas.chosen.size ? `<div class="ph-chosen"><b>${esc(tr('Gewählt'))}</b>${[...photoNas.chosen].sort().map((f) => `<span class="chip"><span translate="no">${esc(f)}</span><button class="ph-chip-x" data-unpick="${esc(f)}" aria-label="${esc(tr('Abwählen'))}">${icon('close', 14)}</button></span>`).join('')}</div>` : ''}
+      <div class="ph-tree">${photoNasFolderRows('/', 0)}</div>
+      <div class="row"><span class="lbl"><b>Unterordner als eigene Alben</b><small>An: Jeder Unterordner wird ein eigenes Album. Aus: Fotos aus Unterordnern landen im Album des Ordners.</small></span>
+        <label class="switch"><input type="checkbox" id="nas-subs" ${photoNas.subs ? 'checked' : ''} aria-label="${esc(tr('Unterordner als eigene Alben'))}"><span></span></label></div>
+      <p class="help" style="margin:0">${esc(tr(`${photoNas.chosen.size} ${photoNas.chosen.size === 1 ? 'Ordner' : 'Ordner'} gewählt`))}</p>
+      <div class="btns"><button class="btn primary" id="nas-apply" ${changed ? '' : 'disabled'}>Übernehmen</button></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="nas-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === d.settings.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos vom NAS erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      <p class="help">Fotos vom NAS liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="nas-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === d.settings.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div></section>`,
+    saved.length || d.albums
+      ? `<section class="card wide"><div class="navlist"><button class="navrow" id="nas-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Ordner nicht mehr verwenden</b><small>Die Alben vom NAS werden von der Box entfernt. Auf dem NAS bleibt alles.</small></span></button></div></section>`
+      : '',
+  ]
+}
+
+function mountPhotoNas(root, page) {
+  const d = photoNas.data
+  window.clearTimeout(photoNas.timer)
+  if (!d?.nas.connected) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const fresh = async () => {
+    const r = await api(`${API}/photos/nas`)
+    if (r.ok) photoNas.data = r.body
+    photoLib.stale = true
+    redraw()
+  }
+  // (while a sync runs: its state every 3 s)
+  if (d.sync.running) photoNas.timer = window.setTimeout(() => currentPage()?.id === page.id && fresh(), 3000)
+  for (const b of root.querySelectorAll('[data-tree]')) {
+    b.onclick = async () => {
+      const p = b.dataset.tree
+      if (photoNas.open.has(p)) photoNas.open.delete(p)
+      else {
+        photoNas.open.add(p)
+        // (not listed yet, or the NAS did not answer the last time: asked again)
+        if (!photoNas.tree.has(p) || photoNas.tree.get(p).error) {
+          photoNas.tree.delete(p)
+          redraw()
+          await photoNasBrowse(p)
+        }
+      }
+      redraw()
+    }
+  }
+  // (a folder chosen deep in the tree: taken off here without opening the tree down to it)
+  for (const b of root.querySelectorAll('[data-unpick]')) {
+    b.onclick = () => {
+      photoNas.chosen.delete(b.dataset.unpick)
+      redraw()
+    }
+  }
+  for (const b of root.querySelectorAll('[data-retry]')) {
+    b.onclick = async () => {
+      b.disabled = true
+      await photoNasBrowse(b.dataset.retry)
+      redraw()
+    }
+  }
+  for (const b of root.querySelectorAll('[data-pick]')) {
+    b.onclick = () => {
+      const p = b.dataset.pick
+      if (photoNas.chosen.has(p)) photoNas.chosen.delete(p)
+      else {
+        // (a folder takes in the ones below it that were chosen)
+        for (const c of [...photoNas.chosen]) if (c.startsWith(`${p}/`)) photoNas.chosen.delete(c)
+        photoNas.chosen.add(p)
+      }
+      redraw()
+    }
+  }
+  $('#nas-subs', root)?.addEventListener('change', (e) => {
+    photoNas.subs = e.target.checked
+    redraw()
+  })
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/nas`, { method: 'POST', body })
+    if (!r.ok) return toast('Nicht gespeichert', 'info')
+    photoNas.data = r.body
+    photoNas.chosen = new Set(r.body.settings.folders)
+    photoNas.subs = r.body.settings.subfoldersAsAlbums
+    photoLib.stale = true
+    toast(done)
+    redraw()
+  }
+  $('#nas-apply', root)?.addEventListener('click', () => save({ folders: [...photoNas.chosen], subfoldersAsAlbums: photoNas.subs }, 'Gespeichert – Abgleich gestartet'))
+  $('#nas-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/nas/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    photoNas.data = r.body
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = () => {
+            close()
+            save({ [key]: Number(b.dataset.v) }, 'Gespeichert')
+          }
+        }
+      },
+    )
+  $('#nas-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#nas-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#nas-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Ordner nicht mehr verwenden', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} vom NAS und ihre Fotos werden von der Box entfernt. Auf dem NAS bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/nas/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoNas.data = r.body
+      photoNas.chosen = new Set()
+      photoLib.stale = true
+      toast('NAS-Ordner entfernt')
+      redraw()
+    }),
+  )
+}
+
+/* Bibliothek › Fotos › Immich (5.1): the assistant (address, key, test, albums) and, once connected, the service's page
+   (state, keep the pictures on the box or show them live, sync, cache, access, disconnect). The key goes to the box
+   once and is never shown again. */
+
+const photoImmich = { data: null, step: 0, url: '', key: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+
+async function loadPhotoImmich() {
+  const r = await api(`${API}/photos/immich`)
+  if (!r.ok) throw new Error(`photos immich ${r.status}`)
+  photoImmich.data = r.body
+  // (a new visit: the service's page when connected, else the assistant from its start)
+  photoImmich.step = r.body.connected ? 0 : 1
+  photoImmich.url = r.body.settings.url || ''
+  photoImmich.key = ''
+  photoImmich.test = null
+  photoImmich.albums = null
+}
+
+const IMMICH_ERRORS = {
+  unreachable: ['Server nicht erreichbar', 'Prüfe die Adresse und ob Immich läuft. Die Box muss im selben Netz sein.'],
+  unauthorized: ['Schlüssel ungültig', 'Immich hat den Schlüssel abgelehnt. Prüfe, ob du den ganzen Schlüssel kopiert hast.'],
+  permissions: ['Rechte fehlen', 'Der Schlüssel passt, aber ihm fehlen Rechte. Lege in Immich einen Schlüssel mit album.read, asset.read und asset.view an.'],
+  unsupportedVersion: ['Immich-Version zu alt', 'Diese Version wird nicht unterstützt. Bitte Immich aktualisieren (ab Version {}).'],
+}
+
+// The assistant as the Spotify one (.wz): the steps on top (done ones ticked, one already passed can be opened
+// again), "Schritt x von 4", the step, and below Zurück on the left, the way on at the right
+const IMMICH_STEPS = [
+  ['url', 'Adresse'],
+  ['key', 'Schlüssel'],
+  ['test', 'Test'],
+  ['albums', 'Alben'],
+]
+
+function photoImmichSteps() {
+  const s = photoImmichImmichStep()
+  const t = photoImmich.test
+  const bar = `<ol class="wz-steps" style="grid-template-columns:repeat(${IMMICH_STEPS.length}, minmax(0, 1fr))">${IMMICH_STEPS.map(([, label], i) => {
+    const n = i + 1
+    const done = n < s
+    return `<li class="${done ? 'done' : ''}${n === s ? ' current' : ''}"><button type="button" data-imstep="${n}"${n === s ? ' aria-current="step"' : ''}${done ? '' : ' disabled'}><span class="bar"></span><span class="lbl">${done ? icon('check', 14) : `<i>${n}</i>`}${esc(tr(label))}</span></button></li>`
+  }).join('')}</ol>`
+  let body
+  let next
+  if (s === 1) {
+    body = `<h2>Wo läuft dein Immich?</h2>
+      <div class="field"><label for="im-url">Server-Adresse</label><input class="input mono" id="im-url" placeholder="http://192.168.1.20:2283" value="${esc(photoImmich.url)}" ${NO_PW_MANAGER} spellcheck="false">
+      <small>Mit http:// oder https:// und Port. Ein Server nur im Heimnetz reicht.</small></div>`
+    next = `<button class="btn primary" id="im-next1">Weiter</button>`
+  } else if (s === 2) {
+    const kept = photoImmichKeyKept()
+    body = `<h2>API-Schlüssel anlegen</h2><p class="help">Damit die Box deine Alben lesen darf.</p>
+      <ol class="ph-howto"><li>Immich im Browser öffnen und anmelden.</li><li>Kontoeinstellungen › API-Schlüssel › „Neuer API-Schlüssel“.</li>
+      <li>Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).</li><li>Schlüssel kopieren und hier einfügen.</li></ol>
+      <div class="field"><label for="im-key">API-Schlüssel</label><div class="input-wrap"><input class="input mono has-eye" id="im-key" type="password" value="${esc(photoImmich.key)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um ihn zu behalten') : '')}" ${NO_PW_MANAGER} spellcheck="false"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
+      <small>Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
+    next = `<button class="btn primary" id="im-test" ${photoImmich.testing ? 'disabled' : ''}>${esc(tr(photoImmich.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
+  } else if (s === 3) {
+    if (t?.ok) {
+      body = `<h2>Verbindung steht</h2><p class="help">Die Box kann deine Alben lesen.</p>
+        <dl class="kv">${t.account ? `<div><dt>Konto</dt><dd translate="no">${esc(t.account)}</dd></div>` : ''}<div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.assets))}</dd></div><div><dt>Version</dt><dd>${esc(t.version)}</dd></div></dl>`
+      next = `<button class="btn primary" id="im-next3">Weiter</button>`
+    } else {
+      const [head, text] = IMMICH_ERRORS[t?.error] ?? IMMICH_ERRORS.unreachable
+      body = `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text.replace('{}', photoImmich.data?.minVersion ?? '1.106')))}</span></div>`
+      next = t?.error === 'unauthorized' || t?.error === 'permissions' ? `<button class="btn primary" data-imstep="2">Schlüssel ändern</button>` : `<button class="btn primary" data-imstep="1">Adresse ändern</button>`
+    }
+  } else {
+    const list = photoImmich.albums
+    const rows = !list
+      ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+      : list.error
+        ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+        : list.albums.length
+          ? `<div class="rows">${list.albums
+              .map(
+                (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/immich/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+                <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}</small></span>
+                <button class="ph-check-box" role="checkbox" aria-checked="${photoImmich.chosen.has(a.id)}" data-im="${esc(a.id)}" aria-label="${esc(a.name)}">${photoImmich.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
+              )
+              .join('')}</div>`
+          : `<p class="help" style="margin:0">In Immich gibt es noch keine Alben.</p>`
+    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Immich` : 'Alben in Immich'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="im-all">Alle wählen</button>' : ''}</div>
+      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoImmich.chosen.size} ${photoImmich.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    next = `<button class="btn primary" id="im-done">Fertig</button>`
+  }
+  // (the first step's way back: out of the assistant - to the service's page when connected, else to the photos)
+  const back = s === 1 ? `<button class="btn" id="im-cancel">Abbrechen</button>` : `<button class="btn" id="im-back">${icon('back', 18)}Zurück</button>`
+  return [
+    `<section class="card wide wz">${bar}<div class="wz-count">${esc(tr(`Schritt ${s} von ${IMMICH_STEPS.length}`))}</div>${body}
+      <div class="wz-foot">${back}<span class="wz-next">${next}</span></div></section>`,
+  ]
+}
+
+// a key kept on the box, for the address typed in (another server gets it only typed in anew - see immich.ts)
+const immichUrl = (v) => {
+  const t = String(v ?? '').trim().replace(/\/+$/, '').replace(/\/api$/i, '')
+  return /^https?:\/\//i.test(t) ? t.toLowerCase() : `http://${t}`.toLowerCase()
+}
+const photoImmichKeyKept = () => !!photoImmich.data?.settings.hasKey && immichUrl(photoImmich.url) === immichUrl(photoImmich.data.settings.url)
+
+// the step shown (3, the test, only with a result)
+const photoImmichImmichStep = () => (photoImmich.step === 3 && !photoImmich.test ? 2 : photoImmich.step)
+
+function photoImmichTop() {
+  const d = photoImmich.data
+  if (!d) return []
+  if (photoImmich.step) return photoImmichSteps()
+  const s = d.sync
+  const st = d.settings
+  const status = photoServiceStatus(s, 'Schlüssel abgelehnt')
+  const limit = st.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
+      <div class="ph-nas-state ${status[1]}">${status[0]}</div>
+      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.</span></div>` : ''}
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob Immich läuft und die Adresse stimmt.</span></div>` : ''}
+      ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es in Immich nicht mehr.') : tr(`${s.missing} gewählte Alben gibt es in Immich nicht mehr.`))}</span></div>` : ''}
+      ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="im-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="im-albums">Alben ändern</button></div></section>`,
+    `<section class="card wide"><h2>Fotos</h2>
+      <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert die Fotos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live von Immich – ohne Netz sind diese Alben gerade nicht da.</small></span>
+        <label class="switch"><input type="checkbox" id="im-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="im-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(st.keepCopy && limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${st.keepCopy && limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      ${st.keepCopy
+        ? `<p class="help">Fotos aus Immich liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="im-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === st.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
+        : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
+    `<section class="card wide"><h2>Zugang</h2>
+      <dl class="kv"><div><dt>Server-Adresse</dt><dd translate="no">${esc(st.url)}</dd></div><div><dt>API-Schlüssel</dt><dd>${esc(tr(st.hasKey ? 'gesetzt' : 'fehlt'))}</dd></div></dl>
+      <p class="help">Der Schlüssel wird aus Sicherheitsgründen nicht mehr angezeigt.</p>
+      <div class="btns"><button class="btn" id="im-url-change">Adresse ändern</button><button class="btn" id="im-key-change">Schlüssel ersetzen</button></div></section>`,
+    `<section class="card wide"><div class="navlist"><button class="navrow" id="im-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Die Alben aus Immich und ihre Fotos werden von der Box entfernt. In Immich bleibt alles erhalten.</small></span></button></div></section>`,
+  ]
+}
+
+async function photoImmichLoadAlbums() {
+  photoImmich.albums = null
+  const r = await api(`${API}/photos/immich/albums`)
+  photoImmich.albums = r.ok ? r.body : { error: true }
+}
+
+function mountPhotoImmich(root, page) {
+  const d = photoImmich.data
+  window.clearTimeout(photoImmich.timer)
+  if (!d) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const take = (body) => {
+    photoImmich.data = body
+    photoLib.stale = true
+  }
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/immich`, { method: 'POST', body })
+    if (!r.ok) {
+      toast('Nicht gespeichert', 'info')
+      return false
+    }
+    take(r.body)
+    if (done) toast(done)
+    return true
+  }
+  // the assistant
+  $('#im-cancel', root)?.addEventListener('click', () => (d.connected ? ((photoImmich.step = 0), redraw()) : go('fotos')))
+  $('#im-next1', root)?.addEventListener('click', () => {
+    const v = $('#im-url', root).value.trim()
+    if (!/^(https?:\/\/)?[^\s/:]+(:\d+)?(\/\S*)?$/i.test(v)) return toast('Bitte die Adresse von Immich eintragen, z. B. http://192.168.1.20:2283', 'info')
+    photoImmich.url = v
+    photoImmich.test = null
+    photoImmich.step = 2
+    redraw()
+  })
+  // back one step (the key typed is kept while the assistant is open); a step passed already, from the steps on top
+  const goStep = (n) => {
+    const key = $('#im-key', root)
+    if (key) photoImmich.key = key.value
+    photoImmich.step = n
+    redraw()
+    window.scrollTo(0, 0)
+  }
+  $('#im-back', root)?.addEventListener('click', () => goStep(photoImmichImmichStep() === 4 && d.connected && !photoImmich.test ? 0 : photoImmichImmichStep() - 1))
+  for (const b of root.querySelectorAll('[data-imstep]')) b.onclick = () => goStep(Number(b.dataset.imstep))
+  $('#im-test', root)?.addEventListener('click', async () => {
+    photoImmich.key = $('#im-key', root).value.trim()
+    if (!photoImmich.key && !photoImmichKeyKept()) return toast('Bitte den API-Schlüssel einfügen', 'info')
+    photoImmich.testing = true
+    redraw()
+    const r = await api(`${API}/photos/immich/test`, { method: 'POST', body: { url: photoImmich.url, apiKey: photoImmich.key }, timeoutMs: 30000 })
+    photoImmich.testing = false
+    photoImmich.test = r.ok ? r.body : { ok: false, error: 'unreachable' }
+    photoImmich.step = 3
+    redraw()
+  })
+  $('#im-next3', root)?.addEventListener('click', async () => {
+    // (address and key are saved now - the album list comes from the box with them)
+    const body = { url: photoImmich.url, account: photoImmich.test?.account ?? null }
+    if (photoImmich.key) body.apiKey = photoImmich.key
+    if (!(await save(body))) return
+    photoImmich.key = ''
+    photoImmich.chosen = new Set(photoImmich.data.settings.albumIds)
+    photoImmich.step = 4
+    redraw()
+    await photoImmichLoadAlbums()
+    redraw()
+  })
+  for (const b of root.querySelectorAll('[data-im]')) {
+    b.onclick = () => {
+      const id = b.dataset.im
+      if (photoImmich.chosen.has(id)) photoImmich.chosen.delete(id)
+      else photoImmich.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#im-all', root)?.addEventListener('click', () => {
+    for (const a of photoImmich.albums?.albums ?? []) photoImmich.chosen.add(a.id)
+    redraw()
+  })
+  $('#im-done', root)?.addEventListener('click', async () => {
+    if (!(await save({ albumIds: [...photoImmich.chosen] }, photoImmich.chosen.size ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
+    photoImmich.step = 0
+    redraw()
+  })
+  if (photoImmich.step) return
+  // the service's page
+  if (d.sync.running) photoImmich.timer = window.setTimeout(async () => {
+    if (currentPage()?.id !== page.id || photoImmich.step) return
+    const r = await api(`${API}/photos/immich`)
+    if (r.ok) take(r.body)
+    redraw()
+  }, 3000)
+  $('#im-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/immich/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    take(r.body)
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  $('#im-albums', root)?.addEventListener('click', async () => {
+    photoImmich.chosen = new Set(d.settings.albumIds)
+    photoImmich.test = null
+    photoImmich.step = 4
+    redraw()
+    await photoImmichLoadAlbums()
+    redraw()
+  })
+  $('#im-keep', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (!(await save({ keepCopy: on }, on ? 'Fotos werden auf der Box gespeichert' : 'Fotos kommen live von Immich'))) e.target.checked = !on
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = async () => {
+            close()
+            if (await save({ [key]: Number(b.dataset.v) }, 'Gespeichert')) redraw()
+          }
+        }
+      },
+    )
+  $('#im-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#im-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#im-url-change', root)?.addEventListener('click', () => {
+    photoImmich.url = d.settings.url
+    photoImmich.test = null
+    photoImmich.step = 1
+    redraw()
+  })
+  $('#im-key-change', root)?.addEventListener('click', () => {
+    photoImmich.url = d.settings.url
+    photoImmich.key = ''
+    photoImmich.test = null
+    photoImmich.step = 2
+    redraw()
+  })
+  $('#im-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Verbindung trennen', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} aus Immich und ihre Fotos werden von der Box entfernt. In Immich bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/immich/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoLib.stale = true
+      toast('Immich getrennt')
+      go('fotos')
+    }),
+  )
+}
+
+/* Bibliothek › Fotos › Synology Photos (5.1): a login of its own at DSM (address, account, password) - the assistant
+   (login, test with the certificate, albums) and, once switched on, the service's page as Immich's (synology.ts) */
+const photoSyno = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+
+async function loadPhotoSynology() {
+  const r = await api(`${API}/photos/synology`)
+  if (!r.ok) throw new Error(`photos synology ${r.status}`)
+  const d = r.body
+  photoSyno.data = d
+  // (not switched on yet: the assistant)
+  photoSyno.step = d.connected ? 0 : 1
+  photoSyno.url = d.settings.url || (d.nasHost ? `https://${d.nasHost}:5001` : '')
+  photoSyno.account = d.settings.account || ''
+  photoSyno.password = ''
+  photoSyno.fingerprint = d.settings.certFingerprint || ''
+  photoSyno.test = null
+  photoSyno.albums = null
+}
+
+const SYNO_ERRORS = {
+  unauthorized: ['Anmeldung abgelehnt', 'DSM nimmt Benutzername oder Passwort nicht an. Prüfe beides und ob das Konto aktiv ist.'],
+  noPhotos: ['Synology Photos nicht erlaubt', 'Erlaube dem Konto der Box in DSM unter Systemsteuerung › Benutzer und Gruppe › Bearbeiten › Anwendungen die App Synology Photos.'],
+  twoFactor: ['Zweite Bestätigung verlangt', 'Das Konto der Box nutzt die Zwei-Faktor-Anmeldung. Lege für die Box ein eigenes Konto ohne sie an.'],
+  blocked: ['Box von DSM gesperrt', 'DSM hat die Box nach zu vielen Fehlversuchen gesperrt. Gib sie in DSM unter Sicherheit › Schutz › Automatische Blockierung wieder frei.'],
+  expired: ['Passwort abgelaufen', 'Das Passwort des Kontos ist abgelaufen. Lege in DSM ein neues fest und trage es hier ein.'],
+  certificate: ['Zertifikat passt nicht', 'DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.'],
+  unreachable: ['DSM nicht erreichbar', 'Die Box erreicht DSM unter dieser Adresse nicht. Prüfe Adresse, Port (meist 5001 mit https, 5000 ohne) und Firewall.'],
+}
+
+const SYNO_STEPS = [
+  ['login', 'Anmeldung'],
+  ['test', 'Test'],
+  ['albums', 'Alben'],
+]
+
+// the password kept on the box, for the address and the account typed in (another one gets it only typed in anew)
+const photoSynoPasswordKept = () => {
+  const st = photoSyno.data?.settings
+  return !!st?.hasPassword && photoSyno.url.trim().replace(/\/+$/, '').toLowerCase() === String(st.url).toLowerCase() && photoSyno.account.trim() === st.account
+}
+
+function photoSynologySteps() {
+  const s = photoSyno.step
+  const t = photoSyno.test
+  const bar = `<ol class="wz-steps" style="grid-template-columns:repeat(${SYNO_STEPS.length}, minmax(0, 1fr))">${SYNO_STEPS.map(([, label], i) => {
+    const n = i + 1
+    const done = n < s
+    return `<li class="${done ? 'done' : ''}${n === s ? ' current' : ''}"><button type="button" data-systep="${n}"${n === s ? ' aria-current="step"' : ''}${done ? '' : ' disabled'}><span class="bar"></span><span class="lbl">${done ? icon('check', 14) : `<i>${n}</i>`}${esc(tr(label))}</span></button></li>`
+  }).join('')}</ol>`
+  let body
+  let next = ''
+  if (s === 1) {
+    const kept = photoSynoPasswordKept()
+    body = `<h2>Bei Synology Photos anmelden</h2><p class="help">Die Box zeigt die Alben dieses Kontos und alle Alben, die mit ihm geteilt sind. Am besten legst du in DSM ein eigenes Konto nur für die Box an: ohne Zwei-Faktor-Anmeldung, mit Synology Photos erlaubt. Teile dann in Synology Photos die Alben mit diesem Konto (als Betrachter).</p>
+      <div class="field"><label for="sy-url">DSM-Adresse</label><input class="input mono" id="sy-url" placeholder="https://192.168.1.10:5001" value="${esc(photoSyno.url)}" ${NO_PW_MANAGER} spellcheck="false">
+      <small>Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.</small></div>
+      <div class="field"><label for="sy-account">Benutzername</label><input class="input" id="sy-account" value="${esc(photoSyno.account)}" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="sy-pass">Passwort</label><div class="input-wrap"><input class="input has-eye" id="sy-pass" type="password" value="${esc(photoSyno.password)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um es zu behalten') : '')}" autocomplete="new-password"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
+      <small>Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
+    next = `<button class="btn primary" id="sy-test" ${photoSyno.testing ? 'disabled' : ''}>${esc(tr(photoSyno.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
+  } else if (s === 2 && t?.ok) {
+    body = `<h2>Verbindung steht</h2><p class="help">Die Box kann die Alben des Kontos lesen.</p>
+      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(t.account ?? '–')}</dd></div><div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Davon mit dem Konto geteilt</dt><dd>${esc(String(t.shared))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.pictures))}</dd></div></dl>
+      ${t.albums ? '' : `<div class="note warn">${icon('info', 18)}<span>Noch keine Alben. Teile in Synology Photos ein Album mit dem Konto der Box und teste erneut.</span></div>`}`
+    next = t.albums ? `<button class="btn primary" id="sy-next">Weiter</button>` : `<button class="btn primary" id="sy-retry">${esc(tr('Erneut testen'))}</button>`
+  } else if (s === 2) {
+    const [head, text] = SYNO_ERRORS[t?.error] ?? SYNO_ERRORS.unreachable
+    // (a certificate not confirmed yet: shown to be compared and trusted, as for the NAS)
+    const cert = t?.error === 'certificate' ? t.certificate : null
+    body = cert
+      ? `<h2>Zertifikat bestätigen</h2><p class="help" style="margin:0">Das NAS nutzt ein eigenes (selbst signiertes) Zertifikat. Vergleiche den Fingerabdruck mit dem im NAS (bzw. im Browser über das Schloss-Symbol). Nur wenn er übereinstimmt:</p>
+        <dl class="kv"><div><dt>Ausgestellt für</dt><dd>${esc(cert.subject)}</dd></div><div><dt>Gültig bis</dt><dd>${esc(cert.validTo)}</dd></div></dl>
+        <p class="mono-block">${esc(cert.fingerprint)}</p>
+        ${photoSyno.fingerprint ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(text))}</span></div>` : ''}`
+      : `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text))}</span></div>`
+    next = cert
+      ? `<button class="btn primary" id="sy-trust" data-fp="${esc(cert.fingerprint)}">${esc(tr('Vertrauen und testen'))}</button>`
+      : `<button class="btn primary" data-systep="1">${esc(tr('Anmeldung ändern'))}</button>`
+  } else {
+    const list = photoSyno.albums
+    const rows = !list
+      ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+      : list.error
+        ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+        : list.albums.length
+          ? `<div class="rows">${list.albums
+              .map(
+                (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/synology/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+                <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}${a.shared ? ` · ${esc(tr('Geteilt'))}` : ''}</small></span>
+                <button class="ph-check-box" role="checkbox" aria-checked="${photoSyno.chosen.has(a.id)}" data-sy="${esc(a.id)}" aria-label="${esc(a.name)}">${photoSyno.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
+              )
+              .join('')}</div>`
+          : `<p class="help" style="margin:0">Das Konto sieht noch keine Alben.</p>`
+    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Synology Photos` : 'Alben in Synology Photos'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="sy-all">Alle wählen</button>' : ''}</div>
+      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoSyno.chosen.size} ${photoSyno.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    next = `<button class="btn primary" id="sy-done">Fertig</button>`
+  }
+  // (the first step's way back: out of the assistant - to the service's page when switched on, else to the photos)
+  const back = s === 1 ? `<button class="btn" id="sy-cancel">Abbrechen</button>` : `<button class="btn" id="sy-back">${icon('back', 18)}Zurück</button>`
+  return [
+    `<section class="card wide wz">${bar}<div class="wz-count">${esc(tr(`Schritt ${s} von ${SYNO_STEPS.length}`))}</div>${body}
+      <div class="wz-foot">${back}<span class="wz-next">${next}</span></div></section>`,
+  ]
+}
+
+// the state of a photo service's sync as a line (the service's page, Immich and Synology Photos)
+function photoServiceStatus(s, refused) {
+  if (s.running) return [`${icon('sync', 16)}${esc(s.total ? tr(`Abgleich läuft · ${s.done} von ${s.total} Fotos`) : tr('Abgleich läuft …'))}`, 'accent']
+  if (s.unauthorized) return [`${icon('info', 16)}${esc(tr(refused))}`, 'danger']
+  if (s.offlineSince) return [`${icon('info', 16)}${esc(tr(`Nicht erreichbar seit ${relTime(s.offlineSince).replace(/^vor /, '')}`))}`, 'danger']
+  // (the last sync stopped before its end - the service had trouble: it tries again soon)
+  if (s.retry) return [`${icon('info', 16)}${esc(tr('Abgleich unterbrochen · neuer Versuch in Kürze'))}`, 'warn']
+  if (s.lastSync) return [`${icon('check', 16)}${esc(tr(`Abgeglichen ${relTime(s.lastSync)}`))}`, 'ok']
+  return [esc(tr('Noch nicht abgeglichen')), '']
+}
+
+function photoSynologyTop() {
+  const d = photoSyno.data
+  if (!d) return []
+  if (photoSyno.step) return photoSynologySteps()
+  const s = d.sync
+  const st = d.settings
+  const status = photoServiceStatus(s, 'Anmeldung abgelehnt')
+  const limit = st.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
+      <div class="ph-nas-state ${status[1]}">${status[0]}</div>
+      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.</span></div>` : ''}
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob das NAS läuft.</span></div>` : ''}
+      ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr oder es ist nicht mehr geteilt.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr oder sie sind nicht mehr geteilt.`))}</span></div>` : ''}
+      ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="sy-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="sy-albums">Alben ändern</button></div></section>`,
+    `<section class="card wide"><h2>Fotos</h2>
+      <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live vom NAS – Videos gibt es dann nicht, und ohne Netz sind diese Alben gerade nicht da.</small></span>
+        <label class="switch"><input type="checkbox" id="sy-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="sy-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos aus Synology Photos erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(st.keepCopy && limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${st.keepCopy && limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      ${st.keepCopy
+        ? `<p class="help">Fotos aus Synology Photos liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="sy-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === st.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
+        : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
+    `<section class="card wide"><h2>Zugang</h2>
+      <dl class="kv"><div><dt>DSM-Adresse</dt><dd translate="no">${esc(st.url)}</dd></div><div><dt>Konto</dt><dd translate="no">${esc(st.account || '–')}</dd></div><div><dt>Passwort</dt><dd>${esc(tr(st.hasPassword ? 'gesetzt' : 'fehlt'))}</dd></div>${st.certFingerprint ? `<div><dt>Zertifikat</dt><dd>${esc(tr('bestätigt'))}</dd></div>` : ''}</dl>
+      <p class="help">Das Passwort wird aus Sicherheitsgründen nicht mehr angezeigt.</p>
+      <div class="btns"><button class="btn" id="sy-login">Anmeldung ändern</button></div></section>`,
+    `<section class="card wide"><div class="navlist"><button class="navrow" id="sy-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Die Alben aus Synology Photos und ihre Fotos werden von der Box entfernt. Auf dem NAS bleibt alles erhalten.</small></span></button></div></section>`,
+  ]
+}
+
+async function photoSynologyLoadAlbums() {
+  photoSyno.albums = null
+  const r = await api(`${API}/photos/synology/albums`)
+  photoSyno.albums = r.ok ? r.body : { error: true }
+}
+
+function mountPhotoSynology(root, page) {
+  const d = photoSyno.data
+  window.clearTimeout(photoSyno.timer)
+  if (!d) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const take = (body) => {
+    photoSyno.data = body
+    photoLib.stale = true
+  }
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/synology`, { method: 'POST', body })
+    if (!r.ok) {
+      toast('Nicht gespeichert', 'info')
+      return false
+    }
+    take(r.body)
+    if (done) toast(done)
+    return true
+  }
+  // (what is typed in stays while the assistant is open)
+  const keep = () => {
+    const url = $('#sy-url', root)
+    if (url) photoSyno.url = url.value.trim()
+    const account = $('#sy-account', root)
+    if (account) photoSyno.account = account.value.trim()
+    const pass = $('#sy-pass', root)
+    if (pass) photoSyno.password = pass.value
+  }
+  const goStep = (n) => {
+    keep()
+    photoSyno.step = n
+    redraw()
+    window.scrollTo(0, 0)
+  }
+  // the assistant
+  $('#sy-cancel', root)?.addEventListener('click', () => (d.connected ? goStep(0) : go('fotos')))
+  $('#sy-back', root)?.addEventListener('click', () => goStep(photoSyno.step === 3 && d.connected && !photoSyno.test ? 0 : photoSyno.step - 1))
+  for (const b of root.querySelectorAll('[data-systep]')) b.onclick = () => goStep(Number(b.dataset.systep))
+  const test = async (fingerprint) => {
+    photoSyno.testing = true
+    photoSyno.test = null
+    redraw()
+    const body = { url: photoSyno.url, account: photoSyno.account, ...(photoSyno.password ? { password: photoSyno.password } : {}), ...(fingerprint ? { fingerprint } : {}) }
+    const r = await api(`${API}/photos/synology/test`, { method: 'POST', body, timeoutMs: 45000 })
+    photoSyno.testing = false
+    photoSyno.test = r.ok ? r.body : { ok: false, error: 'unreachable' }
+    if (r.ok && r.body.ok) photoSyno.fingerprint = r.body.fingerprint || ''
+    photoSyno.step = 2
+    redraw()
+  }
+  $('#sy-test', root)?.addEventListener('click', () => {
+    keep()
+    if (!/^(https?:\/\/)?[^\s/:]+(:\d+)?\/?$/i.test(photoSyno.url)) return toast('Bitte die Adresse von DSM eintragen, z. B. https://192.168.1.10:5001', 'info')
+    if (!photoSyno.account) return toast('Bitte den Benutzernamen eintragen', 'info')
+    if (!photoSyno.password && !photoSynoPasswordKept()) return toast('Bitte das Passwort eintragen', 'info')
+    // (another address: the certificate confirmed for the one before does not count)
+    if (photoSyno.url.replace(/\/+$/, '').toLowerCase() !== String(d.settings.url).toLowerCase()) photoSyno.fingerprint = ''
+    void test(photoSyno.fingerprint)
+  })
+  $('#sy-trust', root)?.addEventListener('click', (e) => {
+    photoSyno.fingerprint = e.currentTarget.dataset.fp
+    void test(photoSyno.fingerprint)
+  })
+  $('#sy-retry', root)?.addEventListener('click', () => void test(photoSyno.fingerprint))
+  $('#sy-next', root)?.addEventListener('click', async () => {
+    // (the login is saved now - the album list comes from the box with it)
+    const body = { url: photoSyno.url, account: photoSyno.account, certFingerprint: photoSyno.fingerprint }
+    if (photoSyno.password) body.password = photoSyno.password
+    if (!(await save(body))) return
+    photoSyno.password = ''
+    photoSyno.chosen = new Set(photoSyno.data.settings.albumIds)
+    photoSyno.step = 3
+    redraw()
+    await photoSynologyLoadAlbums()
+    redraw()
+  })
+  for (const b of root.querySelectorAll('[data-sy]')) {
+    b.onclick = () => {
+      const id = b.dataset.sy
+      if (photoSyno.chosen.has(id)) photoSyno.chosen.delete(id)
+      else photoSyno.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#sy-all', root)?.addEventListener('click', () => {
+    for (const a of photoSyno.albums?.albums ?? []) photoSyno.chosen.add(a.id)
+    redraw()
+  })
+  $('#sy-done', root)?.addEventListener('click', async () => {
+    if (!(await save({ enabled: true, albumIds: [...photoSyno.chosen] }, photoSyno.chosen.size ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
+    photoSyno.step = 0
+    photoSyno.test = null
+    redraw()
+  })
+  if (photoSyno.step) return
+  // the service's page
+  if (d.sync.running) photoSyno.timer = window.setTimeout(async () => {
+    if (currentPage()?.id !== page.id || photoSyno.step) return
+    const r = await api(`${API}/photos/synology`)
+    if (r.ok) take(r.body)
+    redraw()
+  }, 3000)
+  $('#sy-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/synology/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    take(r.body)
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  $('#sy-albums', root)?.addEventListener('click', async () => {
+    photoSyno.chosen = new Set(d.settings.albumIds)
+    photoSyno.test = null
+    photoSyno.step = 3
+    redraw()
+    await photoSynologyLoadAlbums()
+    redraw()
+  })
+  $('#sy-login', root)?.addEventListener('click', () => {
+    Object.assign(photoSyno, { url: d.settings.url, account: d.settings.account, password: '', fingerprint: d.settings.certFingerprint || '', test: null })
+    goStep(1)
+  })
+  $('#sy-keep', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (!(await save({ keepCopy: on }, on ? 'Fotos werden auf der Box gespeichert' : 'Fotos kommen live vom NAS'))) e.target.checked = !on
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = async () => {
+            close()
+            if (await save({ [key]: Number(b.dataset.v) }, 'Gespeichert')) redraw()
+          }
+        }
+      },
+    )
+  $('#sy-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#sy-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#sy-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Verbindung trennen', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} aus Synology Photos und ihre Fotos werden von der Box entfernt. Auf dem NAS bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/synology/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoLib.stale = true
+      toast('Synology Photos getrennt')
+      go('fotos')
+    }),
+  )
+}
+
+/* Bibliothek › Fotos › Nextcloud (5.1): a login of its own (address, user name, app password) - the assistant (login,
+   test with the certificate, albums of the Photos app) and, once switched on, the service's page as Immich's (nextcloud.ts) */
+const photoNc = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+
+async function loadPhotoNextcloud() {
+  const r = await api(`${API}/photos/nextcloud`)
+  if (!r.ok) throw new Error(`photos nextcloud ${r.status}`)
+  const d = r.body
+  photoNc.data = d
+  // (not switched on yet: the assistant)
+  photoNc.step = d.connected ? 0 : 1
+  photoNc.url = d.settings.url || ''
+  photoNc.account = d.settings.account || ''
+  photoNc.password = ''
+  photoNc.fingerprint = d.settings.certFingerprint || ''
+  photoNc.test = null
+  photoNc.albums = null
+}
+
+const NC_ERRORS = {
+  unauthorized: ['Anmeldung abgelehnt', 'Nextcloud nimmt Benutzername oder App-Passwort nicht an. Prüfe beides, oder erstelle ein neues App-Passwort.'],
+  noPhotos: ['Fotos-App fehlt', 'In dieser Nextcloud ist die App „Fotos“ nicht eingeschaltet. Schalte sie unter Apps ein.'],
+  certificate: ['Zertifikat passt nicht', 'Die Nextcloud zeigt ein anderes Zertifikat als das bestätigte. Wurde es erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.'],
+  unreachable: ['Nextcloud nicht erreichbar', 'Die Box erreicht die Nextcloud unter dieser Adresse nicht. Prüfe Adresse und Netz.'],
+}
+
+const NC_STEPS = [
+  ['login', 'Anmeldung'],
+  ['test', 'Test'],
+  ['albums', 'Alben'],
+]
+
+// the password kept on the box, for the address and the account typed in (another one gets it only typed in anew)
+const photoNcPasswordKept = () => {
+  const st = photoNc.data?.settings
+  return !!st?.hasPassword && photoNc.url.trim().replace(/\/+$/, '').toLowerCase() === String(st.url).toLowerCase() && photoNc.account.trim() === st.account
+}
+
+function photoNextcloudSteps() {
+  const s = photoNc.step
+  const t = photoNc.test
+  const bar = `<ol class="wz-steps" style="grid-template-columns:repeat(${NC_STEPS.length}, minmax(0, 1fr))">${NC_STEPS.map(([, label], i) => {
+    const n = i + 1
+    const done = n < s
+    return `<li class="${done ? 'done' : ''}${n === s ? ' current' : ''}"><button type="button" data-ncstep="${n}"${n === s ? ' aria-current="step"' : ''}${done ? '' : ' disabled'}><span class="bar"></span><span class="lbl">${done ? icon('check', 14) : `<i>${n}</i>`}${esc(tr(label))}</span></button></li>`
+  }).join('')}</ol>`
+  let body
+  let next = ''
+  if (s === 1) {
+    const kept = photoNcPasswordKept()
+    body = `<h2>Bei Nextcloud anmelden</h2><p class="help">Die Box zeigt die Alben der Nextcloud-App „Fotos“ dieses Kontos und alle Alben, die mit ihm geteilt sind. Am besten legst du in Nextcloud ein eigenes Konto nur für die Box an und teilst ihm die Alben.</p>
+      <div class="field"><label for="nc-url">Nextcloud-Adresse</label><input class="input mono" id="nc-url" placeholder="https://cloud.example.de" value="${esc(photoNc.url)}" ${NO_PW_MANAGER} spellcheck="false">
+      <small>Wie im Browser, ohne /apps/… dahinter.</small></div>
+      <div class="field"><label for="nc-account">Benutzername</label><input class="input" id="nc-account" value="${esc(photoNc.account)}" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="nc-pass">App-Passwort</label><div class="input-wrap"><input class="input has-eye" id="nc-pass" type="password" value="${esc(photoNc.password)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um es zu behalten') : '')}" autocomplete="new-password"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
+      <small>In Nextcloud unter Persönliche Einstellungen › Sicherheit › „Neues App-Passwort erstellen“. Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
+    next = `<button class="btn primary" id="nc-test" ${photoNc.testing ? 'disabled' : ''}>${esc(tr(photoNc.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
+  } else if (s === 2 && t?.ok) {
+    body = `<h2>Verbindung steht</h2><p class="help">Die Box kann die Alben des Kontos lesen.</p>
+      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(t.account ?? '–')}</dd></div><div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Davon mit dem Konto geteilt</dt><dd>${esc(String(t.shared))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.pictures))}</dd></div></dl>
+      ${t.albums ? '' : `<div class="note warn">${icon('info', 18)}<span>Noch keine Alben. Lege in der Nextcloud-App „Fotos“ ein Album an oder teile eines mit diesem Konto und teste erneut.</span></div>`}`
+    next = t.albums ? `<button class="btn primary" id="nc-next">Weiter</button>` : `<button class="btn primary" id="nc-retry">${esc(tr('Erneut testen'))}</button>`
+  } else if (s === 2) {
+    const [head, text] = NC_ERRORS[t?.error] ?? NC_ERRORS.unreachable
+    // (a certificate not confirmed yet: shown to be compared and trusted, as for the NAS)
+    const cert = t?.error === 'certificate' ? t.certificate : null
+    body = cert
+      ? `<h2>Zertifikat bestätigen</h2><p class="help" style="margin:0">Die Nextcloud nutzt ein eigenes (selbst signiertes) Zertifikat. Vergleiche den Fingerabdruck mit dem im Browser über das Schloss-Symbol. Nur wenn er übereinstimmt:</p>
+        <dl class="kv"><div><dt>Ausgestellt für</dt><dd>${esc(cert.subject)}</dd></div><div><dt>Gültig bis</dt><dd>${esc(cert.validTo)}</dd></div></dl>
+        <p class="mono-block">${esc(cert.fingerprint)}</p>
+        ${photoNc.fingerprint ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(text))}</span></div>` : ''}`
+      : `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text))}</span></div>`
+    next = cert
+      ? `<button class="btn primary" id="nc-trust" data-fp="${esc(cert.fingerprint)}">${esc(tr('Vertrauen und testen'))}</button>`
+      : `<button class="btn primary" data-ncstep="1">${esc(tr('Anmeldung ändern'))}</button>`
+  } else {
+    const list = photoNc.albums
+    const rows = !list
+      ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+      : list.error
+        ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+        : list.albums.length
+          ? `<div class="rows">${list.albums
+              .map(
+                (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/nextcloud/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+                <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}${a.shared ? ` · ${esc(tr('Geteilt'))}` : ''}</small></span>
+                <button class="ph-check-box" role="checkbox" aria-checked="${photoNc.chosen.has(a.id)}" data-nc="${esc(a.id)}" aria-label="${esc(a.name)}">${photoNc.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
+              )
+              .join('')}</div>`
+          : `<p class="help" style="margin:0">Das Konto sieht noch keine Alben.</p>`
+    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Nextcloud` : 'Alben in Nextcloud'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="nc-all">Alle wählen</button>' : ''}</div>
+      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoNc.chosen.size} ${photoNc.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    next = `<button class="btn primary" id="nc-done">Fertig</button>`
+  }
+  // (the first step's way back: out of the assistant - to the service's page when switched on, else to the photos)
+  const back = s === 1 ? `<button class="btn" id="nc-cancel">Abbrechen</button>` : `<button class="btn" id="nc-back">${icon('back', 18)}Zurück</button>`
+  return [
+    `<section class="card wide wz">${bar}<div class="wz-count">${esc(tr(`Schritt ${s} von ${NC_STEPS.length}`))}</div>${body}
+      <div class="wz-foot">${back}<span class="wz-next">${next}</span></div></section>`,
+  ]
+}
+
+function photoNextcloudTop() {
+  const d = photoNc.data
+  if (!d) return []
+  if (photoNc.step) return photoNextcloudSteps()
+  const s = d.sync
+  const st = d.settings
+  const status = photoServiceStatus(s, 'Anmeldung abgelehnt')
+  const limit = st.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
+      <div class="ph-nas-state ${status[1]}">${status[0]}</div>
+      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>Nextcloud nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und App-Passwort unten.</span></div>` : ''}
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob die Nextcloud läuft.</span></div>` : ''}
+      ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr oder es ist nicht mehr geteilt.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr oder sie sind nicht mehr geteilt.`))}</span></div>` : ''}
+      ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="nc-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="nc-albums">Alben ändern</button></div></section>`,
+    `<section class="card wide"><h2>Fotos</h2>
+      <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live von der Nextcloud – Videos gibt es dann nicht, und ohne Netz sind diese Alben gerade nicht da.</small></span>
+        <label class="switch"><input type="checkbox" id="nc-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="nc-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos aus Nextcloud erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(st.keepCopy && limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${st.keepCopy && limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      ${st.keepCopy
+        ? `<p class="help">Fotos aus Nextcloud liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="nc-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === st.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
+        : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
+    `<section class="card wide"><h2>Zugang</h2>
+      <dl class="kv"><div><dt>Nextcloud-Adresse</dt><dd translate="no">${esc(st.url)}</dd></div><div><dt>Konto</dt><dd translate="no">${esc(st.account || '–')}</dd></div><div><dt>App-Passwort</dt><dd>${esc(tr(st.hasPassword ? 'gesetzt' : 'fehlt'))}</dd></div>${st.certFingerprint ? `<div><dt>Zertifikat</dt><dd>${esc(tr('bestätigt'))}</dd></div>` : ''}</dl>
+      <p class="help">Das App-Passwort wird aus Sicherheitsgründen nicht mehr angezeigt.</p>
+      <div class="btns"><button class="btn" id="nc-login">Anmeldung ändern</button></div></section>`,
+    `<section class="card wide"><div class="navlist"><button class="navrow" id="nc-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Die Alben aus Nextcloud und ihre Fotos werden von der Box entfernt. In der Nextcloud bleibt alles erhalten.</small></span></button></div></section>`,
+  ]
+}
+
+async function photoNextcloudLoadAlbums() {
+  photoNc.albums = null
+  const r = await api(`${API}/photos/nextcloud/albums`)
+  photoNc.albums = r.ok ? r.body : { error: true }
+}
+
+function mountPhotoNextcloud(root, page) {
+  const d = photoNc.data
+  window.clearTimeout(photoNc.timer)
+  if (!d) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const take = (body) => {
+    photoNc.data = body
+    photoLib.stale = true
+  }
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/nextcloud`, { method: 'POST', body })
+    if (!r.ok) {
+      toast('Nicht gespeichert', 'info')
+      return false
+    }
+    take(r.body)
+    if (done) toast(done)
+    return true
+  }
+  // (what is typed in stays while the assistant is open)
+  const keep = () => {
+    const url = $('#nc-url', root)
+    if (url) photoNc.url = url.value.trim()
+    const account = $('#nc-account', root)
+    if (account) photoNc.account = account.value.trim()
+    const pass = $('#nc-pass', root)
+    if (pass) photoNc.password = pass.value
+  }
+  const goStep = (n) => {
+    keep()
+    photoNc.step = n
+    redraw()
+    window.scrollTo(0, 0)
+  }
+  // the assistant
+  $('#nc-cancel', root)?.addEventListener('click', () => (d.connected ? goStep(0) : go('fotos')))
+  $('#nc-back', root)?.addEventListener('click', () => goStep(photoNc.step === 3 && d.connected && !photoNc.test ? 0 : photoNc.step - 1))
+  for (const b of root.querySelectorAll('[data-ncstep]')) b.onclick = () => goStep(Number(b.dataset.ncstep))
+  const test = async (fingerprint) => {
+    photoNc.testing = true
+    photoNc.test = null
+    redraw()
+    const body = { url: photoNc.url, account: photoNc.account, ...(photoNc.password ? { password: photoNc.password } : {}), ...(fingerprint ? { fingerprint } : {}) }
+    const r = await api(`${API}/photos/nextcloud/test`, { method: 'POST', body, timeoutMs: 45000 })
+    photoNc.testing = false
+    photoNc.test = r.ok ? r.body : { ok: false, error: 'unreachable' }
+    if (r.ok && r.body.ok) photoNc.fingerprint = r.body.fingerprint || ''
+    photoNc.step = 2
+    redraw()
+  }
+  $('#nc-test', root)?.addEventListener('click', () => {
+    keep()
+    if (!/^(https?:\/\/)?[^\s/:]+(:\d+)?(\/\S*)?$/i.test(photoNc.url)) return toast('Bitte die Adresse der Nextcloud eintragen, z. B. https://cloud.example.de', 'info')
+    if (!photoNc.account) return toast('Bitte den Benutzernamen eintragen', 'info')
+    if (!photoNc.password && !photoNcPasswordKept()) return toast('Bitte das App-Passwort eintragen', 'info')
+    // (another address: the certificate confirmed for the one before does not count)
+    if (photoNc.url.replace(/\/+$/, '').toLowerCase() !== String(d.settings.url).toLowerCase()) photoNc.fingerprint = ''
+    void test(photoNc.fingerprint)
+  })
+  $('#nc-trust', root)?.addEventListener('click', (e) => {
+    photoNc.fingerprint = e.currentTarget.dataset.fp
+    void test(photoNc.fingerprint)
+  })
+  $('#nc-retry', root)?.addEventListener('click', () => void test(photoNc.fingerprint))
+  $('#nc-next', root)?.addEventListener('click', async () => {
+    // (the login is saved now - the album list comes from the box with it)
+    const body = { url: photoNc.url, account: photoNc.account, userId: photoNc.test?.userId, certFingerprint: photoNc.fingerprint }
+    if (photoNc.password) body.password = photoNc.password
+    if (!(await save(body))) return
+    photoNc.password = ''
+    photoNc.chosen = new Set(photoNc.data.settings.albumIds)
+    photoNc.step = 3
+    redraw()
+    await photoNextcloudLoadAlbums()
+    redraw()
+  })
+  for (const b of root.querySelectorAll('[data-nc]')) {
+    b.onclick = () => {
+      const id = b.dataset.nc
+      if (photoNc.chosen.has(id)) photoNc.chosen.delete(id)
+      else photoNc.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#nc-all', root)?.addEventListener('click', () => {
+    for (const a of photoNc.albums?.albums ?? []) photoNc.chosen.add(a.id)
+    redraw()
+  })
+  $('#nc-done', root)?.addEventListener('click', async () => {
+    if (!(await save({ enabled: true, albumIds: [...photoNc.chosen] }, photoNc.chosen.size ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
+    photoNc.step = 0
+    photoNc.test = null
+    redraw()
+  })
+  if (photoNc.step) return
+  // the service's page
+  if (d.sync.running) photoNc.timer = window.setTimeout(async () => {
+    if (currentPage()?.id !== page.id || photoNc.step) return
+    const r = await api(`${API}/photos/nextcloud`)
+    if (r.ok) take(r.body)
+    redraw()
+  }, 3000)
+  $('#nc-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/nextcloud/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    take(r.body)
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  $('#nc-albums', root)?.addEventListener('click', async () => {
+    photoNc.chosen = new Set(d.settings.albumIds)
+    photoNc.test = null
+    photoNc.step = 3
+    redraw()
+    await photoNextcloudLoadAlbums()
+    redraw()
+  })
+  $('#nc-login', root)?.addEventListener('click', () => {
+    Object.assign(photoNc, { url: d.settings.url, account: d.settings.account, password: '', fingerprint: d.settings.certFingerprint || '', test: null })
+    goStep(1)
+  })
+  $('#nc-keep', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (!(await save({ keepCopy: on }, on ? 'Fotos werden auf der Box gespeichert' : 'Fotos kommen live von der Nextcloud'))) e.target.checked = !on
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = async () => {
+            close()
+            if (await save({ [key]: Number(b.dataset.v) }, 'Gespeichert')) redraw()
+          }
+        }
+      },
+    )
+  $('#nc-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#nc-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#nc-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Verbindung trennen', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} aus Nextcloud und ihre Fotos werden von der Box entfernt. In der Nextcloud bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/nextcloud/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoLib.stale = true
+      toast('Nextcloud getrennt')
+      go('fotos')
+    }),
+  )
+}
+
+
+/* Bibliothek › Fotos › PhotoPrism (5.1): a login of its own (address, app password) - the assistant (login, test with the
+   certificate, albums) and, once switched on, the service's page as Immich's (photoprism.ts) */
+const photoPp = { data: null, step: 0, url: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+
+async function loadPhotoPhotoprism() {
+  const r = await api(`${API}/photos/photoprism`)
+  if (!r.ok) throw new Error(`photos photoprism ${r.status}`)
+  const d = r.body
+  photoPp.data = d
+  // (not switched on yet: the assistant)
+  photoPp.step = d.connected ? 0 : 1
+  photoPp.url = d.settings.url || ''
+  photoPp.password = ''
+  photoPp.fingerprint = d.settings.certFingerprint || ''
+  photoPp.test = null
+  photoPp.albums = null
+}
+
+const PP_ERRORS = {
+  unauthorized: ['App-Passwort abgelehnt', 'PhotoPrism nimmt das App-Passwort nicht an. Prüfe es, oder erstelle ein neues. Das Anmeldepasswort funktioniert hier nicht.'],
+  notPhotoprism: ['Kein PhotoPrism gefunden', 'Unter dieser Adresse antwortet kein PhotoPrism. Prüfe die Adresse, meist endet sie auf :2342.'],
+  certificate: ['Zertifikat passt nicht', 'PhotoPrism zeigt ein anderes Zertifikat als das bestätigte. Wurde es erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.'],
+  unreachable: ['PhotoPrism nicht erreichbar', 'Die Box erreicht PhotoPrism unter dieser Adresse nicht. Prüfe Adresse und Netz.'],
+}
+
+const PP_STEPS = [
+  ['login', 'Anmeldung'],
+  ['test', 'Test'],
+  ['albums', 'Alben'],
+]
+
+// the password kept on the box, for the address typed in (another one gets it only typed in anew)
+const photoPpPasswordKept = () => {
+  const st = photoPp.data?.settings
+  return !!st?.hasPassword && photoPp.url.trim().replace(/\/+$/, '').toLowerCase() === String(st.url).toLowerCase()
+}
+
+function photoPhotoprismSteps() {
+  const s = photoPp.step
+  const t = photoPp.test
+  const bar = `<ol class="wz-steps" style="grid-template-columns:repeat(${PP_STEPS.length}, minmax(0, 1fr))">${PP_STEPS.map(([, label], i) => {
+    const n = i + 1
+    const done = n < s
+    return `<li class="${done ? 'done' : ''}${n === s ? ' current' : ''}"><button type="button" data-ppstep="${n}"${n === s ? ' aria-current="step"' : ''}${done ? '' : ' disabled'}><span class="bar"></span><span class="lbl">${done ? icon('check', 14) : `<i>${n}</i>`}${esc(tr(label))}</span></button></li>`
+  }).join('')}</ol>`
+  let body
+  let next = ''
+  if (s === 1) {
+    const kept = photoPpPasswordKept()
+    body = `<h2>Mit PhotoPrism verbinden</h2><p class="help">Die Box zeigt die Alben aus PhotoPrism, die du gleich auswählst. Private und archivierte Fotos bleiben draußen.</p>
+      <div class="field"><label for="pp-url">PhotoPrism-Adresse</label><input class="input mono" id="pp-url" placeholder="http://192.168.1.20:2342" value="${esc(photoPp.url)}" ${NO_PW_MANAGER} spellcheck="false">
+      <small>Wie im Browser, ohne /library/… dahinter.</small></div>
+      <div class="field"><label for="pp-pass">App-Passwort</label><div class="input-wrap"><input class="input has-eye" id="pp-pass" type="password" value="${esc(photoPp.password)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um es zu behalten') : '')}" autocomplete="new-password"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
+      <small>In PhotoPrism unter Einstellungen › Konto › Apps und Geräte › Hinzufügen erstellen: Berechtigung „Voller Zugriff“, Ablaufdatum am besten „Nie“. Die Box liest damit nur. Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
+    next = `<button class="btn primary" id="pp-test" ${photoPp.testing ? 'disabled' : ''}>${esc(tr(photoPp.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
+  } else if (s === 2 && t?.ok) {
+    body = `<h2>Verbindung steht</h2><p class="help">Die Box kann die Alben lesen.</p>
+      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(t.account ?? '–')}</dd></div><div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.pictures))}</dd></div></dl>
+      ${t.albums ? '' : `<div class="note warn">${icon('info', 18)}<span>Noch keine Alben. Lege in PhotoPrism unter Alben eines an und teste erneut.</span></div>`}`
+    next = t.albums ? `<button class="btn primary" id="pp-next">Weiter</button>` : `<button class="btn primary" id="pp-retry">${esc(tr('Erneut testen'))}</button>`
+  } else if (s === 2) {
+    const [head, text] = PP_ERRORS[t?.error] ?? PP_ERRORS.unreachable
+    // (a certificate not confirmed yet: shown to be compared and trusted, as for the NAS)
+    const cert = t?.error === 'certificate' ? t.certificate : null
+    body = cert
+      ? `<h2>Zertifikat bestätigen</h2><p class="help" style="margin:0">PhotoPrism nutzt ein eigenes (selbst signiertes) Zertifikat. Vergleiche den Fingerabdruck mit dem im Browser über das Schloss-Symbol. Nur wenn er übereinstimmt:</p>
+        <dl class="kv"><div><dt>Ausgestellt für</dt><dd>${esc(cert.subject)}</dd></div><div><dt>Gültig bis</dt><dd>${esc(cert.validTo)}</dd></div></dl>
+        <p class="mono-block">${esc(cert.fingerprint)}</p>
+        ${photoPp.fingerprint ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(text))}</span></div>` : ''}`
+      : `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text))}</span></div>`
+    next = cert
+      ? `<button class="btn primary" id="pp-trust" data-fp="${esc(cert.fingerprint)}">${esc(tr('Vertrauen und testen'))}</button>`
+      : `<button class="btn primary" data-ppstep="1">${esc(tr('Anmeldung ändern'))}</button>`
+  } else {
+    const list = photoPp.albums
+    const rows = !list
+      ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+      : list.error
+        ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+        : list.albums.length
+          ? `<div class="rows">${list.albums
+              .map(
+                (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/photoprism/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+                <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}</small></span>
+                <button class="ph-check-box" role="checkbox" aria-checked="${photoPp.chosen.has(a.id)}" data-pp="${esc(a.id)}" aria-label="${esc(a.name)}">${photoPp.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
+              )
+              .join('')}</div>`
+          : `<p class="help" style="margin:0">In PhotoPrism gibt es noch keine Alben.</p>`
+    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in PhotoPrism` : 'Alben in PhotoPrism'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="pp-all">Alle wählen</button>' : ''}</div>
+      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoPp.chosen.size} ${photoPp.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    next = `<button class="btn primary" id="pp-done">Fertig</button>`
+  }
+  // (the first step's way back: out of the assistant - to the service's page when switched on, else to the photos)
+  const back = s === 1 ? `<button class="btn" id="pp-cancel">Abbrechen</button>` : `<button class="btn" id="pp-back">${icon('back', 18)}Zurück</button>`
+  return [
+    `<section class="card wide wz">${bar}<div class="wz-count">${esc(tr(`Schritt ${s} von ${PP_STEPS.length}`))}</div>${body}
+      <div class="wz-foot">${back}<span class="wz-next">${next}</span></div></section>`,
+  ]
+}
+
+function photoPhotoprismTop() {
+  const d = photoPp.data
+  if (!d) return []
+  if (photoPp.step) return photoPhotoprismSteps()
+  const s = d.sync
+  const st = d.settings
+  const status = photoServiceStatus(s, 'Anmeldung abgelehnt')
+  const limit = st.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
+      <div class="ph-nas-state ${status[1]}">${status[0]}</div>
+      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>PhotoPrism nimmt das App-Passwort nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe das App-Passwort unten.</span></div>` : ''}
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob PhotoPrism läuft.</span></div>` : ''}
+      ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr.`))}</span></div>` : ''}
+      ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="pp-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="pp-albums">Alben ändern</button></div></section>`,
+    `<section class="card wide"><h2>Fotos</h2>
+      <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Fotos und Videos kommen beim Anzeigen live von PhotoPrism – ohne Netz sind diese Alben gerade nicht da.</small></span>
+        <label class="switch"><input type="checkbox" id="pp-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="pp-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos aus PhotoPrism erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(st.keepCopy && limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${st.keepCopy && limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      ${st.keepCopy
+        ? `<p class="help">Fotos aus PhotoPrism liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="pp-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === st.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
+        : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
+    `<section class="card wide"><h2>Zugang</h2>
+      <dl class="kv"><div><dt>PhotoPrism-Adresse</dt><dd translate="no">${esc(st.url)}</dd></div><div><dt>Konto</dt><dd translate="no">${esc(st.account || '–')}</dd></div><div><dt>App-Passwort</dt><dd>${esc(tr(st.hasPassword ? 'gesetzt' : 'fehlt'))}</dd></div>${st.certFingerprint ? `<div><dt>Zertifikat</dt><dd>${esc(tr('bestätigt'))}</dd></div>` : ''}</dl>
+      <p class="help">Das App-Passwort wird aus Sicherheitsgründen nicht mehr angezeigt.</p>
+      <div class="btns"><button class="btn" id="pp-login">Anmeldung ändern</button></div></section>`,
+    `<section class="card wide"><div class="navlist"><button class="navrow" id="pp-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Die Alben aus PhotoPrism und ihre Fotos werden von der Box entfernt. In PhotoPrism bleibt alles erhalten.</small></span></button></div></section>`,
+  ]
+}
+
+async function photoPhotoprismLoadAlbums() {
+  photoPp.albums = null
+  const r = await api(`${API}/photos/photoprism/albums`)
+  photoPp.albums = r.ok ? r.body : { error: true }
+}
+
+function mountPhotoPhotoprism(root, page) {
+  const d = photoPp.data
+  window.clearTimeout(photoPp.timer)
+  if (!d) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const take = (body) => {
+    photoPp.data = body
+    photoLib.stale = true
+  }
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/photoprism`, { method: 'POST', body })
+    if (!r.ok) {
+      toast('Nicht gespeichert', 'info')
+      return false
+    }
+    take(r.body)
+    if (done) toast(done)
+    return true
+  }
+  // (what is typed in stays while the assistant is open)
+  const keep = () => {
+    const url = $('#pp-url', root)
+    if (url) photoPp.url = url.value.trim()
+    const pass = $('#pp-pass', root)
+    if (pass) photoPp.password = pass.value
+  }
+  const goStep = (n) => {
+    keep()
+    photoPp.step = n
+    redraw()
+    window.scrollTo(0, 0)
+  }
+  // the assistant
+  $('#pp-cancel', root)?.addEventListener('click', () => (d.connected ? goStep(0) : go('fotos')))
+  $('#pp-back', root)?.addEventListener('click', () => goStep(photoPp.step === 3 && d.connected && !photoPp.test ? 0 : photoPp.step - 1))
+  for (const b of root.querySelectorAll('[data-ppstep]')) b.onclick = () => goStep(Number(b.dataset.ppstep))
+  const test = async (fingerprint) => {
+    photoPp.testing = true
+    photoPp.test = null
+    redraw()
+    const body = { url: photoPp.url, ...(photoPp.password ? { password: photoPp.password } : {}), ...(fingerprint ? { fingerprint } : {}) }
+    const r = await api(`${API}/photos/photoprism/test`, { method: 'POST', body, timeoutMs: 45000 })
+    photoPp.testing = false
+    photoPp.test = r.ok ? r.body : { ok: false, error: 'unreachable' }
+    if (r.ok && r.body.ok) photoPp.fingerprint = r.body.fingerprint || ''
+    photoPp.step = 2
+    redraw()
+  }
+  $('#pp-test', root)?.addEventListener('click', () => {
+    keep()
+    if (!/^(https?:\/\/)?[^\s/:]+(:\d+)?(\/\S*)?$/i.test(photoPp.url)) return toast('Bitte die Adresse von PhotoPrism eintragen, z. B. http://192.168.1.20:2342', 'info')
+    if (!photoPp.password && !photoPpPasswordKept()) return toast('Bitte das App-Passwort eintragen', 'info')
+    // (another address: the certificate confirmed for the one before does not count)
+    if (photoPp.url.replace(/\/+$/, '').toLowerCase() !== String(d.settings.url).toLowerCase()) photoPp.fingerprint = ''
+    void test(photoPp.fingerprint)
+  })
+  $('#pp-trust', root)?.addEventListener('click', (e) => {
+    photoPp.fingerprint = e.currentTarget.dataset.fp
+    void test(photoPp.fingerprint)
+  })
+  $('#pp-retry', root)?.addEventListener('click', () => void test(photoPp.fingerprint))
+  $('#pp-next', root)?.addEventListener('click', async () => {
+    // (the login is saved now - the album list comes from the box with it)
+    const body = { url: photoPp.url, account: photoPp.test?.account ?? '', certFingerprint: photoPp.fingerprint }
+    if (photoPp.password) body.password = photoPp.password
+    if (!(await save(body))) return
+    photoPp.password = ''
+    photoPp.chosen = new Set(photoPp.data.settings.albumIds)
+    photoPp.step = 3
+    redraw()
+    await photoPhotoprismLoadAlbums()
+    redraw()
+  })
+  for (const b of root.querySelectorAll('[data-pp]')) {
+    b.onclick = () => {
+      const id = b.dataset.pp
+      if (photoPp.chosen.has(id)) photoPp.chosen.delete(id)
+      else photoPp.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#pp-all', root)?.addEventListener('click', () => {
+    for (const a of photoPp.albums?.albums ?? []) photoPp.chosen.add(a.id)
+    redraw()
+  })
+  $('#pp-done', root)?.addEventListener('click', async () => {
+    if (!(await save({ enabled: true, albumIds: [...photoPp.chosen] }, photoPp.chosen.size ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
+    photoPp.step = 0
+    photoPp.test = null
+    redraw()
+  })
+  if (photoPp.step) return
+  // the service's page
+  if (d.sync.running) photoPp.timer = window.setTimeout(async () => {
+    if (currentPage()?.id !== page.id || photoPp.step) return
+    const r = await api(`${API}/photos/photoprism`)
+    if (r.ok) take(r.body)
+    redraw()
+  }, 3000)
+  $('#pp-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/photoprism/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    take(r.body)
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  $('#pp-albums', root)?.addEventListener('click', async () => {
+    photoPp.chosen = new Set(d.settings.albumIds)
+    photoPp.test = null
+    photoPp.step = 3
+    redraw()
+    await photoPhotoprismLoadAlbums()
+    redraw()
+  })
+  $('#pp-login', root)?.addEventListener('click', () => {
+    Object.assign(photoPp, { url: d.settings.url, password: '', fingerprint: d.settings.certFingerprint || '', test: null })
+    goStep(1)
+  })
+  $('#pp-keep', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (!(await save({ keepCopy: on }, on ? 'Fotos werden auf der Box gespeichert' : 'Fotos kommen live von PhotoPrism'))) e.target.checked = !on
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = async () => {
+            close()
+            if (await save({ [key]: Number(b.dataset.v) }, 'Gespeichert')) redraw()
+          }
+        }
+      },
+    )
+  $('#pp-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#pp-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#pp-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Verbindung trennen', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} aus PhotoPrism und ihre Fotos werden von der Box entfernt. In PhotoPrism bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/photoprism/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoLib.stale = true
+      toast('PhotoPrism getrennt')
+      go('fotos')
+    }),
+  )
+}
+
+
+/* Bibliothek › Fotos › iCloud (5.1): shared albums of the iPhone's Photos app by their public link - a list of them, a
+   link to add, and the service's page as Immich's (icloud.ts). Not an official interface of Apple: said on the page. */
+const photoIc = { data: null, adding: false, timer: 0 }
+
+async function loadPhotoIcloud() {
+  const r = await api(`${API}/photos/icloud`)
+  if (!r.ok) throw new Error(`photos icloud ${r.status}`)
+  photoIc.data = r.body
+}
+
+const IC_ERRORS = {
+  link: 'Das ist kein Link zu einem geteilten iCloud-Album. Er beginnt mit https://photos.icloud.com/shared/album/',
+  oldLink: 'Das ist ein Link der früheren Art. Öffne das Album auf dem iPhone und teile den Link der öffentlichen Website neu.',
+  gone: 'Unter diesem Link gibt es kein öffentliches Album (mehr). Prüfe, ob „Öffentliche Website“ eingeschaltet ist.',
+  unreachable: 'iCloud ist gerade nicht erreichbar. Prüfe die Internetverbindung der Box.',
+  full: 'Es sind schon 30 Alben verbunden.',
+}
+
+function photoIcloudTop() {
+  const d = photoIc.data
+  if (!d) return []
+  const s = d.sync
+  const st = d.settings
+  const status = photoServiceStatus(s, 'Nicht erreichbar')
+  const limit = st.cacheLimitMb * 1024 * 1024
+  const rows = d.albumList.length
+    ? `<div class="rows">${d.albumList
+        .map(
+          (a) => `<div class="entry"><span class="tile">${icon('share', 18)}</span>
+            <span class="lbl"><b translate="no">${esc(a.title || tr('Geteiltes Album'))}</b><small>${esc(a.count === null ? tr('Wird abgeglichen …') : tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}</small></span>
+            <button class="btn sm" data-ic-remove="${esc(a.key)}" aria-label="${esc(tr('Album entfernen'))}">${icon('close', 16)}</button></div>`,
+        )
+        .join('')}</div>`
+    : `<p class="help" style="margin:0">Noch kein Album verbunden.</p>`
+  return [
+    `<section class="card wide"><h2>Geteilte Alben</h2>
+      ${d.connected ? `<div class="ph-nas-state ${status[1]}">${status[0]}</div>` : ''}
+      ${rows}
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe die Internetverbindung der Box.</span></div>` : ''}
+      ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein Album ist nicht mehr öffentlich oder gelöscht.') : tr(`${s.missing} Alben sind nicht mehr öffentlich oder gelöscht.`))}</span></div>` : ''}
+      ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
+      ${d.connected ? `<div class="btns"><button class="btn" id="ic-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>` : ''}</section>`,
+    `<section class="card wide"><h2>Album hinzufügen</h2>
+      <ol class="ph-howto"><li>Auf dem iPhone in Fotos ein geteiltes Album öffnen.</li><li>Oben auf das Personen-Symbol tippen und „Öffentliche Website“ einschalten.</li><li>„Link teilen“ wählen und den Link hier einfügen.</li></ol>
+      <div class="field"><label for="ic-link">Link zum Album</label><input class="input mono" id="ic-link" placeholder="https://photos.icloud.com/shared/album/…" ${NO_PW_MANAGER} spellcheck="false" autocomplete="off"></div>
+      <div class="btns"><button class="btn primary" id="ic-add" ${photoIc.adding ? 'disabled' : ''}>${icon('plus', 18)}${esc(tr(photoIc.adding ? 'Wird geprüft …' : 'Album hinzufügen'))}</button></div>
+      <div class="note">${icon('info', 18)}<span>Die Box liest das Album so wie die öffentliche Website von Apple. Eine offizielle Schnittstelle dafür gibt es nicht: Ändert Apple etwas, sind diese Alben vielleicht eine Weile nicht da. Jeder mit dem Link kann das Album sehen.</span></div></section>`,
+    ...(d.connected
+      ? [
+          `<section class="card wide"><h2>Fotos</h2>
+      <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Internet. Aus: Fotos und Videos kommen beim Anzeigen live von iCloud – ohne Internet sind diese Alben gerade nicht da.</small></span>
+        <label class="switch"><input type="checkbox" id="ic-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+          `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="ic-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos aus iCloud erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+          `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(st.keepCopy && limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${st.keepCopy && limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      ${st.keepCopy
+        ? `<p class="help">Fotos aus iCloud liegen in Anzeigegröße auf der Box und sind auch ohne Internet da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="ic-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === st.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
+        : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
+          `<section class="card wide"><div class="navlist"><button class="navrow" id="ic-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Alle Alben aus iCloud und ihre Fotos werden von der Box entfernt. In iCloud bleibt alles erhalten.</small></span></button></div></section>`,
+        ]
+      : []),
+  ]
+}
+
+function mountPhotoIcloud(root, page) {
+  const d = photoIc.data
+  window.clearTimeout(photoIc.timer)
+  if (!d) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const take = (body) => {
+    photoIc.data = body
+    photoLib.stale = true
+  }
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/icloud`, { method: 'POST', body })
+    if (!r.ok) {
+      toast('Nicht gespeichert', 'info')
+      return false
+    }
+    take(r.body)
+    if (done) toast(done)
+    return true
+  }
+  // (an album just added, a sync running: the page asks again)
+  if (d.sync.running || d.albumList.some((a) => a.count === null)) photoIc.timer = window.setTimeout(async () => {
+    if (currentPage()?.id !== page.id) return
+    const r = await api(`${API}/photos/icloud`)
+    if (r.ok) take(r.body)
+    redraw()
+  }, 3000)
+  $('#ic-add', root)?.addEventListener('click', async () => {
+    const link = $('#ic-link', root).value.trim()
+    if (!link) return toast('Bitte den Link zum Album einfügen', 'info')
+    photoIc.adding = true
+    redraw()
+    const r = await api(`${API}/photos/icloud/add`, { method: 'POST', body: { link }, timeoutMs: 60000 })
+    photoIc.adding = false
+    if (r.ok) take(r.body)
+    if (r.ok && r.body.ok) toast(tr(`„${r.body.title || tr('Geteiltes Album')}“ hinzugefügt – Abgleich gestartet`))
+    else toast(tr(IC_ERRORS[r.body?.error] ?? IC_ERRORS.unreachable), 'info')
+    redraw()
+  })
+  for (const b of root.querySelectorAll('[data-ic-remove]')) {
+    b.onclick = () => {
+      const a = d.albumList.find((x) => x.key === b.dataset.icRemove)
+      confirmSheet('Album entfernen', tr(`„${a?.title || tr('Geteiltes Album')}“ und seine Fotos werden von der Box entfernt. In iCloud bleibt alles erhalten.`), async () => {
+        if (await save({ remove: b.dataset.icRemove }, 'Album entfernt')) redraw()
+      })
+    }
+  }
+  $('#ic-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/icloud/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    take(r.body)
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  $('#ic-keep', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (!(await save({ keepCopy: on }, on ? 'Fotos werden auf der Box gespeichert' : 'Fotos kommen live von iCloud'))) e.target.checked = !on
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = async () => {
+            close()
+            if (await save({ [key]: Number(b.dataset.v) }, 'Gespeichert')) redraw()
+          }
+        }
+      },
+    )
+  $('#ic-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#ic-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#ic-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Verbindung trennen', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} aus iCloud und ihre Fotos werden von der Box entfernt. In iCloud bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/icloud/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoLib.stale = true
+      toast('iCloud getrennt')
+      go('fotos')
+    }),
+  )
+}
+
+async function loadPhotoAlbum() {
+  let id = photoLib.albumId
+  if (!id) {
+    try {
+      id = sessionStorage.getItem('mupi-photo-album')
+    } catch {}
+  }
+  if (!id) throw new Error('no album')
+  const [a, o] = await Promise.all([api(`${API}/photos/albums/${id}`), photoLib.overview && !photoLib.stale ? null : api(`${API}/photos/overview`)])
+  if (!a.ok) throw new Error(`album ${a.status}`)
+  if (o?.ok) Object.assign(photoLib, { overview: o.body, stale: false })
+  photoLib.albumId = id
+  photoLib.album = a.body
+  // (a NAS or Immich album: the sync's state for its card "Quelle")
+  if (a.body.source === 'nas') {
+    const nas = await api(`${API}/photos/nas`)
+    if (nas.ok) photoLib.nas = nas.body
+  }
+  if (PHOTO_SERVICE[a.body.source]) {
+    const sv = await api(`${API}/photos/${a.body.source}`)
+    if (sv.ok) photoLib[a.body.source] = sv.body
+  }
+}
+
+function photoAlbumTop() {
+  const a = photoLib.album
+  if (!a) return []
+  const upload = a.source === 'upload'
+  const sel = photoLib.selecting
+  const n = photoLib.chosen.size
+  const grid = a.assets.length
+    ? `<div class="ph-grid${sel ? ' selecting' : ''}">${a.assets
+        .map(
+          (x) => `<button class="ph-tile${photoLib.chosen.has(x.id) ? ' chosen' : ''}" data-asset="${esc(x.id)}" aria-label="${esc(tr('Foto'))}" ${sel ? `aria-pressed="${photoLib.chosen.has(x.id)}"` : ''}>
+            ${x.ready === false ? `<span class="ph-prep">${icon('sync', 18)}<small>${esc(tr('Wird vorbereitet'))}</small></span>` : `<img src="${esc(photoFile(a.id, x.id, 's'))}" alt="" loading="lazy">`}${x.kind === 'video' && x.ready !== false ? `<span class="ph-video-pill">▶ ${esc(clipLength(x.duration))}</span>` : ''}${x.id === a.cover ? `<span class="ph-cover-pill">${esc(tr('Titelbild'))}</span>` : ''}${sel ? `<span class="ph-check">${icon('check', 16)}</span>` : ''}</button>`,
+        )
+        .join('')}</div>`
+    : `<p class="help" style="margin:0">Noch keine Fotos in diesem Album.</p>`
+  return [
+    `<section class="card wide">${photoAlbumRow(a, { sub: a.display ? 'Am Display sichtbar' : 'Am Display ausgeblendet' })}
+      ${upload ? `<div class="btns"><button class="btn primary" id="ph-add">${icon('plus', 18)}Fotos hinzufügen</button>${a.assets.length ? `<button class="btn" id="ph-select">${icon('check', 18)}${sel ? 'Fertig' : 'Auswählen'}</button>` : ''}</div>` : ''}</section>`,
+    a.source === 'nas' ? photoNasAlbumCard(a) : PHOTO_SERVICE[a.source] ? photoServiceAlbumCard(a) : '',
+    upload
+      ? `<section class="card wide"><h2>Album</h2><div class="navlist">
+          <button class="navrow" id="ph-rename"><span class="tile">${icon('text', 18)}</span><span class="lbl"><b>Umbenennen</b></span><span class="chev">${icon('chevron', 18)}</span></button>
+          <button class="navrow" id="ph-delete"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Album löschen</b></span></button></div></section>`
+      : '',
+    `<section class="card wide"><div class="card-head"><h2>${esc(sel ? tr(`${n} ausgewählt`) : (a.videos ? tr(`${a.assets.length} Fotos und Videos`) : tr(`${a.assets.length} Fotos`)))}</h2>${sel ? '<button class="btn sm" id="ph-all">Alle</button>' : ''}</div>${grid}</section>`,
+    sel
+      ? `<div class="ph-actionbar wide"><button class="btn" id="ph-sel-cancel">Abbrechen</button>${n === 1 ? '<button class="btn" id="ph-sel-cover">Titelbild</button>' : ''}<button class="btn danger" id="ph-sel-delete" ${n ? '' : 'disabled'}>${esc(tr(`Löschen (${n})`))}</button></div>`
+      : '',
+  ]
+}
+
+// A NAS album: only looked at here - its folder, the last sync, "Jetzt abgleichen"
+function photoNasAlbumCard(a) {
+  const n = photoLib.nas
+  const running = !!n?.sync.running
+  const last = n?.sync.lastSync ? relTime(n.sync.lastSync) : '–'
+  return `<section class="card wide"><h2>Quelle</h2>
+    <div class="note">${icon('info', 18)}<span>Dieses Album ist ein Ordner auf dem NAS. Fotos dort hinzufügen oder löschen. Die Box gleicht den Ordner regelmäßig ab.</span></div>
+    <dl class="kv"><div><dt>Dienst</dt><dd>NAS</dd></div><div><dt>Ordner</dt><dd translate="no">${esc(a.ref ?? '–')}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
+    <div class="btns"><button class="btn" id="ph-nas-sync" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>
+    <div class="navlist">${navRow('fotonas', 'NAS-Ordner', 'Ordner, Abgleich, Zwischenspeicher', 'server')}</div></section>`
+}
+
+// An album of a photo service (Immich, Synology Photos): only looked at here - kept on the box or shown live, the last
+// sync, "Jetzt abgleichen"
+// the photo services: their name, page, icon, the note on an album of theirs and how live is said
+const PHOTO_SERVICE = {
+  immich: { name: 'Immich', page: 'fotoimmich', icon: 'grid', live: 'Live von Immich', note: 'Dieses Album wird in Immich verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
+  synology: { name: 'Synology Photos', page: 'fotosynology', icon: 'image', live: 'Live vom NAS', note: 'Dieses Album wird in Synology Photos verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
+  nextcloud: { name: 'Nextcloud', page: 'fotonextcloud', icon: 'cloud', live: 'Live von der Nextcloud', note: 'Dieses Album wird in Nextcloud verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
+  photoprism: { name: 'PhotoPrism', page: 'fotophotoprism', icon: 'prism', live: 'Live von PhotoPrism', note: 'Dieses Album wird in PhotoPrism verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
+  icloud: { name: 'iCloud', page: 'fotoicloud', icon: 'share', live: 'Live von iCloud', note: 'Dieses Album wird auf dem iPhone verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
+}
+
+function photoServiceAlbumCard(a) {
+  const svc = PHOTO_SERVICE[a.source]
+  const sv = photoLib[a.source]
+  const running = !!sv?.sync.running
+  const last = sv?.sync.lastSync ? relTime(sv.sync.lastSync) : '–'
+  return `<section class="card wide"><h2>Quelle</h2>
+    <div class="note">${icon('info', 18)}<span>${esc(tr(svc.note))}</span></div>
+    <dl class="kv"><div><dt>Dienst</dt><dd>${esc(svc.name)}</dd></div><div><dt>Fotos</dt><dd>${esc(tr(a.live ? svc.live : 'Auf der Box gespeichert'))}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
+    <div class="btns"><button class="btn" id="ph-service-sync" data-source="${esc(a.source)}" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>
+    <div class="navlist">${navRow(svc.page, svc.name, 'Alben, Abgleich, Zugang', svc.icon)}</div></section>`
+}
+
+let photoPrepTimer = 0
+// the open full view: shown anew when a clip in it is made meanwhile (null while it is closed)
+let photoViewerRefresh = null
+function mountPhotoAlbum(root, page) {
+  const a = photoLib.album
+  window.clearTimeout(photoPrepTimer)
+  if (!a) return
+  if (a.assets.some((x) => x.ready === false)) {
+    // while clips are being made: their state every 5 s, taken into this album (an answer for an album left meanwhile
+    // is dropped); the open full view shows a clip made meanwhile, the page is drawn anew when no sheet is over it
+    let stale = false
+    const ask = () => {
+      photoPrepTimer = window.setTimeout(async () => {
+        if (currentPage()?.id !== page.id || photoLib.album !== a || photoLib.albumId !== a.id) return
+        const r = await api(`${API}/photos/albums/${a.id}`)
+        if (currentPage()?.id !== page.id || photoLib.album !== a || photoLib.albumId !== a.id) return
+        if (r.ok) {
+          const now = new Map(r.body.assets.map((y) => [y.id, y]))
+          const changed = new Set()
+          for (const x of a.assets) {
+            const y = now.get(x.id)
+            if (!y || (x.ready === false && y.ready !== false)) changed.add(x.id)
+            if (y && x.ready === false && y.ready !== false) Object.assign(x, y)
+          }
+          // (a clip that could not be made: gone)
+          if (a.assets.some((x) => !now.has(x.id))) a.assets = a.assets.filter((x) => now.has(x.id))
+          if (changed.size) {
+            stale = true
+            photoViewerRefresh?.(changed)
+          }
+        }
+        if (stale && $('#sheet').hidden) return renderPage(page, false)
+        if (a.assets.some((x) => x.ready === false) || stale) ask()
+      }, 5000)
+    }
+    ask()
+  }
+  $('#ph-service-sync', root)?.addEventListener('click', async (e) => {
+    const source = e.currentTarget.dataset.source
+    e.currentTarget.disabled = true
+    const r = await api(`${API}/photos/${source}/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    photoLib[source] = r.body
+    toast('Abgleich gestartet')
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  })
+  $('#ph-nas-sync', root)?.addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true
+    const r = await api(`${API}/photos/nas/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    photoLib.nas = r.body
+    toast('Abgleich gestartet')
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  })
+  const title = $('#topbar .title')
+  if (title) {
+    title.textContent = a.title
+    title.setAttribute('translate', 'no')
+  }
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const reload = async () => {
+    photoLib.overview = null
+    await loadPhotoAlbum().catch(() => undefined)
+    redraw()
+  }
+  for (const s of root.querySelectorAll('[data-show]')) s.onchange = () => photoShowSwitch(s, reload)
+  $('#ph-add', root)?.addEventListener('click', () => openPhotoUpload(a.id))
+  $('#ph-select', root)?.addEventListener('click', () => {
+    photoLib.selecting = !photoLib.selecting
+    photoLib.chosen.clear()
+    redraw()
+  })
+  $('#ph-all', root)?.addEventListener('click', () => {
+    for (const x of a.assets) photoLib.chosen.add(x.id)
+    redraw()
+  })
+  $('#ph-sel-cancel', root)?.addEventListener('click', () => {
+    photoLib.selecting = false
+    photoLib.chosen.clear()
+    redraw()
+  })
+  const setCover = async (assetId) => {
+    const r = await api(`${API}/photos/albums/${a.id}`, { method: 'POST', body: { cover: assetId } })
+    if (!r.ok) return toast('Nicht gespeichert', 'info')
+    toast('Titelbild geändert')
+    photoLib.selecting = false
+    photoLib.chosen.clear()
+    reload()
+  }
+  const deleteAssets = (ids) =>
+    confirmSheet('Löschen', tr(`${ids.length} ${ids.length === 1 ? 'Foto' : 'Fotos'} löschen? Sie werden von der Box gelöscht. Das lässt sich nicht rückgängig machen.`), async () => {
+      const r = await api(`${API}/photos/albums/${a.id}/assets/delete`, { method: 'POST', body: { ids } })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      toast(tr(`${ids.length} ${ids.length === 1 ? 'Foto' : 'Fotos'} gelöscht`))
+      photoLib.selecting = false
+      photoLib.chosen.clear()
+      reload()
+    })
+  $('#ph-sel-cover', root)?.addEventListener('click', () => setCover([...photoLib.chosen][0]))
+  $('#ph-sel-delete', root)?.addEventListener('click', () => deleteAssets([...photoLib.chosen]))
+  for (const t of root.querySelectorAll('[data-asset]')) {
+    t.onclick = () => {
+      const id = t.dataset.asset
+      if (!photoLib.selecting) return photoViewer(a, a.assets.findIndex((x) => x.id === id), { setCover, deleteAssets })
+      if (photoLib.chosen.has(id)) photoLib.chosen.delete(id)
+      else photoLib.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#ph-rename', root)?.addEventListener('click', () =>
+    openSheet(
+      `<h2>Umbenennen</h2><div class="field"><label for="ph-name">Name des Albums</label><input class="input" id="ph-name" maxlength="40" value="${esc(a.title)}" autocomplete="off"><small>So heißt das Album am Display.</small></div>
+       <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Speichern</button></div>`,
+      (sheet, close) => {
+        sheet.querySelector('[data-close]').onclick = close
+        sheet.querySelector('[data-ok]').onclick = async () => {
+          const title = sheet.querySelector('#ph-name').value.trim()
+          if (!title) return toast('Bitte einen Namen für das Album eintragen', 'info')
+          const r = await api(`${API}/photos/albums/${a.id}`, { method: 'POST', body: { title } })
+          if (!r.ok) return toast('Nicht gespeichert', 'info')
+          close()
+          toast('Album umbenannt')
+          reload()
+        }
+      },
+    ),
+  )
+  $('#ph-delete', root)?.addEventListener('click', () =>
+    confirmSheet('Album löschen', tr(`Album „${a.title}“ löschen? ${a.count} ${a.count === 1 ? 'Foto wird' : 'Fotos werden'} von der Box gelöscht. Das lässt sich nicht rückgängig machen.`), async () => {
+      const r = await api(`${API}/photos/albums/${a.id}/delete`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      toast('Album gelöscht')
+      photoLib.overview = null
+      go('fotos')
+    }),
+  )
+}
+
+// The app's full view of a picture: swiping (or the arrows) to the next, "Als Titelbild" and "Löschen" - nothing else
+const clipLength = (sec) => {
+  const n = Math.max(0, Math.round(Number(sec) || 0))
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
+}
+
+function photoViewer(a, start, { setCover, deleteAssets }) {
+  let i = Math.max(0, start)
+  openSheet(
+    `<div class="ph-view"><img id="ph-view-img" alt=""><video id="ph-view-vid" controls playsinline preload="metadata" hidden></video><p class="ph-view-prep" hidden>${esc(tr('Wird vorbereitet'))}</p><button class="icon-btn soft ph-prev" aria-label="${esc(tr('Voriges Bild'))}">${icon('back', 18)}</button><button class="icon-btn soft ph-next" aria-label="${esc(tr('Nächstes Bild'))}">${icon('chevron', 18)}</button></div>
+     <p class="help" id="ph-view-n" style="margin:0;text-align:center"></p>
+     <div class="btns">${a.source === 'upload' ? '<button class="btn danger" data-del>Löschen</button>' : ''}<button class="btn" data-cover>Als Titelbild</button><button class="btn primary" data-close>Schließen</button></div>`,
+    (sheet, close) => {
+      const img = sheet.querySelector('#ph-view-img')
+      const vid = sheet.querySelector('#ph-view-vid')
+      const prep = sheet.querySelector('.ph-view-prep')
+      let shownId = null
+      const show = () => {
+        const x = a.assets[i]
+        shownId = x.id
+        const clip = x.kind === 'video'
+        vid.pause()
+        vid.hidden = !clip || x.ready === false
+        img.hidden = clip
+        prep.hidden = !(clip && x.ready === false)
+        if (clip && x.ready !== false) {
+          vid.poster = photoFile(a.id, x.id, 'f')
+          vid.src = photoFile(a.id, x.id, 'v')
+        } else if (!clip) img.src = photoFile(a.id, x.id, 'f')
+        // (a clip still being made has no picture for the album yet)
+        const cover = sheet.querySelector('[data-cover]')
+        if (cover) cover.disabled = x.ready === false
+        sheet.querySelector('#ph-view-n').textContent = `${i + 1} / ${a.assets.length}`
+      }
+      const step = (by) => {
+        i = (i + by + a.assets.length) % a.assets.length
+        show()
+      }
+      sheet.querySelector('.ph-prev').onclick = () => step(-1)
+      sheet.querySelector('.ph-next').onclick = () => step(1)
+      let x0 = null
+      img.addEventListener('pointerdown', (e) => (x0 = e.clientX))
+      img.addEventListener('pointerup', (e) => {
+        if (x0 !== null && Math.abs(e.clientX - x0) > 50) step(e.clientX < x0 ? 1 : -1)
+        x0 = null
+      })
+      sheet.querySelector('[data-close]').onclick = () => {
+        vid.pause()
+        close()
+      }
+      // (a clip made while it is open: shown when it is the one on the screen; one taken out: the place stays in the list)
+      photoViewerRefresh = (changed) => {
+        if (!a.assets.length) return close()
+        if (i >= a.assets.length) i = a.assets.length - 1
+        if (a.assets[i].id !== shownId || changed.has(shownId)) show()
+        else sheet.querySelector('#ph-view-n').textContent = `${i + 1} / ${a.assets.length}`
+      }
+      sheet.querySelector('[data-cover]').onclick = () => {
+        close()
+        setCover(a.assets[i].id)
+      }
+      sheet.querySelector('[data-del]')?.addEventListener('click', () => {
+        close()
+        deleteAssets([a.assets[i].id])
+      })
+      show()
+    },
+    () => {
+      photoViewerRefresh = null
+      const v = document.querySelector('#ph-view-vid')
+      if (!v) return
+      v.pause()
+      v.removeAttribute('src')
+      v.load()
+    },
+  )
+}
+
+/* Fotos (5.1, backend-api app-api/photos): Einstellungen › Fotos switches the photo display on (off by default) and
+   holds how it shows them - albums and slideshow, videos, the screensaver. While it is off nothing else about photos
+   shows anywhere; switching it off keeps albums, photos and connections. */
+
+const photoState = { data: null }
+const PHOTO_TEMPO = [
+  ['Langsam · 8 s', 8],
+  ['Mittel · 5 s', 5],
+  ['Schnell · 3 s', 3],
+]
+const PHOTO_ORDER = [
+  ['Gemischt', 'shuffle'],
+  ['Neueste zuerst', 'newest'],
+  ['Nach Aufnahmedatum', 'taken'],
+]
+
+async function loadPhotoSettings() {
+  const r = await api(`${API}/photos/settings`)
+  if (!r.ok) throw new Error(`photos ${r.status}`)
+  setPhotoState(r.body)
+}
+function setPhotoState(body) {
+  photoState.data = body
+  const s = body.settings
+  state.values.set('phSlideStart', s.startAsSlideshow)
+  state.values.set('phTempo', (PHOTO_TEMPO.find(([, v]) => v === s.slideshowSeconds) ?? PHOTO_TEMPO[1])[0])
+  state.values.set('phOrder', (PHOTO_ORDER.find(([, v]) => v === s.order) ?? PHOTO_ORDER[0])[0])
+  state.values.set('phVideos', s.showVideos)
+  state.values.set('phSaver', s.screensaver.enabled)
+  state.values.set('phSaverMin', s.screensaver.afterMinutes)
+  state.values.set('phSaverPlay', s.screensaver.duringPlayback)
+}
+
+// what a program being installed, or one that could not be, means for the parents
+function photoToolNotes(d) {
+  const notes = []
+  const t = d.tools ?? {}
+  const busy = (x, what) => x?.installing && notes.push(`<div class="status-line"><span class="dot"></span><span>${esc(tr(what))}</span></div>`)
+  busy(t.heif, 'Die Box richtet die Umwandlung von iPhone-Fotos (HEIC) ein …')
+  if (d.settings.showVideos) busy(t.video, 'Die Box richtet die Wiedergabe von Videos ein (ffmpeg, braucht Internet) …')
+  // (missing and not being installed: a try that failed now, or one before a restart, or the update's - the state of
+  // the box counts, not only what this server tried)
+  const missing = (x) => x && !x.installed && !x.installing
+  const failed = missing(t.heif) || (d.settings.showVideos && missing(t.video))
+  if (failed) {
+    notes.push(
+      `<div class="note warn">${icon('info', 18)}<span>${esc(tr('Ein Programm für die Fotoanzeige ließ sich nicht installieren (kein Internet?). Fotos ohne HEIC und ohne Video gehen trotzdem.'))}</span></div><div class="btns"><button class="btn" id="ph-install">Erneut versuchen</button></div>`,
+    )
+  }
+  return notes.join('')
+}
+
+function photoSettingsTop() {
+  const d = photoState.data
+  if (!d) return []
+  if (!d.settings.enabled) {
+    return [
+      `<section class="card photo-off"><div class="photo-hero"><span class="photo-hero-ic">${icon('image', 30)}</span><h2>Fotos am Display</h2>
+        <p class="help">Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich, Synology Photos, Nextcloud, PhotoPrism oder iCloud.</p></div>
+        <div class="row"><span class="lbl"><b>Fotoanzeige</b><small>Standardmäßig aus.</small></span><label class="switch"><input type="checkbox" id="ph-on" role="switch" aria-label="Fotoanzeige"><span></span></label></div></section>`,
+      `<div class="note wide">${icon('info', 18)}<span>Nach dem Einschalten erscheinen „Fotos“ in der Bibliothek und die Bildzeit unter Spielzeit. Am Display kommt der Reiter „Fotos“ dazu, sobald ein Album freigegeben ist.</span></div>`,
+      `<div class="note wide">${icon('lock', 18)}<span>Fotos bleiben auf der Box in deinem Heimnetz. Es gibt keine Links zum Teilen.</span></div>`,
+    ]
+  }
+  return [
+    `<section class="card wide"><div class="row"><span class="lbl"><b>Fotoanzeige</b><small>Fotos am Display, Bibliothek › Fotos und Bildzeit sind eingeschaltet.</small></span><label class="switch"><input type="checkbox" id="ph-on" role="switch" checked aria-label="Fotoanzeige"><span></span></label></div>${photoToolNotes(d)}</section>`,
+  ]
+}
+
+function photoSettingsSections() {
+  if (!photoState.data?.settings.enabled) return []
+  return [
+    {
+      title: 'Alben und Diashow',
+      col: 1,
+      items: [
+        { type: 'toggle', label: 'Album startet als Diashow', key: 'phSlideStart', help: 'Für die Kleinsten: ohne Bildübersicht direkt los.' },
+        { type: 'seg', label: 'Tempo der Diashow', key: 'phTempo', options: PHOTO_TEMPO.map(([l]) => l) },
+        { type: 'select', label: 'Reihenfolge', key: 'phOrder', options: PHOTO_ORDER.map(([l]) => l), help: 'Gemischt · Neueste zuerst · Nach Aufnahmedatum' },
+      ],
+    },
+    {
+      title: 'Videos',
+      col: 2,
+      items: [{ type: 'toggle', label: 'Videos anzeigen', key: 'phVideos', help: 'Clips laufen im Album mit Ton, in der Diashow stumm. Live-Fotos zeigen nur das Standbild.' }],
+    },
+    {
+      title: 'Bildschirmschoner',
+      col: 2,
+      items: [
+        { type: 'toggle', label: 'Bildschirmschoner', key: 'phSaver', help: 'Zeigt eine Diashow, wenn an der Box eine Weile niemand etwas tut.' },
+        { type: 'slider', label: 'Startet nach', key: 'phSaverMin', min: 1, max: 30, step: 1, unit: ' Min.', dep: 'phSaver' },
+        { type: 'toggle', label: 'Auch während der Wiedergabe', key: 'phSaverPlay', help: 'Läuft auch, wenn ein Hörspiel spielt.', dep: 'phSaver' },
+        {
+          type: 'note',
+          text: 'Der Bildschirmschoner endet, wenn das Display wie gewohnt ausschaltet (Display & Bedienung › Display). Er zählt nicht als Bildzeit und läuft nicht in Ruhezeiten.',
+          dep: 'phSaver',
+        },
+      ],
+    },
+  ]
+}
+
+async function savePhotoSettings(patch, done = 'Gespeichert') {
+  const r = await api(`${API}/photos/settings`, { method: 'POST', body: patch })
+  if (!r.ok || !r.body?.settings) {
+    toast('Nicht gespeichert', 'info')
+    return false
+  }
+  setPhotoState(r.body)
+  toast(done)
+  return true
+}
+
+function mountPhotoSettings(root, page) {
+  const again = () => currentPage()?.id === page.id && renderPage(page, false)
+  $('#ph-on', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (on) {
+      if (await savePhotoSettings({ enabled: true }, 'Fotoanzeige eingeschaltet')) again()
+      else e.target.checked = false
+      return
+    }
+    // (switching off asks first: the display loses its tab, the app its photo pages - nothing is deleted)
+    e.target.checked = true
+    const yes = await ask(
+      'Fotoanzeige ausschalten?',
+      'Alben, Fotos und Verbindungen bleiben auf der Box gespeichert. Sie sind am Display und in der App ausgeblendet, bis du die Fotoanzeige wieder einschaltest. Der Abgleich mit NAS und Immich pausiert.',
+      'Ausschalten',
+    )
+    if (yes && (await savePhotoSettings({ enabled: false }, 'Fotoanzeige ausgeschaltet'))) again()
+  })
+  $('#ph-install', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/install`, { method: 'POST', body: {} })
+    if (r.ok && r.body?.settings) setPhotoState(r.body)
+    again()
+  })
+  // a program being installed: its state again in a while (the note goes when it is there)
+  const t = photoState.data?.tools ?? {}
+  if (t.heif?.installing || t.video?.installing) {
+    every(5000, async () => {
+      const r = await api(`${API}/photos/settings`)
+      if (!r.ok || !r.body?.settings) return
+      const was = JSON.stringify(photoState.data?.tools)
+      setPhotoState(r.body)
+      if (JSON.stringify(r.body.tools) !== was) again()
+    })
+  }
+}
+
+async function changePhotoSetting(key, v, page) {
+  const patch =
+    key === 'phSlideStart'
+      ? { startAsSlideshow: v }
+      : key === 'phTempo'
+        ? { slideshowSeconds: (PHOTO_TEMPO.find(([l]) => l === v) ?? PHOTO_TEMPO[1])[1] }
+        : key === 'phOrder'
+          ? { order: (PHOTO_ORDER.find(([l]) => l === v) ?? PHOTO_ORDER[0])[1] }
+          : key === 'phVideos'
+            ? { showVideos: v }
+            : key === 'phSaver'
+              ? { screensaver: { enabled: v } }
+              : key === 'phSaverMin'
+                ? { screensaver: { afterMinutes: Number(v) } }
+                : key === 'phSaverPlay'
+                  ? { screensaver: { duringPlayback: v } }
+                  : null
+  if (!patch) return
+  const ok = await savePhotoSettings(patch)
+  // (videos on: ffmpeg is installed - its note shows on the page)
+  if (ok && key === 'phVideos' && v && currentPage()?.id === page.id) renderPage(page, false)
+  // (not saved: the switch goes back)
+  return ok
 }
 
 /* TIDAL (backend-api app-api/tidal.ts, unofficial: python-tidal): switched on with a hint, the sign-in with a code */
@@ -11796,7 +14658,7 @@ function extFormHtml(e, fields) {
       }
       if (it.type === 'roster') {
         // a list the extension keeps itself (the users of the box, say): to look at, to add to, to take from and to choose from
-        return `<div class="field"><label>${esc(it.label)}</label><ul class="ext-roster" data-xroster="${index}" aria-live="polite"></ul><div class="row" style="gap:8px"><input class="input" type="text" maxlength="24" data-xradd="${index}" placeholder="Name" autocomplete="off" aria-label="${esc(it.label)}" ${NO_PW_MANAGER}><button type="button" class="btn" data-xraddgo="${index}">Anlegen</button></div>${help}</div>`
+        return `<div class="field"><label>${esc(it.label)}</label><ul class="ext-roster" data-xroster="${index}" aria-live="polite"></ul><div class="row" style="gap:8px"><input class="input" type="text" maxlength="24" data-xradd="${index}" placeholder="Name" autocomplete="off" aria-label="${esc(it.label)}" ${NO_PW_MANAGER}><button type="button" class="btn" data-xraddgo="${index}">Anlegen</button></div>${it.addFrom ? `<div class="field ext-roster-from"><label for="xrfrom-${index}">Bibliothek</label><select class="input" id="xrfrom-${index}" data-xrfrom="${index}"><option value="">Leere Bibliothek</option></select></div>` : ''}<div data-xrtrash="${index}"></div>${help}</div>`
       }
       if (type(it) === 'boolean') {
         return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
@@ -12129,6 +14991,10 @@ function extFormMount(sheet, e, fields, saved) {
     if (item.type !== 'roster') return
     const list = sheet.querySelector(`[data-xroster="${index}"]`)
     const input = sheet.querySelector(`[data-xradd="${index}"]`)
+    const from = sheet.querySelector(`[data-xrfrom="${index}"]`)
+    const bin = sheet.querySelector(`[data-xrtrash="${index}"]`)
+    // (the entries of an entry's library, when the list names them)
+    const countText = (n) => (Number.isInteger(n) ? tr(`${n} ${n === 1 ? 'Eintrag' : 'Einträge'}`) : '')
     let busy = false
     const post = (route, body) => api(route, { method: 'POST', body, timeoutMs: 20000 })
     const draw = async () => {
@@ -12179,6 +15045,11 @@ function extFormMount(sheet, e, fields, saved) {
         const name = document.createElement('span')
         name.className = 'ext-roster-name'
         name.textContent = u.name
+        if (countText(u.count)) {
+          const small = document.createElement('small')
+          small.textContent = countText(u.count)
+          name.append(small)
+        }
         li.append(name)
         if (u.id === r.body.current) {
           li.classList.add('current')
@@ -12200,11 +15071,64 @@ function extFormMount(sheet, e, fields, saved) {
         del.textContent = 'Löschen'
         del.setAttribute('aria-label', `${u.name}: Löschen`)
         del.disabled = u.id === r.body.current || r.body.users.length < 2
-        del.onclick = () => remove(u)
+        del.onclick = () => remove(u, r.body)
         li.append(del)
         list.append(li)
       }
+      // (a new one as a copy: whose library - the choice stays while the list is drawn again)
+      if (from) {
+        const was = from.value
+        from.textContent = ''
+        from.append(new Option(tr('Leere Bibliothek'), ''))
+        for (const u of r.body.users) from.append(new Option(`${tr(`Kopie der Bibliothek von „${u.name}“`)}${countText(u.count) ? ` (${countText(u.count)})` : ''}`, u.id))
+        from.value = r.body.users.some((u) => u.id === was) ? was : ''
+      }
+      // (the trash: deleted ones, restored within the days the list names)
+      if (bin) {
+        bin.textContent = ''
+        const gone = item.restore && Array.isArray(r.body.trash) ? r.body.trash : []
+        if (gone.length) {
+          const head = document.createElement('label')
+          head.textContent = tr('Papierkorb')
+          const ul = document.createElement('ul')
+          ul.className = 'ext-roster ext-roster-trash'
+          for (const t of gone) {
+            const li = document.createElement('li')
+            if (/^#[0-9a-fA-F]{6}$/.test(String(t.color ?? ''))) {
+              const dot = document.createElement('span')
+              dot.className = 'ext-roster-dot'
+              dot.style.background = t.color
+              li.append(dot)
+            }
+            const name = document.createElement('span')
+            name.className = 'ext-roster-name'
+            name.textContent = t.name
+            const small = document.createElement('small')
+            small.textContent = [tr(`gelöscht am ${new Date(t.deletedAt).toLocaleDateString(LOCALE)}`), countText(t.count)].filter(Boolean).join(' · ')
+            name.append(small)
+            const back = document.createElement('button')
+            back.type = 'button'
+            back.className = 'btn'
+            back.textContent = tr('Wiederherstellen')
+            back.setAttribute('aria-label', `${t.name}: ${tr('Wiederherstellen')}`)
+            back.onclick = () => restore(t)
+            li.append(name, back)
+            ul.append(li)
+          }
+          const hint = document.createElement('small')
+          hint.className = 'help'
+          hint.textContent = tr(`Gelöschte bleiben ${r.body.trashDays ?? 30} Tage im Papierkorb, dann sind sie endgültig weg.`)
+          bin.append(head, ul, hint)
+        }
+      }
       return r.body
+    }
+    const restore = async (t) => {
+      if (busy) return
+      const r = await post(item.restore, { id: t.id })
+      if (!r.ok) return toast(r.body?.error === 'full' ? 'Es gibt schon so viele Einträge, wie möglich sind' : r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+      toast(tr(`„${r.body?.name ?? t.name}“ wiederhergestellt`))
+      draw()
     }
     const choose = async (u) => {
       if (busy) return
@@ -12230,9 +15154,13 @@ function extFormMount(sheet, e, fields, saved) {
       }
       setTimeout(wait, 8000)
     }
-    const remove = async (u) => {
+    const remove = async (u, body) => {
       if (busy) return
-      if (!(await ask('Benutzer löschen', `„${u.name}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.`, 'Löschen'))) return
+      const n = Number.isInteger(u.count) ? ` (${countText(u.count)})` : ''
+      const text = item.restore
+        ? tr(`„${u.name}“ kommt mit seinen Einstellungen und seiner Bibliothek${n} in den Papierkorb. Dort lässt er sich ${body?.trashDays ?? 30} Tage lang wiederherstellen.`)
+        : tr(`„${u.name}“ wird mit seinen Einstellungen und seiner Bibliothek${n} gelöscht. Das lässt sich nicht rückgängig machen.`)
+      if (!(await ask('Benutzer löschen', text, 'Löschen'))) return
       const r = await post(item.remove, { id: u.id })
       if (!r.ok) toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
       else toast('Gelöscht')
@@ -12241,9 +15169,10 @@ function extFormMount(sheet, e, fields, saved) {
     const add = async () => {
       const name = input.value.trim()
       if (!name || busy) return
-      const r = await post(item.add, { name })
+      const r = await post(item.add, { name, ...(from?.value ? { from: from.value } : {}) })
       if (!r.ok) return toast(r.body?.error === 'exists' ? 'Den Namen gibt es schon' : r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
       input.value = ''
+      if (from) from.value = ''
       toast('Angelegt')
       draw()
     }
@@ -12411,10 +15340,18 @@ const CONTROLLERS = {
   spielzeit: {
     load: loadCaps,
     // ("Display aus nach" in the steps of its own page)
-    sections: (page) => page.sections.map((sec) => (sec.title === 'Ausschalten' ? { ...sec, items: sec.items.map((it) => (it.key === 'dispOff' ? { ...it, stops: DISPLAY_OFF_STOPS } : it)) } : sec)),
+    sections: (page) => {
+      const list = page.sections.map((sec) => (sec.title === 'Ausschalten' ? { ...sec, items: sec.items.map((it) => (it.key === 'dispOff' ? { ...it, stops: DISPLAY_OFF_STOPS } : it)) } : sec))
+      if (!caps.photos) return list
+      // the picture time after the daily limits; the quiet times say that they hold the photos too
+      const at = list.findIndex((sec) => sec.title === 'Tageslimits')
+      list.splice(at < 0 ? list.length : at + 1, 0, photoTimeSection())
+      return list.map((sec) => (sec.title === 'Ruhezeiten' ? { ...sec, help: `${sec.help} ${tr('Während einer Ruhezeit sind auch die Fotos gesperrt.')}` } : sec))
+    },
     mount(root) {
       drawRing()
       drawSleep()
+      drawPhotoTime()
       bonusButton(root)
       every(20000, refreshPlaytime)
     },
@@ -12441,6 +15378,19 @@ const CONTROLLERS = {
           return saveCaps({ playtimeLimit: { graceMaxMinutes: graceMaxOf(v) } }, `Höchstens ${v} weiter`)
         case 'quietGraceMax':
           return saveCaps({ quietHours: { graceMaxMinutes: graceMaxOf(v) } }, `Höchstens ${v} weiter`)
+        case 'phMode': {
+          const mode = PHOTO_MODE.find(([l]) => l === v)?.[1] ?? 'separate'
+          const ok = await savePhotoTime({ limitMode: mode }, mode === 'shared' ? 'Bildzeit zählt auf die Hörzeit' : 'Bildzeit mit eigenem Limit')
+          // (the card shows what belongs to the mode)
+          if (ok) renderPage(currentPage(), false)
+          return ok
+        }
+        case 'phLimitOn':
+          return savePhotoTime({ limitEnabled: v }, v ? 'Bildzeit-Limit an' : 'Bildzeit ohne Grenze')
+        case 'phWarn':
+          return savePhotoTime({ warnMinutes: PHOTO_WARN.find(([l]) => l === v)?.[1] ?? 5 })
+        case 'phIdle':
+          return savePhotoTime({ idlePauseSeconds: PHOTO_IDLE.find(([l]) => l === v)?.[1] ?? 120 })
         case 'resetHour': {
           const h = Number(v)
           // (an emptied field is no "0:00")
@@ -12452,6 +15402,11 @@ const CONTROLLERS = {
           }
           return saveCaps({ playtimeLimit: { resetHour: h } }, `Neuer Tag beginnt um ${h}:00 Uhr`)
         }
+      }
+      const phDay = /^phl([0-6])$/.exec(key)
+      if (phDay) {
+        const i = Number(phDay[1])
+        return savePhotoTime({ dailyMinutes: { [DAY_KEYS[i]]: Number(v) } }, `${DAY_LONG[i]}: ${Number(v) === 0 ? tr('keine Bilder') : `${v} min`}`)
       }
       const day = /^lim([0-6])$/.exec(key)
       if (day) {
@@ -12482,6 +15437,9 @@ const CONTROLLERS = {
       sheet(arg, _label, page) {
         if (arg === 'rule-new') openRule(null, page)
       },
+      phExtend: () => photoTimeAction('extend', '+10 Minuten Bildzeit für heute'),
+      phFree: () => photoTimeAction('free', 'Bildzeit heute frei'),
+      phReset: () => confirmSheet('Bildzeit zurücksetzen?', 'Die heute schon angeschauten Minuten zählen nicht mehr, die Bildzeit beginnt von vorn.', () => photoTimeAction('reset', 'Bildzeit zurückgesetzt')),
     },
     byLabel: {
       'Sperren aufheben'() {
@@ -13826,6 +16784,16 @@ const CONTROLLERS = {
   telegram: { load: loadTelegram, top: tgTop, sections: () => [], mount: mountTelegram },
   homeassistant: { load: loadHa, top: haTop, sections: () => [], mount: mountHa },
   tidal: { load: loadTidal, top: tidalTop, sections: () => [], mount: mountTidal },
+  fotos: { load: loadPhotoOverview, top: photoOverviewTop, sections: () => [], mount: mountPhotoOverview, ownNav: true },
+  fotoalbum: { load: loadPhotoAlbum, top: photoAlbumTop, sections: () => [], mount: mountPhotoAlbum },
+  fotoupload: { load: loadPhotoUpload, top: photoUploadTop, sections: () => [], mount: mountPhotoUpload },
+  fotonas: { load: loadPhotoNas, top: photoNasTop, sections: () => [], mount: mountPhotoNas },
+  fotoimmich: { load: loadPhotoImmich, top: photoImmichTop, sections: () => [], mount: mountPhotoImmich },
+  fotosynology: { load: loadPhotoSynology, top: photoSynologyTop, sections: () => [], mount: mountPhotoSynology },
+  fotonextcloud: { load: loadPhotoNextcloud, top: photoNextcloudTop, sections: () => [], mount: mountPhotoNextcloud },
+  fotophotoprism: { load: loadPhotoPhotoprism, top: photoPhotoprismTop, sections: () => [], mount: mountPhotoPhotoprism },
+  fotoicloud: { load: loadPhotoIcloud, top: photoIcloudTop, sections: () => [], mount: mountPhotoIcloud },
+  'g-fotos': { load: loadPhotoSettings, top: photoSettingsTop, sections: photoSettingsSections, mount: mountPhotoSettings, change: changePhotoSetting },
   mqtt: {
     load: loadMqtt,
     // the connection (broker and login), the box's names in MQTT, how often, Home Assistant - saved together

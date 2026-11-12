@@ -1,6 +1,6 @@
 import { AsyncPipe, NgTemplateOutlet } from '@angular/common'
 import { HttpClient } from '@angular/common/http'
-import { AfterViewInit, Component, DestroyRef, ElementRef, effect, inject, OnInit, signal, ViewChild } from '@angular/core'
+import { AfterViewInit, Component, DestroyRef, ElementRef, effect, inject, OnInit, signal, untracked, ViewChild } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { FormsModule } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
@@ -69,6 +69,7 @@ import { OutputSwitchComponent } from '../output-switch/output-switch.component'
 import { PlayerCmds, PlayerService } from '../player.service'
 import type { PlaytimePlayState } from '../playtime.model'
 import { PlaytimeService } from '../playtime.service'
+import { TileTimeService } from '../tile-time.service'
 import { SpotifyService } from '../spotify.service'
 
 /**
@@ -348,6 +349,11 @@ export class PlayerPage implements OnInit, AfterViewInit {
   private idleTicks = 0
   private isLeaving = false
   private stoppedFromOutside = false
+  // A day's limit per tile (5.1): its tile is used up - nothing was started, the page goes back at once (no STOP: what
+  // played on in the background goes on); and the page is on the screen (a refusal of the player sends it back)
+  private tileUsedUp = false
+  private onPage = false
+  private readonly tileTime = inject(TileTimeService)
   private contextSeenFor = ''
   private contextGone = 0
   private albumEnded = false
@@ -403,6 +409,21 @@ export class PlayerPage implements OnInit, AfterViewInit {
     this.local$ = this.mediaService.local$
     // the listening-time chip lies above every page: hidden while the "Hören mit" window dims the player
     effect(() => document.body.classList.toggle('kp-out-open', this.outputOpen()))
+    // The player refused a start or a play/next of this page: its tile's day's limit is used up (5.1) - back to the
+    // list (TileTimeService shows the bar)
+    let seenRefusals = this.tileTime.refusals()
+    effect(() => {
+      const n = this.tileTime.refusals()
+      untracked(() => {
+        if (n === seenRefusals) return
+        seenRefusals = n
+        if (!this.onPage || this.isLeaving) return
+        this.isLeaving = true
+        this.playing = false
+        this.updateProgression = false
+        this.leavePage('the player refused it: its tile is used up for today')
+      })
+    })
 
     // navState is read once into a local because the external-playback flag
     // (Phase 19 Stufe B) is read from the same state object further down.
@@ -759,6 +780,16 @@ export class PlayerPage implements OnInit, AfterViewInit {
   }
 
   async ionViewWillEnter() {
+    // its tile's day's limit is used up (opened from "Weiterhören", an album of the artist, the tile ran out
+    // meanwhile): nothing starts, the bar says so
+    this.tileUsedUp = !this.isExternalPlayback && this.tileTime.blocked(this.media)
+    if (this.tileUsedUp) {
+      this.tileTime.showOver(this.media)
+      this.updateProgression = false
+      this.leavePage('its tile is used up for today')
+      return
+    }
+    this.onPage = true
     this.updateProgression = true
     this.leftByPage = false
     // (whatever ran on in the background is on this page again - or is replaced by what starts now)
@@ -800,6 +831,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
   }
 
   ionViewWillLeave() {
+    this.onPage = false
+    if (this.tileUsedUp) return
     // (left within the first seconds: shuffle must not be switched on after the page is gone - the next audiobook
     // played in random order then)
     clearTimeout(this.shuffleTimer)

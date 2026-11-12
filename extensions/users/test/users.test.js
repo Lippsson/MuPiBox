@@ -189,3 +189,107 @@ test('every user has their own colour, the first one nobody has; a user from bef
   fs.writeFileSync(path.join(root, 'ext-data', 'users.json'), JSON.stringify({ current: 'main', users: [{ id: 'main', name: 'Standard' }, { id: 'x1', name: 'X', color: 'red' }] }))
   assert.deepEqual(store.state().users.map((u) => u.color), ['#FFFFFF', '#FF0000'])
 })
+
+test('a switch that cannot keep the one who goes (the card full) changes nothing', async () => {
+  const { store, put, read, has, root } = box()
+  put('library/data.json', '[{"name":"Mein Album"}]')
+  const mia = store.add('Mia').id
+  await store.select(mia)
+  put('library/data.json', '[{"name":"Mias Album"}]')
+  // (the folder kept for "main" before; then copying fails - as with a full card)
+  const before = read('ext-data/profiles/main/library/data.json')
+  const copy = fs.copyFileSync
+  fs.copyFileSync = (from, to) => {
+    if (String(from).includes(path.join(root, 'library'))) throw Object.assign(new Error('no space'), { code: 'ENOSPC' })
+    return copy(from, to)
+  }
+  try {
+    await assert.rejects(store.select('main'), /no space/)
+  } finally {
+    fs.copyFileSync = copy
+  }
+  assert.equal(store.state().current, mia)
+  assert.equal(read('library/data.json'), '[{"name":"Mias Album"}]')
+  assert.equal(read('ext-data/profiles/main/library/data.json'), before)
+  assert.equal(has('ext-data/.staging'), false)
+})
+
+test('a switch that fails while the one who comes is loaded puts the one who goes back', async () => {
+  const { store, put, read } = box()
+  put('library/data.json', '[{"name":"Mein Album"}]')
+  const mia = store.add('Mia').id
+  put(`ext-data/profiles/${mia}/library/data.json`, '[{"name":"Mias Album"}]')
+  const copy = fs.copyFileSync
+  let n = 0
+  fs.copyFileSync = (from, to) => {
+    // (the first file of Mia's library into the live one fails)
+    if (String(from).includes(path.join('profiles', mia, 'library')) && n++ === 0) throw Object.assign(new Error('io'), { code: 'EIO' })
+    return copy(from, to)
+  }
+  try {
+    await assert.rejects(store.select(mia), /io/)
+  } finally {
+    fs.copyFileSync = copy
+  }
+  assert.equal(store.state().current, 'main')
+  assert.equal(read('library/data.json'), '[{"name":"Mein Album"}]')
+})
+
+test('the way of switching at the display, and how long a tile is held', () => {
+  assert.equal(_test.switchMode({ switchMode: 'hold' }), 'hold')
+  assert.equal(_test.switchMode({ switchMode: 'app' }), 'app')
+  assert.equal(_test.switchMode({ switchMode: 'x' }), 'free')
+  assert.equal(_test.switchMode(undefined), 'free')
+  assert.equal(_test.holdSeconds({ mupibox: { settingsAccessTimer: 5 } }), 5)
+  assert.equal(_test.holdSeconds({ mupibox: { settingsAccessTimer: 60 } }), 10)
+  assert.equal(_test.holdSeconds({}), 3)
+})
+
+test('a new user can start with a copy of the library of another one - the live one for the current user', async () => {
+  const { store, put, read } = box()
+  put('library/data.json', '[{"name":"A"},{"name":"B"}]')
+  put('library/resume.json', '[{"id":1}]')
+  const mia = store.add('Mia', 'main').id
+  assert.equal(read(`ext-data/profiles/${mia}/library/data.json`), '[{"name":"A"},{"name":"B"}]')
+  assert.equal(read(`ext-data/profiles/${mia}/library/offline_data.json`), '[]\n')
+  // (a copy of one who is not the current one: from their folder)
+  put(`ext-data/profiles/${mia}/library/data.json`, '[{"name":"C"}]')
+  const ben = store.add('Ben', mia).id
+  assert.equal(read(`ext-data/profiles/${ben}/library/data.json`), '[{"name":"C"}]')
+  assert.deepEqual(store.add('Lea', 'nobody'), { error: 'from' })
+  assert.equal(store.state().users.length, 3)
+  assert.deepEqual(store.counts(), { main: 2, [mia]: 1, [ben]: 1 })
+})
+
+test('a deleted user goes to the trash and comes back with their library; after 30 days it is gone', async () => {
+  const { store, put, has } = box()
+  put('library/data.json', '[{"name":"Mein Album"}]')
+  const mia = store.add('Mia', 'main').id
+  await store.select(mia)
+  // ("Standard" deleted, as it happened: their library is in the trash, not gone)
+  assert.deepEqual(store.remove('main'), { ok: true })
+  assert.equal(has('ext-data/profiles/main'), false)
+  const [t] = store.trash()
+  assert.equal(t.id, 'main')
+  assert.equal(t.name, 'Standard')
+  assert.equal(t.count, 1)
+  // (a new user took the name meanwhile: the one restored gets a number)
+  store.add('Standard')
+  const back = store.restore('main')
+  assert.deepEqual(back, { ok: true, name: 'Standard (2)' })
+  assert.equal(store.trash().length, 0)
+  // (its colour went to the new one meanwhile: it gets one nobody has)
+  const colors = store.state().users.map((u) => u.color)
+  assert.equal(new Set(colors).size, colors.length)
+  assert.ok(store.state().users.some((u) => u.id === 'main'))
+  assert.equal(has('ext-data/profiles/main/library/data.json'), true)
+  assert.equal(has('ext-data/profiles/main/deleted.json'), false)
+  // (deleted again, and 31 days later: gone for good)
+  store.remove('main')
+  const note = JSON.parse(fs.readFileSync(path.join(store._trashOf('main'), 'deleted.json'), 'utf8'))
+  note.deletedAt -= 31 * 24 * 60 * 60 * 1000
+  fs.writeFileSync(path.join(store._trashOf('main'), 'deleted.json'), JSON.stringify(note))
+  assert.equal(store.trash().length, 0)
+  assert.equal(has('ext-data/trash/main'), false)
+  assert.deepEqual(store.restore('main'), { error: 'id' })
+})

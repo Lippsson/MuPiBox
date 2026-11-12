@@ -18,6 +18,11 @@ import { HaPairingOverlayComponent } from './ha-pairing/ha-pairing-overlay.compo
 import { DisplayTestOverlayComponent } from './display-test/display-test-overlay.component'
 import { ParentAccessBarComponent } from './parent-access/parent-access-bar.component'
 import { ParentAccessService } from './parent-access/parent-access.service'
+import { PhotoScreensaverComponent } from './photos/photo-screensaver.component'
+import { PhotoScreensaverService } from './photos/photo-screensaver.service'
+import { PhotoTimeChipComponent } from './photos/photo-time-chip.component'
+import { PhotoTimeWarningComponent } from './photos/photo-time-warning.component'
+import { TileTimeNoticeComponent } from './tile-time-notice.component'
 import { PlaytimeBlockedOverlayComponent } from './playtime-blocked-overlay/playtime-blocked-overlay.component'
 import { PlaytimeChipComponent } from './playtime-chip/playtime-chip.component'
 import { buildResumeMedia } from './resume-builder'
@@ -40,6 +45,10 @@ import { WinampShellComponent } from './winamp/winamp-shell.component'
     DisplayTestOverlayComponent,
     ParentAccessBarComponent,
     WinampShellComponent,
+    PhotoScreensaverComponent,
+    PhotoTimeChipComponent,
+    PhotoTimeWarningComponent,
+    TileTimeNoticeComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -55,6 +64,8 @@ export class AppComponent {
   protected readonly parentAccess = inject(ParentAccessService)
   // the Winamp theme on a 1920 x 480 display: the player of a Winamp skin on the left half of the screen
   protected readonly winamp = inject(WinampService)
+  // the photo display's screensaver (5.1)
+  protected readonly saver = inject(PhotoScreensaverService)
 
   // Track previous playtime state to detect normal -> grace/blocked transitions.
   // 'unknown' on first tick avoids spurious save before we know the baseline.
@@ -94,6 +105,12 @@ export class AppComponent {
     // the display reports "on" again: the next time it goes off the wake tap is swallowed again
     effect(() => {
       if (!this.monitorReportedOff()) this.wakeReleased.set(false)
+    })
+    // (the display went off: the screensaver ends with it, and does not start while it is off)
+    effect(() => {
+      const off = this.monitorReportedOff()
+      this.saver.monitorOff.set(off)
+      if (off && this.saver.active()) this.saver.end()
     })
     this.watchWakeTaps()
     this.playtimeBlocked = computed(() => {

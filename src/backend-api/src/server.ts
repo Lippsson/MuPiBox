@@ -43,6 +43,9 @@ import { startSpotifyLoginWatch } from './app-api/spotify-auth-age'
 import { startTlsWatch } from './app-api/tls'
 import { startWeeklySummary } from './app-api/weekly-summary'
 import { startInstallationStatistics } from './app-api/telemetry'
+import { registerPhotoDisplayRoutes } from './app-api/photos/albums'
+import type { PhotoNasAccess } from './app-api/photos/nas'
+import { applyPhotoTimeAction } from './app-api/photos/settings'
 import { startNightDim } from './app-api/night-dim'
 import { bootConfigPath } from './app-api/boot-paths'
 import { startSpeech } from './speech'
@@ -53,7 +56,7 @@ import { type IncomingMessage, request as httpRequest } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { SUDO_BACKUP_SNIPPET, backupBeforeWrite } from './file-backup'
 import { readEmbeddedPicture } from './embedded-cover'
-import { acquireLock, releaseLock, staleReason } from './file-lock'
+import { acquireLock, DATA_LOCK, RESUME_LOCK, releaseLock, staleReason } from './file-lock'
 import { type AlbumFillDeps, fillSpotifyAlbums, isBareAlbum, startSpotifyAlbumFill } from './spotify-album-fill'
 import { coverHidden } from './hidden-covers'
 import { OnlineCovers } from './online-covers'
@@ -272,8 +275,8 @@ const monitorFile = `${configBasePath}/monitor.json`
 const albumstopFile = `${LIBRARY_DIR}/albumstop.json`
 const mupihat = '/tmp/mupihat.json'
 const playtimeFile = '/tmp/playtime.json'
-const dataLock = '/tmp/.data.lock'
-const resumeLock = '/tmp/.resume.lock'
+const dataLock = DATA_LOCK
+const resumeLock = RESUME_LOCK
 
 // RSS feed cache: persisted on disk (not /tmp) so cached podcast covers and feed
 // data survive a reboot - in cache/, which an update leaves alone (a missing picture is fetched again, see
@@ -2713,6 +2716,34 @@ app.post('/api/playtime/limit', localOrElternSession, async (req, res) => {
 // POST /api/quiethours/now  body: { minutes?: number }
 // Sets `playbackOverride.forceBlockUntil = now + minutes*60_000`. Forces playback
 // off immediately (kid sees the override overlay). Default 60 min.
+// POST /api/phototime  body: { action: 'extend' | 'free', minutes?: number }
+// Today's photo time (5.1, Spielzeit › Bildzeit) for the Telegram bot: as the app's /api/app/photos/time, from the box
+// itself (the bot) or with the parents' sign-in. "extend" adds minutes for today, "free" lifts the limit for today;
+// the player takes it within a second.
+app.post('/api/phototime', localOrElternSession, async (req, res) => {
+  const action = req.body?.action
+  if (action !== 'extend' && action !== 'free') {
+    res.status(400).json({ error: 'action must be extend or free' })
+    return
+  }
+  let error: string | null = null
+  try {
+    await updateMupiboxConfig((cfg) => {
+      error = applyPhotoTimeAction(cfg as Record<string, unknown>, action, req.body?.minutes)
+    })
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/phototime failed:`, err)
+    res.status(500).json({ error: 'internal error' })
+    return
+  }
+  if (error) {
+    res.status(400).json({ error })
+    return
+  }
+  console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/phototime ${action}${action === 'extend' ? ` +${req.body?.minutes} min` : ''}`)
+  res.status(200).json({ ok: true })
+})
+
 app.post('/api/quiethours/now', localOrElternSession, async (req, res) => {
   const minutes = req.body?.minutes !== undefined ? Number(req.body.minutes) : 60
   if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440) {
@@ -5507,6 +5538,56 @@ async function nasPathSelected(raw: string): Promise<boolean> {
 // (cover.png) into that folder with the box's NAS login - only in the folders the parents selected. A cover there
 // before is kept as cover-previous.*, the box's own cover-online.jpg goes (it would come first); when the upload fails
 // the cover before comes back. An account without write permission: 'denied'.
+// The NAS for the photo display's NAS folders (5.1, app-api/photos/nas.ts): the same access as the audio folders, its
+// own choice of folders. A listing (undefined: no NAS signed in, or away), a file into a local one, whether one is set up.
+const photoNas: PhotoNasAccess = {
+  async list(folder) {
+    let files: NasFileEntry[] | undefined
+    try {
+      files = await withNasSession((s) => nasListFilesLive(s, folder))
+    } catch (err) {
+      // (the NAS answered with an error for this folder: thrown on; no answer at all - it is away)
+      if (err instanceof NasApiError) throw err
+      return undefined
+    }
+    return files?.map((f) => ({ name: f.name, path: f.path, isdir: f.isdir, size: f.additional?.size, version: f.version }))
+  },
+  async download(file, dest, maxBytes, signal) {
+    const session = await getActiveNasSession()
+    if (!session) return false
+    let response: Response
+    try {
+      response = await nasFetch(session, nasUrl(session, file), { headers: { Authorization: session.auth }, signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]) })
+    } catch {
+      return false
+    }
+    const size = Number(response.headers.get('content-length'))
+    if (response.status !== 200 || !response.body || (Number.isFinite(size) && size > maxBytes)) {
+      await response.body?.cancel().catch(() => undefined)
+      return false
+    }
+    const out = await fs.promises.open(dest, 'wx')
+    let written = 0
+    try {
+      for await (const chunk of Readable.fromWeb(response.body as import('node:stream/web').ReadableStream)) {
+        const piece = chunk as Buffer
+        written += piece.length
+        if (written > maxBytes) throw new Error('too big')
+        await out.write(piece)
+      }
+      return true
+    } catch {
+      return false
+    } finally {
+      await out.close().catch(() => undefined)
+    }
+  },
+  info() {
+    const c = nasSettings(getMupiboxConfigSync())
+    return { connected: Boolean(c?.address && c.account && c.password && c.rememberMe), name: c?.address ?? null }
+  },
+}
+
 async function writeNasCover(folder: string, bytes: Buffer, ext: '.jpg' | '.png'): Promise<'ok' | 'not_selected' | 'offline' | 'denied' | 'failed'> {
   if (!(await nasPathSelected(folder))) return 'not_selected'
   const session = await getActiveNasSession()
@@ -8436,6 +8517,9 @@ app.get('/api/library/children', async (req, res) => {
 })
 
 // Cover images (and audio) of library folders, with Range support.
+// The photo display's albums for the box's display (only with the display switched on - app-api/photos/albums.ts)
+registerPhotoDisplayRoutes(app, { getMupiboxConfig: () => getMupiboxConfigSync() })
+
 app.get('/api/library/file', async (req, res) => {
   const rel = libraryRel(typeof req.query.path === 'string' ? req.query.path : '')
   const contentType = rel ? nasContentTypes[path.extname(rel).toLowerCase()] : undefined
@@ -8615,6 +8699,9 @@ app.use(
     nasCover: writeNasCover,
     nasSelected: nasPathSelected,
     podcastOffline,
+    photoNas,
+    // (the Immich key kept as the NAS password: encrypted with this box's own key)
+    photoSecret: { encrypt: nasEncrypt, decrypt: nasDecrypt },
     localLibrary: {
       root: libraryRoot,
       categories: libraryCategories,

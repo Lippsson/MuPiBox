@@ -1495,6 +1495,14 @@ rm -f /tmp/mupibox-update-failed
 	if [ -x /usr/local/bin/mupibox/tidal_setup.sh ] && [ "$(/usr/bin/jq -r '.tidal.enabled // false' /etc/mupibox/mupiboxconfig.json 2>/dev/null)" = "true" ]; then
 		/usr/local/bin/mupibox/tidal_setup.sh on >&3 2>&3 || echo "## WARNING: TIDAL could not be set up - the app's switch tries again ##" >&3 2>&3
 	fi
+	# The photo display switched on in the app: its programs (heif-convert; ffmpeg with videos on) - a reinstalled box
+	# has them again. Without internet now: the app tries again (Einstellungen › Fotos).
+	if [ -x /usr/local/bin/mupibox/photos_setup.sh ] && [ "$(/usr/bin/jq -r '.photos.enabled // false' /etc/mupibox/mupiboxconfig.json 2>/dev/null)" = "true" ]; then
+		/usr/local/bin/mupibox/photos_setup.sh heif >&3 2>&3 || echo "## WARNING: heif-convert could not be installed - the app tries again ##" >&3 2>&3
+		if [ "$(/usr/bin/jq -r '.photos.showVideos // false' /etc/mupibox/mupiboxconfig.json 2>/dev/null)" = "true" ]; then
+			/usr/local/bin/mupibox/photos_setup.sh video >&3 2>&3 || echo "## WARNING: ffmpeg could not be installed - the app tries again ##" >&3 2>&3
+		fi
+	fi
 	after=$(date +%s)
 	echo -e "## Restarting services  ##  finished after $((after - $before)) seconds" >&3 2>&3
 	STEP=$(($STEP + 1))

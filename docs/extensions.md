@@ -193,6 +193,7 @@ Die Nummer 2 (Wetter) bringt zum Display `api.overlay`, `api.fetchApi` und im Ma
 - `host.updateConfig(mutate)` (`hostApi` 4) – ändert die Konfiguration der Box (`mupiboxconfig.json`) unter ihrer Sperre: `mutate(cfg)` ändert das Objekt, das Ergebnis wird gespeichert. Gehört zu den Dingen, die nur eine Extension tun darf, der man vertraut.
 - `host.paths` (`hostApi` 4) – `{ library, data, extensions }`: wo die Box ihre Bibliothek, ihre Daten und die Extensions hält
 - `host.restartServices()` (`hostApi` 4) – startet Player und Server neu und lädt danach das Display; der API-Teil läuft im Server, also ist das das Letzte, was er tut
+- `host.lockLibrary()` (`hostApi` 4) – nimmt die Sperren der Bibliothek (`data.json` und die Fortsetzen-Liste), wartet bis etwa 10 s und gibt eine Funktion zurück, die sie wieder freigibt (`null`: nicht zu bekommen). Solange sie gehalten werden, schreiben die App und der Smart Sync nicht in die Bibliothek. Wer danach `host.restartServices()` aufruft, behält sie: Sie enden mit dem Prozess des Servers.
 - `host.apiUrl` (`hostApi` 5) – die Adresse des Servers selbst (für Routen des Kerns, etwa `/api/audio-output`)
 - `host.onSettings(fn)` (`hostApi` 5) – `fn(settings)` wird aufgerufen, nachdem die Einstellungen der Extension gespeichert wurden; so stellt
   sich ein API-Teil um, ohne dass der Server neu startet (der Kern wartet höchstens drei Sekunden auf die Antwort)
