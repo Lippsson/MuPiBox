@@ -10,8 +10,19 @@ import { KmThemeService } from '../theme/km-theme.service'
 import { PhotoTimeService } from './photo-time.service'
 import { type PhotoAlbumSummary, PhotosService } from './photos.service'
 
+// The stacks are 236 px wide and three of them fill the 5" display (800 px): one every 800 / 3 px. On a wider display the row
+// shows more of them, so the distance of two stacks stays the one of the 5" display (at least 244 px: the stack and a gap).
+const PITCH = 800 / 3
+const PITCH_MIN = 244
+/** How many albums a row of the given width shows: three on 800 px and below, more on a wider display */
+export function albumsPerView(width: number): number {
+  if (!Number.isFinite(width) || width <= 0) return 3
+  return Math.max(3, Math.min(Math.round(width / PITCH), Math.floor(width / PITCH_MIN)))
+}
+
 /**
- * The tab "Fotos" on the start page (handoff §4): the albums as stacks of pictures, three a screen, swiped sideways
+ * The tab "Fotos" on the start page (handoff §4): the albums as stacks of pictures, three a screen (more on a wider display
+ * than the 5" one, the same distance), swiped sideways
  * as the albums of the other tabs (a Swiper row with their scrollbar); a tap on a stack opens the album. Colours only
  * from the theme (--km-*), with plain ones for the old themes.
  */
@@ -71,7 +82,7 @@ import { type PhotoAlbumSummary, PhotosService } from './photos.service'
     } @else {
     <!-- the row as in the other tabs (swiper.component.html): three a screen, swiped freely, with the same scrollbar
          (Einstellungen › Aussehen: hidden or "Durchgehend") -->
-    <swiper-container class="pa" slides-per-view="3" [class.sb-full]="fullScrollbar()" [class.pa-few]="albums().length < 3" [attr.scrollbar]="!hideScrollbar()" scrollbar-hide="false" scrollbar-draggable="true" scrollbar-drag-size="auto" scrollbar-snap-on-release="true" free-mode="false" css-mode="true"
+    <swiper-container class="pa" [attr.slides-per-view]="perView()" [class.sb-full]="fullScrollbar()" [class.pa-few]="albums().length < perView()" [attr.scrollbar]="!hideScrollbar()" scrollbar-hide="false" scrollbar-draggable="true" scrollbar-drag-size="auto" scrollbar-snap-on-release="true" free-mode="false" css-mode="true"
       speed="900" touch-ratio="0.5" slides-per-group="1" resistance="true" resistance-ratio="0.85">
         @for (a of albums(); track a.id) {
           <!-- the stack opens the album, the name under it is read out (as the names in the other tabs) -->
@@ -479,12 +490,18 @@ export class PhotoAlbumsComponent {
   protected readonly hideScrollbar = signal(false)
   protected readonly fullScrollbar = signal(false)
 
+  // how many stacks a screen shows (more on a wide display, the same distance as on the 5" one)
+  protected readonly perView = signal(albumsPerView(window.innerWidth))
+
   constructor() {
     // (the tab left within the seconds of a note or a name read out: its timers go with it)
     inject(DestroyRef).onDestroy(() => {
       window.clearTimeout(this.hintTimer)
       window.clearTimeout(this.speakingTimer)
     })
+    const onResize = () => this.perView.set(albumsPerView(window.innerWidth))
+    window.addEventListener('resize', onResize)
+    inject(DestroyRef).onDestroy(() => window.removeEventListener('resize', onResize))
     inject(HttpClient)
       .get<MupiboxConfig>(`${environment.backend.apiUrl}/config`)
       .subscribe({
