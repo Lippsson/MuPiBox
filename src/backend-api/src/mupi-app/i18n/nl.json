@@ -3259,7 +3259,6 @@
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox is een vrij project dat in de vrije tijd wordt ontwikkeld. Als je de box leuk vindt, is het project blij met een kleine donatie.",
  "Zur Spendenseite": "Naar de donatiepagina",
  "Reihenfolge der Uhren": "Volgorde van de meters",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Pak een meter bij de greep en verplaats hem naar een andere plek. Het display toont altijd twee meters naast elkaar.",
  "Verschieben": "Verplaatsen",
  "Luftfeuchte": "Luchtvochtigheid",
  "Windrichtung": "Windrichting",
@@ -3879,5 +3878,6 @@
  "Motive": "Onderwerpen",
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Niets gevonden: de herkenning van Synology Photos (personen, plaatsen, onderwerpen) staat uit voor het account van de box, of er is nog niets met een naam.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Slimme albums veranderen vanzelf: de box synchroniseert ze zoals alle andere.",
- "{} Foto": "{} foto"
+ "{} Foto": "{} foto",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Pak een meter bij de greep en verplaats hem naar een andere plek. Een klein scherm toont twee meters naast elkaar, een breed scherm zoveel als er passen."
 }

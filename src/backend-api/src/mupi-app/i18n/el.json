@@ -3259,7 +3259,6 @@
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "Το MuPiBox είναι ένα ελεύθερο έργο που αναπτύσσεται στον ελεύθερο χρόνο. Αν σου αρέσει το κουτί, το έργο θα χαρεί για μια μικρή δωρεά.",
  "Zur Spendenseite": "Στη σελίδα δωρεών",
  "Reihenfolge der Uhren": "Σειρά των οργάνων",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Πιάσε ένα όργανο από τη λαβή και μετακίνησέ το σε άλλη θέση. Η οθόνη δείχνει πάντα δύο όργανα δίπλα-δίπλα.",
  "Verschieben": "Μετακίνηση",
  "Luftfeuchte": "Υγρασία",
  "Windrichtung": "Κατεύθυνση ανέμου",
@@ -3879,5 +3878,6 @@
  "Motive": "Θέματα",
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Δεν βρέθηκε τίποτα: η αναγνώριση του Synology Photos (άτομα, τοποθεσίες, θέματα) είναι απενεργοποιημένη για τον λογαριασμό του κουτιού ή δεν υπάρχει ακόμη τίποτα με όνομα.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Τα έξυπνα άλμπουμ αλλάζουν μόνα τους: το κουτί τα συγχρονίζει όπως όλα τα άλλα.",
- "{} Foto": "{} φωτογραφία"
+ "{} Foto": "{} φωτογραφία",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Πιάσε ένα όργανο από τη λαβή και μετακίνησέ το σε άλλη θέση. Μια μικρή οθόνη δείχνει δύο καντράν δίπλα-δίπλα, μια πλατιά όσα χωρούν."
 }

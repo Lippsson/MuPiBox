@@ -1,7 +1,7 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
   "hostApi": 3,
   "resources": {},
@@ -208,7 +208,7 @@
       {
         "key": "order",
         "label": "Reihenfolge der Uhren",
-        "help": "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.",
+        "help": "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.",
         "type": "order",
         "choices": [
           {

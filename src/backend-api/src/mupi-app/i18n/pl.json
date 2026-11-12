@@ -3259,7 +3259,6 @@
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox to wolny projekt rozwijany w wolnym czasie. Jeśli podoba ci się box, projekt ucieszy się z niewielkiej darowizny.",
  "Zur Spendenseite": "Do strony darowizn",
  "Reihenfolge der Uhren": "Kolejność wskaźników",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Chwyć wskaźnik za uchwyt i przesuń go w inne miejsce. Wyświetlacz zawsze pokazuje dwa wskaźniki obok siebie.",
  "Verschieben": "Przesuń",
  "Luftfeuchte": "Wilgotność",
  "Windrichtung": "Kierunek wiatru",
@@ -3879,5 +3878,6 @@
  "Motive": "Motywy",
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Nic nie znaleziono: rozpoznawanie w Synology Photos (osoby, miejsca, motywy) jest wyłączone dla konta skrzynki albo nic jeszcze nie ma nazwy.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Inteligentne albumy zmieniają się same: skrzynka synchronizuje je jak wszystkie inne.",
- "{} Foto": "{} zdjęcie"
+ "{} Foto": "{} zdjęcie",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Chwyć wskaźnik za uchwyt i przesuń go w inne miejsce. Mały wyświetlacz pokazuje dwa zegary obok siebie, szeroki tyle, ile się zmieści."
 }

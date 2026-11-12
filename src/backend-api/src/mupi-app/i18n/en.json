@@ -3275,7 +3275,6 @@
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox is a free project developed in spare time. If you like the box, the project is happy about a small donation.",
  "Zur Spendenseite": "To the donation page",
  "Reihenfolge der Uhren": "Order of the dials",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Take a dial by its grip and move it to another place. The display always shows two dials side by side.",
  "Verschieben": "Move",
  "Luftfeuchte": "Humidity",
  "Windrichtung": "Wind direction",
@@ -3895,5 +3894,6 @@
  "Motive": "Subjects",
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Nothing found: the recognition of Synology Photos (people, places, subjects) is off for the box's account, or there is nothing with a name yet.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Smart albums change by themselves: the box syncs them like all the others.",
- "{} Foto": "{} photo"
+ "{} Foto": "{} photo",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Take a dial by its grip and move it to another place. A small display shows two dials side by side, a wide one as many as fit."
 }

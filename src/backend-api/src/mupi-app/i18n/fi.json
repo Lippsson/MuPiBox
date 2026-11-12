@@ -3259,7 +3259,6 @@
  "MuPiBox ist ein freies Projekt, das in der Freizeit entwickelt wird. Wenn dir die Box gefällt, freut sich das Projekt über eine kleine Spende.": "MuPiBox on vapaa projekti, jota kehitetään vapaa-ajalla. Jos pidät laatikosta, projekti ilahtuu pienestä lahjoituksesta.",
  "Zur Spendenseite": "Lahjoitussivulle",
  "Reihenfolge der Uhren": "Mittareiden järjestys",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Das Display zeigt immer zwei Uhren nebeneinander.": "Tartu mittariin kahvasta ja siirrä se toiseen kohtaan. Näyttö näyttää aina kaksi mittaria vierekkäin.",
  "Verschieben": "Siirrä",
  "Luftfeuchte": "Ilmankosteus",
  "Windrichtung": "Tuulen suunta",
@@ -3879,5 +3878,6 @@
  "Motive": "Aiheet",
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Mitään ei löytynyt: Synology Photosin tunnistus (henkilöt, paikat, aiheet) on pois päältä laatikon tililtä, tai nimettyä ei ole vielä.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Älykkäät albumit muuttuvat itsestään: laatikko synkronoi ne kuten muutkin.",
- "{} Foto": "{} kuva"
+ "{} Foto": "{} kuva",
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Tartu mittariin kahvasta ja siirrä se toiseen kohtaan. Pieni näyttö näyttää kaksi mittaria vierekkäin, leveä niin monta kuin mahtuu."
 }

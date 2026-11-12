@@ -136,3 +136,24 @@ test('the dials in the order of the settings; a missing or doubled name does not
   assert.equal(ids(orderDials(dials, undefined)), 'temp,hum,wind,dir,baro,rain')
   assert.equal(ids(orderDials(dials, 'wind,temp,wind,x')), 'wind,temp,hum,dir,baro,rain')
 })
+
+test('the row shows two dials on a narrow page and as many as fit on a wide one, the dials as large as the height allows', async () => {
+  const { viewFor } = await load()
+  // the 5" display (800 × 480, the page 408 high without the header): two dials, as before
+  assert.deepEqual(viewFor(800, 408, 6), { n: 2, size: 332 })
+  // a narrow page: two dials as large as the width allows
+  assert.deepEqual(viewFor(480, 408, 6), { n: 2, size: 212 })
+  // a wide display: more dials side by side, none larger than the height allows
+  const wide = viewFor(1920, 408, 6)
+  assert.equal(wide.n, 5)
+  assert.equal(wide.size, 332)
+  assert.ok(wide.n * wide.size + (wide.n - 1) * 24 <= 1920 - 32)
+  // everything fits: all six, the dials a little smaller if need be
+  const huge = viewFor(2560, 408, 6)
+  assert.equal(huge.n, 6)
+  assert.ok(huge.n * huge.size + (huge.n - 1) * 24 <= 2560 - 32)
+  // never more dials than there are
+  assert.equal(viewFor(3840, 408, 4).n, 4)
+  // a very small page keeps its least size
+  assert.equal(viewFor(100, 100, 6).size, 120)
+})
