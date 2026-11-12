@@ -353,6 +353,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
   // played on in the background goes on); and the page is on the screen (a refusal of the player sends it back)
   private tileUsedUp = false
   private onPage = false
+  private tileView = 0
   private readonly tileTime = inject(TileTimeService)
   private contextSeenFor = ''
   private contextGone = 0
@@ -790,6 +791,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
       return
     }
     this.onPage = true
+    // (its tile is the one open now: the chip shows its minutes, see TileTimeService.shown)
+    this.tileView = this.tileTime.view(this.media)
     this.updateProgression = true
     this.leftByPage = false
     // (whatever ran on in the background is on this page again - or is replaced by what starts now)
@@ -832,6 +835,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
 
   ionViewWillLeave() {
     this.onPage = false
+    this.tileTime.leave(this.tileView)
     if (this.tileUsedUp) return
     // (left within the first seconds: shuffle must not be switched on after the page is gone - the next audiobook
     // played in random order then)

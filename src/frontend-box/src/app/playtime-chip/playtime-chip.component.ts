@@ -37,9 +37,10 @@ export class PlaytimeChipComponent {
   })
 
   // A day's limit per tile (5.1): the chip shows what ends first - the tile that plays when its minutes end before the
-  // listening time (also without a listening time limit), with its round cover in place of the clock
+  // listening time (also without a listening time limit), with its round cover in place of the clock; only while that
+  // tile is open (its albums, its player), not on the start page
   protected readonly tile = computed(() => {
-    const t = this.tileTime.current()
+    const t = this.tileTime.shown()
     if (!t) return null
     const p = this.playtimeSeconds()
     return p === null || t.remainingSeconds < p ? t : null

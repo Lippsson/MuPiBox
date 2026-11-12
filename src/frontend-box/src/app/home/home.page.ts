@@ -288,6 +288,11 @@ export class HomePage extends SwiperIonicEventsHelper {
         }
       })
     })
+    // (the tiles' pictures for the chip and the bars of a day's limit, whatever started them)
+    effect(() => {
+      const list = this.artists()
+      if (list?.length) untracked(() => this.tileTime.noteStartPage(list.map((a) => a.coverMedia)))
+    })
     // a tile whose day's limit is used up (5.1): with its lock - the same cover (imgSrc) as before, it is not loaded anew
     this.swiperData = computed(() => {
       const locks = this.tileTime.locks()

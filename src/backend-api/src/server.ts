@@ -46,6 +46,7 @@ import { startInstallationStatistics } from './app-api/telemetry'
 import { registerPhotoDisplayRoutes } from './app-api/photos/albums'
 import type { PhotoNasAccess } from './app-api/photos/nas'
 import { applyPhotoTimeAction } from './app-api/photos/settings'
+import { applyTileTimeAction } from './app-api/tile-limits'
 import { startNightDim } from './app-api/night-dim'
 import { bootConfigPath } from './app-api/boot-paths'
 import { startSpeech } from './speech'
@@ -2741,6 +2742,29 @@ app.post('/api/phototime', localOrElternSession, async (req, res) => {
     return
   }
   console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/phototime ${action}${action === 'extend' ? ` +${req.body?.minutes} min` : ''}`)
+  res.status(200).json({ ok: true })
+})
+
+// POST /api/tiletime  body: { key, action: 'extend' | 'free', minutes?: number }
+// Today's time of a tile with a day's limit (5.1, "Kachel-Limit") for the Telegram bot: as the app's
+// /api/app/tiles/time, from the box itself (the bot) or with the parents' sign-in.
+app.post('/api/tiletime', localOrElternSession, async (req, res) => {
+  const action = req.body?.action
+  let error: string | null = null
+  try {
+    await updateMupiboxConfig((cfg) => {
+      error = applyTileTimeAction(cfg as Record<string, unknown>, req.body?.key, action, req.body?.minutes)
+    })
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/tiletime failed:`, err)
+    res.status(500).json({ error: 'internal error' })
+    return
+  }
+  if (error) {
+    res.status(400).json({ error })
+    return
+  }
+  console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/tiletime ${action}${action === 'extend' ? ` +${req.body?.minutes} min` : ''}`)
   res.status(200).json({ ok: true })
 })
 

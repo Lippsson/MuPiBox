@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, Signal, signal, WritableSignal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, inject, Signal, signal, WritableSignal } from '@angular/core'
 import { toObservable, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, NavigationExtras, Router } from '@angular/router'
 import {
@@ -29,6 +29,7 @@ import { StatusComponent } from '../status/status.component'
 import { KmStatusGroupComponent } from '../km-header/km-status-group.component'
 import { NowPlayingPillComponent } from '../now-playing-pill/now-playing-pill.component'
 import { KmThemeService } from '../theme/km-theme.service'
+import { TileTimeService } from '../tile-time.service'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
 import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
 
@@ -114,6 +115,26 @@ export class MedialistPage extends SwiperIonicEventsHelper {
   private readonly outlet = inject(IonRouterOutlet, { optional: true })
   // the top bar is folded away (HeaderVisibilityService): the covers are drawn larger
   protected readonly headerHidden = inject(HeaderVisibilityService).hidden
+
+  // A day's limit per tile (5.1): this tile is open while the page is on the screen - the chip shows its minutes (and
+  // the listening time's on the start page, see TileTimeService.shown)
+  private readonly tileTime = inject(TileTimeService)
+  private readonly tileOpen = signal(false)
+  protected readonly tileViewSync = effect((onCleanup) => {
+    if (!this.tileOpen()) return
+    const token = this.tileTime.view(this.artist()?.coverMedia)
+    onCleanup(() => this.tileTime.leave(token))
+  })
+
+  override ionViewWillEnter(): void {
+    super.ionViewWillEnter()
+    this.tileOpen.set(true)
+  }
+
+  override ionViewWillLeave(): void {
+    super.ionViewWillLeave()
+    this.tileOpen.set(false)
+  }
 
   constructor(
     private router: Router,

@@ -70,7 +70,28 @@ export class TileTimeService {
     if (key) this.started.set({ key: resolveTileKey(key, this.byKey().keys()), media })
   }
 
+  // the tiles of the start page seen so far (HomePage, each tab as it is shown): the picture of a tile also when it was
+  // started from the parents' app, Home Assistant or Telegram, or the display was loaded again since
+  private readonly startTiles = signal<ReadonlyMap<string, Media>>(new Map())
+
+  /** the tiles of a tab of the start page (their media as the start page has them) */
+  noteStartPage(media: Media[]): void {
+    const next = new Map(this.startTiles())
+    let changed = false
+    for (const m of media) {
+      const key = tileKeyOf(m)
+      if (key && next.get(key) !== m) {
+        next.set(key, m)
+        changed = true
+      }
+    }
+    if (changed) this.startTiles.set(next)
+  }
+
+  // the tile's own media (its picture as on the start page), else what was started of it
   private startedMedia(key: string): Media | null {
+    const tile = this.startTiles().get(key)
+    if (tile) return tile
     const s = this.started()
     return s && s.key === key ? s.media : null
   }
@@ -82,6 +103,35 @@ export class TileTimeService {
     const l = this.byKey().get(cur.key)
     if (!l || l.free || l.remainingSeconds === null) return null
     return { key: cur.key, name: l.name, remainingSeconds: l.remainingSeconds, media: this.startedMedia(cur.key) }
+  })
+
+  // The tile that is open on the screen (its list of albums, its player - MedialistPage, PlayerPage): the chip shows a
+  // tile's minutes only there; on the start page and with another tile open its minutes would mislead (the listening
+  // time's minutes there as before). A token per page: a page that goes takes only its own away.
+  private readonly viewed = signal<{ token: number; media: Media | null } | null>(null)
+  private viewTokens = 0
+
+  view(media: Media | null | undefined): number {
+    const token = ++this.viewTokens
+    this.viewed.set({ token, media: media ?? null })
+    return token
+  }
+
+  leave(token: number): void {
+    if (token && this.viewed()?.token === token) this.viewed.set(null)
+  }
+
+  /** the tile open on the screen, when it has a limit of its own that counts today - also before anything of it plays:
+   *  its name, the seconds left, its media (the chip) */
+  readonly shown = computed(() => {
+    const v = this.viewed()
+    const key = tileKeyOf(v?.media ?? undefined)
+    if (!v || !key) return null
+    const map = this.byKey()
+    const k = resolveTileKey(key, map.keys())
+    const l = map.get(k)
+    if (!l || l.free || l.remainingSeconds === null) return null
+    return { key: k, name: l.name, remainingSeconds: l.remainingSeconds, media: this.startedMedia(k) ?? v.media }
   })
 
   readonly notice = signal<TileNotice | null>(null)

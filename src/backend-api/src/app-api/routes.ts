@@ -89,6 +89,7 @@ import { spotifyLoginAge } from './spotify-auth-age'
 import { btBattery, headphonesPlaying } from '../audio-output'
 import { playbackSnapshot } from '../playback-snapshot'
 import { tileKeyOfRow, tileParam } from './tile-key'
+import { applyTileTimeAction, setTileLimit, tileLimitsOf } from './tile-limits'
 import { CACHE_DIR, LOGS_DIR, SERVER_CONFIG_DIR, WWW_DIR } from '../paths'
 import {
   REQUESTED_SCOPES,
@@ -963,6 +964,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         limitsMinutes: playtime.limitsMinutes ?? {
           mon: 60, tue: 60, wed: 60, thu: 60, fri: 60, sat: 60, sun: 60,
         },
+        // a day's limit per tile (5.1): set in the library's sheet of a tile, today's state from /api/playtime
+        tileLimits: tileLimitsOf((cfg ?? {}) as Record<string, unknown>),
       },
       quietHours: {
         enabled: quiet.enabled ?? false,
@@ -1095,6 +1098,39 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         cfg.quietHours = block
       }
     })
+    res.json({ ok: true })
+  })
+
+  /**
+   * POST /api/app/tiles/limit {keys: string[], name, minutes} - a day's limit per tile (5.1, the library's sheet of a
+   * tile: "Höchstens am Tag"); minutes 0 takes it away. The answer: the limits set.
+   */
+  router.post('/tiles/limit', requireSession, requireCsrf, async (req, res) => {
+    let error: string | null = null
+    let limits: ReturnType<typeof tileLimitsOf> = []
+    try {
+      await deps.updateMupiboxConfig((cfg) => {
+        error = setTileLimit(cfg as Record<string, unknown>, req.body?.keys, req.body?.name, req.body?.minutes)
+        limits = tileLimitsOf(cfg as Record<string, unknown>)
+      })
+    } catch {
+      return void res.status(500).json({ error: 'config_not_saved' })
+    }
+    if (error) return void res.status(400).json({ error })
+    res.json({ ok: true, tileLimits: limits })
+  })
+
+  /** POST /api/app/tiles/time {key, action: extend|free, minutes?} - today's time of a tile with a limit (Spielzeit) */
+  router.post('/tiles/time', requireSession, requireCsrf, async (req, res) => {
+    let error: string | null = null
+    try {
+      await deps.updateMupiboxConfig((cfg) => {
+        error = applyTileTimeAction(cfg as Record<string, unknown>, req.body?.key, req.body?.action, req.body?.minutes)
+      })
+    } catch {
+      return void res.status(500).json({ error: 'config_not_saved' })
+    }
+    if (error) return void res.status(400).json({ error })
     res.json({ ok: true })
   })
 

@@ -1464,14 +1464,21 @@ function nextQuiet(schedule) {
 }
 
 async function loadNotices(root) {
-  const [hat, sync, access, auth, tools] = await Promise.all([
+  const [hat, sync, access, auth, tools, pt] = await Promise.all([
     api('/api/mupihat'),
     api('/api/spotify-sync/status'),
     api(`${API}/spotify-access`),
     api(`${API}/auth-state`),
     api(`${API}/missing-programs`),
+    api('/api/playtime'),
   ])
   const notes = []
+  // a tile with a day's limit used up (5.1): which one, a tap to Spielzeit (+10 min, free today)
+  const usedUp = (pt.body?.tiles?.list ?? []).filter((t) => t.blocked)
+  if (usedUp.length) {
+    const names = usedUp.map((t) => t.name || t.key.replace(/^[a-z]+:/, '')).join(', ')
+    notes.push(['time', usedUp.length === 1 ? tr(`${names} ist für heute aufgebraucht`) : tr(`Für heute aufgebraucht: ${names}`), tr('Antippen für +10 min oder „Heute frei“.'), 'spielzeit'])
+  }
   // a new display model waiting for its answer (Display & Bedienung): from the start page too, first of all - without
   // an answer the box goes back to the display before
   const dm = await api(`${API}/display-profile`)
@@ -1782,6 +1789,7 @@ async function refreshPlaytime() {
   drawRing()
   drawSleep()
   drawPhotoTime()
+  drawTileTime()
 }
 
 // The ring of today: minutes left of the limit, plus what else holds the box right now
@@ -1971,6 +1979,51 @@ async function savePhotoTime(patch, done = 'Gespeichert') {
 
 async function photoTimeAction(action, done) {
   const r = await api(`${API}/photos/time`, { method: 'POST', body: action === 'extend' ? { action, minutes: 10 } : { action } })
+  toast(r.ok ? done : errorText(r), r.ok ? 'ok' : 'info')
+  if (r.ok) setTimeout(() => refreshPlaytime(), 1500)
+}
+
+/* A day's limit per tile (5.1, "Kachel-Limit"): the tiles with one, today's minutes, +10 min and free today. Set in
+   the library's sheet of a tile ("Höchstens am Tag"). */
+
+function tileTimeSection() {
+  return {
+    title: 'Kacheln mit Limit',
+    help: 'Einzelne Kacheln der Startseite, zum Beispiel eine Hörspielserie, mit eigener Grenze am Tag. Sie zählen auch zur Hörzeit.',
+    items: [{ type: 'html', html: '<div id="tile-time"></div>' }],
+  }
+}
+
+function drawTileTime() {
+  const box = $('#tile-time')
+  if (!box) return
+  const limits = caps.config?.playtimeLimit?.tileLimits ?? []
+  if (!limits.length) {
+    box.innerHTML = `<p class="help" style="margin:0">${esc(tr('Noch keine. Einstellen in der Bibliothek: die Kachel antippen › „Höchstens am Tag“.'))}</p>`
+    return
+  }
+  const today = new Map((caps.status?.tiles?.list ?? []).map((t) => [t.key, t]))
+  box.innerHTML = limits
+    .map((l) => {
+      const t = today.get(l.key)
+      const used = Math.floor((t?.usedSeconds ?? 0) / 60)
+      const limit = t?.limitMinutes ?? l.minutes
+      const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 100
+      const line = t?.free
+        ? tr(`Heute frei – ${used} min gehört.`)
+        : t?.blocked
+          ? tr(`Aufgebraucht – ${used} von ${limit} min.`)
+          : tr(`Heute ${used} von ${limit} min${t?.bonusMinutes ? ` (+${t.bonusMinutes} min heute)` : ''}.`)
+      const name = l.name || l.key.replace(/^[a-z]+:/, '')
+      return `<div class="bar"><div class="slider-head"><b translate="no">${esc(name)}</b>${t?.blocked ? `<span class="chip danger">${esc(tr('Aufgebraucht'))}</span>` : ''}</div>
+        <div class="track"><i style="--w:${t?.free ? 0 : pct}%"></i></div><small class="help">${esc(line)}</small>
+        <div class="btns"><button class="btn accent" data-tx="${esc(l.key)}" data-name="${esc(name)}">+10 min</button>${t?.free ? '' : `<button class="btn" data-tf="${esc(l.key)}" data-name="${esc(name)}">${esc(tr('Heute frei'))}</button>`}</div></div>`
+    })
+    .join('')
+}
+
+async function tileTimeAction(key, action, done) {
+  const r = await api(`${API}/tiles/time`, { method: 'POST', body: action === 'extend' ? { key, action, minutes: 10 } : { key, action } })
   toast(r.ok ? done : errorText(r), r.ok ? 'ok' : 'info')
   if (r.ok) setTimeout(() => refreshPlaytime(), 1500)
 }
@@ -2959,6 +3012,69 @@ async function removeLibEntries(items, { subscriptionEnded = false } = {}) {
   return done
 }
 
+/* A day's limit per tile of the start page (5.1, "Kachel-Limit"): "Höchstens am Tag" in the sheet of a tile - an
+   artist's group, a playlist or station of its own, a folder of the SD card or the NAS. The key as the display forms it
+   (frontend-box tile-key.ts): the entry's own artist and category, not the names the app gives (artist_override) -
+   the display groups its tiles by those. The player counts and ends it (Spielzeit › Kacheln mit Limit). */
+
+const tileCat = (c) => (!c ? 'audiobook' : c === 'radio' ? 'other' : String(c))
+function tileKeyOfItem(it) {
+  if (!it) return null
+  if (it.nasPath) return `nas:${it.nasPath}`
+  if (it.type === 'library') return it.libraryPath ? `lib:${it.libraryPath}` : null
+  const cat = tileCat(it.category)
+  const artist = String(it.artist ?? '')
+  if (!artist) {
+    // (as the display's isStandaloneMedia: a playlist or a station on a tile of its own)
+    if (it.playlistid) return `single:${cat}:${it.playlistid}`
+    if ((it.type === 'radio' || (it.type === 'tidal' && it.tidalKind === 'playlist')) && it.id) return `single:${cat}:${it.id}`
+    return null
+  }
+  return `artist:${cat}:${artist}`
+}
+// the tile's name as the display shows it
+const tileNameOfItem = (it) => String(it?.artist || it?.title || '')
+const TILE_MINUTES = [15, 30, 45, 60, 90, 120]
+
+function tileLimitField() {
+  return `<div class="field tile-limit"><label for="tl-min">${esc(tr('Höchstens am Tag'))}</label>
+    <select class="input" id="tl-min" disabled><option>…</option></select>
+    <small id="tl-help">${esc(tr('Ist die Zeit um, ist die Kachel am Display bis morgen gesperrt. Sie zählt auch zur Hörzeit.'))}</small></div>`
+}
+
+// keys: the tiles this sheet stands for (an artist named alike in the app can be more than one on the display); name:
+// the tile's name; the choice is saved at once
+async function mountTileLimit(sheet, keys, name) {
+  const sel = sheet.querySelector('#tl-min')
+  const help = sheet.querySelector('#tl-help')
+  if (!sel || !keys.length) return
+  const [cfg, st] = await Promise.all([api(`${API}/caps-config`), api('/api/playtime')])
+  if (!sel.isConnected) return
+  if (!cfg.ok) {
+    sel.innerHTML = `<option>${esc(tr('Nicht geladen'))}</option>`
+    return
+  }
+  const limits = cfg.body?.playtimeLimit?.tileLimits ?? []
+  const mine = limits.find((t) => keys.includes(t.key))
+  const cur = mine?.minutes ?? 0
+  const opts = [...new Set([...TILE_MINUTES, ...(cur ? [cur] : [])])].sort((a, b) => a - b)
+  sel.innerHTML = `<option value="0">${esc(tr('Kein Limit'))}</option>${opts.map((m) => `<option value="${m}"${m === cur ? ' selected' : ''}>${m} min</option>`).join('')}`
+  sel.disabled = false
+  const today = (st.body?.tiles?.list ?? []).find((t) => keys.includes(t.key))
+  if (today && help) {
+    const used = Math.floor((today.usedSeconds ?? 0) / 60)
+    const line = today.free ? tr(`Heute frei – ${used} min gehört.`) : today.blocked ? tr(`Heute aufgebraucht (${used} min).`) : tr(`Heute ${used} von ${today.limitMinutes} min.`)
+    help.textContent = `${line} ${help.textContent}`
+  }
+  sel.onchange = async () => {
+    const minutes = Number(sel.value)
+    sel.disabled = true
+    const r = await api(`${API}/tiles/limit`, { method: 'POST', body: { keys, name, minutes } })
+    sel.disabled = false
+    toast(r.ok ? (minutes ? tr(`Höchstens ${minutes} min am Tag`) : tr('Kein Tageslimit mehr')) : errorText(r), r.ok ? 'ok' : 'info')
+  }
+}
+
 // A group: one entry opens right away, several are listed first
 function openLibGroup(g) {
   if (g.kind === 'local') return openLocalSheet(g.folder)
@@ -2992,8 +3108,11 @@ function openLibGroup(g) {
           .join('')}</div>
          <div class="section-label" style="margin:0">Auf der Box</div>`
       : ''
+  // (the display's tiles of these entries: a day's limit for them)
+  const tileKeys = [...new Set(items.map(tileKeyOfItem).filter(Boolean))]
   openSheet(
     `<h2 translate="no">${esc(g.artist)}</h2><p class="help" style="margin:0">${esc(libSub(g))}${g.src === 'spotify-sync' && !sub ? ' – kommt vom Spotify-Sync.' : ''}</p>
+     ${tileKeys.length ? tileLimitField() : ''}
      ${subBlock}
      ${
        entries.length
@@ -3005,6 +3124,7 @@ function openLibGroup(g) {
      <div class="btns">${groupBtn}<button class="btn" data-close>Schließen</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = close
+      void mountTileLimit(sheet, tileKeys, tileNameOfItem(items[0]) || g.artist)
       if (sub) mountSubControls(sheet, sub, close, libSubDone)
       sheet.querySelector('[data-unsub]')?.addEventListener('click', () => {
         close()
@@ -3279,10 +3399,13 @@ function openEntrySheet(item, back = null) {
   const folder = place ? String(item.artist ?? '').trim() : ''
   // (alone in its folder - as the app added playlists before, in one of their own name: a tile spares a tap)
   const aloneInFolder = !!folder && (lib.items ?? []).filter((it) => it && !it.isResume && it.category === item.category && String(it.artist ?? '').trim() === folder).length === 1
+  // (the only entry of its group, opened right away: the day's limit of its tile here - else in the group's sheet)
+  const tileKeys = back ? [] : [tileKeyOfItem(item)].filter(Boolean)
   openSheet(
     `${back ? `<button class="sheet-back" data-back>${icon('back', 18)}<span translate="no">${esc(back.title)}</span></button>` : ''}
      <h2 translate="no">${esc(item.title_override ?? item.title ?? item.artist_override ?? item.artist ?? 'Eintrag')}</h2>
      <p class="help" style="margin:0">${isSync ? 'Kommt vom Spotify-Sync. Was du hier einträgst, gilt statt der Werte von Spotify; leer = der Wert von Spotify.' : 'Von Hand hinzugefügt.'}</p>
+     ${tileKeys.length ? tileLimitField() : ''}
      ${fields
        .map(([k, l]) => {
          const input = `<input class="input" id="e-${k}"${k === 'id' ? ' type="url" inputmode="url" spellcheck="false" translate="no"' : ''} value="${esc(val(k))}" placeholder="${esc(isSync ? item[k] ?? '' : place && k === 'title' && item.type === 'spotify' ? 'leer = Name der Playlist' : '')}" autocomplete="off">`
@@ -3309,6 +3432,7 @@ function openEntrySheet(item, back = null) {
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = back ? back.open : close
       sheet.querySelector('[data-back]')?.addEventListener('click', back?.open)
+      void mountTileLimit(sheet, tileKeys, tileNameOfItem(item))
       const placer = place ? wirePlace(sheet, 'e', () => sheet.querySelector('#e-cat').value) : null
       if (placer) sheet.querySelector('#e-cat').addEventListener('change', () => void placer.reload())
       if (wholeArtist) loadArtistAlbums(item, sheet.querySelector('#e-albums'))
@@ -3554,6 +3678,7 @@ async function openLocalSheet(folder, parent = null) {
      <div class="local-head"><span class="local-cover">${folder.cover ? `<img src="${esc(stampedCover(folder.cover))}" alt="">` : icon('image', 28)}</span>
        <div class="lbl"><h2 translate="no">${esc(folder.title)}</h2><p class="help" style="margin:0">${esc(['Ordner auf der SD-Karte', catLabel(folder.category), `${albums.length} ${albums.length === 1 ? 'Album' : 'Alben'}`].join(' · '))}</p>
        <button class="btn sm" data-cover>${icon('image', 16)}${folder.cover ? 'Cover ändern' : 'Cover wählen'}</button></div></div>
+     ${parent ? '' : tileLimitField()}
      ${albums.length ? `<div class="section-label" style="margin:0">Alben</div><div class="rows">${albums.map((a, i) => `<button class="entry lib-row" data-a="${i}">${thumb(a.cover)}<span class="lbl"><b translate="no">${esc(a.title)}</b>${a.libraryIsContainer ? '<small>Ordner</small>' : ''}</span><span class="chev">${icon('chevron', 18)}</span></button>`).join('')}</div>` : ''}
      <div class="dl-card" id="dl-card" hidden></div>
      <div class="btns"><button class="btn danger" data-all>Ganzen Ordner löschen</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
@@ -3563,6 +3688,7 @@ async function openLocalSheet(folder, parent = null) {
       sheet.querySelector('[data-close]').onclick = back
       sheet.querySelector('[data-back]')?.addEventListener('click', back)
       sheet.querySelector('[data-cover]').onclick = () => pickLocalCover(folder, parent, (f) => openLocalSheet(f, parent))
+      if (!parent) void mountTileLimit(sheet, [`lib:${folder.libraryPath}`], String(folder.title ?? ''))
       for (const b of sheet.querySelectorAll('[data-a]')) b.onclick = () => openLocalSheet(albums[Number(b.dataset.a)], folder)
       fillFolderDownloads(sheet, folder, albums)
       sheet.querySelector('[data-all]').onclick = () => {
@@ -3641,6 +3767,7 @@ async function openNasSheet(folder, parent = null) {
        <div class="lbl"><h2 translate="no">${esc(folder.title)}</h2><p class="help" style="margin:0">${esc(['Ordner auf dem NAS', `${albums.length} ${albums.length === 1 ? 'Album' : 'Alben'}`].join(' · '))}</p>
        <button class="btn sm" data-cover>${icon('image', 16)}${folder.cover ? 'Cover ändern' : 'Cover wählen'}</button></div></div>
      ${parent ? '' : nasPlaceLine(folder)}
+     ${parent ? '' : tileLimitField()}
      ${r.ok ? '' : `<p class="help" style="margin:0">Das NAS antwortet gerade nicht.</p>`}
      ${albums.length ? `<div class="section-label" style="margin:0">Alben</div><div class="rows">${albums.map((a, i) => `<button class="entry lib-row" data-a="${i}">${thumb(a.cover)}<span class="lbl"><b translate="no">${esc(a.title)}</b>${a.nasIsContainer ? '<small>Ordner</small>' : ''}</span><span class="chev">${icon('chevron', 18)}</span></button>`).join('')}</div>` : ''}
      <div class="btns"><button class="btn" data-admin>NAS-Verwaltung</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
@@ -3654,6 +3781,8 @@ async function openNasSheet(folder, parent = null) {
         go('nas')
       }
       for (const b of sheet.querySelectorAll('[data-a]')) b.onclick = () => openNasSheet(albums[Number(b.dataset.a)], folder)
+      // (a collection shown as its folders one by one: the limit counts them all together)
+      if (!parent) void mountTileLimit(sheet, [`nas:${folder.nasPath}`], String(folder.title ?? ''))
       sheet.querySelector('[data-cover]').onclick = () => pickNasCover(folder, parent, (f) => openNasSheet(f, parent))
       sheet.querySelector('[data-place]')?.addEventListener('click', () => changeNasPlace(folder, (f) => openNasSheet(f)))
     },
@@ -3667,6 +3796,7 @@ function openNasAlbumSheet(album, parent) {
      <span class="album-cover">${album.cover ? `<img src="${esc(album.cover)}" alt="">` : icon('folder', 40)}</span>
      <div class="album-title"><h2 translate="no">${esc(album.title)}</h2><p class="help" style="margin:0">${esc(['Album auf dem NAS', parent?.title].filter(Boolean).join(' · '))}</p></div>
      ${parent ? '' : nasPlaceLine(album)}
+     ${parent ? '' : tileLimitField()}
      <button class="btn primary block" data-play>${icon('phones', 18)}Abspielen</button>
      <div class="btns"><button class="btn" data-cover>${icon('image', 18)}${album.cover ? 'Cover ändern' : 'Cover wählen'}</button><button class="btn" data-admin>NAS-Verwaltung</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
     (sheet, close) => {
@@ -3683,6 +3813,7 @@ function openNasAlbumSheet(album, parent) {
         startPlay(album.title, `${API}/library/play-nas`, { path: album.nasPath })
       }
       sheet.querySelector('[data-cover]').onclick = () => pickNasCover(album, parent, (f) => openNasAlbumSheet(f, parent))
+      if (!parent) void mountTileLimit(sheet, [`nas:${album.nasPath}`], String(album.title ?? ''))
       sheet.querySelector('[data-place]')?.addEventListener('click', () => changeNasPlace(album, (f) => openNasAlbumSheet(f, null)))
     },
   )
@@ -3760,6 +3891,7 @@ function openLocalAlbumSheet(album, parent) {
      <span class="album-cover">${album.cover ? `<img src="${esc(stampedCover(album.cover))}" alt="">` : icon('image', 40)}</span>
      <div class="album-title"><h2 translate="no">${esc(album.title)}</h2><p class="help" style="margin:0">${esc(['Album auf der SD-Karte', catLabel(album.category), parent?.title].filter(Boolean).join(' · '))}</p></div>
      <button class="btn primary block" data-cover>${icon('image', 18)}${album.cover ? 'Cover ändern' : 'Cover wählen'}</button>
+     ${parent ? '' : tileLimitField()}
      <div id="dl-album"></div><div class="section-label dl-head" id="dl-head" hidden><span>Titel</span><span></span></div><div class="rows" id="dl-tracks"></div>
      <div class="btns"><button class="btn danger" data-del>Album löschen</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
     (sheet, close) => {
@@ -3768,6 +3900,7 @@ function openLocalAlbumSheet(album, parent) {
       sheet.querySelector('[data-close]').onclick = back
       sheet.querySelector('[data-back]')?.addEventListener('click', back)
       sheet.querySelector('[data-cover]').onclick = () => pickLocalCover(album, parent, (f) => openLocalAlbumSheet(f, parent))
+      if (!parent) void mountTileLimit(sheet, [`lib:${album.libraryPath}`], String(album.title ?? ''))
       fillAlbumDownloads(sheet, album)
       sheet.querySelector('[data-del]').onclick = () => {
         close()
@@ -15342,9 +15475,11 @@ const CONTROLLERS = {
     // ("Display aus nach" in the steps of its own page)
     sections: (page) => {
       const list = page.sections.map((sec) => (sec.title === 'Ausschalten' ? { ...sec, items: sec.items.map((it) => (it.key === 'dispOff' ? { ...it, stops: DISPLAY_OFF_STOPS } : it)) } : sec))
+      // the tiles with a day's limit (5.1) after the daily limits
+      const at = list.findIndex((sec) => sec.title === 'Tageslimits')
+      list.splice(at < 0 ? list.length : at + 1, 0, tileTimeSection())
       if (!caps.photos) return list
       // the picture time after the daily limits; the quiet times say that they hold the photos too
-      const at = list.findIndex((sec) => sec.title === 'Tageslimits')
       list.splice(at < 0 ? list.length : at + 1, 0, photoTimeSection())
       return list.map((sec) => (sec.title === 'Ruhezeiten' ? { ...sec, help: `${sec.help} ${tr('Während einer Ruhezeit sind auch die Fotos gesperrt.')}` } : sec))
     },
@@ -15352,6 +15487,15 @@ const CONTROLLERS = {
       drawRing()
       drawSleep()
       drawPhotoTime()
+      drawTileTime()
+      $('#tile-time', root)?.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-tx], [data-tf]')
+        if (!b) return
+        const key = b.dataset.tx ?? b.dataset.tf
+        const name = b.dataset.name ?? ''
+        if (b.dataset.tx !== undefined) tileTimeAction(key, 'extend', tr(`+10 Minuten ${name} für heute`))
+        else tileTimeAction(key, 'free', tr(`${name} heute frei`))
+      })
       bonusButton(root)
       every(20000, refreshPlaytime)
     },
