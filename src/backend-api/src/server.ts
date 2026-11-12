@@ -45,6 +45,7 @@ import { startWeeklySummary } from './app-api/weekly-summary'
 import { startInstallationStatistics } from './app-api/telemetry'
 import { registerPhotoDisplayRoutes } from './app-api/photos/albums'
 import type { PhotoNasAccess } from './app-api/photos/nas'
+import { applyPhotoTimeAction } from './app-api/photos/settings'
 import { startNightDim } from './app-api/night-dim'
 import { bootConfigPath } from './app-api/boot-paths'
 import { startSpeech } from './speech'
@@ -2715,6 +2716,34 @@ app.post('/api/playtime/limit', localOrElternSession, async (req, res) => {
 // POST /api/quiethours/now  body: { minutes?: number }
 // Sets `playbackOverride.forceBlockUntil = now + minutes*60_000`. Forces playback
 // off immediately (kid sees the override overlay). Default 60 min.
+// POST /api/phototime  body: { action: 'extend' | 'free', minutes?: number }
+// Today's photo time (5.1, Spielzeit › Bildzeit) for the Telegram bot: as the app's /api/app/photos/time, from the box
+// itself (the bot) or with the parents' sign-in. "extend" adds minutes for today, "free" lifts the limit for today;
+// the player takes it within a second.
+app.post('/api/phototime', localOrElternSession, async (req, res) => {
+  const action = req.body?.action
+  if (action !== 'extend' && action !== 'free') {
+    res.status(400).json({ error: 'action must be extend or free' })
+    return
+  }
+  let error: string | null = null
+  try {
+    await updateMupiboxConfig((cfg) => {
+      error = applyPhotoTimeAction(cfg as Record<string, unknown>, action, req.body?.minutes)
+    })
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/phototime failed:`, err)
+    res.status(500).json({ error: 'internal error' })
+    return
+  }
+  if (error) {
+    res.status(400).json({ error })
+    return
+  }
+  console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/phototime ${action}${action === 'extend' ? ` +${req.body?.minutes} min` : ''}`)
+  res.status(200).json({ ok: true })
+})
+
 app.post('/api/quiethours/now', localOrElternSession, async (req, res) => {
   const minutes = req.body?.minutes !== undefined ? Number(req.body.minutes) : 60
   if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440) {

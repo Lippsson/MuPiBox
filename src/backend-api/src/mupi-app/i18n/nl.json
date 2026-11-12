@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Spiegelen ↔",
  "Spiegeln ↕": "Spiegelen ↕",
  "Spielzeit": "Speeltijd",
- "Spielzeit und Ruhezeiten jetzt": "Speeltijd en rusttijden nu",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3859,5 +3858,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Bovenaan het scherm toont een stip in de kleur van de gebruiker wie is aangemeld; een tik erop opent het overzicht met de namen. Een nieuwe gebruiker begint met een lege bibliotheek of een kopie van de bibliotheek van een ander. Verwijderde gebruikers gaan naar de prullenbak. De actieve en de laatste gebruiker kunnen niet worden verwijderd.",
  "Reihenfolge am Display": "Volgorde op het scherm",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standaard: alfabetisch, getallen als getallen – „Folge 2” vóór „Folge 10”.",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "„Aflevering” is het nummer in de titel (bijv. „Folge 12”). Leeg = alle; albums zonder nummer horen dan bij geen bereik."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "„Aflevering” is het nummer in de titel (bijv. „Folge 12”). Leeg = alle; albums zonder nummer horen dan bij geen bereik.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Speeltijd, rusttijden en fototijd nu",
+ "Bildzeit: Minuten für heute dazu": "Fototijd: extra minuten voor vandaag"
 }

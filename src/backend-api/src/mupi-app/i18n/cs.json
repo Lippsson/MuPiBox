@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Zrcadlit ↔",
  "Spiegeln ↕": "Zrcadlit ↕",
  "Spielzeit": "Herní doba",
- "Spielzeit und Ruhezeiten jetzt": "Herní doba a doby odpočinku teď",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3859,5 +3858,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Nahoře na displeji ukazuje tečka v barvě uživatele, kdo je přihlášen; klepnutím se otevře přehled se jmény. Nový uživatel začíná s prázdnou knihovnou nebo s kopií knihovny jiného uživatele. Smazaní uživatelé jdou do koše. Aktivního a posledního uživatele nelze smazat.",
  "Reihenfolge am Display": "Pořadí na displeji",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standard: abecedně, čísla jako čísla – „Folge 2“ před „Folge 10“.",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "„Díl“ je číslo v názvu (např. „Folge 12“). Prázdné = vše; alba bez čísla pak nepatří do žádného rozsahu."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "„Díl“ je číslo v názvu (např. „Folge 12“). Prázdné = vše; alba bez čísla pak nepatří do žádného rozsahu.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Čas poslechu, klidový čas a čas fotek teď",
+ "Bildzeit: Minuten für heute dazu": "Čas fotek: minuty navíc pro dnešek"
 }

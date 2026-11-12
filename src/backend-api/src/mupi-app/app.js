@@ -9221,8 +9221,9 @@ async function loadTelegram() {
 // The bot's commands a parent uses most (the whole list: /command in Telegram, see telegram_i18n.py)
 const TG_COMMANDS = [
   ['/help', 'die wichtigsten Befehle als Knöpfe'],
-  ['/status', 'Spielzeit und Ruhezeiten jetzt'],
+  ['/status', 'Spielzeit, Ruhezeiten und Bildzeit jetzt'],
   ['/extend 30', 'Bonus-Minuten für heute'],
+  ['/photoextend 10', 'Bildzeit: Minuten für heute dazu'],
   ['/release 60', 'alle Sperren für eine Weile aufheben'],
   ['/quietnow 60', 'Wiedergabe für eine Weile sperren'],
   ['/pause', 'Wiedergabe anhalten'],

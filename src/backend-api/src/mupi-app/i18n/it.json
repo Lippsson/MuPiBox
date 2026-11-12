@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Specchia ↔",
  "Spiegeln ↕": "Specchia ↕",
  "Spielzeit": "Tempo di ascolto",
- "Spielzeit und Ruhezeiten jetzt": "tempo di ascolto e tempi di silenzio adesso",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3859,5 +3858,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "In alto sul display un punto del colore dell’utente mostra chi è connesso; un tocco apre la panoramica con i nomi. Un nuovo utente parte con una libreria vuota o con una copia della libreria di un altro. Gli utenti eliminati finiscono nel cestino. L’utente attivo e l’ultimo non si possono eliminare.",
  "Reihenfolge am Display": "Ordine sul display",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standard: alfabetico, i numeri come numeri – «Folge 2» prima di «Folge 10».",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Episodio» è il numero nel titolo (ad es. «Folge 12»). Vuoto = tutti; gli album senza numero non rientrano allora in nessun intervallo."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Episodio» è il numero nel titolo (ad es. «Folge 12»). Vuoto = tutti; gli album senza numero non rientrano allora in nessun intervallo.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Tempo di ascolto, ore di silenzio e tempo foto ora",
+ "Bildzeit: Minuten für heute dazu": "Tempo foto: minuti in più per oggi"
 }

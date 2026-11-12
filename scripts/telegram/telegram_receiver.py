@@ -136,9 +136,43 @@ def block_source_name(source):
     key = {'playtime': 'src_playtime', 'quiet': 'src_quiet', 'override': 'src_override'}.get(source)
     return tr(key) if key else str(source)
 
+def photo_lines(status):
+    """The photo time of today (5.1, Spielzeit › Bildzeit) as the player reports it under "photos" - none while the
+    photo display is off."""
+    ph = (status or {}).get('photos') or {}
+    if not ph.get('enabled'):
+        return []
+    used = int(ph.get('usedSeconds', 0)) // 60
+    if ph.get('mode') == 'shared':
+        return [tr('st_photos_shared', used=used)]
+    if ph.get('free'):
+        return [tr('st_photos_free', used=used)]
+    if not ph.get('limited'):
+        return [tr('st_photos_unlimited', used=used)]
+    limit = int(ph.get('limitMinutes', 0))
+    if ph.get('state') == 'blocked':
+        return [tr('st_photos_blocked', used=used, limit=limit)]
+    return [tr('st_photos_limit', used=used, limit=limit, left=fmt_minutes(int(ph.get('remainingSeconds') or 0)))]
+
+def photo_time_limited():
+    """Whether the photo time has a limit of its own today (the commands for it make sense then)."""
+    status_code, body = call_api_get('/playtime')
+    ph = (body or {}).get('photos') if status_code == 200 and isinstance(body, dict) else None
+    return bool(ph and ph.get('enabled') and ph.get('mode') == 'separate' and ph.get('limitEnabled'))
+
+def photo_time_action(action, mins=None):
+    """extend (mins) or free for today's photo time; the key of the text that says how it went."""
+    if not photo_time_limited():
+        return 'photos_no_limit', None
+    status_code, body = call_api_post('/phototime', {'action': action, **({'minutes': mins} if mins else {})})
+    if status_code == 200:
+        return ('photoextend_done' if action == 'extend' else 'photofree_done'), None
+    return 'error', failure_detail(status_code, body)
+
 def format_status(status):
     if not status or status.get('enabled') is False:
-        return tr('st_not_configured')
+        # (the photo time has its own limit: it is told even without playtime or quiet hours)
+        return '\n'.join([tr('st_not_configured'), *photo_lines(status)])
     state = status.get('state', 'normal')
     source = block_source_name(status.get('blockSource'))
     pt = status.get('playtime', {}) or {}
@@ -167,6 +201,7 @@ def format_status(status):
         lines.append(tr('st_forceblock', mins=(int(ovr['forceBlockUntil']) - now_ms) // 60000))
     if int(ovr.get('allowUntil', 0)) > now_ms:
         lines.append(tr('st_override', mins=(int(ovr['allowUntil']) - now_ms) // 60000))
+    lines.extend(photo_lines(status))
     return '\n'.join(lines)
 
 def failure_detail(status_code, body):
@@ -174,11 +209,14 @@ def failure_detail(status_code, body):
 
 def help_keyboard():
     b = InlineKeyboardButton
+    # (the photo time's buttons only while it has a limit of its own)
+    photos = [[b(text=tr('kb_photoextend10'), callback_data='photoextend_10'), b(text=tr('kb_photofree'), callback_data='photofree')]] if photo_time_limited() else []
     return InlineKeyboardMarkup(inline_keyboard=[
         [b(text=tr('kb_status'), callback_data='status'), b(text=tr('kb_screen'), callback_data='screen')],
         [b(text=tr('kb_pause'), callback_data='pause'), b(text=tr('kb_play'), callback_data='play')],
         [b(text='+30 min', callback_data='extend_30'), b(text='+60 min', callback_data='extend_60')],
         [b(text=tr('kb_release60'), callback_data='release_60'), b(text=tr('kb_quietnow60'), callback_data='quietnow_60')],
+        *photos,
         [b(text=tr('kb_volume'), callback_data='vol'), b(text=tr('kb_sleep'), callback_data='sleep')],
         # No "Update media DB" button: change_checker runs it when the media folder changes, and it blocks the bot
         # for a long time; /media (text command) and the admin interface still have it.
@@ -284,6 +322,17 @@ def on_chat_message(msg):
             bot.sendMessage(chat_id, format_status(body), parse_mode='HTML')
         else:
             bot.sendMessage(chat_id, tr('status_failed', detail=failure_detail(status_code, body)))
+    elif command.split(' ', 1)[0] == '/photoextend':
+        # today's photo time (Bildzeit): minutes added, 10 when none are given (as the app's "+10 min")
+        mins = parse_int_arg(command, default=10)
+        if mins is None or mins <= 0 or mins > 1440:
+            bot.sendMessage(chat_id, tr('usage_minutes', cmd='/photoextend'))
+        else:
+            key, detail = photo_time_action('extend', mins)
+            bot.sendMessage(chat_id, tr(key, mins=mins, detail=detail))
+    elif command.split(' ', 1)[0] == '/photofree':
+        key, detail = photo_time_action('free')
+        bot.sendMessage(chat_id, tr(key, detail=detail))
     elif command[:7] == '/extend':
         send_minutes_action(chat_id, command, 30, '/playtime/extend', 'extend_done')
     elif command[:8] == '/release':
@@ -480,6 +529,10 @@ def handle_callback(query_data, chat_id, keyboard_msg, answer):
             answer(text=tr('release_short', mins=mins), show_alert=True)
         else:
             answer(text=tr('error', detail=status_code), show_alert=True)
+    elif query_data[:12] == 'photoextend_' or query_data == 'photofree':
+        mins = int(query_data.split('_')[1]) if query_data != 'photofree' else None
+        key, detail = photo_time_action('extend' if mins else 'free', mins)
+        answer(text=tr(key, mins=mins, detail=detail), show_alert=True)
     elif query_data[:9] == 'quietnow_':
         mins = int(query_data.split('_')[1])
         status_code, body = call_api_post('/quiethours/now', {'minutes': mins})

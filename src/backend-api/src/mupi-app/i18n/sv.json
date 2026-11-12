@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Spegla ↔",
  "Spiegeln ↕": "Spegla ↕",
  "Spielzeit": "Speltid",
- "Spielzeit und Ruhezeiten jetzt": "Speltid och vilotider nu",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3859,5 +3858,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Överst på skärmen visar en prick i användarens färg vem som är inloggad; ett tryck på den öppnar översikten med namnen. En ny användare börjar med ett tomt bibliotek eller en kopia av en annan användares bibliotek. Raderade användare hamnar i papperskorgen. Den aktiva och den sista användaren kan inte raderas.",
  "Reihenfolge am Display": "Ordning på skärmen",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standard: alfabetiskt, tal som tal – ”Folge 2” före ”Folge 10”.",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "”Avsnitt” är numret i titeln (t.ex. ”Folge 12”). Tomt = alla; album utan nummer hör då inte till något intervall."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "”Avsnitt” är numret i titeln (t.ex. ”Folge 12”). Tomt = alla; album utan nummer hör då inte till något intervall.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Speltid, vilotider och bildtid nu",
+ "Bildzeit: Minuten für heute dazu": "Bildtid: extra minuter i dag"
 }

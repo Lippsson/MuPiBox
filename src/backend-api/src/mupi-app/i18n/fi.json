@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Peilaa ↔",
  "Spiegeln ↕": "Peilaa ↕",
  "Spielzeit": "Soittoaika",
- "Spielzeit und Ruhezeiten jetzt": "Soittoaika ja hiljaiset hetket nyt",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3859,5 +3858,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Näytön yläreunassa käyttäjän värinen piste näyttää, kuka on kirjautuneena; napautus avaa nimiluettelon. Uusi käyttäjä aloittaa tyhjällä kirjastolla tai kopiolla toisen käyttäjän kirjastosta. Poistetut käyttäjät siirtyvät roskakoriin. Aktiivista ja viimeistä käyttäjää ei voi poistaa.",
  "Reihenfolge am Display": "Järjestys näytöllä",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Oletus: aakkosjärjestys, numerot numeroina – ”Folge 2” ennen ”Folge 10”.",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "”Jakso” on otsikon numero (esim. ”Folge 12”). Tyhjä = kaikki; albumit ilman numeroa eivät silloin kuulu mihinkään väliin."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "”Jakso” on otsikon numero (esim. ”Folge 12”). Tyhjä = kaikki; albumit ilman numeroa eivät silloin kuulu mihinkään väliin.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Kuunteluaika, hiljaiset ajat ja kuva-aika nyt",
+ "Bildzeit: Minuten für heute dazu": "Kuva-aika: lisäminuutteja tälle päivälle"
 }

@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Odbij ↔",
  "Spiegeln ↕": "Odbij ↕",
  "Spielzeit": "Czas słuchania",
- "Spielzeit und Ruhezeiten jetzt": "Czas słuchania i czasy odpoczynku teraz",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3859,5 +3858,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "U góry ekranu kropka w kolorze użytkownika pokazuje, kto jest zalogowany; dotknięcie otwiera przegląd z nazwami. Nowy użytkownik zaczyna z pustą biblioteką albo z kopią biblioteki innego. Usunięci użytkownicy trafiają do kosza. Aktywnego i ostatniego użytkownika nie można usunąć.",
  "Reihenfolge am Display": "Kolejność na ekranie",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standard: alfabetycznie, liczby jako liczby – „Folge 2” przed „Folge 10”.",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "„Odcinek” to numer w tytule (np. „Folge 12”). Puste = wszystkie; albumy bez numeru nie należą wtedy do żadnego zakresu."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "„Odcinek” to numer w tytule (np. „Folge 12”). Puste = wszystkie; albumy bez numeru nie należą wtedy do żadnego zakresu.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Czas słuchania, godziny ciszy i czas zdjęć teraz",
+ "Bildzeit: Minuten für heute dazu": "Czas zdjęć: dodatkowe minuty na dziś"
 }

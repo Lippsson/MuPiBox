@@ -24,6 +24,17 @@ The **parent bot** connects the box with Telegram. It sends you messages and let
 
 When switching off, the message also says why: empty battery, too long without playback (idle) or a normal shutdown.
 
+## Photo time
+
+When the [photo display](../fotos/index.md) is on, `/status` also tells today's **photo time**: how long photos were looked at, and with a limit of its own, how much is left. If the photo time has a limit of its own ([Photo time](../fotos/bildzeit.md)), two commands go with it, also as buttons under `/help`:
+
+| Command | Effect |
+| --- | --- |
+| `/photoextend 10` | 10 more minutes of photo time today (10 without a number) |
+| `/photofree` | no photo time limit today |
+
+Both hold for today only, as **+10 min** and **Free today** in the app.
+
 ## Signing in with a link
 
 With `/login` the bot sends you a **link** that signs you in to the app, even without a password ([Opening the app and signing in](../erste-schritte/app-oeffnen.md)).

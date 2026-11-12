@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Отразить ↔",
  "Spiegeln ↕": "Отразить ↕",
  "Spielzeit": "Время прослушивания",
- "Spielzeit und Ruhezeiten jetzt": "Время прослушивания и периоды отдыха сейчас",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3859,5 +3858,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Вверху экрана точка цвета пользователя показывает, кто вошёл; касание открывает обзор с именами. Новый пользователь начинает с пустой библиотекой или с копией библиотеки другого. Удалённые пользователи попадают в корзину. Активного и последнего пользователя удалить нельзя.",
  "Reihenfolge am Display": "Порядок на экране",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Стандарт: по алфавиту, числа как числа — «Folge 2» перед «Folge 10».",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Эпизод» — это номер в названии (например, «Folge 12»). Пусто = все; альбомы без номера тогда не входят ни в один диапазон."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Эпизод» — это номер в названии (например, «Folge 12»). Пусто = все; альбомы без номера тогда не входят ни в один диапазон.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Время прослушивания, тихие часы и время фото сейчас",
+ "Bildzeit: Minuten für heute dazu": "Время фото: дополнительные минуты на сегодня"
 }

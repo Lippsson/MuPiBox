@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Yansıt ↔",
  "Spiegeln ↕": "Yansıt ↕",
  "Spielzeit": "Oyun süresi",
- "Spielzeit und Ruhezeiten jetzt": "Şu anki oyun süresi ve sessiz saatler",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3859,5 +3858,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Ekranın üstünde kullanıcının renginde bir nokta kimin oturum açtığını gösterir; dokununca adların olduğu genel bakış açılır. Yeni bir kullanıcı boş bir kitaplıkla ya da başka birinin kitaplığının kopyasıyla başlar. Silinen kullanıcılar çöp kutusuna gider. Etkin kullanıcı ve son kullanıcı silinemez.",
  "Reihenfolge am Display": "Ekrandaki sıra",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standart: alfabetik, sayılar sayı olarak – “Folge 2”, “Folge 10”dan önce.",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "“Bölüm”, başlıktaki numaradır (ör. “Folge 12”). Boş = tümü; numarası olmayan albümler o zaman hiçbir aralığa girmez."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "“Bölüm”, başlıktaki numaradır (ör. “Folge 12”). Boş = tümü; numarası olmayan albümler o zaman hiçbir aralığa girmez.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Dinleme süresi, sessiz saatler ve fotoğraf süresi şimdi",
+ "Bildzeit: Minuten für heute dazu": "Fotoğraf süresi: bugün için ek dakikalar"
 }

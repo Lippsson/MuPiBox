@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Mirror ↔",
  "Spiegeln ↕": "Mirror ↕",
  "Spielzeit": "Playtime",
- "Spielzeit und Ruhezeiten jetzt": "playtime and quiet times right now",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3875,5 +3874,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "At the top of the display, a dot in the user’s colour shows who is signed in; a tap on it opens the overview with the names. A new user starts with an empty library or a copy of another user’s library. Deleted users go to the trash. The active user and the last user cannot be deleted.",
  "Reihenfolge am Display": "Order on the display",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Default: alphabetical, numbers as numbers – “Folge 2” before “Folge 10”.",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "“Episode” is the number in the title (e.g. “Folge 12”). Empty = all; albums without a number then belong to no range."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "“Episode” is the number in the title (e.g. “Folge 12”). Empty = all; albums without a number then belong to no range.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Playtime, quiet hours and photo time now",
+ "Bildzeit: Minuten für heute dazu": "Photo time: minutes added for today"
 }

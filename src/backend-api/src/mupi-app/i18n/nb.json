@@ -2335,7 +2335,6 @@
  "Spiegeln ↔": "Speilvend ↔",
  "Spiegeln ↕": "Speilvend ↕",
  "Spielzeit": "Spilletid",
- "Spielzeit und Ruhezeiten jetzt": "Spilletid og hviletider nå",
  "Spotify": "Spotify",
  "Spotify · Smart-Sync": "Spotify · Smart-Sync",
  "spotify {}": "spotify {}",
@@ -3859,5 +3858,7 @@
  "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Øverst på skjermen viser en prikk i brukerens farge hvem som er logget inn; et trykk på den åpner oversikten med navnene. En ny bruker starter med et tomt bibliotek eller en kopi av en annen brukers bibliotek. Slettede brukere havner i papirkurven. Den aktive og den siste brukeren kan ikke slettes.",
  "Reihenfolge am Display": "Rekkefølge på skjermen",
  "Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.": "Standard: alfabetisk, tall som tall – «Folge 2» før «Folge 10».",
- "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Episode» er nummeret i tittelen (f.eks. «Folge 12»). Tomt = alle; album uten nummer hører da ikke til noe område."
+ "„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.": "«Episode» er nummeret i tittelen (f.eks. «Folge 12»). Tomt = alle; album uten nummer hører da ikke til noe område.",
+ "Spielzeit, Ruhezeiten und Bildzeit jetzt": "Spilletid, hviletider og bildetid nå",
+ "Bildzeit: Minuten für heute dazu": "Bildetid: ekstra minutter i dag"
 }
