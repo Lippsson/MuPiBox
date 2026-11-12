@@ -11624,12 +11624,12 @@ function mountHa(root, page) {
    its numbers and the card's space, an album with its pictures, uploading into it. A part of its own, beside the
    radio plays and the music: never in their lists, filters or "Hören". */
 
-const photoLib = { overview: null, nas: null, immich: null, synology: null, nextcloud: null, icloud: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
-const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'], synology: ['image', 'Synology Photos'], nextcloud: ['cloud', 'Nextcloud'], icloud: ['share', 'iCloud'] }
+const photoLib = { overview: null, nas: null, immich: null, synology: null, nextcloud: null, icloud: null, photoprism: null, stale: false, album: null, albumId: null, selecting: false, chosen: new Set() }
+const PHOTO_SOURCE = { upload: ['mobile', 'Hochgeladen'], nas: ['server', 'NAS'], immich: ['grid', 'Immich'], synology: ['image', 'Synology Photos'], nextcloud: ['cloud', 'Nextcloud'], icloud: ['share', 'iCloud'], photoprism: ['prism', 'PhotoPrism'] }
 const photoFile = (albumId, assetId, size) => `${API}/photos/file/${albumId}/${assetId}/${size}`
 
 async function loadPhotoOverview() {
-  const [r, nas, immich, synology, nextcloud, icloud] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`), api(`${API}/photos/immich`), api(`${API}/photos/synology`), api(`${API}/photos/nextcloud`), api(`${API}/photos/icloud`)])
+  const [r, nas, immich, synology, nextcloud, icloud, photoprism] = await Promise.all([api(`${API}/photos/overview`), api(`${API}/photos/nas`), api(`${API}/photos/immich`), api(`${API}/photos/synology`), api(`${API}/photos/nextcloud`), api(`${API}/photos/icloud`), api(`${API}/photos/photoprism`)])
   if (!r.ok) throw new Error(`photos ${r.status}`)
   photoLib.overview = r.body
   // (the photo services: the NAS folders and Immich - their lines in the overview)
@@ -11638,6 +11638,7 @@ async function loadPhotoOverview() {
   photoLib.synology = synology.ok ? synology.body : null
   photoLib.nextcloud = nextcloud.ok ? nextcloud.body : null
   photoLib.icloud = icloud.ok ? icloud.body : null
+  photoLib.photoprism = photoprism.ok ? photoprism.body : null
   photoLib.stale = false
 }
 
@@ -11659,6 +11660,8 @@ function photoServicesCard() {
   if (sy?.connected) rows.push(navRow('fotosynology', 'Synology Photos', synologyLine(sy), 'image'))
   const nc = photoLib.nextcloud
   if (nc?.connected) rows.push(navRow('fotonextcloud', 'Nextcloud', synologyLine(nc), 'cloud'))
+  const pp = photoLib.photoprism
+  if (pp?.connected) rows.push(navRow('fotophotoprism', 'PhotoPrism', synologyLine(pp), 'prism'))
   const ic = photoLib.icloud
   if (ic?.connected) rows.push(navRow('fotoicloud', 'iCloud', ic.sync.offlineSince ? tr(`Nicht erreichbar seit ${relTime(ic.sync.offlineSince).replace(/^vor /, '')}`) : tr(`${ic.albumList.length} ${ic.albumList.length === 1 ? 'geteiltes Album' : 'geteilte Alben'}`), 'share'))
   return rows.length ? `<section class="card wide"><h2>Foto-Dienste</h2><div class="navlist">${rows.join('')}</div></section>` : ''
@@ -11754,6 +11757,7 @@ function mountPhotoOverview(root, page) {
        <button class="navrow" data-svc="fotoimmich"><span class="tile">${icon('grid', 18)}</span><span class="lbl"><b>Immich</b><small>Dein eigener Fotodienst, per API-Schlüssel</small></span><span class="chev">${icon('chevron', 18)}</span></button>
        <button class="navrow" data-svc="fotosynology"><span class="tile">${icon('image', 18)}</span><span class="lbl"><b>Synology Photos</b><small>Alben deines Synology-NAS, mit eigenem Konto</small></span><span class="chev">${icon('chevron', 18)}</span></button>
        <button class="navrow" data-svc="fotonextcloud"><span class="tile">${icon('cloud', 18)}</span><span class="lbl"><b>Nextcloud</b><small>Alben der Nextcloud-App „Fotos“, per App-Passwort</small></span><span class="chev">${icon('chevron', 18)}</span></button>
+       <button class="navrow" data-svc="fotophotoprism"><span class="tile">${icon('prism', 18)}</span><span class="lbl"><b>PhotoPrism</b><small>Alben deines PhotoPrism, per App-Passwort</small></span><span class="chev">${icon('chevron', 18)}</span></button>
        <button class="navrow" data-svc="fotoicloud"><span class="tile">${icon('share', 18)}</span><span class="lbl"><b>iCloud</b><small>Geteilte Alben vom iPhone, per Link</small></span><span class="chev">${icon('chevron', 18)}</span></button></div>`,
       (sheet, close) => {
         for (const b of sheet.querySelectorAll('[data-svc]')) {
@@ -13329,6 +13333,302 @@ function mountPhotoNextcloud(root, page) {
 }
 
 
+/* Bibliothek › Fotos › PhotoPrism (5.1): a login of its own (address, app password) - the assistant (login, test with the
+   certificate, albums) and, once switched on, the service's page as Immich's (photoprism.ts) */
+const photoPp = { data: null, step: 0, url: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+
+async function loadPhotoPhotoprism() {
+  const r = await api(`${API}/photos/photoprism`)
+  if (!r.ok) throw new Error(`photos photoprism ${r.status}`)
+  const d = r.body
+  photoPp.data = d
+  // (not switched on yet: the assistant)
+  photoPp.step = d.connected ? 0 : 1
+  photoPp.url = d.settings.url || ''
+  photoPp.password = ''
+  photoPp.fingerprint = d.settings.certFingerprint || ''
+  photoPp.test = null
+  photoPp.albums = null
+}
+
+const PP_ERRORS = {
+  unauthorized: ['App-Passwort abgelehnt', 'PhotoPrism nimmt das App-Passwort nicht an. Prüfe es, oder erstelle ein neues. Das Anmeldepasswort funktioniert hier nicht.'],
+  notPhotoprism: ['Kein PhotoPrism gefunden', 'Unter dieser Adresse antwortet kein PhotoPrism. Prüfe die Adresse, meist endet sie auf :2342.'],
+  certificate: ['Zertifikat passt nicht', 'PhotoPrism zeigt ein anderes Zertifikat als das bestätigte. Wurde es erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.'],
+  unreachable: ['PhotoPrism nicht erreichbar', 'Die Box erreicht PhotoPrism unter dieser Adresse nicht. Prüfe Adresse und Netz.'],
+}
+
+const PP_STEPS = [
+  ['login', 'Anmeldung'],
+  ['test', 'Test'],
+  ['albums', 'Alben'],
+]
+
+// the password kept on the box, for the address typed in (another one gets it only typed in anew)
+const photoPpPasswordKept = () => {
+  const st = photoPp.data?.settings
+  return !!st?.hasPassword && photoPp.url.trim().replace(/\/+$/, '').toLowerCase() === String(st.url).toLowerCase()
+}
+
+function photoPhotoprismSteps() {
+  const s = photoPp.step
+  const t = photoPp.test
+  const bar = `<ol class="wz-steps" style="grid-template-columns:repeat(${PP_STEPS.length}, minmax(0, 1fr))">${PP_STEPS.map(([, label], i) => {
+    const n = i + 1
+    const done = n < s
+    return `<li class="${done ? 'done' : ''}${n === s ? ' current' : ''}"><button type="button" data-ppstep="${n}"${n === s ? ' aria-current="step"' : ''}${done ? '' : ' disabled'}><span class="bar"></span><span class="lbl">${done ? icon('check', 14) : `<i>${n}</i>`}${esc(tr(label))}</span></button></li>`
+  }).join('')}</ol>`
+  let body
+  let next = ''
+  if (s === 1) {
+    const kept = photoPpPasswordKept()
+    body = `<h2>Mit PhotoPrism verbinden</h2><p class="help">Die Box zeigt die Alben aus PhotoPrism, die du gleich auswählst. Private und archivierte Fotos bleiben draußen.</p>
+      <div class="field"><label for="pp-url">PhotoPrism-Adresse</label><input class="input mono" id="pp-url" placeholder="http://192.168.1.20:2342" value="${esc(photoPp.url)}" ${NO_PW_MANAGER} spellcheck="false">
+      <small>Wie im Browser, ohne /library/… dahinter.</small></div>
+      <div class="field"><label for="pp-pass">App-Passwort</label><div class="input-wrap"><input class="input has-eye" id="pp-pass" type="password" value="${esc(photoPp.password)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um es zu behalten') : '')}" autocomplete="new-password"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
+      <small>In PhotoPrism unter Einstellungen › Konto › Apps und Geräte › Hinzufügen erstellen: Berechtigung „Voller Zugriff“, Ablaufdatum am besten „Nie“. Die Box liest damit nur. Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
+    next = `<button class="btn primary" id="pp-test" ${photoPp.testing ? 'disabled' : ''}>${esc(tr(photoPp.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
+  } else if (s === 2 && t?.ok) {
+    body = `<h2>Verbindung steht</h2><p class="help">Die Box kann die Alben lesen.</p>
+      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(t.account ?? '–')}</dd></div><div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.pictures))}</dd></div></dl>
+      ${t.albums ? '' : `<div class="note warn">${icon('info', 18)}<span>Noch keine Alben. Lege in PhotoPrism unter Alben eines an und teste erneut.</span></div>`}`
+    next = t.albums ? `<button class="btn primary" id="pp-next">Weiter</button>` : `<button class="btn primary" id="pp-retry">${esc(tr('Erneut testen'))}</button>`
+  } else if (s === 2) {
+    const [head, text] = PP_ERRORS[t?.error] ?? PP_ERRORS.unreachable
+    // (a certificate not confirmed yet: shown to be compared and trusted, as for the NAS)
+    const cert = t?.error === 'certificate' ? t.certificate : null
+    body = cert
+      ? `<h2>Zertifikat bestätigen</h2><p class="help" style="margin:0">PhotoPrism nutzt ein eigenes (selbst signiertes) Zertifikat. Vergleiche den Fingerabdruck mit dem im Browser über das Schloss-Symbol. Nur wenn er übereinstimmt:</p>
+        <dl class="kv"><div><dt>Ausgestellt für</dt><dd>${esc(cert.subject)}</dd></div><div><dt>Gültig bis</dt><dd>${esc(cert.validTo)}</dd></div></dl>
+        <p class="mono-block">${esc(cert.fingerprint)}</p>
+        ${photoPp.fingerprint ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(text))}</span></div>` : ''}`
+      : `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text))}</span></div>`
+    next = cert
+      ? `<button class="btn primary" id="pp-trust" data-fp="${esc(cert.fingerprint)}">${esc(tr('Vertrauen und testen'))}</button>`
+      : `<button class="btn primary" data-ppstep="1">${esc(tr('Anmeldung ändern'))}</button>`
+  } else {
+    const list = photoPp.albums
+    const rows = !list
+      ? `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+      : list.error
+        ? `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Alben lassen sich gerade nicht laden.'))}</span></div>`
+        : list.albums.length
+          ? `<div class="rows">${list.albums
+              .map(
+                (a) => `<div class="entry ph-im-album"><span class="ph-thumb">${a.thumb ? `<img src="${esc(`${API}/photos/photoprism/thumb/${a.thumb}`)}" alt="" loading="lazy">` : icon('image', 20)}</span>
+                <span class="lbl"><b translate="no">${esc(a.name)}</b><small>${esc(tr(`${a.count} ${a.count === 1 ? 'Foto' : 'Fotos'}`))}</small></span>
+                <button class="ph-check-box" role="checkbox" aria-checked="${photoPp.chosen.has(a.id)}" data-pp="${esc(a.id)}" aria-label="${esc(a.name)}">${photoPp.chosen.has(a.id) ? icon('check', 16) : ''}</button></div>`,
+              )
+              .join('')}</div>`
+          : `<p class="help" style="margin:0">In PhotoPrism gibt es noch keine Alben.</p>`
+    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in PhotoPrism` : 'Alben in PhotoPrism'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="pp-all">Alle wählen</button>' : ''}</div>
+      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoPp.chosen.size} ${photoPp.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    next = `<button class="btn primary" id="pp-done">Fertig</button>`
+  }
+  // (the first step's way back: out of the assistant - to the service's page when switched on, else to the photos)
+  const back = s === 1 ? `<button class="btn" id="pp-cancel">Abbrechen</button>` : `<button class="btn" id="pp-back">${icon('back', 18)}Zurück</button>`
+  return [
+    `<section class="card wide wz">${bar}<div class="wz-count">${esc(tr(`Schritt ${s} von ${PP_STEPS.length}`))}</div>${body}
+      <div class="wz-foot">${back}<span class="wz-next">${next}</span></div></section>`,
+  ]
+}
+
+function photoPhotoprismTop() {
+  const d = photoPp.data
+  if (!d) return []
+  if (photoPp.step) return photoPhotoprismSteps()
+  const s = d.sync
+  const st = d.settings
+  const status = photoServiceStatus(s, 'Anmeldung abgelehnt')
+  const limit = st.cacheLimitMb * 1024 * 1024
+  return [
+    `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
+      <div class="ph-nas-state ${status[1]}">${status[0]}</div>
+      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>PhotoPrism nimmt das App-Passwort nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe das App-Passwort unten.</span></div>` : ''}
+      ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob PhotoPrism läuft.</span></div>` : ''}
+      ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr.`))}</span></div>` : ''}
+      ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
+      <div class="btns"><button class="btn primary" id="pp-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="pp-albums">Alben ändern</button></div></section>`,
+    `<section class="card wide"><h2>Fotos</h2>
+      <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Fotos und Videos kommen beim Anzeigen live von PhotoPrism – ohne Netz sind diese Alben gerade nicht da.</small></span>
+        <label class="switch"><input type="checkbox" id="pp-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+    `<section class="card"><h2>Abgleich</h2>
+      <div class="field"><label>Intervall</label><button class="select-btn" id="pp-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
+      <small>Neue Fotos aus PhotoPrism erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
+    `<section class="card"><h2>Zwischenspeicher</h2>
+      <div class="bar"><div class="slider-head"><b>${esc(st.keepCopy && limit ? tr(`${formatBytes(d.cacheBytes)} von ${formatBytes(limit)} belegt`) : tr(`${formatBytes(d.cacheBytes)} belegt`))}</b></div>
+      <div class="track"><i style="--w:${st.keepCopy && limit ? Math.min(100, (d.cacheBytes / limit) * 100).toFixed(1) : 0}%"></i></div></div>
+      ${st.keepCopy
+        ? `<p class="help">Fotos aus PhotoPrism liegen in Anzeigegröße auf der Box und sind auch ohne Netz da.</p>
+      <div class="field"><label>Höchstens belegen</label><button class="select-btn" id="pp-cache"><span>${esc(tr(NAS_CACHE.find(([, m]) => m === st.cacheLimitMb)?.[0] ?? '2 GB'))}</span>${icon('chevron', 18)}</button>
+      <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
+        : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
+    `<section class="card wide"><h2>Zugang</h2>
+      <dl class="kv"><div><dt>PhotoPrism-Adresse</dt><dd translate="no">${esc(st.url)}</dd></div><div><dt>Konto</dt><dd translate="no">${esc(st.account || '–')}</dd></div><div><dt>App-Passwort</dt><dd>${esc(tr(st.hasPassword ? 'gesetzt' : 'fehlt'))}</dd></div>${st.certFingerprint ? `<div><dt>Zertifikat</dt><dd>${esc(tr('bestätigt'))}</dd></div>` : ''}</dl>
+      <p class="help">Das App-Passwort wird aus Sicherheitsgründen nicht mehr angezeigt.</p>
+      <div class="btns"><button class="btn" id="pp-login">Anmeldung ändern</button></div></section>`,
+    `<section class="card wide"><div class="navlist"><button class="navrow" id="pp-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Die Alben aus PhotoPrism und ihre Fotos werden von der Box entfernt. In PhotoPrism bleibt alles erhalten.</small></span></button></div></section>`,
+  ]
+}
+
+async function photoPhotoprismLoadAlbums() {
+  photoPp.albums = null
+  const r = await api(`${API}/photos/photoprism/albums`)
+  photoPp.albums = r.ok ? r.body : { error: true }
+}
+
+function mountPhotoPhotoprism(root, page) {
+  const d = photoPp.data
+  window.clearTimeout(photoPp.timer)
+  if (!d) return
+  const redraw = () => currentPage()?.id === page.id && renderPage(page, false)
+  const take = (body) => {
+    photoPp.data = body
+    photoLib.stale = true
+  }
+  const save = async (body, done) => {
+    const r = await api(`${API}/photos/photoprism`, { method: 'POST', body })
+    if (!r.ok) {
+      toast('Nicht gespeichert', 'info')
+      return false
+    }
+    take(r.body)
+    if (done) toast(done)
+    return true
+  }
+  // (what is typed in stays while the assistant is open)
+  const keep = () => {
+    const url = $('#pp-url', root)
+    if (url) photoPp.url = url.value.trim()
+    const pass = $('#pp-pass', root)
+    if (pass) photoPp.password = pass.value
+  }
+  const goStep = (n) => {
+    keep()
+    photoPp.step = n
+    redraw()
+    window.scrollTo(0, 0)
+  }
+  // the assistant
+  $('#pp-cancel', root)?.addEventListener('click', () => (d.connected ? goStep(0) : go('fotos')))
+  $('#pp-back', root)?.addEventListener('click', () => goStep(photoPp.step === 3 && d.connected && !photoPp.test ? 0 : photoPp.step - 1))
+  for (const b of root.querySelectorAll('[data-ppstep]')) b.onclick = () => goStep(Number(b.dataset.ppstep))
+  const test = async (fingerprint) => {
+    photoPp.testing = true
+    photoPp.test = null
+    redraw()
+    const body = { url: photoPp.url, ...(photoPp.password ? { password: photoPp.password } : {}), ...(fingerprint ? { fingerprint } : {}) }
+    const r = await api(`${API}/photos/photoprism/test`, { method: 'POST', body, timeoutMs: 45000 })
+    photoPp.testing = false
+    photoPp.test = r.ok ? r.body : { ok: false, error: 'unreachable' }
+    if (r.ok && r.body.ok) photoPp.fingerprint = r.body.fingerprint || ''
+    photoPp.step = 2
+    redraw()
+  }
+  $('#pp-test', root)?.addEventListener('click', () => {
+    keep()
+    if (!/^(https?:\/\/)?[^\s/:]+(:\d+)?(\/\S*)?$/i.test(photoPp.url)) return toast('Bitte die Adresse von PhotoPrism eintragen, z. B. http://192.168.1.20:2342', 'info')
+    if (!photoPp.password && !photoPpPasswordKept()) return toast('Bitte das App-Passwort eintragen', 'info')
+    // (another address: the certificate confirmed for the one before does not count)
+    if (photoPp.url.replace(/\/+$/, '').toLowerCase() !== String(d.settings.url).toLowerCase()) photoPp.fingerprint = ''
+    void test(photoPp.fingerprint)
+  })
+  $('#pp-trust', root)?.addEventListener('click', (e) => {
+    photoPp.fingerprint = e.currentTarget.dataset.fp
+    void test(photoPp.fingerprint)
+  })
+  $('#pp-retry', root)?.addEventListener('click', () => void test(photoPp.fingerprint))
+  $('#pp-next', root)?.addEventListener('click', async () => {
+    // (the login is saved now - the album list comes from the box with it)
+    const body = { url: photoPp.url, account: photoPp.test?.account ?? '', certFingerprint: photoPp.fingerprint }
+    if (photoPp.password) body.password = photoPp.password
+    if (!(await save(body))) return
+    photoPp.password = ''
+    photoPp.chosen = new Set(photoPp.data.settings.albumIds)
+    photoPp.step = 3
+    redraw()
+    await photoPhotoprismLoadAlbums()
+    redraw()
+  })
+  for (const b of root.querySelectorAll('[data-pp]')) {
+    b.onclick = () => {
+      const id = b.dataset.pp
+      if (photoPp.chosen.has(id)) photoPp.chosen.delete(id)
+      else photoPp.chosen.add(id)
+      redraw()
+    }
+  }
+  $('#pp-all', root)?.addEventListener('click', () => {
+    for (const a of photoPp.albums?.albums ?? []) photoPp.chosen.add(a.id)
+    redraw()
+  })
+  $('#pp-done', root)?.addEventListener('click', async () => {
+    if (!(await save({ enabled: true, albumIds: [...photoPp.chosen] }, photoPp.chosen.size ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
+    photoPp.step = 0
+    photoPp.test = null
+    redraw()
+  })
+  if (photoPp.step) return
+  // the service's page
+  if (d.sync.running) photoPp.timer = window.setTimeout(async () => {
+    if (currentPage()?.id !== page.id || photoPp.step) return
+    const r = await api(`${API}/photos/photoprism`)
+    if (r.ok) take(r.body)
+    redraw()
+  }, 3000)
+  $('#pp-sync', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/photos/photoprism/sync`, { method: 'POST', body: {} })
+    if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+    take(r.body)
+    toast('Abgleich gestartet')
+    redraw()
+  })
+  $('#pp-albums', root)?.addEventListener('click', async () => {
+    photoPp.chosen = new Set(d.settings.albumIds)
+    photoPp.test = null
+    photoPp.step = 3
+    redraw()
+    await photoPhotoprismLoadAlbums()
+    redraw()
+  })
+  $('#pp-login', root)?.addEventListener('click', () => {
+    Object.assign(photoPp, { url: d.settings.url, password: '', fingerprint: d.settings.certFingerprint || '', test: null })
+    goStep(1)
+  })
+  $('#pp-keep', root)?.addEventListener('change', async (e) => {
+    const on = e.target.checked
+    if (!(await save({ keepCopy: on }, on ? 'Fotos werden auf der Box gespeichert' : 'Fotos kommen live von PhotoPrism'))) e.target.checked = !on
+    redraw()
+  })
+  const choose = (title, list, current, key) =>
+    openSheet(
+      `<h2>${esc(tr(title))}</h2><div class="navlist">${list
+        .map(([l, v]) => `<button class="navrow" data-v="${v}"><span class="lbl"><b>${esc(tr(l))}</b></span>${v === current ? `<span class="chev">${icon('check', 18)}</span>` : ''}</button>`)
+        .join('')}</div>`,
+      (sheet, close) => {
+        for (const b of sheet.querySelectorAll('[data-v]')) {
+          b.onclick = async () => {
+            close()
+            if (await save({ [key]: Number(b.dataset.v) }, 'Gespeichert')) redraw()
+          }
+        }
+      },
+    )
+  $('#pp-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
+  $('#pp-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#pp-remove', root)?.addEventListener('click', () =>
+    confirmSheet('Verbindung trennen', tr(`Die ${d.albums} ${d.albums === 1 ? 'Album' : 'Alben'} aus PhotoPrism und ihre Fotos werden von der Box entfernt. In PhotoPrism bleibt alles erhalten.`), async () => {
+      const r = await api(`${API}/photos/photoprism/remove`, { method: 'POST', body: {} })
+      if (!r.ok) return toast('Das hat nicht geklappt', 'info')
+      photoLib.stale = true
+      toast('PhotoPrism getrennt')
+      go('fotos')
+    }),
+  )
+}
+
+
 /* Bibliothek › Fotos › iCloud (5.1): shared albums of the iPhone's Photos app by their public link - a list of them, a
    link to add, and the service's page as Immich's (icloud.ts). Not an official interface of Apple: said on the page. */
 const photoIc = { data: null, adding: false, timer: 0 }
@@ -13556,6 +13856,7 @@ const PHOTO_SERVICE = {
   immich: { name: 'Immich', page: 'fotoimmich', icon: 'grid', live: 'Live von Immich', note: 'Dieses Album wird in Immich verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
   synology: { name: 'Synology Photos', page: 'fotosynology', icon: 'image', live: 'Live vom NAS', note: 'Dieses Album wird in Synology Photos verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
   nextcloud: { name: 'Nextcloud', page: 'fotonextcloud', icon: 'cloud', live: 'Live von der Nextcloud', note: 'Dieses Album wird in Nextcloud verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
+  photoprism: { name: 'PhotoPrism', page: 'fotophotoprism', icon: 'prism', live: 'Live von PhotoPrism', note: 'Dieses Album wird in PhotoPrism verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
   icloud: { name: 'iCloud', page: 'fotoicloud', icon: 'share', live: 'Live von iCloud', note: 'Dieses Album wird auf dem iPhone verwaltet. Fotos hinzufügen oder löschen geht dort. Die Box übernimmt Änderungen beim nächsten Abgleich.' },
 }
 
@@ -13845,7 +14146,7 @@ function photoSettingsTop() {
   if (!d.settings.enabled) {
     return [
       `<section class="card photo-off"><div class="photo-hero"><span class="photo-hero-ic">${icon('image', 30)}</span><h2>Fotos am Display</h2>
-        <p class="help">Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich, Synology Photos, Nextcloud oder iCloud.</p></div>
+        <p class="help">Zeige Fotos und kurze Videos am Display der Box: vom Handy hochgeladen, aus einem NAS-Ordner, aus Immich, Synology Photos, Nextcloud, PhotoPrism oder iCloud.</p></div>
         <div class="row"><span class="lbl"><b>Fotoanzeige</b><small>Standardmäßig aus.</small></span><label class="switch"><input type="checkbox" id="ph-on" role="switch" aria-label="Fotoanzeige"><span></span></label></div></section>`,
       `<div class="note wide">${icon('info', 18)}<span>Nach dem Einschalten erscheinen „Fotos“ in der Bibliothek und die Bildzeit unter Spielzeit. Am Display kommt der Reiter „Fotos“ dazu, sobald ein Album freigegeben ist.</span></div>`,
       `<div class="note wide">${icon('lock', 18)}<span>Fotos bleiben auf der Box in deinem Heimnetz. Es gibt keine Links zum Teilen.</span></div>`,
@@ -15930,6 +16231,7 @@ const CONTROLLERS = {
   fotoimmich: { load: loadPhotoImmich, top: photoImmichTop, sections: () => [], mount: mountPhotoImmich },
   fotosynology: { load: loadPhotoSynology, top: photoSynologyTop, sections: () => [], mount: mountPhotoSynology },
   fotonextcloud: { load: loadPhotoNextcloud, top: photoNextcloudTop, sections: () => [], mount: mountPhotoNextcloud },
+  fotophotoprism: { load: loadPhotoPhotoprism, top: photoPhotoprismTop, sections: () => [], mount: mountPhotoPhotoprism },
   fotoicloud: { load: loadPhotoIcloud, top: photoIcloudTop, sections: () => [], mount: mountPhotoIcloud },
   'g-fotos': { load: loadPhotoSettings, top: photoSettingsTop, sections: photoSettingsSections, mount: mountPhotoSettings, change: changePhotoSetting },
   mqtt: {

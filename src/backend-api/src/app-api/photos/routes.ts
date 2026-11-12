@@ -12,6 +12,7 @@ import { type PhotoImmichDeps, registerPhotoImmichRoutes } from './immich'
 import { type PhotoNasAccess, registerPhotoNasRoutes } from './nas'
 import { registerPhotoIcloudRoutes } from './icloud'
 import { registerPhotoNextcloudRoutes } from './nextcloud'
+import { registerPhotoPhotoprismRoutes } from './photoprism'
 import { registerPhotoSynologyRoutes } from './synology'
 import { videoQueue } from './video'
 import { applyPhotoSettings, applyPhotoTimeAction, photoSettings } from './settings'
@@ -92,6 +93,8 @@ export function registerPhotoRoutes(router: Router, deps: PhotoDeps): void {
   registerPhotoNextcloudRoutes(router, deps)
   // (Bibliothek › Fotos › iCloud: shared albums by their public link - see icloud.ts)
   registerPhotoIcloudRoutes(router, deps)
+  // (Bibliothek › Fotos › PhotoPrism: its albums, by an app password - see photoprism.ts)
+  registerPhotoPhotoprismRoutes(router, deps)
 
   /** GET /api/app/photos/settings - the settings (with their defaults) and the programs' state */
   router.get('/photos/settings', requireSession, (_req, res) => {

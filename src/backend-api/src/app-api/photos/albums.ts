@@ -29,6 +29,7 @@ import {
   photoBytes,
   SERVICE_SOURCES,
   ICLOUD_PHOTO_DIR,
+  PHOTOPRISM_PHOTO_DIR,
   NEXTCLOUD_PHOTO_DIR,
   SYNOLOGY_PHOTO_DIR,
   sweepLeftovers,
@@ -157,14 +158,14 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     res.setHeader('Cache-Control', 'no-store')
     const list = await albums()
     // (the pictures on the card: the uploaded ones and those of the NAS folders in the cache)
-    const [space, used, nasUsed, immichUsed, synologyUsed, nextcloudUsed, icloudUsed] = req.query.light
-      ? [null, 0, 0, 0, 0, 0, 0]
-      : await Promise.all([cardSpace(), photoBytes(), photoBytes(NAS_PHOTO_DIR), photoBytes(IMMICH_PHOTO_DIR), photoBytes(SYNOLOGY_PHOTO_DIR), photoBytes(NEXTCLOUD_PHOTO_DIR), photoBytes(ICLOUD_PHOTO_DIR)])
+    const [space, used, nasUsed, immichUsed, synologyUsed, nextcloudUsed, icloudUsed, photoprismUsed] = req.query.light
+      ? [null, 0, 0, 0, 0, 0, 0, 0]
+      : await Promise.all([cardSpace(), photoBytes(), photoBytes(NAS_PHOTO_DIR), photoBytes(IMMICH_PHOTO_DIR), photoBytes(SYNOLOGY_PHOTO_DIR), photoBytes(NEXTCLOUD_PHOTO_DIR), photoBytes(ICLOUD_PHOTO_DIR), photoBytes(PHOTOPRISM_PHOTO_DIR)])
     res.json({
       enabled: photoSettings(deps.getMupiboxConfig()).enabled,
       albums: list.map(summary),
       totals: { photos: list.reduce((n, a) => n + a.assets.length, 0), videos: 0, albums: list.length },
-      storage: space ? { total: space.total, free: space.free, photos: used + nasUsed + immichUsed + synologyUsed + nextcloudUsed + icloudUsed } : null,
+      storage: space ? { total: space.total, free: space.free, photos: used + nasUsed + immichUsed + synologyUsed + nextcloudUsed + icloudUsed + photoprismUsed } : null,
     })
   })
 

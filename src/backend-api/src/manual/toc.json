@@ -246,6 +246,13 @@
         }
       },
       {
+        "id": "photoprism",
+        "title": {
+          "de": "PhotoPrism",
+          "en": "PhotoPrism"
+        }
+      },
+      {
         "id": "icloud",
         "title": {
           "de": "iCloud (geteilte Alben)",

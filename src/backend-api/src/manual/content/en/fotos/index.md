@@ -13,9 +13,10 @@ The photo display is off at first. You switch it on under **Settings › Photos*
 | **Immich** | albums of an Immich server in the home network | [Immich](immich.md) |
 | **Synology Photos** | albums from Synology Photos on a Synology NAS | [Synology Photos](synology-photos.md) |
 | **Nextcloud** | albums of the Nextcloud Photos app | [Nextcloud](nextcloud.md) |
+| **PhotoPrism** | albums of a PhotoPrism in the home network | [PhotoPrism](photoprism.md) |
 | **iCloud** | shared albums from the iPhone, by link | [iCloud](icloud.md) |
 
-The box can keep albums from Immich, Synology Photos, Nextcloud and iCloud or fetch them live when they are shown ([Photo services: keep or live](speichern-oder-live.md)).
+The box can keep albums from Immich, Synology Photos, Nextcloud, PhotoPrism and iCloud or fetch them live when they are shown ([Photo services: keep or live](speichern-oder-live.md)).
 
 ## Getting started
 

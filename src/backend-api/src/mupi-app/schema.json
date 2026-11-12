@@ -1730,6 +1730,16 @@
    "sections": []
   },
   {
+   "id": "fotophotoprism",
+   "slug": "photo-photoprism",
+   "area": "bibliothek",
+   "parent": "fotos",
+   "title": "PhotoPrism",
+   "description": "",
+   "icon": "prism",
+   "sections": []
+  },
+  {
    "id": "fotoicloud",
    "slug": "photo-icloud",
    "area": "bibliothek",

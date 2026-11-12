@@ -99,7 +99,7 @@ export interface RemoteSettings {
 }
 
 export interface RemoteSpec {
-  source: Extract<PhotoSource, 'immich' | 'synology' | 'nextcloud' | 'icloud'>
+  source: Extract<PhotoSource, 'immich' | 'synology' | 'nextcloud' | 'icloud' | 'photoprism'>
   /** how the logs name it */
   label: string
   stateFile: string
