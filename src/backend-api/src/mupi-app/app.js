@@ -12784,8 +12784,15 @@ const SYNO_TABS = [
   ['shared', 'Gemeinsamer Bereich'],
   ['smart', 'Intelligent'],
 ]
-// the smart albums Synology Photos makes of the personal space: what the box offers besides the people
-const SYNO_SMART = { recent: ['Zuletzt hinzugefügt', 'time'], favorites: ['Favoriten', 'heart'], videos: ['Videos', 'image'] }
+// the smart albums Synology Photos makes of the personal space: what the box offers besides the lists below
+const SYNO_SMART = { recent: ['Zuletzt hinzugefügt', 'time'], videos: ['Videos', 'image'] }
+// the lists of what Synology's recognition found (or the user named): [key of the answer, heading]
+const SYNO_SMART_LISTS = [
+  ['people', 'Personen'],
+  ['places', 'Orte'],
+  ['tags', 'Tags'],
+  ['subjects', 'Motive'],
+]
 
 async function photoSynoLoadSmart() {
   photoSyno.smart = null
@@ -12801,13 +12808,13 @@ function photoSynoSmartRows() {
       <span class="lbl"><b translate="no">${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>
       <button class="ph-check-box" role="checkbox" aria-checked="${photoSyno.chosen.has(ref)}" data-sypick="${esc(ref)}" aria-label="${esc(name)}">${photoSyno.chosen.has(ref) ? icon('check', 16) : ''}</button></div>`
   const collections = d.collections.map((c) => row(c.ref, tr(SYNO_SMART[c.kind]?.[0] ?? c.kind), '', SYNO_SMART[c.kind]?.[1] ?? 'image')).join('')
-  const people = d.peopleError
-    ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr('Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.'))}</span></div>`
-    : d.people.length
-      ? `<div class="rows">${d.people.map((x) => row(x.ref, x.name, x.count ? tr(`${x.count} ${x.count === 1 ? 'Foto' : 'Fotos'}`) : '', 'image')).join('')}</div>`
-      : `<p class="help" style="margin:0">${esc(tr('Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.'))}</p>`
-  return `<div class="rows">${collections}</div><h3 style="margin:12px 0 4px">${esc(tr('Personen'))}</h3>${people}
-    <p class="help" style="margin:0">${esc(tr('Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.'))}</p>`
+  // (a list the DSM does not have, or an empty one, is left out)
+  const lists = SYNO_SMART_LISTS.filter(([key]) => Array.isArray(d[key]) && d[key].length)
+    .map(([key, head]) => `<h3 style="margin:12px 0 4px">${esc(tr(head))}</h3><div class="rows">${d[key].map((x) => row(x.ref, x.name, [x.note, x.count ? tr(`${x.count} ${x.count === 1 ? 'Foto' : 'Fotos'}`) : ''].filter(Boolean).join(' · '), 'image')).join('')}</div>`)
+    .join('')
+  const none = lists ? '' : `<p class="help" style="margin:12px 0 0">${esc(tr('Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.'))}</p>`
+  return `<div class="rows">${collections}</div>${lists}${none}
+    <p class="help" style="margin:8px 0 0">${esc(tr('Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.'))}</p>`
 }
 const synoRef = (space, id) => `${space === 'shared' ? 't' : 'f'}${id}`
 
