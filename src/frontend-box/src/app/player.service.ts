@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http'
+import { HttpClient, type HttpErrorResponse } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import type { ServerHttpApiConfig } from '@backend-api/server.model'
 import { firstValueFrom, type Observable, timeout } from 'rxjs'
@@ -9,6 +9,7 @@ import { LogService } from './log.service'
 import type { Media } from './media'
 import { SpotifyService } from './spotify.service'
 import { tileQuery } from './tile-key'
+import { TileTimeService } from './tile-time.service'
 
 export enum PlayerCmds {
   PLAY = 'play',
@@ -45,6 +46,7 @@ export class PlayerService {
     private logService: LogService,
     private spotifyService: SpotifyService,
     private currentMediaService: CurrentMediaService,
+    private tileTime: TileTimeService,
   ) {}
 
   getConfig() {
@@ -328,7 +330,17 @@ export class PlayerService {
   private sendRequest(url: string, media?: Media) {
     const room = this.spotifyService.isPlayerReady() ? this.spotifyService.getDeviceId() : 'current'
     const baseUrl = `${environment.backend.playerUrl}/${room}/`
-    this.http.get(baseUrl + url + (media ? tileQuery(url, media) : '')).subscribe()
+    if (media) this.tileTime.noteStart(media)
+    this.http.get(baseUrl + url + (media ? tileQuery(url, media) : '')).subscribe({
+      // (its tile's day's limit is used up: the player refused it - the bar says so, the player page goes back)
+      error: (e: HttpErrorResponse) => {
+        const body = e.error as { error?: unknown; tile?: unknown } | null
+        if (e.status === 423 && body?.error === 'tile_limit_reached') {
+          this.logService.log(`[PlayerService] start refused, the tile is used up for today: ${String(body.tile ?? '')}`)
+          this.tileTime.refused(typeof body.tile === 'string' ? body.tile : null, media ?? null)
+        }
+      },
+    })
   }
 }
 

@@ -8,6 +8,8 @@
       <!-- the photo time (5.1): its chip on the photos' screens, its warning -->
       <mupi-photo-time-chip></mupi-photo-time-chip>
       <mupi-photo-time-warning></mupi-photo-time-warning>
+      <!-- a day's limit per tile (5.1): "<tile> ist für heute vorbei", "Noch 5 Minuten <tile>" -->
+      <mupi-tile-time-notice></mupi-tile-time-notice>
     }
     @if (saver.active() && !monitorOff() && !playtimeBlocked()) {
       <mupi-photo-screensaver></mupi-photo-screensaver>

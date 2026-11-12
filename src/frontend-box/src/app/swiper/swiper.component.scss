@@ -710,3 +710,40 @@ swiper-container.coverflow {
     font-size: 22px;
     z-index: 3;
 }
+
+// A tile whose day's limit is used up (5.1, "Kachel-Limit"): the cover paler, a lock in its middle - it stays where it
+// is, a tap says "ist für heute vorbei" (HomePage)
+.tile-locked {
+    img,
+    .mupi-no-cover {
+        opacity: 0.45;
+        filter: grayscale(0.6);
+    }
+}
+
+.tile-lock {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 64px;
+    height: 64px;
+    margin: -32px 0 0 -32px;
+    border-radius: 50%;
+    background: var(--km-cream, rgba(255, 255, 255, 0.92));
+    color: var(--km-ink, #2b2240);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 3px 0 var(--km-shadow, rgba(0, 0, 0, 0.3));
+    pointer-events: none;
+    z-index: 4;
+
+    svg {
+        width: 32px;
+        height: 32px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+}

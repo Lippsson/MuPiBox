@@ -22,6 +22,7 @@ import { PhotoScreensaverComponent } from './photos/photo-screensaver.component'
 import { PhotoScreensaverService } from './photos/photo-screensaver.service'
 import { PhotoTimeChipComponent } from './photos/photo-time-chip.component'
 import { PhotoTimeWarningComponent } from './photos/photo-time-warning.component'
+import { TileTimeNoticeComponent } from './tile-time-notice.component'
 import { PlaytimeBlockedOverlayComponent } from './playtime-blocked-overlay/playtime-blocked-overlay.component'
 import { PlaytimeChipComponent } from './playtime-chip/playtime-chip.component'
 import { buildResumeMedia } from './resume-builder'
@@ -47,6 +48,7 @@ import { WinampShellComponent } from './winamp/winamp-shell.component'
     PhotoScreensaverComponent,
     PhotoTimeChipComponent,
     PhotoTimeWarningComponent,
+    TileTimeNoticeComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

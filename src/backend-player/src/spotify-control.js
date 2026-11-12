@@ -1349,7 +1349,8 @@ function tileStatus() {
   const cur = tileState.current
   return {
     list,
-    current: cur ? { key: cur, state: tileState.state, usedSeconds: tileState.used[cur] ?? 0, limited: cfg.limits.has(cur) } : null,
+    // (playing: the display's chip shows the tile's minutes only while it plays)
+    current: cur ? { key: cur, state: tileState.state, usedSeconds: tileState.used[cur] ?? 0, limited: cfg.limits.has(cur), playing: isActuallyPlaying() } : null,
   }
 }
 

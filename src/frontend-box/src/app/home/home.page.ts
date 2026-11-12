@@ -42,6 +42,7 @@ import { NowPlayingPillComponent } from '../now-playing-pill/now-playing-pill.co
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
 import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
 import { KmThemeService } from '../theme/km-theme.service'
+import { TileTimeService } from '../tile-time.service'
 import { PhotoAlbumsComponent } from '../photos/photo-albums.component'
 import { PhotoTimeService } from '../photos/photo-time.service'
 import { type PhotoAlbumSummary, PhotosService } from '../photos/photos.service'
@@ -112,6 +113,8 @@ export class HomePage extends SwiperIonicEventsHelper {
   // the photo display (5.1): its tab right of radio, while it is switched on and at least one album is shown here
   protected readonly photos = inject(PhotosService)
   private readonly photoTime = inject(PhotoTimeService)
+  // a day's limit per tile (5.1): the used-up ones carry a lock
+  private readonly tileTime = inject(TileTimeService)
   protected readonly headerCategories = computed<{ key: string; icon?: string; src?: string }[]>(() => [
     ...this.visibleCategories(),
     ...(this.photos.available() ? [{ key: 'photos', src: 'assets/photos.svg' }] : []),
@@ -274,7 +277,7 @@ export class HomePage extends SwiperIonicEventsHelper {
       onCleanup(() => window.clearInterval(timer))
     })
 
-    this.swiperData = computed(() => {
+    const tiles = computed(() => {
       return this.artists()?.map((artist) => {
         return {
           name: artist.name,
@@ -284,6 +287,11 @@ export class HomePage extends SwiperIonicEventsHelper {
           isNew: artist.hasNew === true,
         }
       })
+    })
+    // a tile whose day's limit is used up (5.1): with its lock - the same cover (imgSrc) as before, it is not loaded anew
+    this.swiperData = computed(() => {
+      const locks = this.tileTime.locks()
+      return tiles()?.map((t) => (this.tileTime.isLocked(t.data.coverMedia, locks) ? { ...t, locked: true } : t))
     })
   }
 
@@ -354,6 +362,11 @@ export class HomePage extends SwiperIonicEventsHelper {
   }
 
   protected async artistCoverClicked(artist: Artist): Promise<void> {
+    // its day's limit is used up (5.1): it opens nothing, the bar says so
+    if (this.tileTime.isLocked(artist.coverMedia, this.tileTime.locks())) {
+      this.tileTime.showOver(artist.coverMedia)
+      return
+    }
     // Check if this is a standalone playlist (playlist without artist)
     const isPlayableNasFolder = artist.coverMedia?.type === 'nas' && !artist.coverMedia.nasIsContainer
     const isPlayableLibraryFolder =

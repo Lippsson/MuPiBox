@@ -47,6 +47,8 @@ export interface SwiperData<T> {
   isNew?: boolean
   progress?: number
   done?: boolean
+  // a tile of the start page whose day's limit is used up (5.1): paler, with a lock (a tap says so, see HomePage)
+  locked?: boolean
   // (set by the swiper itself: what the list keeps a slide by - its name, see entryKeys)
   trackKey?: string
   // a photo album on the stage (5.1, tab "Fotos" with the stage on): drawn as its stack of pictures - imgSrc the front

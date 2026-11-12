@@ -29,6 +29,20 @@ export function tileKeyOf(media: Media | undefined): string | null {
   return `artist:${cat}:${media.artist}`
 }
 
+// A folder (lib:, nas:) belongs to the tile with a limit whose folder it is in - the longest of them (as the player's
+// resolveTile); every other key, and a folder in none of them, is its own
+export function resolveTileKey(key: string, limitKeys: Iterable<string>): string {
+  const m = /^(lib|nas):(.*)$/.exec(key)
+  if (!m) return key
+  let best: string | null = null
+  for (const k of limitKeys) {
+    if (!k.startsWith(`${m[1]}:`)) continue
+    const p = k.slice(m[1].length + 1)
+    if ((m[2] === p || m[2].startsWith(`${p}/`)) && (!best || k.length > best.length)) best = k
+  }
+  return best ?? key
+}
+
 // The query part that names it on a command to the player ('' without a tile): "?tile=…" or "&tile=…"
 export function tileQuery(url: string, media: Media | undefined): string {
   const key = tileKeyOf(media)

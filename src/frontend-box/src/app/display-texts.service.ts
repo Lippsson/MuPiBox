@@ -105,6 +105,10 @@ export const DEFAULT_DISPLAY_TEXTS = {
   photosTimePaused: 'Picture time left: {n} min, paused',
   photosWarn: '{n} more minutes of pictures',
   photosWarnOne: '1 more minute of pictures',
+  // a day's limit per tile of the start page (5.1): used up, and its warning ({name} = the tile)
+  tileOver: '{name} is over for today',
+  tileWarn: '{n} more minutes of {name}',
+  tileWarnOne: '1 more minute of {name}',
   photosPauseTitle: 'The pictures are taking a break',
   photosPauseText: 'Picture time is over for today. Audio books and music still work.',
   photosToListening: 'To the audio books',
