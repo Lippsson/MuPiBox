@@ -14,6 +14,7 @@ import {
 import { environment } from 'src/environments/environment'
 import { isPlaying } from '../background-playback.service'
 import { DisplayTextsService } from '../display-texts.service'
+import { PlayerCmds, PlayerService } from '../player.service'
 import { PhotoTimeService } from './photo-time.service'
 import { StatusComponent } from '../status/status.component'
 import { type PhotoAsset, PhotosService } from './photos.service'
@@ -113,6 +114,20 @@ type Speed = (typeof SPEEDS)[number]
             }
           </button>
         </div>
+        @if (clipShown() && !playing() && !audioPlays()) {
+          <!-- a clip with sound: the box's volume (the same as the player's) -->
+          <div class="pv-vol" data-ui>
+            <button class="pv-btn pv-64" type="button" data-ui [attr.aria-label]="texts.text('photosVolDown')" (click)="changeVolume(-1)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" class="pv-solid" /><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" /></svg>
+            </button>
+            @if (volume() !== null) {
+              <span class="pv-vol-n">{{ volume() }} %</span>
+            }
+            <button class="pv-btn pv-64" type="button" data-ui [attr.aria-label]="texts.text('photosVolUp')" (click)="changeVolume(1)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5v5h3.5L11 18.5v-13L6.5 9.5H3z" class="pv-solid" /><path d="M14.5 9.5a3.5 3.5 0 0 1 0 5M17 7a7 7 0 0 1 0 10" /></svg>
+            </button>
+          </div>
+        }
       </div>
     </div>
   `,
@@ -362,6 +377,27 @@ type Speed = (typeof SPEEDS)[number]
       align-items: center;
       gap: 24px;
     }
+    /* a clip with sound: the volume, at the bottom right */
+    .pv-vol {
+      position: absolute;
+      right: 14px;
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pv-btn svg path.pv-solid {
+      fill: currentColor;
+      stroke: none;
+    }
+    .pv-vol-n {
+      min-width: 56px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -369,6 +405,7 @@ export class PhotoViewerComponent implements OnDestroy {
   protected readonly photos = inject(PhotosService)
   protected readonly texts = inject(DisplayTextsService)
   private readonly time = inject(PhotoTimeService)
+  private readonly player = inject(PlayerService)
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef)
 
   readonly albumId = input.required<string>()
@@ -404,7 +441,10 @@ export class PhotoViewerComponent implements OnDestroy {
   // a clip: paused by its button; whether something plays on the box (then the clip is silent - checked every 5 s)
   protected readonly clipPaused = signal(false)
   protected readonly audioPlays = signal(false)
+  /** the box's volume in percent (from the player; null: not known yet) - shown beside a clip's volume buttons */
+  protected readonly volume = signal<number | null>(null)
   private audioTimer = 0
+  private volumeTimer = 0
   // (in the slideshow only a short clip plays, to its end - a long one shows its picture there)
   protected isClip(a: PhotoAsset): boolean {
     return a.kind === 'video' && (!this.playing() || (a.duration ?? 0) <= CLIP_IN_SLIDESHOW)
@@ -459,10 +499,20 @@ export class PhotoViewerComponent implements OnDestroy {
   private async checkAudio(): Promise<void> {
     try {
       const r = await fetch(`${environment.backend.playerUrl}/local`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-      this.audioPlays.set(r.ok && isPlaying(await r.json()))
+      const local = r.ok ? await r.json() : null
+      this.audioPlays.set(!!local && isPlaying(local))
+      const v = Number(local?.volume)
+      if (Number.isFinite(v)) this.volume.set(Math.round(v))
     } catch {
       this.audioPlays.set(false)
     }
+  }
+  // louder or quieter by a step, as on the player's page (the box's volume, under its maximum); the new value shortly after
+  protected changeVolume(dir: 1 | -1): void {
+    this.player.sendCmd(dir > 0 ? PlayerCmds.VOLUMEUP : PlayerCmds.VOLUMEDOWN)
+    this.touched()
+    window.clearTimeout(this.volumeTimer)
+    this.volumeTimer = window.setTimeout((): void => void this.checkAudio(), 400)
   }
 
   private advanceTimer = 0
@@ -511,6 +561,7 @@ export class PhotoViewerComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     window.clearInterval(this.audioTimer)
+    window.clearTimeout(this.volumeTimer)
     this.time.viewer.set(null)
     window.clearTimeout(this.advanceTimer)
     window.clearTimeout(this.hideTimer)

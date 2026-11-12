@@ -116,6 +116,8 @@ export const DEFAULT_DISPLAY_TEXTS = {
   photosAllAwayTitle: 'The pictures are not there right now',
   photosAllAwayText: 'Maybe the WiFi is gone. Try again in a moment.',
   photosRetry: 'Try again',
+  photosVolDown: 'Quieter',
+  photosVolUp: 'Louder',
 }
 export type DisplayTextKey = keyof typeof DEFAULT_DISPLAY_TEXTS
 type TextSet = Partial<Record<DisplayTextKey, string>>
