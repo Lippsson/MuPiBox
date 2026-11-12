@@ -55,7 +55,7 @@ import { type IncomingMessage, request as httpRequest } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { SUDO_BACKUP_SNIPPET, backupBeforeWrite } from './file-backup'
 import { readEmbeddedPicture } from './embedded-cover'
-import { acquireLock, releaseLock, staleReason } from './file-lock'
+import { acquireLock, DATA_LOCK, RESUME_LOCK, releaseLock, staleReason } from './file-lock'
 import { type AlbumFillDeps, fillSpotifyAlbums, isBareAlbum, startSpotifyAlbumFill } from './spotify-album-fill'
 import { coverHidden } from './hidden-covers'
 import { OnlineCovers } from './online-covers'
@@ -274,8 +274,8 @@ const monitorFile = `${configBasePath}/monitor.json`
 const albumstopFile = `${LIBRARY_DIR}/albumstop.json`
 const mupihat = '/tmp/mupihat.json'
 const playtimeFile = '/tmp/playtime.json'
-const dataLock = '/tmp/.data.lock'
-const resumeLock = '/tmp/.resume.lock'
+const dataLock = DATA_LOCK
+const resumeLock = RESUME_LOCK
 
 // RSS feed cache: persisted on disk (not /tmp) so cached podcast covers and feed
 // data survive a reboot - in cache/, which an update leaves alone (a missing picture is fetched again, see

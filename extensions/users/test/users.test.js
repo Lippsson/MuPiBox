@@ -189,3 +189,58 @@ test('every user has their own colour, the first one nobody has; a user from bef
   fs.writeFileSync(path.join(root, 'ext-data', 'users.json'), JSON.stringify({ current: 'main', users: [{ id: 'main', name: 'Standard' }, { id: 'x1', name: 'X', color: 'red' }] }))
   assert.deepEqual(store.state().users.map((u) => u.color), ['#FFFFFF', '#FF0000'])
 })
+
+test('a switch that cannot keep the one who goes (the card full) changes nothing', async () => {
+  const { store, put, read, has, root } = box()
+  put('library/data.json', '[{"name":"Mein Album"}]')
+  const mia = store.add('Mia').id
+  await store.select(mia)
+  put('library/data.json', '[{"name":"Mias Album"}]')
+  // (the folder kept for "main" before; then copying fails - as with a full card)
+  const before = read('ext-data/profiles/main/library/data.json')
+  const copy = fs.copyFileSync
+  fs.copyFileSync = (from, to) => {
+    if (String(from).includes(path.join(root, 'library'))) throw Object.assign(new Error('no space'), { code: 'ENOSPC' })
+    return copy(from, to)
+  }
+  try {
+    await assert.rejects(store.select('main'), /no space/)
+  } finally {
+    fs.copyFileSync = copy
+  }
+  assert.equal(store.state().current, mia)
+  assert.equal(read('library/data.json'), '[{"name":"Mias Album"}]')
+  assert.equal(read('ext-data/profiles/main/library/data.json'), before)
+  assert.equal(has('ext-data/.staging'), false)
+})
+
+test('a switch that fails while the one who comes is loaded puts the one who goes back', async () => {
+  const { store, put, read } = box()
+  put('library/data.json', '[{"name":"Mein Album"}]')
+  const mia = store.add('Mia').id
+  put(`ext-data/profiles/${mia}/library/data.json`, '[{"name":"Mias Album"}]')
+  const copy = fs.copyFileSync
+  let n = 0
+  fs.copyFileSync = (from, to) => {
+    // (the first file of Mia's library into the live one fails)
+    if (String(from).includes(path.join('profiles', mia, 'library')) && n++ === 0) throw Object.assign(new Error('io'), { code: 'EIO' })
+    return copy(from, to)
+  }
+  try {
+    await assert.rejects(store.select(mia), /io/)
+  } finally {
+    fs.copyFileSync = copy
+  }
+  assert.equal(store.state().current, 'main')
+  assert.equal(read('library/data.json'), '[{"name":"Mein Album"}]')
+})
+
+test('the way of switching at the display, and how long a tile is held', () => {
+  assert.equal(_test.switchMode({ switchMode: 'hold' }), 'hold')
+  assert.equal(_test.switchMode({ switchMode: 'app' }), 'app')
+  assert.equal(_test.switchMode({ switchMode: 'x' }), 'free')
+  assert.equal(_test.switchMode(undefined), 'free')
+  assert.equal(_test.holdSeconds({ mupibox: { settingsAccessTimer: 5 } }), 5)
+  assert.equal(_test.holdSeconds({ mupibox: { settingsAccessTimer: 60 } }), 10)
+  assert.equal(_test.holdSeconds({}), 3)
+})

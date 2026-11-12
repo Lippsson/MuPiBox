@@ -12,3 +12,14 @@ test('the dot has the colour of the user; whatever is no colour is grey', async 
   assert.equal(colorOf({ color: 'url(x)' }), '#808080')
   assert.equal(colorOf(undefined), '#808080')
 })
+
+test('the way of switching and the time a tile is held, as the API part says them', async () => {
+  const { modeOf, holdMs } = await load()
+  assert.equal(modeOf({ mode: 'hold' }), 'hold')
+  assert.equal(modeOf({ mode: 'app' }), 'app')
+  assert.equal(modeOf({ mode: 'nope' }), 'free')
+  assert.equal(modeOf(null), 'free')
+  assert.equal(holdMs({ holdSeconds: 4 }), 4000)
+  assert.equal(holdMs({ holdSeconds: 0 }), 3000)
+  assert.equal(holdMs({}), 3000)
+})

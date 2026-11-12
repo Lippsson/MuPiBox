@@ -12,6 +12,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, promises as fsp, readFileSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import express, { type NextFunction, type Request, type RequestHandler, type Response, type Router } from 'express'
+import { acquireLock, DATA_LOCK, RESUME_LOCK, releaseLock } from '../file-lock'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { DATA_DIR, EXTENSIONS_DIR, EXTENSIONS_DIR_BEFORE, LIBRARY_DIR } from '../paths'
 import { checkResources, type Conflict, describeResources, findConflicts, idleCoreGpio, type GpioUse, gatherTaken, realProbe, type Resources, sameResources } from './extension-resources'
@@ -534,6 +535,32 @@ function restartServices(): void {
   const child = spawn('sh', ['-c', script], { detached: true, stdio: 'ignore' })
   child.on('error', () => undefined)
   child.unref()
+}
+
+/**
+ * (hostApi 4) The library's locks (data.json, the resume list) for an extension that exchanges the library's files: while
+ * it holds them, the app and the Smart Sync do not write there. Waits up to ~10 s for each; null: not to be had. The
+ * function returned gives them back; one who restarts the server after keeps them - its locks end with its process.
+ */
+async function lockLibrary(id: string): Promise<(() => void) | null> {
+  const context = `extension ${id}`
+  const got: string[] = []
+  const release = () => {
+    for (const lock of got.splice(0)) releaseLock(lock, context)
+  }
+  for (const lock of [DATA_LOCK, RESUME_LOCK]) {
+    let state: 'acquired' | 'locked' | 'error' = 'locked'
+    for (let i = 0; i < 40 && state === 'locked'; i++) {
+      state = acquireLock(lock, context)
+      if (state === 'locked') await new Promise((r) => setTimeout(r, 250))
+    }
+    if (state !== 'acquired') {
+      release()
+      return null
+    }
+    got.push(lock)
+  }
+  return release
 }
 
 /** The display loads its page again (the player does it: POST /display/reload-page). */
@@ -1220,6 +1247,7 @@ export function mountExtensions(app: express.Express, deps: ExtensionDeps): void
           },
           paths: { library: LIBRARY_DIR, data: DATA_DIR, extensions: EXT_DIR },
           restartServices,
+          lockLibrary: () => lockLibrary(manifest.id),
           // (hostApi 5) the server itself, for its routes the display uses too (/api/audio-output ...); and what is called after
           // the settings of the extension were saved in the app, with the settings as they are then
           apiUrl: 'http://127.0.0.1:8200',

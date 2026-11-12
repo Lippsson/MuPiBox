@@ -22,18 +22,24 @@ Nach der [Installation](installieren.md) öffnest du die Details der Karte **Ben
 
 ## Wechseln
 
-Am Display zeigt oben ein **Punkt in der Farbe des Benutzers**, wer gerade angemeldet ist. Ein Tipp darauf öffnet die Übersicht mit den Namen; ein Tipp auf einen Namen wechselt.
+Am Display zeigt oben ein **Punkt in der Farbe des Benutzers**, wer gerade angemeldet ist. Ein Tipp darauf öffnet die Übersicht mit den Namen; dort wechselt man, wie es unter **Am Display wechseln** eingestellt ist.
 
 Beim Wechseln **hält die Wiedergabe an**, die Box lädt die Einstellungen und die Bibliothek des anderen Benutzers und **startet kurz neu**. Das dauert etwa eine halbe Minute.
 
 | Einstellung | Wirkung |
 | --- | --- |
-| **Am Display wechseln** | Aus: Der Punkt oben im Display zeigt nur, wer angemeldet ist. Gewechselt wird dann nur in der App |
+| **Am Display wechseln** | **Frei, mit einem Tipp**: ein Tipp auf einen Namen wechselt (Standard). **Mit Halten**: den Namen so lange gedrückt halten, wie man am Display die Einstellungen öffnet; ein Balken zeigt, wie lange noch. **Nur in der Webapp**: Der Punkt zeigt nur, wer angemeldet ist |
+
+Jeder Benutzer hat seine **eigene Spielzeit und Ruhezeit** samt dem Zähler für heute. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter.
 
 > [!TIP]
-> Soll ein Kind nicht selbst auf den Benutzer eines anderen wechseln können, schalte **Am Display wechseln** aus. In der App ist das Wechseln durch die Anmeldung der Eltern geschützt.
+> Soll ein Kind nicht selbst auf den Benutzer eines anderen wechseln können, stelle **Mit Halten** oder **Nur in der Webapp** ein. In der App ist das Wechseln durch die Anmeldung der Eltern geschützt.
+
+## Ausschalten
+
+Der Mehrbenutzer-Betrieb ist eine Erweiterung. Unter **Einstellungen › System › Erweiterungen** lässt er sich ausschalten oder entfernen. Die Box behält dann die Einstellungen und die Bibliothek des Benutzers, der gerade aktiv ist. Die Ordner der anderen Benutzer bleiben liegen, bis die Erweiterung entfernt wird; eingeschaltet geht es mit ihnen weiter.
 
 ## Gut zu wissen
 
 - Weil der Spotify-Login für alle gilt, braucht es nur ein Spotify-Konto. Welche Alben und Playlists auf der Box erscheinen, bestimmt aber jeder Benutzer in seiner eigenen Bibliothek.
-- Ein [Backup](../wartung/backup.md) vor dem ersten Anlegen eines Benutzers schadet nicht.
+- Ein [Backup](../wartung/backup.md) sichert alle Benutzer mit ihren Einstellungen und Bibliotheken. Ein Backup vor dem ersten Anlegen eines Benutzers schadet trotzdem nicht.

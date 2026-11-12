@@ -1,7 +1,7 @@
 {
   "id": "users",
   "name": "Benutzer",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.",
   "hostApi": 4,
   "resources": {},
@@ -9,14 +9,19 @@
   "display": "display.js",
   "icon": "icon.svg",
   "settings": {
-    "displaySwitch": {
-      "type": "boolean",
-      "default": true
+    "switchMode": {
+      "type": "string",
+      "default": "free",
+      "options": [
+        "free",
+        "hold",
+        "app"
+      ]
     }
   },
   "ui": {
     "title": "Benutzer",
-    "help": "Für jeden Benutzer merkt sich die Box seine eigenen Einstellungen (Theme, Lautstärken, Startseite, Spielzeit, Ruhezeiten und mehr), seine Bibliothek mit Alben, Fortsetzen-Positionen und Offline-Listen sowie seine Wiedergabe-Historie. Das gilt auch für die Einstellungen der anderen Erweiterungen. Gemeinsam für alle bleiben der Spotify-Login, WLAN und Netzwerk, NAS, Hardware (Lüfter, Akku, LEDs, Drehgeber), das Elternpasswort und der Name der Box. Ein neuer Benutzer startet mit den Einstellungen dessen, der ihn anlegt, und einer leeren Bibliothek. Beim Wechseln hält die Wiedergabe an und die Box startet kurz neu.",
+    "help": "Für jeden Benutzer merkt sich die Box seine eigenen Einstellungen (Theme, Lautstärken, Startseite, Spielzeit, Ruhezeiten und mehr), seine Bibliothek mit Alben, Fortsetzen-Positionen und Offline-Listen sowie seine Wiedergabe-Historie. Das gilt auch für die Einstellungen der anderen Erweiterungen. Gemeinsam für alle bleiben der Spotify-Login, WLAN und Netzwerk, NAS, Hardware (Lüfter, Akku, LEDs, Drehgeber), das Elternpasswort und der Name der Box. Ein neuer Benutzer startet mit den Einstellungen dessen, der ihn anlegt, und einer leeren Bibliothek. Beim Wechseln hält die Wiedergabe an und die Box startet kurz neu. Ausschalten lässt sich der Mehrbenutzer-Betrieb unter Erweiterungen: Die Box behält dann die Einstellungen und die Bibliothek des Benutzers, der gerade aktiv ist.",
     "items": [
       {
         "type": "roster",
@@ -29,9 +34,23 @@
         "help": "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen."
       },
       {
-        "key": "displaySwitch",
+        "key": "switchMode",
         "label": "Am Display wechseln",
-        "help": "Aus: Das Zeichen oben im Display zeigt nur, wer angemeldet ist. Gewechselt wird dann nur in der Webapp."
+        "help": "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.",
+        "choices": [
+          {
+            "value": "free",
+            "label": "Frei, mit einem Tipp"
+          },
+          {
+            "value": "hold",
+            "label": "Mit Halten"
+          },
+          {
+            "value": "app",
+            "label": "Nur in der Webapp"
+          }
+        ]
       }
     ]
   }

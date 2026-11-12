@@ -6,8 +6,8 @@
 // the library (albums, resume positions, offline lists), hidden covers, today's play time, the play log, the settings of the other
 // extensions. The same for everybody: the Spotify login, Wi-Fi and network, NAS, hardware, the parents' password, the name of the box.
 //
-//   GET  /api/ext/users/state    -> { current: id, users: [{ id, name, color }], busy }              (the display; no login)
-//   POST /api/ext/users/switch   { id }                                                              (the display; setting "displaySwitch")
+//   GET  /api/ext/users/state    -> { current: id, users: [{ id, name, color }], busy, mode, holdSeconds }   (the display; no login)
+//   POST /api/ext/users/switch   { id }                                                              (the display; setting "switchMode")
 //   GET  /api/ext/users/list     -> { current: id, users: [{ id, name, color }], busy }              (the app; parents' login)
 //   POST /api/ext/users/add      { name }  /  POST .../remove { id }  /  POST .../select { id }      (the app; parents' login)
 //   POST /api/ext/users/color    { id, color }   (one of the colours of the list that nobody else has)
@@ -91,15 +91,19 @@ function regularJson(dir) {
   }
 }
 
-/** Copies files of `from` into `to` (the names listed that exist), after removing what `to` has of this kind. */
+/** Copies files of `from` into `to` (the names listed that exist). A file that is not there is left out; any other failure (the
+ *  card full, say) is thrown - a switch must not go on with half a library. */
 function copyFiles(from, to, names) {
   fs.mkdirSync(to, { recursive: true })
   for (const name of names) {
+    const tmp = path.join(to, `${name}.tmp${process.pid}`)
     try {
-      fs.copyFileSync(path.join(from, name), path.join(to, `${name}.tmp${process.pid}`))
-      fs.renameSync(path.join(to, `${name}.tmp${process.pid}`), path.join(to, name))
-    } catch {
-      // (not there: nothing to copy)
+      fs.copyFileSync(path.join(from, name), tmp)
+      fs.renameSync(tmp, path.join(to, name))
+    } catch (error) {
+      fs.rmSync(tmp, { force: true })
+      if (error?.code === 'ENOENT' && !fs.existsSync(path.join(from, name))) continue
+      throw error
     }
   }
 }
@@ -151,16 +155,35 @@ function createStore({ dataDir, libraryDir, boxDataDir, logsDir, settingsDir, co
     }
   }
 
-  /** Live state -> the folder of a user. */
+  /** Live state -> the folder of a user. Written into a folder of its own first and put in place only when all of it is there:
+   *  a failure (the card full) leaves the folder of before as it was. */
   function save(id) {
     const dir = profile(id)
-    fs.rmSync(dir, { recursive: true, force: true })
-    fs.mkdirSync(dir, { recursive: true })
-    writeAtomic(path.join(dir, 'config.json'), JSON.stringify(configPart()))
-    copyFiles(libraryDir, path.join(dir, 'library'), regularJson(libraryDir))
-    copyFiles(boxDataDir, path.join(dir, 'data'), DATA_FILES)
-    copyFiles(logsDir, path.join(dir, 'logs'), LOG_FILES)
-    copyFiles(settingsDir, path.join(dir, 'settings'), settingFiles())
+    const staging = path.join(dataDir, '.staging')
+    const old = path.join(dataDir, '.old')
+    fs.rmSync(staging, { recursive: true, force: true })
+    fs.rmSync(old, { recursive: true, force: true })
+    try {
+      fs.mkdirSync(staging, { recursive: true })
+      writeAtomic(path.join(staging, 'config.json'), JSON.stringify(configPart()))
+      copyFiles(libraryDir, path.join(staging, 'library'), regularJson(libraryDir))
+      copyFiles(boxDataDir, path.join(staging, 'data'), DATA_FILES)
+      copyFiles(logsDir, path.join(staging, 'logs'), LOG_FILES)
+      copyFiles(settingsDir, path.join(staging, 'settings'), settingFiles())
+    } catch (error) {
+      fs.rmSync(staging, { recursive: true, force: true })
+      throw error
+    }
+    fs.mkdirSync(path.dirname(dir), { recursive: true })
+    const had = fs.existsSync(dir)
+    if (had) fs.renameSync(dir, old)
+    try {
+      fs.renameSync(staging, dir)
+    } catch (error) {
+      if (had) fs.renameSync(old, dir)
+      throw error
+    }
+    fs.rmSync(old, { recursive: true, force: true })
   }
 
   /** The folder of a user -> live state. What the user does not have is removed from the live state (no leftovers of the one before). */
@@ -260,8 +283,15 @@ function createStore({ dataDir, libraryDir, boxDataDir, logsDir, settingsDir, co
       if (id === state.current) return { ok: true, same: true }
       // (the profile of the one who comes is checked before the one who goes is touched)
       if (!fs.existsSync(profile(id))) return { error: 'id' }
+      // (the one who goes is kept whole first - a failure there changes nothing; one while the other is loaded puts the one who
+      // goes back from what was just kept, so the live state is never a mix of two users)
       save(state.current)
-      await load(id)
+      try {
+        await load(id)
+      } catch (error) {
+        await load(state.current)
+        throw error
+      }
       state.current = id
       write(state)
       return { ok: true }
@@ -276,6 +306,19 @@ function createStore({ dataDir, libraryDir, boxDataDir, logsDir, settingsDir, co
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** How the display may switch: "free" (a tap), "hold" (a tile held, as the display's settings are opened), "app" (only in the
+ *  app; the dot only shows who is signed in). */
+function switchMode(settings) {
+  const mode = settings?.switchMode
+  return mode === 'hold' || mode === 'app' ? mode : 'free'
+}
+
+/** The seconds the display's settings are held open with (mupibox.settingsAccessTimer), 3 when not set; at most 10. */
+function holdSeconds(config) {
+  const s = Number(config?.mupibox?.settingsAccessTimer)
+  return Number.isFinite(s) && s >= 1 ? Math.min(10, Math.round(s)) : 3
+}
 
 exports.activate = (host) => {
   const store = createStore({
@@ -293,9 +336,17 @@ exports.activate = (host) => {
   let working = false
   let restarting = false
 
-  const view = () => {
+  const view = async () => {
     const s = store.state()
-    return { current: s.current, colors: COLORS, users: s.users.map(({ id, name, color }) => ({ id, name, color })), busy: working || restarting }
+    return {
+      current: s.current,
+      colors: COLORS,
+      users: s.users.map(({ id, name, color }) => ({ id, name, color })),
+      busy: working || restarting,
+      mode: switchMode(await host.settings()),
+      // (how long a tile is held with "hold": as long as the settings of the display are held open)
+      holdSeconds: holdSeconds(host.config()),
+    }
   }
 
   const refuse = (res, error) => res.status(error === 'busy' ? 409 : 400).json({ ok: false, error })
@@ -304,13 +355,21 @@ exports.activate = (host) => {
   async function change(id, res) {
     if (working || restarting) return refuse(res, 'busy')
     working = true
+    // the library's locks, from before the files are exchanged until the box restarts: the app and the Smart Sync do not
+    // write the library of the one who goes over the one who comes meanwhile (gone with the server's process at the restart)
+    let unlock = null
     try {
+      if (typeof host.lockLibrary === 'function') {
+        unlock = await host.lockLibrary()
+        if (!unlock) return refuse(res, 'busy')
+      }
       // (what plays stops first: the player and the app write resume positions while it plays, and they must not land in the new user's library)
       await fetch(`${host.playerUrl}/stop`, { signal: AbortSignal.timeout(3000) }).catch(() => undefined)
       await sleep(1500)
       const result = await store.select(id)
       if (result.error) return refuse(res, result.error)
       if (result.same) return res.json({ ok: true })
+      unlock = null
       restarting = true
       host.log.info(`[Extension users] switched to ${id}`)
       res.json({ ok: true })
@@ -323,20 +382,23 @@ exports.activate = (host) => {
       host.log.warn(`[Extension users] switch failed: ${error}`)
       if (!res.headersSent) res.status(500).json({ ok: false, error: 'failed' })
     } finally {
+      // (no switch: the locks back; after one they stay until the restart)
+      unlock?.()
       working = false
     }
   }
 
   // the display (no login; only the box's network - and only from the pages of the box, the header below is one a foreign page cannot send)
-  host.route('get', '/state', (req, res) => res.json(view()))
+  host.route('get', '/state', async (req, res) => res.json(await view()))
   host.route('post', '/switch', async (req, res) => {
     if (!req.get('x-requested-with')) return res.status(403).json({ ok: false })
-    if (host.settings().displaySwitch === false) return res.status(403).json({ ok: false, error: 'off' })
+    // (the settings come as a promise: 1.2 asked them as they came - the switch off never held here)
+    if (switchMode(await host.settings()) === 'app') return res.status(403).json({ ok: false, error: 'off' })
     return change(String(req.body?.id ?? ''), res)
   })
 
   // the app (parents' login)
-  host.route('get', '/list', (req, res) => res.json(view()), { session: true })
+  host.route('get', '/list', async (req, res) => res.json(await view()), { session: true })
   host.route(
     'post',
     '/add',
@@ -369,4 +431,4 @@ exports.activate = (host) => {
   host.route('post', '/select', (req, res) => change(String(req.body?.id ?? ''), res), { session: true })
 }
 
-exports._test = { createStore, cleanName, USER_KEYS, USER_SECTIONS, COLORS }
+exports._test = { createStore, cleanName, switchMode, holdSeconds, USER_KEYS, USER_SECTIONS, COLORS }
