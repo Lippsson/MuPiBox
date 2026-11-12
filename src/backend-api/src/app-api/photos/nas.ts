@@ -32,13 +32,6 @@ export interface PhotoNasAccess {
   download(file: string, dest: string, maxBytes: number, signal: AbortSignal): Promise<boolean>
   /** a NAS is set up and signed in to stay (its address as the name the app shows) */
   info(): { connected: boolean; name: string | null }
-  /**
-   * Synology's own web API (DSM) on that NAS with the same account - for the albums of Synology Photos (synology.ts): a
-   * question to webapi/entry.cgi with these parameters, the login added (and made again when DSM forgot it). port: DSM's
-   * (default 5001 with https, 5000 without); fresh: a login asked anew (the test). Throws DsmLoginRefused when DSM refuses
-   * the login, DsmCertificate when the certificate is not the NAS's, RemoteAway when the NAS does not answer.
-   */
-  dsm?(params: Record<string, string>, init?: { signal?: AbortSignal; timeoutMs?: number; port?: number; fresh?: boolean }): Promise<globalThis.Response>
 }
 
 export interface PhotoNasDeps {

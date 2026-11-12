@@ -11746,7 +11746,7 @@ function mountPhotoOverview(root, page) {
       `<h2>Foto-Dienst verbinden</h2><p class="help" style="margin:0">Fotos werden nur aus deinem Heimnetz geladen.</p>
        <div class="navlist"><button class="navrow" data-svc="fotonas"><span class="tile">${icon('server', 18)}</span><span class="lbl"><b>NAS-Ordner</b><small>Ordner vom verbundenen NAS als Alben</small></span><span class="chev">${icon('chevron', 18)}</span></button>
        <button class="navrow" data-svc="fotoimmich"><span class="tile">${icon('grid', 18)}</span><span class="lbl"><b>Immich</b><small>Dein eigener Fotodienst, per API-Schlüssel</small></span><span class="chev">${icon('chevron', 18)}</span></button>
-       <button class="navrow" data-svc="fotosynology"><span class="tile">${icon('image', 18)}</span><span class="lbl"><b>Synology Photos</b><small>Alben deines Synology-NAS, mit dem Konto des NAS</small></span><span class="chev">${icon('chevron', 18)}</span></button></div>`,
+       <button class="navrow" data-svc="fotosynology"><span class="tile">${icon('image', 18)}</span><span class="lbl"><b>Synology Photos</b><small>Alben deines Synology-NAS, mit eigenem Konto</small></span><span class="chev">${icon('chevron', 18)}</span></button></div>`,
       (sheet, close) => {
         for (const b of sheet.querySelectorAll('[data-svc]')) {
           b.onclick = () => {
@@ -12706,40 +12706,49 @@ function mountPhotoImmich(root, page) {
   )
 }
 
-/* Bibliothek › Fotos › Synology Photos (5.1): the NAS of the box with the same account at DSM - a test, the albums the
-   account sees (its own and the ones shared with it) and, once switched on, the service's page as Immich's (synology.ts) */
-const photoSyno = { data: null, step: 0, port: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+/* Bibliothek › Fotos › Synology Photos (5.1): a login of its own at DSM (address, account, password) - the assistant
+   (login, test with the certificate, albums) and, once switched on, the service's page as Immich's (synology.ts) */
+const photoSyno = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
 
 async function loadPhotoSynology() {
   const r = await api(`${API}/photos/synology`)
   if (!r.ok) throw new Error(`photos synology ${r.status}`)
-  photoSyno.data = r.body
+  const d = r.body
+  photoSyno.data = d
   // (not switched on yet: the assistant)
-  photoSyno.step = r.body.connected ? 0 : 1
-  photoSyno.port = r.body.settings.port ? String(r.body.settings.port) : ''
+  photoSyno.step = d.connected ? 0 : 1
+  photoSyno.url = d.settings.url || (d.nasHost ? `https://${d.nasHost}:5001` : '')
+  photoSyno.account = d.settings.account || ''
+  photoSyno.password = ''
+  photoSyno.fingerprint = d.settings.certFingerprint || ''
   photoSyno.test = null
   photoSyno.albums = null
 }
 
 const SYNO_ERRORS = {
-  noNas: ['Kein NAS verbunden', 'Verbinde zuerst unter Bibliothek › NAS dein Synology-NAS. Synology Photos nutzt dasselbe Konto.'],
-  unauthorized: ['Anmeldung abgelehnt', 'DSM nimmt Name oder Passwort des NAS-Kontos nicht an. Prüfe die Anmeldung unter Bibliothek › NAS.'],
+  unauthorized: ['Anmeldung abgelehnt', 'DSM nimmt Benutzername oder Passwort nicht an. Prüfe beides und ob das Konto aktiv ist.'],
   noPhotos: ['Synology Photos nicht erlaubt', 'Erlaube dem Konto der Box in DSM unter Systemsteuerung › Benutzer und Gruppe › Bearbeiten › Anwendungen die App Synology Photos.'],
   twoFactor: ['Zweite Bestätigung verlangt', 'Das Konto der Box nutzt die Zwei-Faktor-Anmeldung. Lege für die Box ein eigenes Konto ohne sie an.'],
   blocked: ['Box von DSM gesperrt', 'DSM hat die Box nach zu vielen Fehlversuchen gesperrt. Gib sie in DSM unter Sicherheit › Schutz › Automatische Blockierung wieder frei.'],
-  expired: ['Passwort abgelaufen', 'Das Passwort des Kontos ist abgelaufen. Lege in DSM ein neues fest und melde die Box unter Bibliothek › NAS neu an.'],
-  certificate: ['Zertifikat passt nicht', 'DSM zeigt ein anderes Zertifikat als die NAS-Verbindung. Prüfe den DSM-Port oder melde das NAS unter Bibliothek › NAS neu an.'],
-  unreachable: ['DSM nicht erreichbar', 'Die Box erreicht DSM auf dem NAS nicht (Port 5001 mit https, sonst 5000). Prüfe Firewall und Port.'],
+  expired: ['Passwort abgelaufen', 'Das Passwort des Kontos ist abgelaufen. Lege in DSM ein neues fest und trage es hier ein.'],
+  certificate: ['Zertifikat passt nicht', 'DSM zeigt ein anderes Zertifikat als das bestätigte. Wurde es auf dem NAS erneuert, prüfe den neuen Fingerabdruck und bestätige ihn.'],
+  unreachable: ['DSM nicht erreichbar', 'Die Box erreicht DSM unter dieser Adresse nicht. Prüfe Adresse, Port (meist 5001 mit https, 5000 ohne) und Firewall.'],
 }
 
 const SYNO_STEPS = [
+  ['login', 'Anmeldung'],
   ['test', 'Test'],
   ['albums', 'Alben'],
 ]
 
+// the password kept on the box, for the address and the account typed in (another one gets it only typed in anew)
+const photoSynoPasswordKept = () => {
+  const st = photoSyno.data?.settings
+  return !!st?.hasPassword && photoSyno.url.trim().replace(/\/+$/, '').toLowerCase() === String(st.url).toLowerCase() && photoSyno.account.trim() === st.account
+}
+
 function photoSynologySteps() {
   const s = photoSyno.step
-  const d = photoSyno.data
   const t = photoSyno.test
   const bar = `<ol class="wz-steps" style="grid-template-columns:repeat(${SYNO_STEPS.length}, minmax(0, 1fr))">${SYNO_STEPS.map(([, label], i) => {
     const n = i + 1
@@ -12748,24 +12757,33 @@ function photoSynologySteps() {
   }).join('')}</ol>`
   let body
   let next = ''
-  if (s === 1 && !d.nas.connected) {
-    const [head, text] = SYNO_ERRORS.noNas
-    body = `<h2>${esc(tr(head))}</h2><div class="note warn">${icon('info', 18)}<span>${esc(tr(text))}</span></div><div class="navlist">${navRow('nas', 'NAS', 'Adresse, Konto, Zertifikat', 'server')}</div>`
-  } else if (s === 1 && !t?.ok) {
-    const err = t ? (SYNO_ERRORS[t.error] ?? SYNO_ERRORS.unreachable) : null
-    body = `<h2>Mit Synology Photos verbinden</h2><p class="help">Die Box meldet sich mit dem Konto des NAS bei Synology Photos an. Sie zeigt die Alben dieses Kontos und alle Alben, die mit ihm geteilt sind.</p>
-      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(d.nas.account ?? '–')}</dd></div></dl>
-      <ol class="ph-howto"><li>In DSM unter Systemsteuerung › Benutzer und Gruppe › Bearbeiten › Anwendungen „Synology Photos“ für dieses Konto erlauben.</li>
-      <li>In Synology Photos ein Album öffnen, „Teilen“ wählen und das Konto als Betrachter einladen.</li><li>Verbindung testen – danach wählst du die Alben.</li></ol>
-      <div class="field"><label for="sy-port">DSM-Port</label><input class="input mono" id="sy-port" inputmode="numeric" placeholder="${esc(tr('Standard (5001 bzw. 5000)'))}" value="${esc(photoSyno.port)}" ${NO_PW_MANAGER}>
-      <small>Nur nötig, wenn DSM auf deinem NAS einen anderen Port nutzt.</small></div>
-      ${err ? `<div class="note danger">${icon('info', 18)}<span><b>${esc(tr(err[0]))}</b> ${esc(tr(err[1]))}</span></div>` : ''}`
+  if (s === 1) {
+    const kept = photoSynoPasswordKept()
+    body = `<h2>Bei Synology Photos anmelden</h2><p class="help">Die Box zeigt die Alben dieses Kontos und alle Alben, die mit ihm geteilt sind. Am besten legst du in DSM ein eigenes Konto nur für die Box an: ohne Zwei-Faktor-Anmeldung, mit Synology Photos erlaubt. Teile dann in Synology Photos die Alben mit diesem Konto (als Betrachter).</p>
+      <div class="field"><label for="sy-url">DSM-Adresse</label><input class="input mono" id="sy-url" placeholder="https://192.168.1.10:5001" value="${esc(photoSyno.url)}" ${NO_PW_MANAGER} spellcheck="false">
+      <small>Wie im Browser für DSM, meist mit Port 5001. Ohne Angabe nimmt die Box https und 5001.</small></div>
+      <div class="field"><label for="sy-account">Benutzername</label><input class="input" id="sy-account" value="${esc(photoSyno.account)}" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="sy-pass">Passwort</label><div class="input-wrap"><input class="input has-eye" id="sy-pass" type="password" value="${esc(photoSyno.password)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um es zu behalten') : '')}" autocomplete="new-password"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
+      <small>Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
     next = `<button class="btn primary" id="sy-test" ${photoSyno.testing ? 'disabled' : ''}>${esc(tr(photoSyno.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
-  } else if (s === 1) {
+  } else if (s === 2 && t?.ok) {
     body = `<h2>Verbindung steht</h2><p class="help">Die Box kann die Alben des Kontos lesen.</p>
       <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(t.account ?? '–')}</dd></div><div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Davon mit dem Konto geteilt</dt><dd>${esc(String(t.shared))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.pictures))}</dd></div></dl>
       ${t.albums ? '' : `<div class="note warn">${icon('info', 18)}<span>Noch keine Alben. Teile in Synology Photos ein Album mit dem Konto der Box und teste erneut.</span></div>`}`
-    next = t.albums ? `<button class="btn primary" id="sy-next">Weiter</button>` : `<button class="btn primary" id="sy-test">${esc(tr('Erneut testen'))}</button>`
+    next = t.albums ? `<button class="btn primary" id="sy-next">Weiter</button>` : `<button class="btn primary" id="sy-retry">${esc(tr('Erneut testen'))}</button>`
+  } else if (s === 2) {
+    const [head, text] = SYNO_ERRORS[t?.error] ?? SYNO_ERRORS.unreachable
+    // (a certificate not confirmed yet: shown to be compared and trusted, as for the NAS)
+    const cert = t?.error === 'certificate' ? t.certificate : null
+    body = cert
+      ? `<h2>Zertifikat bestätigen</h2><p class="help" style="margin:0">Das NAS nutzt ein eigenes (selbst signiertes) Zertifikat. Vergleiche den Fingerabdruck mit dem im NAS (bzw. im Browser über das Schloss-Symbol). Nur wenn er übereinstimmt:</p>
+        <dl class="kv"><div><dt>Ausgestellt für</dt><dd>${esc(cert.subject)}</dd></div><div><dt>Gültig bis</dt><dd>${esc(cert.validTo)}</dd></div></dl>
+        <p class="mono-block">${esc(cert.fingerprint)}</p>
+        ${photoSyno.fingerprint ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(text))}</span></div>` : ''}`
+      : `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text))}</span></div>`
+    next = cert
+      ? `<button class="btn primary" id="sy-trust" data-fp="${esc(cert.fingerprint)}">${esc(tr('Vertrauen und testen'))}</button>`
+      : `<button class="btn primary" data-systep="1">${esc(tr('Anmeldung ändern'))}</button>`
   } else {
     const list = photoSyno.albums
     const rows = !list
@@ -12813,10 +12831,10 @@ function photoSynologyTop() {
   const status = photoServiceStatus(s, 'Anmeldung abgelehnt')
   const limit = st.cacheLimitMb * 1024 * 1024
   return [
-    `<section class="card wide"><h2>${esc(d.nas.account ? tr(`Verbunden – Konto „${d.nas.account}“`) : tr('Verbunden'))}</h2>
+    `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
       <div class="ph-nas-state ${status[1]}">${status[0]}</div>
       <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
-      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>DSM nimmt die Anmeldung des NAS-Kontos nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe das Konto und teste die Verbindung unten.</span></div>` : ''}
+      ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>DSM nimmt die Anmeldung nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Prüfe Konto und Passwort unten.</span></div>` : ''}
       ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob das NAS läuft.</span></div>` : ''}
       ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr oder es ist nicht mehr geteilt.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr oder sie sind nicht mehr geteilt.`))}</span></div>` : ''}
       ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
@@ -12836,9 +12854,9 @@ function photoSynologyTop() {
       <small>Ist die Grenze erreicht, lädt die Box keine weiteren Fotos und zeigt hier einen Hinweis.</small></div>`
         : `<p class="help">Live behält die Box nur die zuletzt gezeigten Fotos (höchstens 200 MB).</p>`}</section>`,
     `<section class="card wide"><h2>Zugang</h2>
-      <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(d.nas.account ?? '–')}</dd></div><div><dt>DSM-Port</dt><dd>${esc(st.port ? String(st.port) : tr('Standard'))}</dd></div></dl>
-      <p class="help">Die Box nutzt die Anmeldung des NAS (Bibliothek › NAS).</p>
-      <div class="btns"><button class="btn" id="sy-retest">Verbindung testen</button></div></section>`,
+      <dl class="kv"><div><dt>DSM-Adresse</dt><dd translate="no">${esc(st.url)}</dd></div><div><dt>Konto</dt><dd translate="no">${esc(st.account || '–')}</dd></div><div><dt>Passwort</dt><dd>${esc(tr(st.hasPassword ? 'gesetzt' : 'fehlt'))}</dd></div>${st.certFingerprint ? `<div><dt>Zertifikat</dt><dd>${esc(tr('bestätigt'))}</dd></div>` : ''}</dl>
+      <p class="help">Das Passwort wird aus Sicherheitsgründen nicht mehr angezeigt.</p>
+      <div class="btns"><button class="btn" id="sy-login">Anmeldung ändern</button></div></section>`,
     `<section class="card wide"><div class="navlist"><button class="navrow" id="sy-remove"><span class="tile danger">${icon('close', 18)}</span><span class="lbl"><b class="danger-text">Verbindung trennen</b><small>Die Alben aus Synology Photos und ihre Fotos werden von der Box entfernt. Auf dem NAS bleibt alles erhalten.</small></span></button></div></section>`,
   ]
 }
@@ -12868,33 +12886,59 @@ function mountPhotoSynology(root, page) {
     if (done) toast(done)
     return true
   }
+  // (what is typed in stays while the assistant is open)
+  const keep = () => {
+    const url = $('#sy-url', root)
+    if (url) photoSyno.url = url.value.trim()
+    const account = $('#sy-account', root)
+    if (account) photoSyno.account = account.value.trim()
+    const pass = $('#sy-pass', root)
+    if (pass) photoSyno.password = pass.value
+  }
   const goStep = (n) => {
+    keep()
     photoSyno.step = n
     redraw()
     window.scrollTo(0, 0)
   }
   // the assistant
   $('#sy-cancel', root)?.addEventListener('click', () => (d.connected ? goStep(0) : go('fotos')))
-  $('#sy-back', root)?.addEventListener('click', () => goStep(d.connected && !photoSyno.test ? 0 : 1))
+  $('#sy-back', root)?.addEventListener('click', () => goStep(photoSyno.step === 3 && d.connected && !photoSyno.test ? 0 : photoSyno.step - 1))
   for (const b of root.querySelectorAll('[data-systep]')) b.onclick = () => goStep(Number(b.dataset.systep))
-  $('#sy-test', root)?.addEventListener('click', async () => {
-    const field = $('#sy-port', root)
-    if (field) photoSyno.port = field.value.trim()
-    const port = photoSyno.port ? Number(photoSyno.port) : 0
-    if (!Number.isInteger(port) || port < 0 || port > 65535) return toast('Bitte einen Port zwischen 1 und 65535 eintragen', 'info')
+  const test = async (fingerprint) => {
     photoSyno.testing = true
     photoSyno.test = null
     redraw()
-    const r = await api(`${API}/photos/synology/test`, { method: 'POST', body: { port }, timeoutMs: 45000 })
+    const body = { url: photoSyno.url, account: photoSyno.account, ...(photoSyno.password ? { password: photoSyno.password } : {}), ...(fingerprint ? { fingerprint } : {}) }
+    const r = await api(`${API}/photos/synology/test`, { method: 'POST', body, timeoutMs: 45000 })
     photoSyno.testing = false
     photoSyno.test = r.ok ? r.body : { ok: false, error: 'unreachable' }
-    redraw()
-  })
-  $('#sy-next', root)?.addEventListener('click', async () => {
-    // (the port is saved now - the album list comes from the box with it)
-    if (!(await save({ port: photoSyno.port ? Number(photoSyno.port) : 0 }))) return
-    photoSyno.chosen = new Set(photoSyno.data.settings.albumIds)
+    if (r.ok && r.body.ok) photoSyno.fingerprint = r.body.fingerprint || ''
     photoSyno.step = 2
+    redraw()
+  }
+  $('#sy-test', root)?.addEventListener('click', () => {
+    keep()
+    if (!/^(https?:\/\/)?[^\s/:]+(:\d+)?\/?$/i.test(photoSyno.url)) return toast('Bitte die Adresse von DSM eintragen, z. B. https://192.168.1.10:5001', 'info')
+    if (!photoSyno.account) return toast('Bitte den Benutzernamen eintragen', 'info')
+    if (!photoSyno.password && !photoSynoPasswordKept()) return toast('Bitte das Passwort eintragen', 'info')
+    // (another address: the certificate confirmed for the one before does not count)
+    if (photoSyno.url.replace(/\/+$/, '').toLowerCase() !== String(d.settings.url).toLowerCase()) photoSyno.fingerprint = ''
+    void test(photoSyno.fingerprint)
+  })
+  $('#sy-trust', root)?.addEventListener('click', (e) => {
+    photoSyno.fingerprint = e.currentTarget.dataset.fp
+    void test(photoSyno.fingerprint)
+  })
+  $('#sy-retry', root)?.addEventListener('click', () => void test(photoSyno.fingerprint))
+  $('#sy-next', root)?.addEventListener('click', async () => {
+    // (the login is saved now - the album list comes from the box with it)
+    const body = { url: photoSyno.url, account: photoSyno.account, certFingerprint: photoSyno.fingerprint }
+    if (photoSyno.password) body.password = photoSyno.password
+    if (!(await save(body))) return
+    photoSyno.password = ''
+    photoSyno.chosen = new Set(photoSyno.data.settings.albumIds)
+    photoSyno.step = 3
     redraw()
     await photoSynologyLoadAlbums()
     redraw()
@@ -12935,14 +12979,13 @@ function mountPhotoSynology(root, page) {
   $('#sy-albums', root)?.addEventListener('click', async () => {
     photoSyno.chosen = new Set(d.settings.albumIds)
     photoSyno.test = null
-    photoSyno.step = 2
+    photoSyno.step = 3
     redraw()
     await photoSynologyLoadAlbums()
     redraw()
   })
-  $('#sy-retest', root)?.addEventListener('click', () => {
-    photoSyno.test = null
-    photoSyno.port = d.settings.port ? String(d.settings.port) : ''
+  $('#sy-login', root)?.addEventListener('click', () => {
+    Object.assign(photoSyno, { url: d.settings.url, account: d.settings.account, password: '', fingerprint: d.settings.certFingerprint || '', test: null })
     goStep(1)
   })
   $('#sy-keep', root)?.addEventListener('change', async (e) => {

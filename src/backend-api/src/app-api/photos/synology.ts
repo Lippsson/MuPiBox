@@ -1,15 +1,16 @@
-// The photo display's albums of Synology Photos (5.1, Bibliothek › Fotos › Synology Photos): the NAS the box is signed in
-// to (Bibliothek › NAS) with the same account - its own albums and the ones shared with it in Synology Photos become albums
-// on the display. So a family gives the box an album by sharing it with the box's account ("Betrachter"). The sync, the two
-// ways (kept on the box, live) and the live pictures are the same as for Immich (remote.ts); Synology's thumbnails ("xl"
-// for the full view, "sm" for the grid) are the pictures. A clip comes as it is on the NAS (4K HEVC from a phone, say) and is
-// made on the box (video.ts) - so live albums show no clips. The login stays in the server (server.ts: photoNas.dsm).
+// The photo display's albums of Synology Photos (5.1, Bibliothek › Fotos › Synology Photos): a login of its own at DSM
+// (address, account, password - dsm.ts; best an account just for the box) - its own albums and the ones shared with it in
+// Synology Photos become albums on the display. So a family gives the box an album by sharing it with the box's account
+// ("Betrachter"). The sync, the two ways (kept on the box, live) and the live pictures are the same as for Immich
+// (remote.ts); Synology's thumbnails ("xl" for the full view, "sm" for the grid) are the pictures. A clip comes as it is on
+// the NAS (4K HEVC from a phone, say) and is made on the box (video.ts) - so live albums show no clips. The password is kept
+// encrypted and never shown again.
 
 import path from 'node:path'
 import type { Request, Response, Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
-import type { PhotoNasAccess } from './nas'
+import { DsmCertificateError, type DsmCertificateInfo, DsmLoginRefused, type DsmTarget, dsmCall } from './dsm'
 import { CACHE_LIMITS_MB, type RemoteClient, type RemoteItem, RemoteAway, RemotePhotoSync, RemoteRefused, registerRemote, SYNC_MINUTES, typeOf } from './remote'
 import { photoSettings } from './settings'
 import { albums, PHOTOS_DIR, photoBytes, SYNOLOGY_LIVE_DIR, SYNOLOGY_PHOTO_DIR } from './store'
@@ -17,46 +18,93 @@ import { albums, PHOTOS_DIR, photoBytes, SYNOLOGY_LIVE_DIR, SYNOLOGY_PHOTO_DIR }
 export interface PhotoSynologyDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
   updateMupiboxConfig: (mutate: (cfg: Record<string, unknown>) => void) => Promise<void>
-  nas?: PhotoNasAccess
+  /** the box's way to keep a secret in the config (the NAS password's) */
+  secret?: { encrypt(plain: string): string; decrypt(stored: string): string | undefined }
 }
 
 const ALBUMS_MAX = 100
 const STATE_FILE = path.join(PHOTOS_DIR, 'synology-sync.json')
 // an album's id in Synology Photos (a number)
 const ALBUM_ID = /^\d{1,12}$/
+const FINGERPRINT = /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/i
 // how many items one question asks for
 const PAGE = 500
 
 export interface SynologySettings {
-  /** switched on in the app (the NAS's login is the one of Bibliothek › NAS) */
+  /** switched on in the app (after the test and the choice of albums) */
   enabled: boolean
+  /** DSM: https://host:port or http://host:port */
+  url: string
+  account: string
+  /** the password as kept (encrypted); '' none */
+  password: string
+  /** the confirmed certificate of an https DSM ('': the system trusts it, or http) */
+  certFingerprint: string
   albumIds: string[]
   keepCopy: boolean
   syncMinutes: (typeof SYNC_MINUTES)[number]
   cacheLimitMb: (typeof CACHE_LIMITS_MB)[number]
-  /** DSM's port, when it is not the usual one (5001 with https, 5000 without); 0: the usual one */
-  port: number
 }
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 
+/** DSM's address as the box keeps it: http(s)://host:port - https and 5001 when nothing else is said (5000 for http) */
+export function cleanSynologyUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  let t = raw.trim()
+  if (!t || t.length > 300) return null
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t) && !/^https?:\/\//i.test(t)) return null
+  if (!/^https?:\/\//i.test(t)) t = `https://${t}`
+  let u: URL
+  try {
+    u = new URL(t)
+  } catch {
+    return null
+  }
+  if (!u.hostname || u.username || u.password || u.search || u.hash || (u.pathname !== '/' && u.pathname !== '')) return null
+  const port = u.port || (u.protocol === 'https:' ? '5001' : '5000')
+  return `${u.protocol}//${u.hostname}:${port}`
+}
+
 export function synologySettings(cfg: unknown): SynologySettings {
   const n = obj(obj(obj(obj(cfg).photos).sources).synology)
-  const port = Number(n.port)
   return {
     enabled: n.enabled === true,
+    url: cleanSynologyUrl(n.url) ?? '',
+    account: typeof n.account === 'string' ? n.account.slice(0, 100) : '',
+    password: typeof n.password === 'string' ? n.password : '',
+    certFingerprint: typeof n.certFingerprint === 'string' && FINGERPRINT.test(n.certFingerprint) ? n.certFingerprint.toUpperCase() : '',
     albumIds: Array.isArray(n.albumIds) ? [...new Set(n.albumIds.filter((x): x is string => typeof x === 'string' && ALBUM_ID.test(x)))].slice(0, ALBUMS_MAX) : [],
     keepCopy: n.keepCopy !== false,
     syncMinutes: (SYNC_MINUTES as readonly number[]).includes(Number(n.syncMinutes)) ? (Number(n.syncMinutes) as SynologySettings['syncMinutes']) : 360,
     cacheLimitMb: (CACHE_LIMITS_MB as readonly number[]).includes(Number(n.cacheLimitMb)) ? (Number(n.cacheLimitMb) as SynologySettings['cacheLimitMb']) : 2048,
-    port: Number.isInteger(port) && port > 0 && port < 65536 ? port : 0,
   }
 }
 
-/** A change from the app, checked (a wrong field: the reason, nothing written) */
-export function applySynologySettings(cfg: Record<string, unknown>, patch: unknown): string | null {
+/** A change from the app, checked (a wrong field: the reason, nothing written); the password comes in plain, kept encrypted */
+export function applySynologySettings(cfg: Record<string, unknown>, patch: unknown, encrypt: (plain: string) => string = (x) => x): string | null {
   const p = obj(patch)
   const next: Record<string, unknown> = { ...obj(obj(obj(cfg.photos).sources).synology) }
+  const before = { url: cleanSynologyUrl(next.url), account: next.account }
+  if (p.url !== undefined) {
+    const url = cleanSynologyUrl(p.url)
+    if (!url) return 'url'
+    next.url = url
+  }
+  if (p.account !== undefined) {
+    if (typeof p.account !== 'string' || !p.account.trim() || p.account.length > 100) return 'account'
+    next.account = p.account.trim()
+  }
+  // (the password kept belongs to the address and the account it was given for: another one gets it only typed in anew)
+  const moved = cleanSynologyUrl(next.url) !== before.url || next.account !== before.account
+  if (p.password !== undefined) {
+    if (typeof p.password !== 'string' || !p.password || p.password.length > 200) return 'password'
+    next.password = encrypt(p.password)
+  } else if (moved && next.password) return 'password'
+  if (p.certFingerprint !== undefined) {
+    if (typeof p.certFingerprint !== 'string' || (p.certFingerprint !== '' && !FINGERPRINT.test(p.certFingerprint))) return 'certFingerprint'
+    next.certFingerprint = p.certFingerprint.toUpperCase()
+  } else if (cleanSynologyUrl(next.url) !== before.url) next.certFingerprint = ''
   if (p.enabled !== undefined) {
     if (typeof p.enabled !== 'boolean') return 'enabled'
     next.enabled = p.enabled
@@ -77,10 +125,8 @@ export function applySynologySettings(cfg: Record<string, unknown>, patch: unkno
     if (!(CACHE_LIMITS_MB as readonly unknown[]).includes(p.cacheLimitMb)) return 'cacheLimitMb'
     next.cacheLimitMb = p.cacheLimitMb
   }
-  if (p.port !== undefined) {
-    if (!Number.isInteger(p.port) || (p.port as number) < 0 || (p.port as number) > 65535) return 'port'
-    next.port = p.port
-  }
+  // (from the first version: the port of the NAS's DSM - an address of its own now)
+  delete next.port
   const photos = { ...obj(cfg.photos) }
   photos.sources = { ...obj(photos.sources), synology: next }
   cfg.photos = photos
@@ -88,20 +134,6 @@ export function applySynologySettings(cfg: Record<string, unknown>, patch: unkno
 }
 
 /* ---------- talking to Synology Photos ---------- */
-
-/**
- * DSM refused the login of the box's NAS account: 400 the name or the password, 401 the account is off, 402 it may not use
- * Synology Photos, 403/406 it asks for a second factor, 407 the box's address is blocked (too many wrong logins), 408-410
- * the password expired. -1: no NAS set up.
- */
-export class DsmLoginRefused extends RemoteRefused {
-  constructor(readonly code: number) {
-    super(code === 402 ? 403 : 401, 'Synology (login)')
-  }
-}
-
-/** The NAS's certificate on DSM's port is not the one confirmed for the NAS (Bibliothek › NAS) */
-export class DsmCertificate extends RemoteAway {}
 
 interface SynoAlbum {
   id: number
@@ -122,16 +154,18 @@ interface SynoItem {
 }
 
 // the albums the account sees, for a minute: own ones and the ones shared with it (those are read with their passphrase)
-let albumCache: { at: number; port: number; list: Map<string, SynoAlbum & { shared: boolean }> } | null = null
+let albumCache: { at: number; key: string; list: Map<string, SynoAlbum & { shared: boolean }> } | null = null
 
 export class SynologyClient implements RemoteClient {
   /** a clip comes as it is on the NAS: the display cannot play it as it comes - live albums show no clips */
   readonly liveClips = false
 
-  constructor(
-    private readonly nas: PhotoNasAccess,
-    private readonly port: number,
-  ) {}
+  constructor(private readonly target: DsmTarget) {}
+
+  /** the address and the account (the album list of a minute ago is theirs) */
+  private get key(): string {
+    return `${this.target.url}\n${this.target.account}`
+  }
 
   /** A question to Synology Photos: its data; RemoteRefused when it says no, RemoteAway when the NAS does not answer */
   private async call<T>(params: Record<string, string>, signal?: AbortSignal): Promise<T> {
@@ -141,8 +175,7 @@ export class SynologyClient implements RemoteClient {
   }
 
   private async raw(params: Record<string, string>, init: { signal?: AbortSignal; timeoutMs?: number; fresh?: boolean } = {}): Promise<globalThis.Response> {
-    if (!this.nas.dsm) throw new DsmLoginRefused(-1)
-    return this.nas.dsm(params, { ...init, port: this.port })
+    return dsmCall(this.target, params, init)
   }
 
   private async json(r: globalThis.Response): Promise<unknown> {
@@ -162,7 +195,7 @@ export class SynologyClient implements RemoteClient {
 
   /** Every album the account sees: its own and the ones shared with it (each once) */
   async albums(signal?: AbortSignal, fresh = false): Promise<Map<string, SynoAlbum & { shared: boolean }>> {
-    if (!fresh && albumCache && albumCache.port === this.port && Date.now() - albumCache.at < 60_000) return albumCache.list
+    if (!fresh && albumCache && albumCache.key === this.key && Date.now() - albumCache.at < 60_000) return albumCache.list
     const list = new Map<string, SynoAlbum & { shared: boolean }>()
     const extra = JSON.stringify(['thumbnail'])
     for (const [api, method, version, shared] of [
@@ -176,7 +209,7 @@ export class SynologyClient implements RemoteClient {
         if (page.length < PAGE) break
       }
     }
-    albumCache = { at: Date.now(), port: this.port, list }
+    albumCache = { at: Date.now(), key: this.key, list }
     return list
   }
 
@@ -279,9 +312,10 @@ function itemOf(x: SynoItem, videos: boolean): RemoteItem | null {
 
 export type SynologyTest =
   | { ok: true; account: string | null; albums: number; shared: number; pictures: number }
-  | { ok: false; error: 'noNas' | 'unauthorized' | 'noPhotos' | 'twoFactor' | 'blocked' | 'expired' | 'certificate' | 'unreachable' }
+  | { ok: false; error: 'unauthorized' | 'noPhotos' | 'twoFactor' | 'blocked' | 'expired' | 'unreachable' }
+  | { ok: false; error: 'certificate'; certificate: DsmCertificateInfo | null }
 
-/** The test of the page: the login of the NAS's account at DSM, and its albums */
+/** The test of the assistant: the certificate, the login at DSM, and the account's albums */
 export async function testSynology(client: SynologyClient, account: string | null): Promise<SynologyTest> {
   try {
     await client.login(AbortSignal.timeout(20_000))
@@ -291,9 +325,9 @@ export async function testSynology(client: SynologyClient, account: string | nul
   } catch (err) {
     if (err instanceof DsmLoginRefused) {
       const c = err.code
-      return { ok: false, error: c === -1 ? 'noNas' : c === 402 ? 'noPhotos' : c === 403 || c === 404 || c === 406 ? 'twoFactor' : c === 407 ? 'blocked' : c >= 408 && c <= 410 ? 'expired' : 'unauthorized' }
+      return { ok: false, error: c === 402 ? 'noPhotos' : c === 403 || c === 404 || c === 406 ? 'twoFactor' : c === 407 ? 'blocked' : c >= 408 && c <= 410 ? 'expired' : 'unauthorized' }
     }
-    if (err instanceof DsmCertificate) return { ok: false, error: 'certificate' }
+    if (err instanceof DsmCertificateError) return { ok: false, error: 'certificate', certificate: err.certificate ?? null }
     if (err instanceof RemoteRefused && err.status === 403) return { ok: false, error: 'noPhotos' }
     return { ok: false, error: 'unreachable' }
   }
@@ -301,10 +335,17 @@ export async function testSynology(client: SynologyClient, account: string | nul
 
 /* ---------- the app's side ---------- */
 
-function synologyClient(deps: PhotoSynologyDeps, cfg: MupiboxConfig | undefined): SynologyClient | null {
+/** The login as kept; null: none, or its password cannot be read on this box */
+function keptTarget(deps: PhotoSynologyDeps, cfg: MupiboxConfig | undefined): DsmTarget | null {
   const s = synologySettings(cfg)
-  if (!s.enabled || !deps.nas?.dsm || !deps.nas.info().connected) return null
-  return new SynologyClient(deps.nas, s.port)
+  if (!s.url || !s.account || !s.password) return null
+  const password = deps.secret ? deps.secret.decrypt(s.password) : s.password
+  return password ? { url: s.url, account: s.account, password, fingerprint: s.certFingerprint || undefined } : null
+}
+
+function synologyClient(deps: PhotoSynologyDeps, cfg: MupiboxConfig | undefined): SynologyClient | null {
+  const target = synologySettings(cfg).enabled ? keptTarget(deps, cfg) : null
+  return target ? new SynologyClient(target) : null
 }
 
 /**
@@ -326,38 +367,44 @@ export function registerPhotoSynologyRoutes(router: Router, deps: PhotoSynologyD
       liveDir: SYNOLOGY_LIVE_DIR,
       settings: (cfg) => {
         const s = synologySettings(cfg)
-        return { set: s.enabled, albumIds: s.albumIds, keepCopy: s.keepCopy, syncMinutes: s.syncMinutes, cacheLimitMb: s.cacheLimitMb }
+        // (switched on with a login - one switched on before it had a login of its own waits for the assistant)
+        return { set: s.enabled && !!s.url && !!s.account && !!s.password, albumIds: s.albumIds, keepCopy: s.keepCopy, syncMinutes: s.syncMinutes, cacheLimitMb: s.cacheLimitMb }
       },
       client: (cfg) => synologyClient(deps, cfg),
-      unreadable: 'the NAS is not signed in (Bibliothek › NAS), the pictures stay',
+      unreadable: 'the password cannot be read on this box, the pictures stay - enter it again in the app',
     },
     deps.getMupiboxConfig,
   )
   registerRemote(sync)
   sync.start()
-  const account = () => {
-    const nas = obj(obj(deps.getMupiboxConfig()).nas)
-    return typeof nas.account === 'string' && nas.account ? nas.account.slice(0, 100) : null
+  // (a suggestion for the address: the host of the NAS signed in to under Bibliothek › NAS)
+  const nasHost = () => {
+    const a = obj(obj(deps.getMupiboxConfig()).nas).address
+    if (typeof a !== 'string' || !a.trim()) return null
+    try {
+      return new URL(/^https?:\/\//i.test(a.trim()) ? a.trim() : `http://${a.trim()}`).hostname || null
+    } catch {
+      return null
+    }
   }
 
   const answer = async () => {
     const s = synologySettings(deps.getMupiboxConfig())
     const list = (await albums()).filter((a) => a.source === 'synology')
     return {
-      settings: { enabled: s.enabled, albumIds: s.albumIds, keepCopy: s.keepCopy, syncMinutes: s.syncMinutes, cacheLimitMb: s.cacheLimitMb, port: s.port },
-      nas: { connected: !!deps.nas?.info().connected, account: account() },
-      connected: s.enabled,
+      settings: { enabled: s.enabled, url: s.url, account: s.account, hasPassword: !!s.password, certFingerprint: s.certFingerprint, albumIds: s.albumIds, keepCopy: s.keepCopy, syncMinutes: s.syncMinutes, cacheLimitMb: s.cacheLimitMb },
+      nasHost: nasHost(),
+      connected: s.enabled && !!s.url && !!s.account && !!s.password,
       sync: sync.status(),
       albums: list.length,
       pictures: list.reduce((n, a) => n + a.assets.length, 0),
       cacheBytes: (await photoBytes(SYNOLOGY_PHOTO_DIR)) + (await photoBytes(SYNOLOGY_LIVE_DIR)),
     }
   }
-  // (the test and the album list before it is switched on: with the port typed in - 0 the usual one; none given: the one kept)
-  const tryClient = (port?: unknown) => {
-    if (!deps.nas?.dsm || !deps.nas.info().connected) return null
-    const p = Number(port)
-    return new SynologyClient(deps.nas, port !== undefined && Number.isInteger(p) && p >= 0 && p < 65536 ? p : synologySettings(deps.getMupiboxConfig()).port)
+  // (the album list and its pictures before it is switched on: with the login as kept)
+  const tryClient = () => {
+    const target = keptTarget(deps, deps.getMupiboxConfig())
+    return target ? new SynologyClient(target) : null
   }
 
   router.get('/photos/synology', requireSession, async (_req, res) => {
@@ -365,10 +412,26 @@ export function registerPhotoSynologyRoutes(router: Router, deps: PhotoSynologyD
     res.json(await answer())
   })
 
+  // the test: {url, account, password?, fingerprint?} - without a password the one kept, only for the address and the
+  // account it was given for; a fingerprint: the certificate confirmed in the app
   router.post('/photos/synology/test', requireSession, requireCsrf, async (req, res) => {
-    const client = tryClient(obj(req.body).port)
-    if (!client) return void res.json({ ok: false, error: 'noNas' } satisfies SynologyTest)
-    res.json(await testSynology(client, account()))
+    const b = obj(req.body)
+    const url = cleanSynologyUrl(b.url)
+    if (!url) return void res.status(400).json({ error: 'url' })
+    const account = typeof b.account === 'string' ? b.account.trim() : ''
+    if (!account || account.length > 100) return void res.status(400).json({ error: 'account' })
+    let password = typeof b.password === 'string' ? b.password : ''
+    if (!password) {
+      const kept = keptTarget(deps, deps.getMupiboxConfig())
+      if (!kept || kept.url !== url || kept.account !== account) return void res.status(400).json({ error: 'password' })
+      password = kept.password
+    }
+    const fingerprint = typeof b.fingerprint === 'string' && FINGERPRINT.test(b.fingerprint) ? b.fingerprint.toUpperCase() : undefined
+    const kept = synologySettings(deps.getMupiboxConfig())
+    // (the certificate confirmed before, for the same address)
+    const pin = fingerprint ?? (kept.url === url && kept.certFingerprint ? kept.certFingerprint : undefined)
+    const result = await testSynology(new SynologyClient({ url, account, password, fingerprint: pin }), account)
+    res.json(result.ok ? { ...result, fingerprint: pin ?? '' } : result)
   })
 
   router.get('/photos/synology/albums', requireSession, async (_req, res) => {
@@ -410,15 +473,25 @@ export function registerPhotoSynologyRoutes(router: Router, deps: PhotoSynologyD
     const before = synologySettings(deps.getMupiboxConfig())
     try {
       await deps.updateMupiboxConfig((cfg) => {
-        error = applySynologySettings(cfg, req.body)
+        error = applySynologySettings(cfg, req.body, deps.secret ? (x) => deps.secret!.encrypt(x) : undefined)
       })
     } catch {
       return void res.status(500).json({ error: 'config_not_saved' })
     }
     if (error) return void res.status(400).json({ error })
     const after = synologySettings(deps.getMupiboxConfig())
-    // (switched on, albums, the way they are kept or the port changed: a sync takes it over at once)
-    if (after.enabled && (!before.enabled || before.keepCopy !== after.keepCopy || before.port !== after.port || before.albumIds.join() !== after.albumIds.join())) void sync.run()
+    // (switched on, albums, the way they are kept or the login changed: a sync takes it over at once)
+    if (
+      after.enabled &&
+      (!before.enabled ||
+        before.keepCopy !== after.keepCopy ||
+        before.url !== after.url ||
+        before.account !== after.account ||
+        before.password !== after.password ||
+        before.certFingerprint !== after.certFingerprint ||
+        before.albumIds.join() !== after.albumIds.join())
+    )
+      void sync.run()
     res.json(await answer())
   })
 
