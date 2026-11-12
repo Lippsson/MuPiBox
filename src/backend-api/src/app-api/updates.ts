@@ -23,6 +23,8 @@ export interface UpdatesDeps {
 const REPO_RAW = 'https://raw.githubusercontent.com/splitti/MuPiBox/main'
 const STATE_DIR = '/var/lib/mupibox-update'
 const UNIT = 'mupibox-update'
+// the progress on the display (5.1, scripts/mupibox/update_progress_display.sh): the maintenance picture with a bar
+const PROGRESS_DISPLAY = '/usr/local/bin/mupibox/update_progress_display.sh'
 const CHANNELS = ['stable', 'beta', 'dev'] as const
 type Channel = (typeof CHANNELS)[number]
 
@@ -54,7 +56,10 @@ finish() {
 	FINISHED=$(date +%s)
 	write_state
 }
-progress() { printf '%s\\t%s\\n' "$1" "$2" > "$D/progress"; }
+progress() {
+	printf '%s\\t%s\\n' "$1" "$2" > "$D/progress"
+	[ -x ${PROGRESS_DISPLAY} ] && ${PROGRESS_DISPLAY} "$1" "$2" >/dev/null 2>&1 &
+}
 exec > "$D/output.txt" 2>&1
 write_state
 progress 0 "Start"
@@ -155,6 +160,8 @@ while IFS= read -r line; do
 	while IFS= read -r l && [ "$l" != "XXX" ]; do text="\${text:+$text }$l"; done
 	case "$pct" in '' | *[!0-9]*) pct=$(cut -f1 "$P" 2>/dev/null) ;; esac
 	printf '%s\\t%s\\n' "\${pct:-0}" "$text" > "$P"
+	# the display too (the maintenance picture with a bar) - in the background, it never holds the update up
+	[ -x ${PROGRESS_DISPLAY} ] && ${PROGRESS_DISPLAY} "\${pct:-0}" "$text" >/dev/null 2>&1 &
 done
 exit 0
 `
