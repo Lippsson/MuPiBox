@@ -17,7 +17,7 @@ Unter **Bibliothek › Fotos › Foto-Dienst verbinden › Synology Photos** fü
 
 1. **Anmeldung**: die **DSM-Adresse** (wie im Browser, meist `https://192.168.1.10:5001`; ohne Angabe nimmt die Box https und Port 5001), **Benutzername** und **Passwort**.
 2. **Test**: Nutzt das NAS sein eigenes, selbst ausgestelltes Zertifikat, zeigt die Box dessen Fingerabdruck. Vergleiche ihn mit dem im NAS bzw. im Browser über das Schloss-Symbol und tippe nur bei Übereinstimmung auf **Vertrauen und testen**. Danach zeigt der Test Konto, Alben, davon geteilte, und die Anzahl der Fotos und Videos.
-3. **Auswahl**: oben zwischen **Alben**, **Persönlicher Bereich** und **Gemeinsamer Bereich** umschalten und anhaken, was die Box zeigen soll, dann **Fertig**. In den Bereichen klappst du die Ordner mit dem Pfeil auf. Ein gewählter Ordner wird ein Album und enthält auch die Fotos der Ordner darin; die Ordner darin sind dann nicht noch einmal einzeln wählbar.
+3. **Auswahl**: oben zwischen **Alben**, **Persönlicher Bereich**, **Gemeinsamer Bereich** und **Intelligent** umschalten und anhaken, was die Box zeigen soll, dann **Fertig**. In den Bereichen klappst du die Ordner mit dem Pfeil auf. Ein gewählter Ordner wird ein Album und enthält auch die Fotos der Ordner darin; die Ordner darin sind dann nicht noch einmal einzeln wählbar.
 
 Das Passwort wird verschlüsselt auf der Box gespeichert und nie wieder angezeigt. Es gilt nur für die Adresse und das Konto, für die es eingegeben wurde. **Anmeldung ändern** auf der Seite von Synology Photos öffnet den Assistenten erneut. Wird das Zertifikat auf dem NAS erneuert, fragt die Box beim nächsten Test wieder nach.
 
@@ -33,3 +33,10 @@ Das Passwort wird verschlüsselt auf der Box gespeichert und nie wieder angezeig
 > Lehnt DSM die Anmeldung ab, versucht es die Box mit denselben Daten 10 Minuten lang nicht erneut, damit DSM sie nicht sperrt. Nur **Verbindung testen** fragt sofort.
 
 Clips liefert Synology Photos nur im Original, oft 4K vom Handy. Die Box wandelt sie deshalb selbst um, und **Videos gibt es nur mit „Fotos auf der Box speichern“**. Live zeigt sie nur die Fotos ([Foto-Dienste: speichern oder live](speichern-oder-live.md)).
+
+## Intelligente Alben
+
+Unter **Intelligent** bietet die Box an, was Synology Photos selbst zusammenstellt: **Zuletzt hinzugefügt** (die neuesten 300), **Favoriten**, **Videos** und je ein Album für jede **Person**, die in Synology Photos einen Namen hat. Sie gelten für den persönlichen Bereich des Kontos und ändern sich von selbst: Die Box gleicht sie mit ab wie alle anderen.
+
+> [!NOTE]
+> Personen gibt es nur, wenn die Gesichtserkennung von Synology Photos für das Konto der Box eingeschaltet ist und die Personen einen Namen haben. Ein Konto, das nur Alben geteilt bekommt, hat meist keine. **Videos** zeigt die Box nur mit „Videos anzeigen“ und „Fotos auf der Box speichern“.

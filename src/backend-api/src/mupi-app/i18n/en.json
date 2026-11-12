@@ -3905,5 +3905,12 @@
  "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "A chosen folder also shows the photos in the folders inside it.",
  "{} gewählt": "{} chosen",
  "Ordner in Synology Photos": "Folders in Synology Photos",
- "Noch keine Alben. Ordner kannst du trotzdem wählen.": "No albums yet. You can still choose folders."
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "No albums yet. You can still choose folders.",
+ "Intelligent": "Smart",
+ "Zuletzt hinzugefügt": "Recently added",
+ "Favoriten": "Favorites",
+ "Personen": "People",
+ "Intelligente Alben in Synology Photos": "Smart albums in Synology Photos",
+ "Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.": "No people found: face recognition of Synology Photos is off for the box's account, or there are no people with names yet.",
+ "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Smart albums change by themselves: the box syncs them like all the others. They apply to the account's personal space."
 }

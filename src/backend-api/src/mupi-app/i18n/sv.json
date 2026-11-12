@@ -3889,5 +3889,12 @@
  "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "En vald mapp visar också bilderna i mapparna i den.",
  "{} gewählt": "{} valda",
  "Ordner in Synology Photos": "Mappar i Synology Photos",
- "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Inga album ännu. Du kan ändå välja mappar."
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Inga album ännu. Du kan ändå välja mappar.",
+ "Intelligent": "Smart",
+ "Zuletzt hinzugefügt": "Nyligen tillagda",
+ "Favoriten": "Favoriter",
+ "Personen": "Personer",
+ "Intelligente Alben in Synology Photos": "Smarta album i Synology Photos",
+ "Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.": "Inga personer hittades: ansiktsigenkänningen i Synology Photos är avstängd för boxens konto, eller så finns det inga personer med namn än.",
+ "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Smarta album ändras av sig själva: boxen synkroniserar dem som alla andra. De gäller kontots personliga utrymme."
 }

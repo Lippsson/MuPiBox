@@ -17,7 +17,7 @@ Under **Library › Photos › Connect a photo service › Synology Photos**, an
 
 1. **Sign-in**: the **DSM address** (as in the browser, usually `https://192.168.1.10:5001`; without one the box takes https and port 5001), **Username** and **Password**.
 2. **Test**: if the NAS uses its own, self-issued certificate, the box shows its fingerprint. Compare it with the one on the NAS or in the browser via the padlock, and only if they match tap **Trust and test**. Then the test shows the account, the albums, how many of them are shared, and the number of photos and videos.
-3. **Choice**: switch at the top between **Albums**, **Personal space** and **Shared space** and tick what the box should show, then tap **Done**. In the spaces you open the folders with the arrow. A chosen folder becomes an album and holds the photos of the folders inside it too; those are then not offered again one by one.
+3. **Choice**: switch at the top between **Albums**, **Personal space**, **Shared space** and **Smart** and tick what the box should show, then tap **Done**. In the spaces you open the folders with the arrow. A chosen folder becomes an album and holds the photos of the folders inside it too; those are then not offered again one by one.
 
 The password is kept encrypted on the box and never shown again. It applies only to the address and the account it was entered for. **Change sign-in** on the Synology Photos page opens the assistant again. If the certificate is renewed on the NAS, the box asks again at the next test.
 
@@ -33,3 +33,10 @@ The password is kept encrypted on the box and never shown again. It applies only
 > When DSM refuses the sign-in, the box does not try again with the same data for 10 minutes, so that DSM does not block it. Only **Test connection** asks at once.
 
 Synology Photos gives clips only as their original, often 4K from a phone. So the box converts them itself, and **videos are there only with "Keep photos on the box"**. Live, it shows only the photos ([Photo services: keep or live](speichern-oder-live.md)).
+
+## Smart albums
+
+Under **Smart** the box offers what Synology Photos puts together itself: **Recently added** (the newest 300), **Favorites**, **Videos** and an album for every **person** that has a name in Synology Photos. They apply to the account's personal space and change by themselves: the box syncs them like all the others.
+
+> [!NOTE]
+> People exist only when face recognition of Synology Photos is switched on for the box's account and the people have a name. An account that is only given albums usually has none. The box shows **Videos** only with "Show videos" and "Keep photos on the box".

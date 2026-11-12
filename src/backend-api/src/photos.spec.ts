@@ -291,7 +291,7 @@ test('photo Synology folders: personal and shared space, a folder takes the pict
   const cfg: Record<string, unknown> = {}
   assert.equal(applySynologySettings(cfg, { albumIds: ['12', 'f5', 't9'] }), null)
   assert.deepEqual(synologySettings(cfg).albumIds, ['12', 'f5', 't9'])
-  for (const bad of ['f', 'x5', 'f5a', 't', 'p5', '../1']) assert.equal(applySynologySettings(cfg, { albumIds: [bad] }), 'albumIds', bad)
+  for (const bad of ['f', 'x5', 'f5a', 't', 'q5', '../1']) assert.equal(applySynologySettings(cfg, { albumIds: [bad] }), 'albumIds', bad)
   assert.equal(folderName('/2023/Italien', 3), 'Italien')
   assert.equal(folderName('Familie', 3), 'Familie')
   assert.equal(folderName(undefined, 3), 'Ordner 3')
@@ -361,4 +361,62 @@ test('photo Synology folders: personal and shared space, a folder takes the pict
   await client.picture('f5', { ref: '1', ver: '1_k' }, 'grid')
   assert.equal(asked[0].api, 'SYNO.Foto.Thumbnail')
   assert.equal(asked[0].size, 'sm')
+})
+
+test('photo Synology smart albums: recently added, favorites, videos and the named people', async () => {
+  const { SynologyClient, applySynologySettings, synologySettings } = await import('./app-api/photos/synology')
+  const cfg: Record<string, unknown> = {}
+  assert.equal(applySynologySettings(cfg, { albumIds: ['rec', 'fav', 'vid', 'p7', '12', 'f5'] }), null)
+  assert.deepEqual(synologySettings(cfg).albumIds, ['rec', 'fav', 'vid', 'p7', '12', 'f5'])
+  for (const bad of ['p', 'px', 'recent', 'REC', 'p1a']) assert.equal(applySynologySettings(cfg, { albumIds: [bad] }), 'albumIds', bad)
+
+  const asked: Record<string, string>[] = []
+  const photo = (id: number, time: number, type = 'photo') => ({ id, type, time, additional: { thumbnail: { cache_key: `${id}_k`, xl: 'ready' }, resolution: { width: 800, height: 600 }, video_meta: { duration: 5000 } } })
+  class Fake extends SynologyClient {
+    protected override async raw(params: Record<string, string>): Promise<globalThis.Response> {
+      asked.push(params)
+      const ok = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { headers: { 'content-type': 'application/json' } })
+      const no = (code: number) => new Response(JSON.stringify({ success: false, error: { code } }), { headers: { 'content-type': 'application/json' } })
+      if (params.api === 'SYNO.Foto.Browse.Person') return ok({ list: [{ id: 7, name: 'Anna', item_count: 3 }, { id: 8, name: '' }, { id: 9, name: 'Ben', item_count: 1 }] })
+      if (params.api === 'SYNO.Foto.Browse.RecentlyAdded') return ok({ list: [photo(1, 100), photo(2, 300), photo(3, 200)] })
+      if (params.api === 'SYNO.Foto.Favorite') return no(103)
+      if (params.api === 'SYNO.Foto.Browse.Item') {
+        if (params.person_id === '7') return ok({ list: [photo(4, 10), photo(5, 20)] })
+        if (params.type === 'video') return ok({ list: [photo(6, 50, 'video')] })
+      }
+      throw new Error(`not expected: ${JSON.stringify(params)}`)
+    }
+  }
+  const client = new Fake({ url: 'https://nas:5001', account: 'box', password: 'pw' })
+  const signal = new AbortController().signal
+
+  // the named people only
+  assert.deepEqual(await client.people(), [{ id: '7', name: 'Anna', count: 3 }, { id: '9', name: 'Ben', count: 1 }])
+  // recently added: newest first
+  const recent = await client.album('rec', signal, false)
+  assert.equal(recent.name, 'Zuletzt hinzugefügt')
+  assert.deepEqual(recent.items.map((x) => x.ref), ['2', '3', '1'])
+  // a person: by the id, the name from the list
+  asked.length = 0
+  const anna = await client.album('p7', signal, false)
+  assert.equal(anna.name, 'Anna')
+  assert.deepEqual(anna.items.map((x) => x.ref), ['4', '5'])
+  assert.ok(asked.some((q) => q.api === 'SYNO.Foto.Browse.Item' && q.person_id === '7'))
+  // a person that is not named (any more): not there
+  await assert.rejects(client.album('p8', signal, false), { status: 404 })
+  // videos only with "Videos anzeigen"
+  assert.deepEqual((await client.album('vid', signal, false)).items, [])
+  assert.deepEqual((await client.album('vid', signal, true)).items.map((x) => `${x.ref}:${x.kind}`), ['6:video'])
+  // a DSM without the favorites question (103): not there - not "away"
+  await assert.rejects(client.album('fav', signal, false), { status: 404 })
+  // the picture of a smart album comes from the personal space
+  asked.length = 0
+  class Pic extends Fake {
+    protected override async raw(params: Record<string, string>): Promise<globalThis.Response> {
+      asked.push(params)
+      return new Response(new Uint8Array([1]), { headers: { 'content-type': 'image/webp' } })
+    }
+  }
+  await new Pic({ url: 'https://nas:5001', account: 'box', password: 'pw' }).picture('p7', { ref: '4', ver: '4_k' }, 'full')
+  assert.equal(asked[0].api, 'SYNO.Foto.Thumbnail')
 })
