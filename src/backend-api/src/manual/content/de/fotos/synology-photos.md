@@ -1,6 +1,6 @@
 # Synology Photos
 
-Auf einem Synology-NAS mit **Synology Photos** kann die Box Alben zeigen. Sie meldet sich mit einem eigenen Konto an und zeigt dessen Alben und alle Alben, die mit ihm geteilt sind.
+Auf einem Synology-NAS mit **Synology Photos** kann die Box Alben und Ordner zeigen. Sie meldet sich mit einem eigenen Konto an. Du wählst, was am Display erscheint: die **Alben** des Kontos (auch die mit ihm geteilten) und **Ordner** aus dem **persönlichen Bereich** des Kontos und aus dem **gemeinsamen Bereich**.
 
 ## In DSM vorbereiten
 
@@ -8,7 +8,8 @@ Am besten legst du ein Konto nur für die Box an. Dann sieht sie nur, was du aus
 
 1. In DSM unter **Systemsteuerung › Benutzer und Gruppe** ein Konto anlegen, zum Beispiel „mupibox“, **ohne** Zwei-Faktor-Anmeldung.
 2. Beim Konto unter **Bearbeiten › Anwendungen** die App **Synology Photos** erlauben.
-3. In Synology Photos ein Album öffnen, **Teilen** wählen und das Konto als **Betrachter** einladen. Ein öffentlicher Link ist nicht nötig.
+3. Für **Alben**: In Synology Photos ein Album öffnen, **Teilen** wählen und das Konto als **Betrachter** einladen. Ein öffentlicher Link ist nicht nötig.
+4. Für Ordner des **gemeinsamen Bereichs**: Der Bereich muss in Synology Photos eingerichtet sein, und das Konto braucht Zugriff auf die Ordner (das stellt ein DSM-Administrator ein). Der **persönliche Bereich** gehört dem Konto der Box selbst; Ordner daraus gibt es nur, wenn du Fotos in dessen Bereich ablegst.
 
 ## Verbinden
 
@@ -16,7 +17,7 @@ Unter **Bibliothek › Fotos › Foto-Dienst verbinden › Synology Photos** fü
 
 1. **Anmeldung**: die **DSM-Adresse** (wie im Browser, meist `https://192.168.1.10:5001`; ohne Angabe nimmt die Box https und Port 5001), **Benutzername** und **Passwort**.
 2. **Test**: Nutzt das NAS sein eigenes, selbst ausgestelltes Zertifikat, zeigt die Box dessen Fingerabdruck. Vergleiche ihn mit dem im NAS bzw. im Browser über das Schloss-Symbol und tippe nur bei Übereinstimmung auf **Vertrauen und testen**. Danach zeigt der Test Konto, Alben, davon geteilte, und die Anzahl der Fotos und Videos.
-3. **Alben**: die Alben anhaken und **Fertig**.
+3. **Auswahl**: oben zwischen **Alben**, **Persönlicher Bereich** und **Gemeinsamer Bereich** umschalten und anhaken, was die Box zeigen soll, dann **Fertig**. In den Bereichen klappst du die Ordner mit dem Pfeil auf. Ein gewählter Ordner wird ein Album und enthält auch die Fotos der Ordner darin; die Ordner darin sind dann nicht noch einmal einzeln wählbar.
 
 Das Passwort wird verschlüsselt auf der Box gespeichert und nie wieder angezeigt. Es gilt nur für die Adresse und das Konto, für die es eingegeben wurde. **Anmeldung ändern** auf der Seite von Synology Photos öffnet den Assistenten erneut. Wird das Zertifikat auf dem NAS erneuert, fragt die Box beim nächsten Test wieder nach.
 

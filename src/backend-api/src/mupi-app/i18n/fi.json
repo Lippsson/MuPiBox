@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Tämä laatta on käytetty tältä päivältä.",
  "Zertifikat geändert – bitte neu bestätigen": "Varmenne vaihtui – vahvista se uudelleen",
  "Abgleich abbrechen": "Peruuta synkronointi",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Synkronointi peruttu – haetut kuvat jäävät"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synkronointi peruttu – haetut kuvat jäävät",
+ "Persönlicher Bereich": "Henkilökohtainen tila",
+ "Gemeinsamer Bereich": "Jaettu tila",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Tämä tila ei ole käytettävissä: Synology Photos ei ole ottanut sitä käyttöön, tai laatikon tili ei saa nähdä sitä.",
+ "In diesem Bereich gibt es keine Ordner.": "Tässä tilassa ei ole kansioita.",
+ "Keine weiteren Ordner": "Ei muita kansioita",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Valittu kansio näyttää myös sen sisällä olevien kansioiden kuvat.",
+ "{} gewählt": "{} valittu",
+ "Ordner in Synology Photos": "Synology Photosin kansiot",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ei vielä albumeita. Voit silti valita kansioita."
 }

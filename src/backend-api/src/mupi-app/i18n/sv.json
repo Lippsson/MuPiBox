@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Den här rutan är förbrukad för i dag.",
  "Zertifikat geändert – bitte neu bestätigen": "Certifikatet har ändrats – bekräfta det igen",
  "Abgleich abbrechen": "Avbryt synkronisering",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Synkronisering avbruten – de hämtade bilderna stannar"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synkronisering avbruten – de hämtade bilderna stannar",
+ "Persönlicher Bereich": "Personligt utrymme",
+ "Gemeinsamer Bereich": "Delat utrymme",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Det här utrymmet är inte tillgängligt: Synology Photos har inte ställt in det, eller så får boxens konto inte se det.",
+ "In diesem Bereich gibt es keine Ordner.": "Det finns inga mappar i det här utrymmet.",
+ "Keine weiteren Ordner": "Inga fler mappar",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "En vald mapp visar också bilderna i mapparna i den.",
+ "{} gewählt": "{} valda",
+ "Ordner in Synology Photos": "Mappar i Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Inga album ännu. Du kan ändå välja mappar."
 }

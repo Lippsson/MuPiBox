@@ -11,7 +11,7 @@ The photo display is off at first. You switch it on under **Settings › Photos*
 | **Upload** | photos and videos from a phone or PC into an album on the box | [Uploading photos](hochladen.md) |
 | **NAS folders** | folders of the NAS the box is connected to become albums | [NAS folders](nas-ordner.md) |
 | **Immich** | albums of an Immich server in the home network | [Immich](immich.md) |
-| **Synology Photos** | albums from Synology Photos on a Synology NAS | [Synology Photos](synology-photos.md) |
+| **Synology Photos** | albums and folders from Synology Photos on a Synology NAS | [Synology Photos](synology-photos.md) |
 | **Nextcloud** | albums of the Nextcloud Photos app | [Nextcloud](nextcloud.md) |
 | **PhotoPrism** | albums of a PhotoPrism in the home network | [PhotoPrism](photoprism.md) |
 | **iCloud** | shared albums from the iPhone, by link | [iCloud](icloud.md) |

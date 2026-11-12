@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Denne flise er brugt op for i dag.",
  "Zertifikat geändert – bitte neu bestätigen": "Certifikatet er ændret – bekræft det igen",
  "Abgleich abbrechen": "Annullér synkronisering",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Synkronisering annulleret – de hentede billeder bliver"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synkronisering annulleret – de hentede billeder bliver",
+ "Persönlicher Bereich": "Personligt område",
+ "Gemeinsamer Bereich": "Delt område",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Dette område er ikke tilgængeligt: Synology Photos har ikke oprettet det, eller boksens konto må ikke se det.",
+ "In diesem Bereich gibt es keine Ordner.": "Der er ingen mapper i dette område.",
+ "Keine weiteren Ordner": "Ingen flere mapper",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "En valgt mappe viser også billederne i mapperne i den.",
+ "{} gewählt": "{} valgt",
+ "Ordner in Synology Photos": "Mapper i Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ingen album endnu. Du kan alligevel vælge mapper."
 }

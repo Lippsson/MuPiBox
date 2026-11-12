@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Deze tegel is op voor vandaag.",
  "Zertifikat geändert – bitte neu bestätigen": "Certificaat gewijzigd – bevestig het opnieuw",
  "Abgleich abbrechen": "Synchronisatie annuleren",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronisatie geannuleerd – de opgehaalde foto’s blijven"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronisatie geannuleerd – de opgehaalde foto’s blijven",
+ "Persönlicher Bereich": "Persoonlijke ruimte",
+ "Gemeinsamer Bereich": "Gedeelde ruimte",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Deze ruimte is niet beschikbaar: Synology Photos heeft hem niet ingesteld, of het account van de box mag hem niet zien.",
+ "In diesem Bereich gibt es keine Ordner.": "In deze ruimte zijn geen mappen.",
+ "Keine weiteren Ordner": "Geen andere mappen",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Een gekozen map toont ook de foto’s in de mappen daarin.",
+ "{} gewählt": "{} gekozen",
+ "Ordner in Synology Photos": "Mappen in Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Nog geen albums. Mappen kun je toch kiezen."
 }

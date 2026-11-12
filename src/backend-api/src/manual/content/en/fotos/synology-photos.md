@@ -1,6 +1,6 @@
 # Synology Photos
 
-On a Synology NAS with **Synology Photos**, the box can show albums. It signs in with an account of its own and shows that account's albums and all albums shared with it.
+On a Synology NAS with **Synology Photos**, the box can show albums and folders. It signs in with an account of its own. You choose what appears on the display: the account's **albums** (also the ones shared with it) and **folders** from the account's **personal space** and from the **shared space**.
 
 ## Preparing in DSM
 
@@ -8,7 +8,8 @@ Best create an account just for the box. Then it sees only what you share with i
 
 1. In DSM under **Control Panel › User & Group**, create an account, "mupibox" for example, **without** two-factor sign-in.
 2. For the account, allow the app **Synology Photos** under **Edit › Applications**.
-3. In Synology Photos, open an album, choose **Share** and invite the account as a **viewer**. A public link is not needed.
+3. For **albums**: in Synology Photos, open an album, choose **Share** and invite the account as a **viewer**. A public link is not needed.
+4. For folders of the **shared space**: the space must be set up in Synology Photos, and the account needs access to the folders (a DSM administrator sets that). The **personal space** belongs to the box's own account; it has folders only when photos are put into its space.
 
 ## Connecting
 
@@ -16,7 +17,7 @@ Under **Library › Photos › Connect a photo service › Synology Photos**, an
 
 1. **Sign-in**: the **DSM address** (as in the browser, usually `https://192.168.1.10:5001`; without one the box takes https and port 5001), **Username** and **Password**.
 2. **Test**: if the NAS uses its own, self-issued certificate, the box shows its fingerprint. Compare it with the one on the NAS or in the browser via the padlock, and only if they match tap **Trust and test**. Then the test shows the account, the albums, how many of them are shared, and the number of photos and videos.
-3. **Albums**: tick the albums and tap **Done**.
+3. **Choice**: switch at the top between **Albums**, **Personal space** and **Shared space** and tick what the box should show, then tap **Done**. In the spaces you open the folders with the arrow. A chosen folder becomes an album and holds the photos of the folders inside it too; those are then not offered again one by one.
 
 The password is kept encrypted on the box and never shown again. It applies only to the address and the account it was entered for. **Change sign-in** on the Synology Photos page opens the assistant again. If the certificate is renewed on the NAS, the box asks again at the next test.
 

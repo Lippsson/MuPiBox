@@ -284,3 +284,81 @@ test('photo PhotoPrism: the address, a picture and its clip, the login bound to 
   assert.equal(applyPhotoprismSettings(cfg, { albumIds: ['atoe48cgmajrq1j5'] }), null)
   assert.deepEqual(photoprismSettings(cfg).albumIds, ['atoe48cgmajrq1j5'])
 })
+
+test('photo Synology folders: personal and shared space, a folder takes the pictures below it, thumbnails by the space', async () => {
+  const { SynologyClient, applySynologySettings, folderName, synologySettings } = await import('./app-api/photos/synology')
+  // what is chosen: an album (12), a folder of the personal space (f5) or of the shared space (t9)
+  const cfg: Record<string, unknown> = {}
+  assert.equal(applySynologySettings(cfg, { albumIds: ['12', 'f5', 't9'] }), null)
+  assert.deepEqual(synologySettings(cfg).albumIds, ['12', 'f5', 't9'])
+  for (const bad of ['f', 'x5', 'f5a', 't', 'p5', '../1']) assert.equal(applySynologySettings(cfg, { albumIds: [bad] }), 'albumIds', bad)
+  assert.equal(folderName('/2023/Italien', 3), 'Italien')
+  assert.equal(folderName('Familie', 3), 'Familie')
+  assert.equal(folderName(undefined, 3), 'Ordner 3')
+
+  const asked: Record<string, string>[] = []
+  const photo = (id: number, type = 'photo') => ({ id, type, time: 1700000000 + id, additional: { thumbnail: { cache_key: `${id}_k`, xl: 'ready' }, resolution: { width: 800, height: 600 } } })
+  // personal space: 5 holds picture 1, below it 6 (pictures 2 and 1 again) and 7 (nothing, with 8 below it: picture 3);
+  // shared space: 9 holds picture 4
+  const tree: Record<string, { name?: string; folders: number[]; items: ReturnType<typeof photo>[] }> = {
+    'SYNO.Foto:0': { folders: [5], items: [] },
+    'SYNO.Foto:5': { name: '/Familie', folders: [6, 7], items: [photo(1)] },
+    'SYNO.Foto:6': { name: '/Familie/2023', folders: [], items: [photo(2), photo(1)] },
+    'SYNO.Foto:7': { name: '/Familie/leer', folders: [8], items: [] },
+    'SYNO.Foto:8': { name: '/Familie/leer/tief', folders: [], items: [photo(3), photo(9, 'unknown')] },
+    'SYNO.FotoTeam:9': { name: '/Alle', folders: [], items: [photo(4)] },
+  }
+  class Fake extends SynologyClient {
+    protected override async raw(params: Record<string, string>): Promise<globalThis.Response> {
+      asked.push(params)
+      const json = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { headers: { 'content-type': 'application/json' } })
+      const api = params.api.replace(/\.[A-Za-z]+\.[A-Za-z]+$|\.[A-Za-z]+$/, '')
+      if (/Browse\.Folder$/.test(params.api)) {
+        const key = `${api}:${params.id}`
+        const f = tree[key]
+        if (!f) return new Response(JSON.stringify({ success: false, error: { code: 608 } }), { headers: { 'content-type': 'application/json' } })
+        if (params.method === 'get') return json({ folder: { id: Number(params.id), name: f.name } })
+        return json({ list: f.folders.map((id) => ({ id, name: tree[`${api}:${id}`]?.name })) })
+      }
+      if (/Browse\.Item$/.test(params.api)) return json({ list: tree[`${api}:${params.folder_id}`]?.items ?? [] })
+      if (/Thumbnail$/.test(params.api)) return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/webp' } })
+      throw new Error(`not expected: ${params.api}`)
+    }
+  }
+  const client = new Fake({ url: 'https://nas:5001', account: 'box', password: 'pw' })
+  const signal = new AbortController().signal
+
+  // the folders of a space, one level
+  assert.deepEqual(await client.folders('personal', '0'), [{ id: '5', name: 'Familie' }])
+  assert.deepEqual((await client.folders('personal', '5')).map((f) => f.name), ['2023', 'leer'])
+  await assert.rejects(client.folders('personal', 'x'), { status: 404 })
+
+  // a folder: its name, its own pictures and the ones of every folder below (a picture once, only pictures)
+  asked.length = 0
+  const got = await client.album('f5', signal, false)
+  assert.equal(got.name, 'Familie')
+  assert.deepEqual(got.items.map((x) => x.ref).sort(), ['1', '2', '3'])
+  assert.ok(asked.every((q) => q.api.startsWith('SYNO.Foto.')), 'the personal space is asked as SYNO.Foto')
+  assert.ok(asked.filter((q) => /Browse\.Item$/.test(q.api)).every((q) => q.folder_id && !q.album_id))
+
+  // the shared space has its own API
+  asked.length = 0
+  const team = await client.album('t9', signal, false)
+  assert.equal(team.name, 'Alle')
+  assert.deepEqual(team.items.map((x) => x.ref), ['4'])
+  assert.ok(asked.every((q) => q.api.startsWith('SYNO.FotoTeam.')), 'the shared space is asked as SYNO.FotoTeam')
+
+  // a folder that is gone: 404 (the sync counts it as missing)
+  await assert.rejects(client.album('f404', signal, false), { status: 404 })
+  // a picture of a folder: the thumbnail of its space, no album parameters
+  asked.length = 0
+  const r = await client.picture('t9', { ref: '4', ver: '4_k' }, 'full')
+  assert.equal(r.headers.get('content-type'), 'image/webp')
+  assert.equal(asked[0].api, 'SYNO.FotoTeam.Thumbnail')
+  assert.equal(asked[0].size, 'xl')
+  assert.equal(asked[0].passphrase, undefined)
+  asked.length = 0
+  await client.picture('f5', { ref: '1', ver: '1_k' }, 'grid')
+  assert.equal(asked[0].api, 'SYNO.Foto.Thumbnail')
+  assert.equal(asked[0].size, 'sm')
+})

@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Tato dlaždice je pro dnešek vyčerpaná.",
  "Zertifikat geändert – bitte neu bestätigen": "Certifikát se změnil – potvrďte ho prosím znovu",
  "Abgleich abbrechen": "Zrušit synchronizaci",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronizace zrušena – dosud stažené fotky zůstávají"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronizace zrušena – dosud stažené fotky zůstávají",
+ "Persönlicher Bereich": "Osobní prostor",
+ "Gemeinsamer Bereich": "Sdílený prostor",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Tento prostor není k dispozici: Synology Photos ho nenastavilo, nebo ho účet krabičky nesmí vidět.",
+ "In diesem Bereich gibt es keine Ordner.": "V tomto prostoru nejsou žádné složky.",
+ "Keine weiteren Ordner": "Žádné další složky",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Vybraná složka zobrazí i fotky ve složkách v ní.",
+ "{} gewählt": "Vybráno: {}",
+ "Ordner in Synology Photos": "Složky v Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Zatím žádná alba. Složky přesto můžeš vybrat."
 }

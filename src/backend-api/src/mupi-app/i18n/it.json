@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Questa tessera è esaurita per oggi.",
  "Zertifikat geändert – bitte neu bestätigen": "Certificato cambiato – confermalo di nuovo",
  "Abgleich abbrechen": "Annulla sincronizzazione",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Sincronizzazione annullata – le foto già scaricate restano"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Sincronizzazione annullata – le foto già scaricate restano",
+ "Persönlicher Bereich": "Spazio personale",
+ "Gemeinsamer Bereich": "Spazio condiviso",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Questo spazio non è disponibile: Synology Photos non lo ha configurato, oppure l'account del box non può vederlo.",
+ "In diesem Bereich gibt es keine Ordner.": "In questo spazio non ci sono cartelle.",
+ "Keine weiteren Ordner": "Nessun’altra cartella",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Una cartella scelta mostra anche le foto delle cartelle che contiene.",
+ "{} gewählt": "{} scelti",
+ "Ordner in Synology Photos": "Cartelle in Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ancora nessun album. Puoi comunque scegliere delle cartelle."
 }

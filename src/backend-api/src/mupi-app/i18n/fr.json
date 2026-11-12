@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Cette tuile est épuisée pour aujourd’hui.",
  "Zertifikat geändert – bitte neu bestätigen": "Certificat modifié – veuillez le confirmer à nouveau",
  "Abgleich abbrechen": "Annuler la synchronisation",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronisation annulée – les photos déjà récupérées restent"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronisation annulée – les photos déjà récupérées restent",
+ "Persönlicher Bereich": "Espace personnel",
+ "Gemeinsamer Bereich": "Espace partagé",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Cet espace n'est pas disponible : Synology Photos ne l'a pas configuré, ou le compte de la box n'a pas le droit de le voir.",
+ "In diesem Bereich gibt es keine Ordner.": "Il n'y a aucun dossier dans cet espace.",
+ "Keine weiteren Ordner": "Pas d'autres dossiers",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Un dossier choisi montre aussi les photos des dossiers qu’il contient.",
+ "{} gewählt": "{} choisi(s)",
+ "Ordner in Synology Photos": "Dossiers dans Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Pas encore d'albums. Tu peux quand même choisir des dossiers."
 }

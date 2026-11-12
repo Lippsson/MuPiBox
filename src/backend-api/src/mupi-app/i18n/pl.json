@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Ten kafelek jest na dziś wykorzystany.",
  "Zertifikat geändert – bitte neu bestätigen": "Certyfikat się zmienił – potwierdź go ponownie",
  "Abgleich abbrechen": "Anuluj synchronizację",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronizacja anulowana – pobrane zdjęcia zostają"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronizacja anulowana – pobrane zdjęcia zostają",
+ "Persönlicher Bereich": "Przestrzeń osobista",
+ "Gemeinsamer Bereich": "Przestrzeń wspólna",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Ta przestrzeń jest niedostępna: Synology Photos jej nie skonfigurowało albo konto skrzynki nie może jej zobaczyć.",
+ "In diesem Bereich gibt es keine Ordner.": "W tej przestrzeni nie ma folderów.",
+ "Keine weiteren Ordner": "Brak kolejnych folderów",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Wybrany folder pokazuje też zdjęcia z folderów w nim zawartych.",
+ "{} gewählt": "Wybrano: {}",
+ "Ordner in Synology Photos": "Foldery w Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Brak albumów. Możesz mimo to wybrać foldery."
 }

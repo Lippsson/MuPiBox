@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Αυτό το πλακίδιο εξαντλήθηκε για σήμερα.",
  "Zertifikat geändert – bitte neu bestätigen": "Το πιστοποιητικό άλλαξε – επιβεβαιώστε το ξανά",
  "Abgleich abbrechen": "Ακύρωση συγχρονισμού",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Ο συγχρονισμός ακυρώθηκε – οι φωτογραφίες που ήρθαν μένουν"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Ο συγχρονισμός ακυρώθηκε – οι φωτογραφίες που ήρθαν μένουν",
+ "Persönlicher Bereich": "Προσωπικός χώρος",
+ "Gemeinsamer Bereich": "Κοινόχρηστος χώρος",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Αυτός ο χώρος δεν είναι διαθέσιμος: το Synology Photos δεν τον έχει ρυθμίσει ή ο λογαριασμός του κουτιού δεν μπορεί να τον δει.",
+ "In diesem Bereich gibt es keine Ordner.": "Σε αυτόν τον χώρο δεν υπάρχουν φάκελοι.",
+ "Keine weiteren Ordner": "Δεν υπάρχουν άλλοι φάκελοι",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Ένας επιλεγμένος φάκελος δείχνει και τις φωτογραφίες των φακέλων που περιέχει.",
+ "{} gewählt": "Επιλέχθηκαν: {}",
+ "Ordner in Synology Photos": "Φάκελοι στο Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Δεν υπάρχουν ακόμη άλμπουμ. Μπορείς όμως να επιλέξεις φακέλους."
 }

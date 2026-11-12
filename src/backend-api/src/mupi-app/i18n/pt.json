@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Este mosaico está esgotado por hoje.",
  "Zertifikat geändert – bitte neu bestätigen": "Certificado alterado – confirme-o novamente",
  "Abgleich abbrechen": "Cancelar sincronização",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Sincronização cancelada – as fotos já obtidas ficam"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Sincronização cancelada – as fotos já obtidas ficam",
+ "Persönlicher Bereich": "Espaço pessoal",
+ "Gemeinsamer Bereich": "Espaço partilhado",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Este espaço não está disponível: o Synology Photos não o configurou ou a conta da caixa não o pode ver.",
+ "In diesem Bereich gibt es keine Ordner.": "Não há pastas neste espaço.",
+ "Keine weiteren Ordner": "Sem mais pastas",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Uma pasta escolhida mostra também as fotos das pastas que contém.",
+ "{} gewählt": "{} escolhido(s)",
+ "Ordner in Synology Photos": "Pastas no Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ainda não há álbuns. Mesmo assim podes escolher pastas."
 }

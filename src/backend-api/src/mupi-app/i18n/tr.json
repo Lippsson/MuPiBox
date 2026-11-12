@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Bu kutucuk bugünlük bitti.",
  "Zertifikat geändert – bitte neu bestätigen": "Sertifika değişti – lütfen yeniden onaylayın",
  "Abgleich abbrechen": "Eşitlemeyi iptal et",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Eşitleme iptal edildi – alınan fotoğraflar kalır"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Eşitleme iptal edildi – alınan fotoğraflar kalır",
+ "Persönlicher Bereich": "Kişisel alan",
+ "Gemeinsamer Bereich": "Paylaşılan alan",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Bu alan kullanılamıyor: Synology Photos bunu kurmamış ya da kutunun hesabı onu göremiyor.",
+ "In diesem Bereich gibt es keine Ordner.": "Bu alanda klasör yok.",
+ "Keine weiteren Ordner": "Başka klasör yok",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Seçilen klasör, içindeki klasörlerdeki fotoğrafları da gösterir.",
+ "{} gewählt": "{} seçildi",
+ "Ordner in Synology Photos": "Synology Photos klasörleri",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Henüz albüm yok. Yine de klasör seçebilirsin."
 }

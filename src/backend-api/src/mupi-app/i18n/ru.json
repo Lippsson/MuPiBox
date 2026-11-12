@@ -3880,5 +3880,14 @@
  "Diese Kachel ist für heute aufgebraucht.": "Эта плитка на сегодня исчерпана.",
  "Zertifikat geändert – bitte neu bestätigen": "Сертификат изменился – подтвердите его снова",
  "Abgleich abbrechen": "Отменить синхронизацию",
- "Abgleich abgebrochen – die geholten Fotos bleiben": "Синхронизация отменена – загруженные фото остаются"
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Синхронизация отменена – загруженные фото остаются",
+ "Persönlicher Bereich": "Личное пространство",
+ "Gemeinsamer Bereich": "Общее пространство",
+ "Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.": "Это пространство недоступно: Synology Photos его не настроило, или учётная запись коробки не может его видеть.",
+ "In diesem Bereich gibt es keine Ordner.": "В этом пространстве нет папок.",
+ "Keine weiteren Ordner": "Других папок нет",
+ "Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.": "Выбранная папка показывает и фото из папок внутри неё.",
+ "{} gewählt": "Выбрано: {}",
+ "Ordner in Synology Photos": "Папки в Synology Photos",
+ "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Альбомов пока нет. Папки всё равно можно выбрать."
 }

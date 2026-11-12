@@ -12900,7 +12900,7 @@ function mountPhotoImmich(root, page) {
 
 /* Bibliothek › Fotos › Synology Photos (5.1): a login of its own at DSM (address, account, password) - the assistant
    (login, test with the certificate, albums) and, once switched on, the service's page as Immich's (synology.ts) */
-const photoSyno = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+const photoSyno = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0, tab: 'albums', tree: new Map(), open: new Set(), parent: new Map() }
 
 async function loadPhotoSynology() {
   const r = await api(`${API}/photos/synology`)
@@ -12915,6 +12915,51 @@ async function loadPhotoSynology() {
   photoSyno.fingerprint = d.settings.certFingerprint || ''
   photoSyno.test = null
   photoSyno.albums = null
+  Object.assign(photoSyno, { tab: 'albums', tree: new Map(), open: new Set(), parent: new Map() })
+}
+
+// the choice is albums and folders: the albums the account sees, the folders of its personal space and the ones of the
+// shared space ("Team" for Synology). A folder is a choice as "f<id>" (personal) or "t<id>" (shared).
+const SYNO_TABS = [
+  ['albums', 'Alben'],
+  ['personal', 'Persönlicher Bereich'],
+  ['shared', 'Gemeinsamer Bereich'],
+]
+const synoRef = (space, id) => `${space === 'shared' ? 't' : 'f'}${id}`
+
+async function photoSynoBrowse(space, id) {
+  const r = await api(`${API}/photos/synology/folders?space=${space}&id=${id}`)
+  photoSyno.tree.set(`${space}:${id}`, r.ok ? r.body : { error: r.body?.error ?? 'unreachable', folders: [] })
+  if (r.ok) for (const f of r.body.folders) photoSyno.parent.set(f.ref, id === '0' ? '' : synoRef(space, id))
+}
+
+// the folders above a folder (as far as they were listed)
+function synoAbove(ref) {
+  const out = []
+  for (let p = photoSyno.parent.get(ref); p; p = photoSyno.parent.get(p)) out.push(p)
+  return out
+}
+
+function photoSynoFolderRows(space, id, depth) {
+  const node = photoSyno.tree.get(`${space}:${id}`)
+  if (!node) return `<div class="ph-tree-row" style="--d:${depth}"><span class="help">${esc(tr('Wird geladen …'))}</span></div>`
+  if (node.error === 'not_available' && depth === 0) return `<div class="note warn">${icon('info', 18)}<span>${esc(tr('Dieser Bereich ist nicht verfügbar: Synology Photos hat ihn nicht eingerichtet, oder das Konto der Box darf ihn nicht sehen.'))}</span></div>`
+  if (node.error) return `<div class="ph-tree-row" style="--d:${depth}"><span class="help danger-text" style="flex:1">${esc(tr('Dieser Ordner lässt sich gerade nicht lesen.'))}</span><button class="btn sm" data-syretry="${space}:${id}">${esc(tr('Erneut versuchen'))}</button></div>`
+  if (!node.folders.length) return depth === 0 ? `<p class="help" style="margin:0">${esc(tr('In diesem Bereich gibt es keine Ordner.'))}</p>` : `<div class="ph-tree-row" style="--d:${depth}"><span class="help">${esc(tr('Keine weiteren Ordner'))}</span></div>`
+  return node.folders
+    .map((f) => {
+      const open = photoSyno.open.has(`${space}:${f.id}`)
+      const on = photoSyno.chosen.has(f.ref)
+      // (a folder below one that is chosen: in it already)
+      const inside = synoAbove(f.ref).some((a) => photoSyno.chosen.has(a))
+      return `<div class="ph-tree-row" style="--d:${depth}">
+          <button class="icon-btn ph-tree-arrow${open ? ' open' : ''}" data-sytree="${space}:${f.id}" aria-label="${esc(tr(open ? 'Zuklappen' : 'Aufklappen'))}" aria-expanded="${open}">${icon('chevron', 16)}</button>
+          <span class="ph-tree-ic">${icon('folder', 18)}</span>
+          <span class="lbl"><b translate="no">${esc(f.name)}</b></span>
+          <button class="ph-check-box" role="checkbox" aria-checked="${on ? 'true' : inside ? 'mixed' : 'false'}" data-sypick="${esc(f.ref)}" ${inside ? 'disabled' : ''} aria-label="${esc(f.name)}">${on || inside ? icon('check', 16) : ''}</button>
+        </div>${open ? photoSynoFolderRows(space, f.id, depth + 1) : ''}`
+    })
+    .join('')
 }
 
 const SYNO_ERRORS = {
@@ -12961,8 +13006,8 @@ function photoSynologySteps() {
   } else if (s === 2 && t?.ok) {
     body = `<h2>Verbindung steht</h2><p class="help">Die Box kann die Alben des Kontos lesen.</p>
       <dl class="kv"><div><dt>Konto</dt><dd translate="no">${esc(t.account ?? '–')}</dd></div><div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Davon mit dem Konto geteilt</dt><dd>${esc(String(t.shared))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.pictures))}</dd></div></dl>
-      ${t.albums ? '' : `<div class="note warn">${icon('info', 18)}<span>Noch keine Alben. Teile in Synology Photos ein Album mit dem Konto der Box und teste erneut.</span></div>`}`
-    next = t.albums ? `<button class="btn primary" id="sy-next">Weiter</button>` : `<button class="btn primary" id="sy-retry">${esc(tr('Erneut testen'))}</button>`
+      ${t.albums ? '' : `<div class="note warn">${icon('info', 18)}<span>${esc(tr('Noch keine Alben. Ordner kannst du trotzdem wählen.'))}</span></div>`}`
+    next = `<button class="btn primary" id="sy-next">Weiter</button>`
   } else if (s === 2) {
     const [head, text] = SYNO_ERRORS[t?.error] ?? SYNO_ERRORS.unreachable
     // (a certificate not confirmed yet: shown to be compared and trusted, as for the NAS)
@@ -12991,8 +13036,11 @@ function photoSynologySteps() {
               )
               .join('')}</div>`
           : `<p class="help" style="margin:0">Das Konto sieht noch keine Alben.</p>`
-    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Synology Photos` : 'Alben in Synology Photos'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="sy-all">Alle wählen</button>' : ''}</div>
-      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoSyno.chosen.size} ${photoSyno.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    const tab = photoSyno.tab
+    const tabs = `<div class="seg" role="tablist">${SYNO_TABS.map(([id, label]) => `<button role="tab" aria-pressed="${tab === id}" aria-selected="${tab === id}" data-sytab="${id}">${esc(tr(label))}</button>`).join('')}</div>`
+    const inner = tab === 'albums' ? rows : `<div class="ph-tree">${photoSynoFolderRows(tab, '0', 0)}</div><p class="help" style="margin:0">${esc(tr('Ein gewählter Ordner zeigt auch die Fotos in den Ordnern darin.'))}</p>`
+    body = `<div class="card-head"><h2>${esc(tr(tab === 'albums' ? (list?.albums ? `${list.albums.length} Alben in Synology Photos` : 'Alben in Synology Photos') : 'Ordner in Synology Photos'))}</h2>${tab === 'albums' && list?.albums?.length ? '<button class="btn sm" id="sy-all">Alle wählen</button>' : ''}</div>
+      ${tabs}${inner}<p class="help" style="margin:0">${esc(tr(`${photoSyno.chosen.size} gewählt`))}</p>`
     next = `<button class="btn primary" id="sy-done">Fertig</button>`
   }
   // (the first step's way back: out of the assistant - to the service's page when switched on, else to the photos)
@@ -13140,6 +13188,53 @@ function mountPhotoSynology(root, page) {
       const id = b.dataset.sy
       if (photoSyno.chosen.has(id)) photoSyno.chosen.delete(id)
       else photoSyno.chosen.add(id)
+      redraw()
+    }
+  }
+  for (const b of root.querySelectorAll('[data-sytab]')) {
+    b.onclick = async () => {
+      const tab = b.dataset.sytab
+      photoSyno.tab = tab
+      redraw()
+      if (tab !== 'albums' && !photoSyno.tree.has(`${tab}:0`)) {
+        await photoSynoBrowse(tab, '0')
+        redraw()
+      }
+    }
+  }
+  for (const b of root.querySelectorAll('[data-sytree]')) {
+    b.onclick = async () => {
+      const key = b.dataset.sytree
+      if (photoSyno.open.has(key)) photoSyno.open.delete(key)
+      else {
+        photoSyno.open.add(key)
+        if (!photoSyno.tree.has(key) || photoSyno.tree.get(key).error) {
+          photoSyno.tree.delete(key)
+          redraw()
+          const [space, id] = key.split(':')
+          await photoSynoBrowse(space, id)
+        }
+      }
+      redraw()
+    }
+  }
+  for (const b of root.querySelectorAll('[data-syretry]')) {
+    b.onclick = async () => {
+      b.disabled = true
+      const [space, id] = b.dataset.syretry.split(':')
+      await photoSynoBrowse(space, id)
+      redraw()
+    }
+  }
+  for (const b of root.querySelectorAll('[data-sypick]')) {
+    b.onclick = () => {
+      const ref = b.dataset.sypick
+      if (photoSyno.chosen.has(ref)) photoSyno.chosen.delete(ref)
+      else {
+        // (a folder takes in the ones below it that were chosen)
+        for (const c of [...photoSyno.chosen]) if (synoAbove(c).includes(ref)) photoSyno.chosen.delete(c)
+        photoSyno.chosen.add(ref)
+      }
       redraw()
     }
   }
