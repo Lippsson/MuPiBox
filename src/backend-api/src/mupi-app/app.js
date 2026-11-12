@@ -12900,7 +12900,7 @@ function mountPhotoImmich(root, page) {
 
 /* Bibliothek › Fotos › Synology Photos (5.1): a login of its own at DSM (address, account, password) - the assistant
    (login, test with the certificate, albums) and, once switched on, the service's page as Immich's (synology.ts) */
-const photoSyno = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0, tab: 'albums', tree: new Map(), open: new Set(), parent: new Map(), smart: null }
+const photoSyno = { data: null, step: 0, url: '', account: '', password: '', fingerprint: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0, tab: 'albums', tree: new Map(), open: new Set(), parent: new Map(), smart: null, smartOpen: new Set() }
 
 async function loadPhotoSynology() {
   const r = await api(`${API}/photos/synology`)
@@ -12915,7 +12915,7 @@ async function loadPhotoSynology() {
   photoSyno.fingerprint = d.settings.certFingerprint || ''
   photoSyno.test = null
   photoSyno.albums = null
-  Object.assign(photoSyno, { tab: 'albums', tree: new Map(), open: new Set(), parent: new Map(), smart: null })
+  Object.assign(photoSyno, { tab: 'albums', tree: new Map(), open: new Set(), parent: new Map(), smart: null, smartOpen: new Set() })
 }
 
 // the choice is albums and folders: the albums the account sees, the folders of its personal space and the ones of the
@@ -12940,6 +12940,8 @@ async function photoSynoLoadSmart() {
   photoSyno.smart = null
   const r = await api(`${API}/photos/synology/smart`)
   photoSyno.smart = r.ok ? r.body : { error: true }
+  // (a list opens by itself when something in it is chosen already; the others stay closed - they are long)
+  photoSyno.smartOpen = new Set(r.ok ? SYNO_SMART_LISTS.filter(([key]) => (r.body[key] ?? []).some((x) => photoSyno.chosen.has(x.ref))).map(([key]) => key) : [])
 }
 
 function photoSynoSmartRows() {
@@ -12951,8 +12953,16 @@ function photoSynoSmartRows() {
       <button class="ph-check-box" role="checkbox" aria-checked="${photoSyno.chosen.has(ref)}" data-sypick="${esc(ref)}" aria-label="${esc(name)}">${photoSyno.chosen.has(ref) ? icon('check', 16) : ''}</button></div>`
   const collections = d.collections.map((c) => row(c.ref, tr(SYNO_SMART[c.kind]?.[0] ?? c.kind), '', SYNO_SMART[c.kind]?.[1] ?? 'image')).join('')
   // (a list the DSM does not have, or an empty one, is left out)
+  // each list can be folded; the one with the most pictures first
   const lists = SYNO_SMART_LISTS.filter(([key]) => Array.isArray(d[key]) && d[key].length)
-    .map(([key, head]) => `<h3 style="margin:12px 0 4px">${esc(tr(head))}</h3><div class="rows">${d[key].map((x) => row(x.ref, x.name, [x.space === 'shared' ? tr('Gemeinsamer Bereich') : '', x.note, x.count ? tr(`${x.count} ${x.count === 1 ? 'Foto' : 'Fotos'}`) : ''].filter(Boolean).join(' · '), 'image')).join('')}</div>`)
+    .map(([key, head]) => {
+      const open = photoSyno.smartOpen.has(key)
+      const sorted = [...d[key]].sort((a, b) => (b.count || 0) - (a.count || 0) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+      const rows = sorted.map((x) => row(x.ref, x.name, [x.space === 'shared' ? tr('Gemeinsamer Bereich') : '', x.note, x.count ? tr(`${x.count} ${x.count === 1 ? 'Foto' : 'Fotos'}`) : ''].filter(Boolean).join(' · '), 'image')).join('')
+      return `<button class="ph-sec" data-sysec="${key}" aria-expanded="${open}" aria-label="${esc(tr(open ? 'Zuklappen' : 'Aufklappen'))}: ${esc(tr(head))}" style="display:flex;align-items:center;gap:6px;width:100%;margin-top:8px;padding:6px 0;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer">
+          <span class="ph-tree-arrow${open ? ' open' : ''}" style="display:inline-flex;align-items:center;justify-content:center">${icon('chevron', 16)}</span>
+          <b>${esc(tr(head))}</b><small style="opacity:.7">${sorted.length}</small></button>${open ? `<div class="rows">${rows}</div>` : ''}`
+    })
     .join('')
   const none = lists ? '' : `<p class="help" style="margin:12px 0 0">${esc(tr('Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.'))}</p>`
   return `<div class="rows">${collections}</div>${lists}${none}
@@ -13253,6 +13263,14 @@ function mountPhotoSynology(root, page) {
           await photoSynoBrowse(space, id)
         }
       }
+      redraw()
+    }
+  }
+  for (const b of root.querySelectorAll('[data-sysec]')) {
+    b.onclick = () => {
+      const key = b.dataset.sysec
+      if (photoSyno.smartOpen.has(key)) photoSyno.smartOpen.delete(key)
+      else photoSyno.smartOpen.add(key)
       redraw()
     }
   }
