@@ -1,21 +1,24 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal, untracked } from '@angular/core'
+import { HttpClient } from '@angular/common/http'
+import { ChangeDetectionStrategy, Component, CUSTOM_ELEMENTS_SCHEMA, computed, effect, inject, output, signal, untracked, viewChild } from '@angular/core'
+import { of } from 'rxjs'
+import { environment } from 'src/environments/environment'
 import { type DisplayTextKey, DisplayTextsService } from '../display-texts.service'
+import type { MupiboxConfig } from '../mupibox-config.model'
 import { PlayerService } from '../player.service'
+import { SwiperComponent, type SwiperData } from '../swiper/swiper.component'
+import { KmThemeService } from '../theme/km-theme.service'
 import { PhotoTimeService } from './photo-time.service'
 import { type PhotoAlbumSummary, PhotosService } from './photos.service'
 
-// one page: three albums, 800 wide (handoff §4: left = 15 + i × 266,67 − page × 800 - on a wider display the fourth
-// album peeks in on the right, wanted)
-const STEP = 800 / 3
-const PAGE = 800
-const PER_PAGE = 3
-
 /**
- * The tab "Fotos" on the start page (handoff §4): the albums as stacks of pictures, three a page, swiped sideways;
- * a tap on a stack opens the album. Colours only from the theme (--km-*), with plain ones for the old themes.
+ * The tab "Fotos" on the start page (handoff §4): the albums as stacks of pictures, three a screen, swiped sideways
+ * as the albums of the other tabs (a Swiper row with their scrollbar); a tap on a stack opens the album. Colours only
+ * from the theme (--km-*), with plain ones for the old themes.
  */
 @Component({
   selector: 'mupi-photo-albums',
+  imports: [SwiperComponent],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
   template: `
     @if (time.blocked()) {
       <!-- the photo time is used up (handoff §8, 07_bildzeit-vorbei_eigenes-limit.png): the photos pause -->
@@ -59,11 +62,21 @@ const PER_PAGE = 3
         </div>
       </div>
     } @else {
-    <div class="pa" (pointerdown)="down($event)" (pointermove)="move($event)" (pointerup)="up($event)" (pointercancel)="cancel()">
-      <div class="pa-track" [style.transform]="'translateX(' + -page() * PAGE + 'px)'">
-        @for (a of albums(); track a.id; let i = $index) {
+    @if (stage()) {
+      <!-- the stage switched on (MuPi-Conf): the albums on it as the other tabs' covers - one big stack in the middle,
+           the name below it (read out when tapped); a tap on the stack in the middle opens the album -->
+      <div class="pa-stage">
+        <mupi-swiper [data]="stageData()" positionKey="photos" (elementClicked)="open($event.data)"></mupi-swiper>
+      </div>
+    } @else {
+    <!-- the row as in the other tabs (swiper.component.html): three a screen, swiped freely, with the same scrollbar
+         (Einstellungen › Aussehen: hidden or "Durchgehend") -->
+    <swiper-container class="pa" slides-per-view="3" [class.sb-full]="fullScrollbar()" [class.pa-few]="albums().length < 3" [attr.scrollbar]="!hideScrollbar()" scrollbar-hide="false" scrollbar-draggable="true" scrollbar-drag-size="auto" scrollbar-snap-on-release="true" free-mode="false" css-mode="true"
+      speed="900" touch-ratio="0.5" slides-per-group="1" resistance="true" resistance-ratio="0.85">
+        @for (a of albums(); track a.id) {
           <!-- the stack opens the album, the name under it is read out (as the names in the other tabs) -->
-          <div class="pa-tile" [class.pa-away]="a.away" [style.left.px]="15 + i * STEP">
+          <swiper-slide>
+          <div class="pa-tile" [class.pa-away]="a.away">
             <button class="pa-stack" type="button" [attr.aria-label]="openLabel(a)" (click)="open(a)">
               <span class="pa-back"></span>
               @if (a.pictures[1]) {
@@ -79,16 +92,10 @@ const PER_PAGE = 3
             </button>
             <button class="pa-name" type="button" [class.pa-speaking]="speaking() === a.id" (click)="read(a)">{{ a.title }}</button>
           </div>
+          </swiper-slide>
         }
-      </div>
-      @if (pages() > 1) {
-        <div class="pa-dots">
-          @for (p of pageList(); track p) {
-            <button type="button" class="pa-dot" [class.on]="p === page()" [attr.aria-label]="p + 1" (click)="page.set(p)"><i></i></button>
-          }
-        </div>
-      }
-    </div>
+    </swiper-container>
+    }
     }
     @if (hint(); as h) {
       <div class="pp-hint" role="status">
@@ -263,22 +270,66 @@ const PER_PAGE = 3
       inset: 0;
       overflow: hidden;
     }
+    /* the stage: the whole page, as the other tabs' stage */
+    .pa-stage {
+      position: absolute;
+      inset: 0;
+    }
+    /* the row: the whole page, its scrollbar as in the other tabs (swiper.component.scss) */
     .pa {
       position: absolute;
       inset: 0;
-      touch-action: pan-y;
       user-select: none;
       -webkit-user-select: none;
+      --swiper-scrollbar-bg-color: rgba(255, 255, 255, 0.2);
+      --swiper-scrollbar-drag-bg-color: rgba(255, 255, 255, 0.8);
+      --swiper-scrollbar-size: 8px;
+      --swiper-scrollbar-bottom: 8px;
     }
-    .pa-track {
-      position: absolute;
-      inset: 0;
-      transition: transform 450ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    .pa swiper-slide {
+      height: 100%;
+    }
+    /* fewer than three: in the middle (as the other tabs in the children's themes) */
+    .pa.pa-few::part(wrapper) {
+      justify-content: center;
+    }
+    /* "Durchgehend": across the width less 24 px on each side, 14 px thick, with room above and below for a finger */
+    .pa.sb-full {
+      --swiper-scrollbar-size: 14px;
+    }
+    .pa.sb-full::part(scrollbar) {
+      left: 24px;
+      width: calc(100% - 48px);
+      bottom: 4px;
+      box-sizing: content-box;
+      border-top: 12px solid transparent;
+      border-bottom: 6px solid transparent;
+      background-clip: padding-box;
+      border-radius: 13px;
+    }
+    /* the children's themes: 200 × 8 in the middle, 22 px above the bottom, in the theme's colours */
+    :host-context(body.km) .pa {
+      --swiper-scrollbar-size: 8px;
+      --swiper-scrollbar-bottom: 22px;
+      --swiper-scrollbar-bg-color: var(--km-night-3);
+      --swiper-scrollbar-drag-bg-color: var(--km-lavender);
+      --swiper-scrollbar-border-radius: 4px;
+    }
+    :host-context(body.km) .pa::part(scrollbar) {
+      width: 200px;
+      left: calc(50% - 100px);
+    }
+    :host-context(body.km) .pa.sb-full {
+      --swiper-scrollbar-size: 14px;
+    }
+    :host-context(body.km) .pa.sb-full::part(scrollbar) {
+      left: 24px;
+      width: calc(100% - 48px);
+      bottom: 16px;
     }
     .pa-tile {
-      position: absolute;
       /* (the covers' top: y 106 on the screen, the page starts below the 72 px header) */
-      top: 34px;
+      margin: 34px auto 0;
       width: 236px;
     }
     .pa-stack {
@@ -370,38 +421,6 @@ const PER_PAGE = 3
       background: var(--km-moon, var(--km-apricot, #f7b267));
       transform: scale(1.05);
     }
-    .pa-dots {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 18px;
-      display: flex;
-      justify-content: center;
-    }
-    .pa-dot {
-      height: 36px;
-      padding: 0 5px;
-      border: 0;
-      background: none;
-      display: grid;
-      place-items: center;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .pa-dot i {
-      display: block;
-      width: 12px;
-      height: 12px;
-      border-radius: 6px;
-      background: var(--pa-dot, rgba(255, 255, 255, 0.35));
-      transition: width 300ms, background-color 300ms;
-    }
-    .pa-dot.on i {
-      width: 32px;
-      background: var(--km-apricot, #f7b267);
-    }
-    :host-context(body.km-light) .pa-dot i {
-      --pa-dot: rgba(0, 0, 0, 0.22);
-    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -410,8 +429,6 @@ export class PhotoAlbumsComponent {
   protected readonly texts = inject(DisplayTextsService)
   protected readonly time = inject(PhotoTimeService)
   private readonly player = inject(PlayerService)
-  protected readonly STEP = STEP
-  protected readonly PAGE = PAGE
 
   readonly opened = output<PhotoAlbumSummary>()
   /** the photos pause: "Zu den Hörspielen" */
@@ -435,52 +452,46 @@ export class PhotoAlbumsComponent {
   }
 
   protected readonly albums = this.photos.albums
-  protected readonly pages = computed(() => Math.max(1, Math.ceil(this.albums().length / PER_PAGE)))
-  protected readonly pageList = computed(() => Array.from({ length: this.pages() }, (_, i) => i))
-  protected readonly page = signal(0)
-  // fewer albums than before (one hidden in the app) and the display stood on a page that is gone: the last one there is
-  private readonly pageInRange = effect(() => {
-    const last = this.pages() - 1
-    if (untracked(() => this.page()) > last) this.page.set(last)
+
+  // the stage (MuPi-Conf, the children's themes): the albums on it as picture stacks (swiper.component: SwiperData.stack)
+  protected readonly stage = inject(KmThemeService).stage
+  protected readonly stageData = computed<SwiperData<PhotoAlbumSummary>[]>(() =>
+    this.albums().map((a) => ({
+      name: a.title,
+      imgSrc: of(this.photos.fileUrl(a.id, a.pictures[0], 's')),
+      data: a,
+      stack: {
+        mid: a.pictures[1] ? this.photos.fileUrl(a.id, a.pictures[1], 's') : undefined,
+        count: a.count,
+        away: a.away === true,
+        awayLabel: this.texts.text('photosAway'),
+      },
+    })),
+  )
+  // (the stage's swiper is made with the tab, after the start page's "it comes": it gets it here - else it stays empty)
+  private readonly stageSwiper = viewChild(SwiperComponent)
+  private readonly stageShown = effect(() => {
+    const swiper = this.stageSwiper()
+    if (swiper) untracked(() => swiper.ionViewWillEnter())
   })
 
-  // a sideways swipe turns the page; it does not open the album the finger started on
-  private startX = 0
-  private startY = 0
-  private tracking = false
-  private swiped = false
+  // the scrollbar as in the other tabs (Einstellungen › Aussehen › Ansicht): hidden, or across the width
+  protected readonly hideScrollbar = signal(false)
+  protected readonly fullScrollbar = signal(false)
 
-  protected down(e: PointerEvent): void {
-    this.tracking = true
-    this.swiped = false
-    this.startX = e.clientX
-    this.startY = e.clientY
-  }
-
-  protected move(e: PointerEvent): void {
-    if (!this.tracking || this.swiped) return
-    const dx = e.clientX - this.startX
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(e.clientY - this.startY)) {
-      this.swiped = true
-      const next = Math.min(this.pages() - 1, Math.max(0, this.page() + (dx < 0 ? 1 : -1)))
-      this.page.set(next)
-    }
-  }
-
-  protected up(_e: PointerEvent): void {
-    this.tracking = false
-  }
-
-  protected cancel(): void {
-    this.tracking = false
+  constructor() {
+    inject(HttpClient)
+      .get<MupiboxConfig>(`${environment.backend.apiUrl}/config`)
+      .subscribe({
+        next: (config) => {
+          this.hideScrollbar.set(config?.mupibox?.hideScrollbar === true)
+          this.fullScrollbar.set(config?.mupibox?.scrollbarStyle === 'full')
+        },
+        error: () => undefined,
+      })
   }
 
   protected open(a: PhotoAlbumSummary): void {
-    // (the click after a swipe)
-    if (this.swiped) {
-      this.swiped = false
-      return
-    }
     if (a.away) return this.showHint('photosAwayHint')
     this.opened.emit(a)
   }
@@ -490,10 +501,6 @@ export class PhotoAlbumsComponent {
   protected readonly speaking = signal<string | null>(null)
   private speakingTimer = 0
   protected read(a: PhotoAlbumSummary): void {
-    if (this.swiped) {
-      this.swiped = false
-      return
-    }
     this.player.sayText(a.title)
     this.speaking.set(a.id)
     window.clearTimeout(this.speakingTimer)

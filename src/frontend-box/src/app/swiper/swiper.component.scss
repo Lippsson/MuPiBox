@@ -442,6 +442,95 @@ swiper-container.coverflow {
         }
     }
 
+    // a photo album on the stage: its stack of pictures, as in the tab's row (photo-albums.component.ts) at the stage's
+    // size - a card behind, the picture before the last turned, the front one, the number of pictures
+    .km-photo-stack {
+        position: absolute;
+        inset: 0;
+        transition: transform 150ms var(--km-spring);
+
+        .kps-back,
+        .kps-mid,
+        .kps-front {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            border-radius: 38px;
+            -webkit-user-select: none;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        .kps-back {
+            background: var(--km-cream);
+            transform: rotate(-6deg);
+            box-shadow: 0 5px 0 var(--km-shadow);
+        }
+
+        .kps-mid,
+        .kps-front {
+            object-fit: cover;
+            border: 7px solid var(--km-ring, var(--km-cream));
+            background: var(--km-night-3);
+        }
+
+        .kps-mid {
+            transform: rotate(4deg);
+            box-shadow: 0 5px 0 var(--km-shadow);
+        }
+
+        .kps-front {
+            box-shadow: 0 8px 0 var(--km-shadow);
+        }
+
+        .kps-badge {
+            position: absolute;
+            right: -10px;
+            bottom: -10px;
+            min-width: 58px;
+            height: 58px;
+            padding: 0 12px;
+            box-sizing: border-box;
+            border-radius: 29px;
+            background: var(--km-apricot);
+            color: var(--km-ink);
+            font-size: 24px;
+            font-weight: 700;
+            display: grid;
+            place-items: center;
+            box-shadow: 0 4px 0 var(--km-shadow);
+        }
+
+        .kps-away {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            border-radius: 24px;
+            background: var(--km-cream);
+            color: var(--km-ink);
+            font-size: 20px;
+            font-weight: 700;
+            white-space: nowrap;
+            box-shadow: 0 3px 0 var(--km-shadow);
+        }
+
+        // (an album not there: grey, with its note)
+        &.km-away .kps-back,
+        &.km-away .kps-mid,
+        &.km-away .kps-front {
+            filter: grayscale(1);
+            opacity: 0.55;
+        }
+    }
+
+    .km-stage-item:active .km-photo-stack {
+        transform: scale(0.95);
+    }
+
     .km-stage-name {
         position: absolute;
         left: calc(50% - 220px);

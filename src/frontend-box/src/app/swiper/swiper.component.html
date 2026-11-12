@@ -44,6 +44,22 @@
         @for (it of stageItems(); track it.index) {
           @let src = it.data.imgSrc | async;
           <button class="km-stage-item" [class.km-folder]="it.data.kind === 'folder'" [class.km-own]="it.data.kind === 'own'" [style.transform]="it.transform" [style.opacity]="it.opacity" [style.z-index]="it.z" (click)="kmStageTap(it.index, it.data)">
+            @if (it.data.stack; as st) {
+              <!-- a photo album: its stack of pictures (as in the tab's row, photos/photo-albums.component.ts) -->
+              <div class="km-photo-stack" [class.km-away]="st.away">
+                <span class="kps-back"></span>
+                @if (st.mid) {
+                  <img class="kps-mid" [src]="st.mid" alt="" draggable="false" />
+                } @else {
+                  <span class="kps-mid"></span>
+                }
+                <img class="kps-front" [src]="src" alt="" draggable="false" />
+                <span class="kps-badge">{{ st.count }}</span>
+                @if (st.away) {
+                  <span class="kps-away">{{ st.awayLabel }}</span>
+                }
+              </div>
+            } @else {
             @if (it.data.kind === 'folder') {
               <span class="km-stack"></span><span class="km-stack"></span>
             }
@@ -73,6 +89,7 @@
             }
             @if (it.data.synced) {
               <span class="km-sync"><ion-icon name="link"></ion-icon></span>
+            }
             }
           </button>
         }

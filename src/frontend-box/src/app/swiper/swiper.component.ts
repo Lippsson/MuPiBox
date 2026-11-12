@@ -49,6 +49,9 @@ export interface SwiperData<T> {
   done?: boolean
   // (set by the swiper itself: what the list keeps a slide by - its name, see entryKeys)
   trackKey?: string
+  // a photo album on the stage (5.1, tab "Fotos" with the stage on): drawn as its stack of pictures - imgSrc the front
+  // one, mid the one behind it, the number of pictures as a badge; away: grey with its note (as in the tab's row)
+  stack?: { mid?: string; count: number; away?: boolean; awayLabel?: string }
 }
 
 @Component({
