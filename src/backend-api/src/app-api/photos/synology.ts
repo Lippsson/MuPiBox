@@ -10,7 +10,8 @@
 // space (Synology calls it "team space", API SYNO.FotoTeam). A folder is one album on the display with its pictures and
 // those of the folders below it (as for the NAS folders). The "smart" albums of the personal space are choices too:
 // "rec" recently added, "vid" videos, "p<id>" a person Synology Photos knows (by name), "l<id>" a place, "g<id>" a tag and
-// "c<id>" a subject (what Synology's recognition found).
+// "c<id>" a subject (what Synology's recognition found). The same in capitals (P, L, G, C) are those of the shared space:
+// a family keeps its named people there, as a rule (SYNO.FotoTeam answers the same questions).
 // Tried against a DSM 7.3 with Synology Photos 1.9: Browse.Person / Geocoding / GeneralTag / Concept list their entries
 // ({id, name, item_count}); the pictures of a person and of a place come with Browse.Item list person_id / geocoding_id
 // (the counts agree), a subject only through the search by its name (Search.Search list_item keyword, about the same
@@ -36,8 +37,8 @@ export interface PhotoSynologyDeps {
 const ALBUMS_MAX = 100
 const STATE_FILE = path.join(PHOTOS_DIR, 'synology-sync.json')
 // what the box keeps of a choice: an album's id in Synology Photos (a number), a folder's (f<id> personal, t<id> shared space)
-// or a smart album (rec, vid, p<id>, l<id>, g<id>, c<id>)
-const ALBUM_ID = /^(?:[ft]?\d{1,12}|[plgc]\d{1,12}|rec|vid)$/
+// or a smart album (rec, vid, p<id>, l<id>, g<id>, c<id>; in capitals for the shared space)
+const ALBUM_ID = /^(?:[ft]?\d{1,12}|[plgcPLGC]\d{1,12}|rec|vid)$/
 // how many pictures the smart albums that have no end take at most (the newest ones)
 const RECENT_MAX = 300
 const VIDEOS_MAX = 2000
@@ -245,7 +246,7 @@ export class SynologyClient implements RemoteClient {
   /** What a choice is: an album, or a folder of the personal or of the shared space ("Team" for Synology) */
   static kindOf(ref: string): { kind: 'album' | 'personal' | 'shared' | 'smart'; id: string } | null {
     if (!ALBUM_ID.test(ref)) return null
-    if (ref === 'rec' || ref === 'vid' || /^[plgc]/.test(ref)) return { kind: 'smart', id: ref }
+    if (ref === 'rec' || ref === 'vid' || /^[plgcPLGC]/.test(ref)) return { kind: 'smart', id: ref }
     if (ref.startsWith('f')) return { kind: 'personal', id: ref.slice(1) }
     if (ref.startsWith('t')) return { kind: 'shared', id: ref.slice(1) }
     return { kind: 'album', id: ref }
@@ -328,9 +329,9 @@ export class SynologyClient implements RemoteClient {
     return { name, items: [...items.values()] }
   }
 
-  /** What Synology Photos recognised or the user named in the personal space: its people, places, tags and subjects */
-  async named(kind: 'person' | 'place' | 'tag' | 'subject', signal?: AbortSignal): Promise<{ id: string; name: string; count: number; note: string }[]> {
-    const api = { person: 'SYNO.Foto.Browse.Person', place: 'SYNO.Foto.Browse.Geocoding', tag: 'SYNO.Foto.Browse.GeneralTag', subject: 'SYNO.Foto.Browse.Concept' }[kind]
+  /** What Synology Photos recognised or the user named in a space: its people, places, tags and subjects */
+  async named(kind: 'person' | 'place' | 'tag' | 'subject', signal?: AbortSignal, space: 'personal' | 'shared' = 'personal'): Promise<{ id: string; name: string; count: number; note: string }[]> {
+    const api = `${SynologyClient.api(space)}.Browse.${{ person: 'Person', place: 'Geocoding', tag: 'GeneralTag', subject: 'Concept' }[kind]}`
     type Entry = { id?: number; name?: string; item_count?: number; visibility?: boolean; country?: string }
     const out: { id: string; name: string; count: number; note: string }[] = []
     for (let offset = 0; offset < 5000; offset += PAGE) {
@@ -347,8 +348,8 @@ export class SynologyClient implements RemoteClient {
   }
 
   /** The named people (the albums of faces) */
-  people(signal?: AbortSignal): Promise<{ id: string; name: string; count: number }[]> {
-    return this.named('person', signal)
+  people(signal?: AbortSignal, space: 'personal' | 'shared' = 'personal'): Promise<{ id: string; name: string; count: number; note: string }[]> {
+    return this.named('person', signal, space)
   }
 
   // the items a list of the personal space gives, page after page up to `max` (newest first when `newest`).
@@ -378,21 +379,23 @@ export class SynologyClient implements RemoteClient {
       .slice(0, max)
   }
 
-  /** A smart album of the personal space: recently added, videos, a person, a place, a tag, a subject */
+  /** A smart album: recently added, videos (personal space), a person, a place, a tag, a subject (of either space) */
   private async smart(ref: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[] }> {
     if (ref === 'rec') return { name: 'Zuletzt hinzugefügt', items: await this.listed({ api: 'SYNO.Foto.Browse.RecentlyAdded', method: 'list' }, signal, videos, RECENT_MAX, true) }
     if (ref === 'vid') return { name: 'Videos', items: videos ? await this.listed({ api: 'SYNO.Foto.Browse.Item', method: 'list', type: 'video' }, signal, videos, VIDEOS_MAX, true) : [] }
-    const kind = { p: 'person', l: 'place', g: 'tag', c: 'subject' }[ref[0] as 'p' | 'l' | 'g' | 'c'] as 'person' | 'place' | 'tag' | 'subject'
+    const space = ref[0] === ref[0].toUpperCase() ? 'shared' : 'personal'
+    const api = SynologyClient.api(space)
+    const kind = { p: 'person', l: 'place', g: 'tag', c: 'subject' }[ref[0].toLowerCase() as 'p' | 'l' | 'g' | 'c'] as 'person' | 'place' | 'tag' | 'subject'
     const id = ref.slice(1)
-    const one = (await this.named(kind, signal)).find((x) => x.id === id)
+    const one = (await this.named(kind, signal, space)).find((x) => x.id === id)
     // (one gone, or without a name now: not there any more)
     if (!one) throw new RemoteRefused(404, 'Synology')
     if (kind === 'subject') {
       // (no filter for it: the search by its name finds nearly the same pictures)
-      return { name: one.name, items: await this.listed({ api: 'SYNO.Foto.Search.Search', method: 'list_item', keyword: one.name }, signal, videos, 20_000) }
+      return { name: one.name, items: await this.listed({ api: `${api}.Search.Search`, method: 'list_item', keyword: one.name }, signal, videos, 20_000) }
     }
     const filter = { person: 'person_id', place: 'geocoding_id', tag: 'general_tag_id' }[kind]
-    return { name: one.name, items: await this.listed({ api: 'SYNO.Foto.Browse.Item', method: 'list', [filter]: id }, signal, videos, 20_000, false, one.count) }
+    return { name: one.name, items: await this.listed({ api: `${api}.Browse.Item`, method: 'list', [filter]: id }, signal, videos, 20_000, false, one.count) }
   }
 
   async album(ref: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[] }> {
@@ -420,7 +423,8 @@ export class SynologyClient implements RemoteClient {
   private async source(ref: string, signal?: AbortSignal): Promise<{ api: string; where: Record<string, string> }> {
     const what = SynologyClient.kindOf(ref)
     if (!what) throw new RemoteRefused(404, 'Synology')
-    if (what.kind === 'smart') return { api: 'SYNO.Foto', where: {} }
+    // (a smart album of the shared space - capital letter - has its pictures there)
+    if (what.kind === 'smart') return { api: SynologyClient.api(/^[PLGC]/.test(what.id) ? 'shared' : 'personal'), where: {} }
     if (what.kind !== 'album') return { api: SynologyClient.api(what.kind), where: {} }
     return { api: 'SYNO.Foto', where: await this.albumParams(ref, signal) }
   }
@@ -661,7 +665,7 @@ export function registerPhotoSynologyRoutes(router: Router, deps: PhotoSynologyD
     }
   })
 
-  // the smart albums of the personal space to tick: recently added, videos, people, places, tags and subjects
+  // the smart albums to tick: recently added and videos of the personal space; people, places, tags and subjects of both spaces
   router.get('/photos/synology/smart', requireSession, async (_req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     const client = tryClient()
@@ -676,18 +680,22 @@ export function registerPhotoSynologyRoutes(router: Router, deps: PhotoSynologyD
       ['tags', 'tag', 'g'],
       ['subjects', 'subject', 'c'],
     ] as const
+    const spaces = ['personal', 'shared'] as const
     // (each list on its own: a DSM without one - or with its recognition off - still gives the others)
-    const results = await Promise.allSettled(kinds.map(([, kind]) => client.named(kind, AbortSignal.timeout(20_000))))
+    const wanted = kinds.flatMap(([key, kind, prefix]) => spaces.map((space) => ({ key, kind, space, prefix: space === 'shared' ? prefix.toUpperCase() : prefix })))
+    const results = await Promise.allSettled(wanted.map((w) => client.named(w.kind, AbortSignal.timeout(20_000), w.space)))
     const refused = results.find((r) => r.status === 'rejected' && r.reason instanceof RemoteRefused && r.reason.status === 401)
     if (refused) return void res.status(401).json({ error: 'unauthorized' })
     if (results.every((r) => r.status === 'rejected' && !(r.reason instanceof RemoteRefused))) return void res.status(502).json({ error: 'unreachable' })
     const body: Record<string, unknown> = { collections }
-    kinds.forEach(([key, , prefix], i) => {
+    for (const [key] of kinds) body[key] = []
+    wanted.forEach((w, i) => {
       const r = results[i]
-      const list = r.status === 'fulfilled' ? r.value : []
-      body[key] = list
-        .map((x) => ({ ref: `${prefix}${x.id}`, name: x.name, count: x.count, note: x.note }))
+      if (r.status !== 'fulfilled') return
+      const list = r.value
+        .map((x) => ({ ref: `${w.prefix}${x.id}`, name: x.name, count: x.count, note: x.note, space: w.space }))
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+      ;(body[w.key] as unknown[]).push(...list)
     })
     res.json(body)
   })

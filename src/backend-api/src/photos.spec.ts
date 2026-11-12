@@ -366,9 +366,9 @@ test('photo Synology folders: personal and shared space, a folder takes the pict
 test('photo Synology smart albums: recently added, videos, people, places, tags and subjects', async () => {
   const { SynologyClient, applySynologySettings, synologySettings } = await import('./app-api/photos/synology')
   const cfg: Record<string, unknown> = {}
-  assert.equal(applySynologySettings(cfg, { albumIds: ['rec', 'vid', 'p7', 'l3', 'g4', 'c5', '12', 'f5'] }), null)
-  assert.deepEqual(synologySettings(cfg).albumIds, ['rec', 'vid', 'p7', 'l3', 'g4', 'c5', '12', 'f5'])
-  for (const bad of ['p', 'px', 'recent', 'REC', 'p1a', 'fav', 'x3', 'l']) assert.equal(applySynologySettings(cfg, { albumIds: [bad] }), 'albumIds', bad)
+  assert.equal(applySynologySettings(cfg, { albumIds: ['rec', 'vid', 'p7', 'l3', 'g4', 'c5', 'P7', 'L3', 'G4', 'C5', '12', 'f5'] }), null)
+  assert.deepEqual(synologySettings(cfg).albumIds, ['rec', 'vid', 'p7', 'l3', 'g4', 'c5', 'P7', 'L3', 'G4', 'C5', '12', 'f5'])
+  for (const bad of ['p', 'px', 'recent', 'REC', 'p1a', 'fav', 'x3', 'l', 'P', 'REC']) assert.equal(applySynologySettings(cfg, { albumIds: [bad] }), 'albumIds', bad)
 
   const asked: Record<string, string>[] = []
   const photo = (id: number, time: number, type = 'photo') => ({ id, type, time, additional: { thumbnail: { cache_key: `${id}_k`, xl: 'ready' }, resolution: { width: 800, height: 600 }, video_meta: { duration: 5000 } } })
@@ -391,6 +391,9 @@ test('photo Synology smart albums: recently added, videos, people, places, tags 
         // a DSM that does not know the filter gives the whole library
         if (params.person_id === '9') return ok({ list: Array.from({ length: 100 }, (_, i) => photo(100 + i, i)) })
       }
+      // the shared space: its own API, its own people
+      if (params.api === 'SYNO.FotoTeam.Browse.Person') return ok({ list: [{ id: 21, name: 'Mama', item_count: 2 }] })
+      if (params.api === 'SYNO.FotoTeam.Browse.Item' && params.person_id === '21') return ok({ list: [photo(21, 1), photo(22, 2)] })
       if (params.api === 'SYNO.Foto.Favorite') return no(103)
       throw new Error(`not expected: ${JSON.stringify(params)}`)
     }
@@ -424,6 +427,15 @@ test('photo Synology smart albums: recently added, videos, people, places, tags 
   await assert.rejects(client.album('c6', signal, false), { status: 404 })
   // a filter the DSM did not take (the whole library came, far more than the person has): nothing of it is used
   await assert.rejects(client.album('p9', signal, false), { status: 404 })
+  // a person of the shared space: the capital letter, its own API (and for the picture too)
+  asked.length = 0
+  const mama = await client.album('P21', signal, false)
+  assert.equal(mama.name, 'Mama')
+  assert.deepEqual(mama.items.map((x) => x.ref), ['21', '22'])
+  assert.ok(asked.every((q) => q.api.startsWith('SYNO.FotoTeam.')))
+  assert.deepEqual(await client.people(signal, 'shared'), [{ id: '21', name: 'Mama', count: 2, note: '' }])
+  // (the same id in the personal space is somebody else - or nobody)
+  await assert.rejects(client.album('p21', signal, false), { status: 404 })
   // videos only with "Videos anzeigen"
   assert.deepEqual((await client.album('vid', signal, false)).items, [])
   assert.deepEqual((await client.album('vid', signal, true)).items.map((x) => `${x.ref}:${x.kind}`), ['6:video'])
