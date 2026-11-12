@@ -1730,6 +1730,16 @@
    "sections": []
   },
   {
+   "id": "fotoicloud",
+   "slug": "photo-icloud",
+   "area": "bibliothek",
+   "parent": "fotos",
+   "title": "iCloud",
+   "description": "",
+   "icon": "share",
+   "sections": []
+  },
+  {
    "id": "theme",
    "slug": "theme",
    "area": "einstellungen",

@@ -243,3 +243,20 @@ test('photo Nextcloud: the address, the WebDAV answer, the login bound to the ad
   assert.equal(applyNextcloudSettings(cfg, { userId: '../x' }), 'userId')
   assert.equal(applyNextcloudSettings(cfg, { albumIds: ['nope'] }), 'albumIds')
 })
+
+test('photo iCloud: the album key of a link, albums added and removed', async () => {
+  const { applyIcloudSettings, icloudKeyOf, icloudSettings } = await import('./app-api/photos/icloud')
+  assert.equal(icloudKeyOf('https://photos.icloud.com/shared/album/017vLW1qrDNX8sOcTld_CZOBA'), '017vLW1qrDNX8sOcTld_CZOBA')
+  assert.equal(icloudKeyOf(' photos.icloud.com/shared/album/017vLW1qrDNX8sOcTld_CZOBA/?x=1 '), '017vLW1qrDNX8sOcTld_CZOBA')
+  assert.equal(icloudKeyOf('https://www.icloud.com/sharedalbum/#B0aGWZuqDGxxxx'), 'old')
+  assert.equal(icloudKeyOf('https://evil.example/shared/album/017vLW1qrDNX8sOcTld_CZOBA'), null)
+  assert.equal(icloudKeyOf('https://photos.icloud.com/shared/album/../x'), null)
+  const cfg: Record<string, unknown> = {}
+  assert.equal(applyIcloudSettings(cfg, { add: { key: '017vLW1qrDNX8sOcTld_CZOBA', title: 'Ferien' } }), null)
+  assert.equal(applyIcloudSettings(cfg, { add: { key: '017vLW1qrDNX8sOcTld_CZOBA', title: 'twice' } }), null)
+  assert.deepEqual(icloudSettings(cfg).albums, [{ key: '017vLW1qrDNX8sOcTld_CZOBA', title: 'Ferien' }])
+  assert.equal(applyIcloudSettings(cfg, { add: { key: 'bad key!' } }), 'add')
+  assert.equal(applyIcloudSettings(cfg, { remove: '017vLW1qrDNX8sOcTld_CZOBA', keepCopy: false }), null)
+  assert.deepEqual(icloudSettings(cfg).albums, [])
+  assert.equal(icloudSettings(cfg).keepCopy, false)
+})

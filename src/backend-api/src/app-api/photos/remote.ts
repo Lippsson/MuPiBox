@@ -26,7 +26,7 @@ export const PICTURES_MAX = 20_000
 export const FILE_MAX_BYTES = 30 * 1024 * 1024
 const RESERVE_BYTES = 300 * 1024 * 1024
 // a picture's or an album's id at a service, as the box keeps it (a UUID, a number)
-export const REMOTE_REF = /^[A-Za-z0-9-]{1,64}$/
+export const REMOTE_REF = /^[A-Za-z0-9_-]{1,64}$/
 
 /* ---------- what goes wrong ---------- */
 
@@ -99,7 +99,7 @@ export interface RemoteSettings {
 }
 
 export interface RemoteSpec {
-  source: Extract<PhotoSource, 'immich' | 'synology' | 'nextcloud'>
+  source: Extract<PhotoSource, 'immich' | 'synology' | 'nextcloud' | 'icloud'>
   /** how the logs name it */
   label: string
   stateFile: string

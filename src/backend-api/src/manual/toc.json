@@ -246,6 +246,13 @@
         }
       },
       {
+        "id": "icloud",
+        "title": {
+          "de": "iCloud (geteilte Alben)",
+          "en": "iCloud (shared albums)"
+        }
+      },
+      {
         "id": "speichern-oder-live",
         "title": {
           "de": "Foto-Dienste: speichern oder live",

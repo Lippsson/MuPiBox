@@ -1,13 +1,13 @@
 # Foto-Dienste: speichern oder live
 
-Für Alben aus [Immich](immich.md), [Synology Photos](synology-photos.md) und [Nextcloud](nextcloud.md) entscheidest du auf der Seite des Dienstes mit **Fotos auf der Box speichern**, wie die Box mit den Fotos umgeht.
+Für Alben aus [Immich](immich.md), [Synology Photos](synology-photos.md), [Nextcloud](nextcloud.md) und [iCloud](icloud.md) entscheidest du auf der Seite des Dienstes mit **Fotos auf der Box speichern**, wie die Box mit den Fotos umgeht.
 
 | | An (Standard) | Aus (live) |
 | --- | --- | --- |
 | Wo die Fotos liegen | in Anzeigegröße auf der Speicherkarte | beim Dienst; die Box holt jedes Foto beim Anzeigen |
 | Ohne Netz | alles da | Album zeigt **Gerade nicht da** |
 | Platz auf der Karte | bis zur Grenze unter **Zwischenspeicher** | nur die zuletzt gezeigten Fotos, höchstens 200 MB |
-| Videos | ja | Immich: ja, direkt vom Server; Synology Photos und Nextcloud: nein |
+| Videos | ja | Immich und iCloud: ja, direkt vom Dienst; Synology Photos und Nextcloud: nein |
 
 Live lohnt sich bei schnellem WLAN und großen Alben, die nicht auf die Karte passen sollen.
 

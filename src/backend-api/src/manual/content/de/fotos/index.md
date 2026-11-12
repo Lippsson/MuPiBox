@@ -13,8 +13,9 @@ Die Fotoanzeige ist anfangs aus. Du schaltest sie unter **Einstellungen › Foto
 | **Immich** | Alben eines Immich-Servers im Heimnetz | [Immich](immich.md) |
 | **Synology Photos** | Alben aus Synology Photos auf einem Synology-NAS | [Synology Photos](synology-photos.md) |
 | **Nextcloud** | Alben der Nextcloud-App „Fotos“ | [Nextcloud](nextcloud.md) |
+| **iCloud** | geteilte Alben vom iPhone, per Link | [iCloud](icloud.md) |
 
-Alben aus Immich, Synology Photos und Nextcloud kann die Box speichern oder beim Anzeigen live holen ([Foto-Dienste: speichern oder live](speichern-oder-live.md)).
+Alben aus Immich, Synology Photos, Nextcloud und iCloud kann die Box speichern oder beim Anzeigen live holen ([Foto-Dienste: speichern oder live](speichern-oder-live.md)).
 
 ## So geht es los
 
