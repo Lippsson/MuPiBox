@@ -636,6 +636,66 @@ echo "= Update-URL:       ${MUPIBOX_URL}" >&3 2>&3
 echo "= Unzip-Directory:  ${MUPI_SRC}" >&3 2>&3
 echo "==========================================================================================" >&3 2>&3
 
+# The percent of the progress (whiptail's bar, the app, the display's bar): by the part of the update and the share of
+# the time it took - not the count of the steps, of which the 30 checks of the packages are over in seconds (the bar
+# was at 30 % after half a minute and went from 57 % to 100 at the end). Measured on a Pi 4 (12.11.2026, an update
+# with nothing to install, 5.5 minutes): package list 9 %, packages 1 %, download 16 %, unzipping 33 %, programs 15 %,
+# copying 6 %, services 11 %, settings 5 %. Another Pi takes longer or shorter, the shares stay near enough. The
+# percent never goes back; an abort and the end keep theirs.
+weigh_progress() {
+	local total n=0 at=0 line pct text l
+	total=$(echo ${packages2install} | wc -w)
+	while IFS= read -r line; do
+		if [ "${line}" != "XXX" ]; then
+			printf '%s\n' "${line}"
+			continue
+		fi
+		IFS= read -r pct
+		# (the step's text: up to the closing XXX - one line, or more for a long reason of an abort)
+		text=""
+		while IFS= read -r l && [ "${l}" != "XXX" ]; do text="${text:+${text} }${l}"; done
+		case "${pct}" in '' | *[!0-9]*) pct=${at} ;; esac
+		case "${text}" in
+			"Update aborted"* | "Installation complete"*) at=${pct} ;;
+			*)
+				case "${text}" in
+					"Prepare"*) pct=0 ;;
+					"Update package-list"*) pct=2 ;;
+					"Update Node.js"*) pct=9 ;;
+					"Install package"* | "Install python3-dev"*) pct=16 ;;
+					"Install LED"*) pct=81 ;;
+					"Install "*)
+						n=$((n + 1))
+						pct=$((9 + 6 * n / (total > 0 ? total : 1)))
+						[ "${pct}" -gt 15 ] && pct=15
+						;;
+					"Remove the previous admin"*) pct=98 ;;
+					"Update Chromium"* | "Remove "*) pct=15 ;;
+					"Setup DietPi-Dashboard"*) pct=16 ;;
+					"Download MuPiBox"*) pct=17 ;;
+					"Unzip"*) pct=33 ;;
+					"Folders of 5.1"*) pct=50 ;;
+					"Update frontend"*) pct=60 ;;
+					"Copy MuPiBox-Files"*) pct=75 ;;
+					"Copy binaries"*) pct=78 ;;
+					"Copy some media"*) pct=79 ;;
+					"Restarting Services"*) pct=82 ;;
+					"Uninstall Pi-Blaster"*) pct=92 ;;
+					"Set environment"* | "Download OnOffShim"*) pct=93 ;;
+					"Update Config-File"*) pct=94 ;;
+					"Network optimization"*) pct=95 ;;
+					"Activate SSL"*) pct=96 ;;
+					"Finalizing"*) pct=97 ;;
+					*) pct=${at} ;;
+				esac
+				[ "${pct}" -lt "${at}" ] && pct=${at}
+				at=${pct}
+				;;
+		esac
+		printf 'XXX\n%s\n%s\nXXX\n' "${at}" "${text}"
+	done
+}
+
 rm -f /tmp/mupibox-update-failed
 {
 	###############################################################################################
@@ -788,7 +848,7 @@ rm -f /tmp/mupibox-update-failed
 	do
 		before=$(date +%s)
 		STEP=$(($STEP + 1))
-		echo -e "XXX\n${STEP}\Remove ${package}\nXXX"
+		echo -e "XXX\n${STEP}\nRemove ${package}\nXXX"
 		PKG_OK=$(dpkg -l ${package} 2>/dev/null | egrep '^ii' | wc -l) >&3 2>&3
 		# (only an installed one: this was "-eq 0" - it tried to remove what was not there, and removed nothing)
 		if [ ${PKG_OK} -gt 0 ]; then
@@ -1566,7 +1626,7 @@ rm -f /tmp/mupibox-update-failed
 	
 	###############################################################################################
 
-	echo -e "XXX\n{STEP}\nDownload OnOffShim-Scripts... \nXXX"	
+	echo -e "XXX\n${STEP}\nDownload OnOffShim-Scripts... \nXXX"	
 	before=$(date +%s)
 	# OnOffShim
 	mv ${MUPI_SRC}/scripts/OnOffShim/off_trigger.sh /var/lib/dietpi/postboot.d/off_trigger.sh >&3 2>&3
@@ -1593,7 +1653,7 @@ rm -f /tmp/mupibox-update-failed
 	
 	###############################################################################################
 
-	echo -e "XXX\n{STEP}\nNetwork optimization... \nXXX"	
+	echo -e "XXX\n${STEP}\nNetwork optimization... \nXXX"	
 	before=$(date +%s)
 
 	cd /usr/local/bin/mupibox/	>&3 2>&3
@@ -1604,7 +1664,7 @@ rm -f /tmp/mupibox-update-failed
 
 	###############################################################################################
 
-	echo -e "XXX\n{STEP}\nActivate SSL... \nXXX"	
+	echo -e "XXX\n${STEP}\nActivate SSL... \nXXX"	
 	before=$(date +%s)
 	
 	# The web server's certificate: the box's own, from its small authority for the home network (the app offers it to
@@ -1804,7 +1864,7 @@ rm -f /tmp/mupibox-update-failed
 	sleep 5
 
 
-} | whiptail --title "MuPiBox Update ${VERSION_LONG}" --gauge "Please wait while installing" 6 60 0
+} | weigh_progress | whiptail --title "MuPiBox Update ${VERSION_LONG}" --gauge "Please wait while installing" 6 60 0
 
 if [ -f /tmp/mupibox-update-failed ]; then
 	# (the reason, as fail_update wrote it - this said "the archive could not be downloaded" for every abort before)
