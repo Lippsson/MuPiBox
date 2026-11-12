@@ -3892,9 +3892,11 @@
  "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Альбомів ще немає. Папки все одно можна вибрати.",
  "Intelligent": "Розумні",
  "Zuletzt hinzugefügt": "Нещодавно додані",
- "Favoriten": "Обране",
  "Personen": "Люди",
  "Intelligente Alben in Synology Photos": "Розумні альбоми в Synology Photos",
- "Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.": "Людей не знайдено: розпізнавання облич у Synology Photos вимкнено для облікового запису скриньки, або ще немає людей з іменами.",
- "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Розумні альбоми змінюються самі: скринька синхронізує їх, як і всі інші. Вони стосуються особистого простору облікового запису."
+ "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Розумні альбоми змінюються самі: скринька синхронізує їх, як і всі інші. Вони стосуються особистого простору облікового запису.",
+ "Orte": "Місця",
+ "Tags": "Теги",
+ "Motive": "Сюжети",
+ "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Нічого не знайдено: розпізнавання в Synology Photos (люди, місця, сюжети) вимкнено для облікового запису скриньки, або ще немає нічого з назвою."
 }

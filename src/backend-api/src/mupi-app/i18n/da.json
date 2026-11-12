@@ -3892,9 +3892,11 @@
  "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Ingen album endnu. Du kan alligevel vælge mapper.",
  "Intelligent": "Smart",
  "Zuletzt hinzugefügt": "Tilføjet for nylig",
- "Favoriten": "Favoritter",
  "Personen": "Personer",
  "Intelligente Alben in Synology Photos": "Smarte album i Synology Photos",
- "Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.": "Ingen personer fundet: ansigtsgenkendelsen i Synology Photos er slået fra for boksens konto, eller der er endnu ingen personer med navne.",
- "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Smarte album ændrer sig af sig selv: boksen synkroniserer dem som alle andre. De gælder kontoens personlige område."
+ "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Smarte album ændrer sig af sig selv: boksen synkroniserer dem som alle andre. De gælder kontoens personlige område.",
+ "Orte": "Steder",
+ "Tags": "Tags",
+ "Motive": "Motiver",
+ "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Intet fundet: genkendelsen i Synology Photos (personer, steder, motiver) er slået fra for boksens konto, eller der er endnu intet med navn."
 }

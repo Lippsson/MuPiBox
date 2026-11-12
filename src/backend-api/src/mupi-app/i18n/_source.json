@@ -3724,9 +3724,11 @@
  "Noch keine Alben. Ordner kannst du trotzdem wählen.",
  "Intelligent",
  "Zuletzt hinzugefügt",
- "Favoriten",
  "Personen",
  "Intelligente Alben in Synology Photos",
- "Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.",
- "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos."
+ "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.",
+ "Orte",
+ "Tags",
+ "Motive",
+ "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen."
 ]

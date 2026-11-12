@@ -3892,9 +3892,11 @@
  "Noch keine Alben. Ordner kannst du trotzdem wählen.": "Zatím žádná alba. Složky přesto můžeš vybrat.",
  "Intelligent": "Chytré",
  "Zuletzt hinzugefügt": "Nedávno přidané",
- "Favoriten": "Oblíbené",
  "Personen": "Lidé",
  "Intelligente Alben in Synology Photos": "Chytrá alba v Synology Photos",
- "Keine Personen gefunden: Die Gesichtserkennung von Synology Photos ist für das Konto der Box aus, oder es gibt noch keine Personen mit Namen.": "Nenalezeny žádné osoby: rozpoznávání obličejů v Synology Photos je pro účet krabičky vypnuté, nebo ještě nejsou osoby se jménem.",
- "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Chytrá alba se mění sama: krabička je synchronizuje jako všechna ostatní. Platí pro osobní prostor účtu."
+ "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab. Sie gelten für den persönlichen Bereich des Kontos.": "Chytrá alba se mění sama: krabička je synchronizuje jako všechna ostatní. Platí pro osobní prostor účtu.",
+ "Orte": "Místa",
+ "Tags": "Štítky",
+ "Motive": "Motivy",
+ "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Nic nenalezeno: rozpoznávání v Synology Photos (osoby, místa, motivy) je pro účet krabičky vypnuté, nebo zatím nic nemá název."
 }

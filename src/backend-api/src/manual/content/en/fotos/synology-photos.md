@@ -36,7 +36,7 @@ Synology Photos gives clips only as their original, often 4K from a phone. So th
 
 ## Smart albums
 
-Under **Smart** the box offers what Synology Photos puts together itself: **Recently added** (the newest 300), **Favorites**, **Videos** and an album for every **person** that has a name in Synology Photos. They apply to the account's personal space and change by themselves: the box syncs them like all the others.
+Under **Smart** the box offers what Synology Photos puts together itself: **Recently added** (the newest 300) and **Videos**, plus an album for every **person**, **place**, **tag** and **subject** (for example "Beach") that Synology Photos knows. They apply to the account's personal space and change by themselves: the box syncs them like all the others.
 
 > [!NOTE]
-> People exist only when face recognition of Synology Photos is switched on for the box's account and the people have a name. An account that is only given albums usually has none. The box shows **Videos** only with "Show videos" and "Keep photos on the box".
+> People, places and subjects exist only when the recognition of Synology Photos is switched on for the box's account; people must have a name. An account that is only given albums usually has none. A subject album searches Synology Photos for the name of the subject, so it can differ by a picture or two from the number shown in Synology Photos. The box does not offer **Favorites**: Synology Photos does not hand them out through its interface. The box shows **Videos** only with "Show videos" and "Keep photos on the box".

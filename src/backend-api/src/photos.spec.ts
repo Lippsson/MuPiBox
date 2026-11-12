@@ -363,12 +363,12 @@ test('photo Synology folders: personal and shared space, a folder takes the pict
   assert.equal(asked[0].size, 'sm')
 })
 
-test('photo Synology smart albums: recently added, favorites, videos and the named people', async () => {
+test('photo Synology smart albums: recently added, videos, people, places, tags and subjects', async () => {
   const { SynologyClient, applySynologySettings, synologySettings } = await import('./app-api/photos/synology')
   const cfg: Record<string, unknown> = {}
-  assert.equal(applySynologySettings(cfg, { albumIds: ['rec', 'fav', 'vid', 'p7', '12', 'f5'] }), null)
-  assert.deepEqual(synologySettings(cfg).albumIds, ['rec', 'fav', 'vid', 'p7', '12', 'f5'])
-  for (const bad of ['p', 'px', 'recent', 'REC', 'p1a']) assert.equal(applySynologySettings(cfg, { albumIds: [bad] }), 'albumIds', bad)
+  assert.equal(applySynologySettings(cfg, { albumIds: ['rec', 'vid', 'p7', 'l3', 'g4', 'c5', '12', 'f5'] }), null)
+  assert.deepEqual(synologySettings(cfg).albumIds, ['rec', 'vid', 'p7', 'l3', 'g4', 'c5', '12', 'f5'])
+  for (const bad of ['p', 'px', 'recent', 'REC', 'p1a', 'fav', 'x3', 'l']) assert.equal(applySynologySettings(cfg, { albumIds: [bad] }), 'albumIds', bad)
 
   const asked: Record<string, string>[] = []
   const photo = (id: number, time: number, type = 'photo') => ({ id, type, time, additional: { thumbnail: { cache_key: `${id}_k`, xl: 'ready' }, resolution: { width: 800, height: 600 }, video_meta: { duration: 5000 } } })
@@ -377,21 +377,31 @@ test('photo Synology smart albums: recently added, favorites, videos and the nam
       asked.push(params)
       const ok = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { headers: { 'content-type': 'application/json' } })
       const no = (code: number) => new Response(JSON.stringify({ success: false, error: { code } }), { headers: { 'content-type': 'application/json' } })
-      if (params.api === 'SYNO.Foto.Browse.Person') return ok({ list: [{ id: 7, name: 'Anna', item_count: 3 }, { id: 8, name: '' }, { id: 9, name: 'Ben', item_count: 1 }] })
+      if (params.api === 'SYNO.Foto.Browse.Person') return ok({ list: [{ id: 7, name: 'Anna', item_count: 2 }, { id: 8, name: '' }, { id: 9, name: 'Ben', item_count: 1 }] })
+      if (params.api === 'SYNO.Foto.Browse.Geocoding') return ok({ list: [{ id: 3, name: 'Paris', country: 'Frankreich', item_count: 2 }] })
+      if (params.api === 'SYNO.Foto.Browse.GeneralTag') return ok({ list: [{ id: 4, name: 'Urlaub', item_count: 1 }] })
+      if (params.api === 'SYNO.Foto.Browse.Concept') return ok({ list: [{ id: 5, name: 'Strand', item_count: 1 }, { id: 6, name: 'Hund', item_count: 1, visibility: false }] })
       if (params.api === 'SYNO.Foto.Browse.RecentlyAdded') return ok({ list: [photo(1, 100), photo(2, 300), photo(3, 200)] })
-      if (params.api === 'SYNO.Foto.Favorite') return no(103)
+      if (params.api === 'SYNO.Foto.Search.Search') return params.keyword === 'Strand' ? ok({ list: [photo(11, 5)] }) : ok({ list: [] })
       if (params.api === 'SYNO.Foto.Browse.Item') {
         if (params.person_id === '7') return ok({ list: [photo(4, 10), photo(5, 20)] })
+        if (params.geocoding_id === '3') return ok({ list: [photo(7, 1), photo(8, 2)] })
+        if (params.general_tag_id === '4') return ok({ list: [photo(9, 1)] })
         if (params.type === 'video') return ok({ list: [photo(6, 50, 'video')] })
+        // a DSM that does not know the filter gives the whole library
+        if (params.person_id === '9') return ok({ list: Array.from({ length: 100 }, (_, i) => photo(100 + i, i)) })
       }
+      if (params.api === 'SYNO.Foto.Favorite') return no(103)
       throw new Error(`not expected: ${JSON.stringify(params)}`)
     }
   }
   const client = new Fake({ url: 'https://nas:5001', account: 'box', password: 'pw' })
   const signal = new AbortController().signal
 
-  // the named people only
-  assert.deepEqual(await client.people(), [{ id: '7', name: 'Anna', count: 3 }, { id: '9', name: 'Ben', count: 1 }])
+  // the named ones only (a person without a name, a subject switched off: left out)
+  assert.deepEqual(await client.people(), [{ id: '7', name: 'Anna', count: 2, note: '' }, { id: '9', name: 'Ben', count: 1, note: '' }])
+  assert.deepEqual(await client.named('place'), [{ id: '3', name: 'Paris', count: 2, note: 'Frankreich' }])
+  assert.deepEqual((await client.named('subject')).map((x) => x.name), ['Strand'])
   // recently added: newest first
   const recent = await client.album('rec', signal, false)
   assert.equal(recent.name, 'Zuletzt hinzugefügt')
@@ -404,11 +414,19 @@ test('photo Synology smart albums: recently added, favorites, videos and the nam
   assert.ok(asked.some((q) => q.api === 'SYNO.Foto.Browse.Item' && q.person_id === '7'))
   // a person that is not named (any more): not there
   await assert.rejects(client.album('p8', signal, false), { status: 404 })
+  // a place, a tag: their own filters
+  const paris = await client.album('l3', signal, false)
+  assert.equal(paris.name, 'Paris')
+  assert.deepEqual(paris.items.map((x) => x.ref), ['7', '8'])
+  assert.deepEqual((await client.album('g4', signal, false)).items.map((x) => x.ref), ['9'])
+  // a subject: the search by its name; one switched off is not there
+  assert.deepEqual((await client.album('c5', signal, false)).items.map((x) => x.ref), ['11'])
+  await assert.rejects(client.album('c6', signal, false), { status: 404 })
+  // a filter the DSM did not take (the whole library came, far more than the person has): nothing of it is used
+  await assert.rejects(client.album('p9', signal, false), { status: 404 })
   // videos only with "Videos anzeigen"
   assert.deepEqual((await client.album('vid', signal, false)).items, [])
   assert.deepEqual((await client.album('vid', signal, true)).items.map((x) => `${x.ref}:${x.kind}`), ['6:video'])
-  // a DSM without the favorites question (103): not there - not "away"
-  await assert.rejects(client.album('fav', signal, false), { status: 404 })
   // the picture of a smart album comes from the personal space
   asked.length = 0
   class Pic extends Fake {
