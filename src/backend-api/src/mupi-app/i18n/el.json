@@ -3878,5 +3878,7 @@
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Χρόνος ακρόασης, ώρες ησυχίας, χρόνος φωτογραφιών και πλακίδια τώρα",
  "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Πλακίδια με ημερήσιο όριο: κατάσταση, +10 λεπτά, ελεύθερο σήμερα",
  "Diese Kachel ist für heute aufgebraucht.": "Αυτό το πλακίδιο εξαντλήθηκε για σήμερα.",
- "Zertifikat geändert – bitte neu bestätigen": "Το πιστοποιητικό άλλαξε – επιβεβαιώστε το ξανά"
+ "Zertifikat geändert – bitte neu bestätigen": "Το πιστοποιητικό άλλαξε – επιβεβαιώστε το ξανά",
+ "Abgleich abbrechen": "Ακύρωση συγχρονισμού",
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Ο συγχρονισμός ακυρώθηκε – οι φωτογραφίες που ήρθαν μένουν"
 }

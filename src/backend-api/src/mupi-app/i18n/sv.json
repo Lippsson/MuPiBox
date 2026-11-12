@@ -3878,5 +3878,7 @@
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Speltid, vilotider, bildtid och rutor nu",
  "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Rutor med daglig gräns: läge, +10 min, fri i dag",
  "Diese Kachel ist für heute aufgebraucht.": "Den här rutan är förbrukad för i dag.",
- "Zertifikat geändert – bitte neu bestätigen": "Certifikatet har ändrats – bekräfta det igen"
+ "Zertifikat geändert – bitte neu bestätigen": "Certifikatet har ändrats – bekräfta det igen",
+ "Abgleich abbrechen": "Avbryt synkronisering",
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synkronisering avbruten – de hämtade bilderna stannar"
 }

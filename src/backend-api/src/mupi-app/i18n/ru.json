@@ -3878,5 +3878,7 @@
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Время прослушивания, тихие часы, время фото и плитки сейчас",
  "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Плитки с дневным лимитом: состояние, +10 мин, сегодня свободно",
  "Diese Kachel ist für heute aufgebraucht.": "Эта плитка на сегодня исчерпана.",
- "Zertifikat geändert – bitte neu bestätigen": "Сертификат изменился – подтвердите его снова"
+ "Zertifikat geändert – bitte neu bestätigen": "Сертификат изменился – подтвердите его снова",
+ "Abgleich abbrechen": "Отменить синхронизацию",
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Синхронизация отменена – загруженные фото остаются"
 }

@@ -523,6 +523,13 @@ export function registerPhotoNextcloudRoutes(router: Router, deps: PhotoNextclou
     res.json(await answer())
   })
 
+  // the running sync stopped: what came so far stays, the next one at its time
+  router.post('/photos/nextcloud/sync/cancel', requireSession, requireCsrf, async (_req, res) => {
+    sync.cancel()
+    await new Promise((r) => setTimeout(r, 500))
+    res.json(await answer())
+  })
+
   router.post('/photos/nextcloud/sync', requireSession, requireCsrf, async (_req, res) => {
     if (!photoSettings(deps.getMupiboxConfig()).enabled) return void res.status(409).json({ error: 'photos_off' })
     void sync.run()

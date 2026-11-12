@@ -3878,5 +3878,7 @@
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Tempo de audição, horas de silêncio, tempo de fotos e mosaicos agora",
  "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Mosaicos com limite diário: estado, +10 min, livre hoje",
  "Diese Kachel ist für heute aufgebraucht.": "Este mosaico está esgotado por hoje.",
- "Zertifikat geändert – bitte neu bestätigen": "Certificado alterado – confirme-o novamente"
+ "Zertifikat geändert – bitte neu bestätigen": "Certificado alterado – confirme-o novamente",
+ "Abgleich abbrechen": "Cancelar sincronização",
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Sincronização cancelada – as fotos já obtidas ficam"
 }

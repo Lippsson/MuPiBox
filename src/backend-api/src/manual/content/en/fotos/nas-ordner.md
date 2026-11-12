@@ -15,7 +15,7 @@ The box fetches the photos in display size to the memory card. So they are there
 | **Sync › Interval** | how often the box looks for new, changed and deleted photos (every 15 minutes to daily, or only by hand) |
 | **Cache › Use at most** | how much room the photos from the NAS may take (500 MB to 8 GB, or no limit) |
 
-**Sync now** looks at once. **Stop using the folders** removes the albums from the NAS from the box. Everything stays on the NAS.
+**Sync now** looks at once. While a sync runs, **Cancel sync** stops it, for example on the first sync of a large NAS. The photos fetched so far stay, and the next sync comes at the set time. **Stop using the folders** removes the albums from the NAS from the box. Everything stays on the NAS.
 
 > [!NOTE]
 > If the box finds no photos in the folders chosen, read rights are usually missing: the box's account needs them on the NAS for the folders **and** for the files in them.

@@ -12473,7 +12473,7 @@ function photoNasTop() {
       ${!s.running && !s.offlineSince && saved.length && s.found === 0 ? `<div class="note warn">${icon('info', 18)}<span>In den gewählten Ordnern wurden keine Fotos gefunden. Prüfe die Leserechte des Benutzers auf dem NAS – auch für die Dateien in den Ordnern, nicht nur für die Ordner.</span></div>` : ''}
       ${s.cacheFull ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Ordner.</span></div>` : ''}
       ${s.failed?.length ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr(`Nicht lesbar: ${s.failed.join(', ')}`))}</span></div>` : ''}
-      <div class="btns"><button class="btn primary" id="nas-sync" ${s.running || !saved.length ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div></section>`,
+      <div class="btns"><button class="btn primary" id="nas-sync" ${s.running || !saved.length ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton('nas', s.running)}</div></section>`,
     `<section class="card wide"><h2>Ordner</h2><p class="help">Jeder gewählte Ordner wird ein Album.</p>
       ${photoNas.chosen.size ? `<div class="ph-chosen"><b>${esc(tr('Gewählt'))}</b>${[...photoNas.chosen].sort().map((f) => `<span class="chip"><span translate="no">${esc(f)}</span><button class="ph-chip-x" data-unpick="${esc(f)}" aria-label="${esc(tr('Abwählen'))}">${icon('close', 14)}</button></span>`).join('')}</div>` : ''}
       <div class="ph-tree">${photoNasFolderRows('/', 0)}</div>
@@ -12722,7 +12722,7 @@ function photoImmichTop() {
       ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob Immich läuft und die Adresse stimmt.</span></div>` : ''}
       ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es in Immich nicht mehr.') : tr(`${s.missing} gewählte Alben gibt es in Immich nicht mehr.`))}</span></div>` : ''}
       ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
-      <div class="btns"><button class="btn primary" id="im-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="im-albums">Alben ändern</button></div></section>`,
+      <div class="btns"><button class="btn primary" id="im-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton('immich', s.running)}<button class="btn" id="im-albums">Alben ändern</button></div></section>`,
     `<section class="card wide"><h2>Fotos</h2>
       <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert die Fotos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live von Immich – ohne Netz sind diese Alben gerade nicht da.</small></span>
         <label class="switch"><input type="checkbox" id="im-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
@@ -13030,7 +13030,7 @@ function photoSynologyTop() {
       ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob das NAS läuft.</span></div>` : ''}
       ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr oder es ist nicht mehr geteilt.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr oder sie sind nicht mehr geteilt.`))}</span></div>` : ''}
       ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
-      <div class="btns"><button class="btn primary" id="sy-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="sy-albums">Alben ändern</button></div></section>`,
+      <div class="btns"><button class="btn primary" id="sy-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton('synology', s.running)}<button class="btn" id="sy-albums">Alben ändern</button></div></section>`,
     `<section class="card wide"><h2>Fotos</h2>
       <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live vom NAS – Videos gibt es dann nicht, und ohne Netz sind diese Alben gerade nicht da.</small></span>
         <label class="switch"><input type="checkbox" id="sy-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
@@ -13330,7 +13330,7 @@ function photoNextcloudTop() {
       ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob die Nextcloud läuft.</span></div>` : ''}
       ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr oder es ist nicht mehr geteilt.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr oder sie sind nicht mehr geteilt.`))}</span></div>` : ''}
       ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
-      <div class="btns"><button class="btn primary" id="nc-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="nc-albums">Alben ändern</button></div></section>`,
+      <div class="btns"><button class="btn primary" id="nc-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton('nextcloud', s.running)}<button class="btn" id="nc-albums">Alben ändern</button></div></section>`,
     `<section class="card wide"><h2>Fotos</h2>
       <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live von der Nextcloud – Videos gibt es dann nicht, und ohne Netz sind diese Alben gerade nicht da.</small></span>
         <label class="switch"><input type="checkbox" id="nc-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
@@ -13629,7 +13629,7 @@ function photoPhotoprismTop() {
       ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob PhotoPrism läuft.</span></div>` : ''}
       ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es nicht mehr.') : tr(`${s.missing} gewählte Alben gibt es nicht mehr.`))}</span></div>` : ''}
       ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
-      <div class="btns"><button class="btn primary" id="pp-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button><button class="btn" id="pp-albums">Alben ändern</button></div></section>`,
+      <div class="btns"><button class="btn primary" id="pp-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton('photoprism', s.running)}<button class="btn" id="pp-albums">Alben ändern</button></div></section>`,
     `<section class="card wide"><h2>Fotos</h2>
       <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert Fotos und Videos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Fotos und Videos kommen beim Anzeigen live von PhotoPrism – ohne Netz sind diese Alben gerade nicht da.</small></span>
         <label class="switch"><input type="checkbox" id="pp-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
@@ -13850,7 +13850,7 @@ function photoIcloudTop() {
       ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe die Internetverbindung der Box.</span></div>` : ''}
       ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein Album ist nicht mehr öffentlich oder gelöscht.') : tr(`${s.missing} Alben sind nicht mehr öffentlich oder gelöscht.`))}</span></div>` : ''}
       ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
-      ${d.connected ? `<div class="btns"><button class="btn" id="ic-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>` : ''}</section>`,
+      ${d.connected ? `<div class="btns"><button class="btn" id="ic-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton('icloud', s.running)}</div>` : ''}</section>`,
     `<section class="card wide"><h2>Album hinzufügen</h2>
       <ol class="ph-howto"><li>Auf dem iPhone in Fotos ein geteiltes Album öffnen.</li><li>Oben auf das Personen-Symbol tippen und „Öffentliche Website“ einschalten.</li><li>„Link teilen“ wählen und den Link hier einfügen.</li></ol>
       <div class="field"><label for="ic-link">Link zum Album</label><input class="input mono" id="ic-link" placeholder="https://photos.icloud.com/shared/album/…" ${NO_PW_MANAGER} spellcheck="false" autocomplete="off"></div>
@@ -14017,6 +14017,22 @@ function photoAlbumTop() {
   ]
 }
 
+// "Abgleich abbrechen" beside "Jetzt abgleichen" while a photo service's sync runs (a big NAS takes hours the first
+// time): what came so far stays, the next sync at its time. One handler for all of them; the page is read anew.
+function syncCancelButton(source, running) {
+  return running ? `<button class="btn danger" data-sync-cancel="${esc(source)}">${esc(tr('Abgleich abbrechen'))}</button>` : ''
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target instanceof Element ? e.target.closest('[data-sync-cancel]') : null
+  if (!b || b.disabled) return
+  b.disabled = true
+  const r = await api(`${API}/photos/${encodeURIComponent(b.dataset.syncCancel)}/sync/cancel`, { method: 'POST', body: {} })
+  toast(r.ok ? tr('Abgleich abgebrochen – die geholten Fotos bleiben') : errorText(r), r.ok ? 'ok' : 'info')
+  photoLib.stale = true
+  const page = currentPage()
+  if (page) void renderPage(page, true)
+})
+
 // A NAS album: only looked at here - its folder, the last sync, "Jetzt abgleichen"
 function photoNasAlbumCard(a) {
   const n = photoLib.nas
@@ -14025,7 +14041,7 @@ function photoNasAlbumCard(a) {
   return `<section class="card wide"><h2>Quelle</h2>
     <div class="note">${icon('info', 18)}<span>Dieses Album ist ein Ordner auf dem NAS. Fotos dort hinzufügen oder löschen. Die Box gleicht den Ordner regelmäßig ab.</span></div>
     <dl class="kv"><div><dt>Dienst</dt><dd>NAS</dd></div><div><dt>Ordner</dt><dd translate="no">${esc(a.ref ?? '–')}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
-    <div class="btns"><button class="btn" id="ph-nas-sync" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>
+    <div class="btns"><button class="btn" id="ph-nas-sync" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton('nas', running)}</div>
     <div class="navlist">${navRow('fotonas', 'NAS-Ordner', 'Ordner, Abgleich, Zwischenspeicher', 'server')}</div></section>`
 }
 
@@ -14048,7 +14064,7 @@ function photoServiceAlbumCard(a) {
   return `<section class="card wide"><h2>Quelle</h2>
     <div class="note">${icon('info', 18)}<span>${esc(tr(svc.note))}</span></div>
     <dl class="kv"><div><dt>Dienst</dt><dd>${esc(svc.name)}</dd></div><div><dt>Fotos</dt><dd>${esc(tr(a.live ? svc.live : 'Auf der Box gespeichert'))}</dd></div><div><dt>Zuletzt abgeglichen</dt><dd>${esc(running ? tr('Abgleich läuft …') : last)}</dd></div></dl>
-    <div class="btns"><button class="btn" id="ph-service-sync" data-source="${esc(a.source)}" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button></div>
+    <div class="btns"><button class="btn" id="ph-service-sync" data-source="${esc(a.source)}" ${running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton(a.source, running)}</div>
     <div class="navlist">${navRow(svc.page, svc.name, 'Alben, Abgleich, Zugang', svc.icon)}</div></section>`
 }
 

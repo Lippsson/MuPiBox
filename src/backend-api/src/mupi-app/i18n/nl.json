@@ -3878,5 +3878,7 @@
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Speeltijd, rusttijden, fototijd en tegels nu",
  "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Tegels met daglimiet: stand, +10 min, vandaag vrij",
  "Diese Kachel ist für heute aufgebraucht.": "Deze tegel is op voor vandaag.",
- "Zertifikat geändert – bitte neu bestätigen": "Certificaat gewijzigd – bevestig het opnieuw"
+ "Zertifikat geändert – bitte neu bestätigen": "Certificaat gewijzigd – bevestig het opnieuw",
+ "Abgleich abbrechen": "Synchronisatie annuleren",
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronisatie geannuleerd – de opgehaalde foto’s blijven"
 }

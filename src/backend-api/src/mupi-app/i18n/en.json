@@ -3894,5 +3894,7 @@
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Playtime, quiet hours, photo time and tiles now",
  "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Tiles with a daily limit: state, +10 min, free today",
  "Diese Kachel ist für heute aufgebraucht.": "This tile is used up for today.",
- "Zertifikat geändert – bitte neu bestätigen": "Certificate changed – please confirm it again"
+ "Zertifikat geändert – bitte neu bestätigen": "Certificate changed – please confirm it again",
+ "Abgleich abbrechen": "Cancel sync",
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Sync cancelled – the photos fetched so far stay"
 }

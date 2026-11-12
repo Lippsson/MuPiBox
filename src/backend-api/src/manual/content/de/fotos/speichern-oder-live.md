@@ -13,7 +13,7 @@ Live lohnt sich bei schnellem WLAN und großen Alben, die nicht auf die Karte pa
 
 ## Abgleich
 
-Die Box schaut regelmäßig nach neuen, geänderten und gelöschten Fotos und übernimmt geänderte Albennamen. Wie oft, legt **Abgleich › Intervall** fest (alle 15 Minuten bis täglich, oder nur von Hand). **Jetzt abgleichen** schaut sofort nach.
+Die Box schaut regelmäßig nach neuen, geänderten und gelöschten Fotos und übernimmt geänderte Albennamen. Wie oft, legt **Abgleich › Intervall** fest (alle 15 Minuten bis täglich, oder nur von Hand). **Jetzt abgleichen** schaut sofort nach, **Abgleich abbrechen** hält einen laufenden Abgleich an. Die schon geholten Fotos bleiben.
 
 Die Zeile oben auf der Seite zeigt den Stand:
 

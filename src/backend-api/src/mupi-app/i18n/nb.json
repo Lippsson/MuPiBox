@@ -3878,5 +3878,7 @@
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Spilletid, hviletider, bildetid og fliser nå",
  "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Fliser med daglig grense: status, +10 min, fri i dag",
  "Diese Kachel ist für heute aufgebraucht.": "Denne flisen er brukt opp for i dag.",
- "Zertifikat geändert – bitte neu bestätigen": "Sertifikatet er endret – bekreft det på nytt"
+ "Zertifikat geändert – bitte neu bestätigen": "Sertifikatet er endret – bekreft det på nytt",
+ "Abgleich abbrechen": "Avbryt synkronisering",
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synkronisering avbrutt – bildene som er hentet blir"
 }

@@ -13,7 +13,7 @@ Live is worth it with fast Wi-Fi and large albums that should not fill the card.
 
 ## Sync
 
-The box regularly looks for new, changed and deleted photos and takes over changed album names. How often is set by **Sync › Interval** (every 15 minutes to daily, or only by hand). **Sync now** looks at once.
+The box regularly looks for new, changed and deleted photos and takes over changed album names. How often is set by **Sync › Interval** (every 15 minutes to daily, or only by hand). **Sync now** looks at once, and **Cancel sync** stops a running sync. The photos fetched so far stay.
 
 The line at the top of the page shows the state:
 

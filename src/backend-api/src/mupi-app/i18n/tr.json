@@ -3878,5 +3878,7 @@
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Dinleme süresi, sessiz saatler, fotoğraf süresi ve kutucuklar şimdi",
  "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Günlük sınırlı kutucuklar: durum, +10 dk, bugün serbest",
  "Diese Kachel ist für heute aufgebraucht.": "Bu kutucuk bugünlük bitti.",
- "Zertifikat geändert – bitte neu bestätigen": "Sertifika değişti – lütfen yeniden onaylayın"
+ "Zertifikat geändert – bitte neu bestätigen": "Sertifika değişti – lütfen yeniden onaylayın",
+ "Abgleich abbrechen": "Eşitlemeyi iptal et",
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Eşitleme iptal edildi – alınan fotoğraflar kalır"
 }

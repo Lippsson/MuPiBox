@@ -528,6 +528,13 @@ export function registerPhotoNasRoutes(router: Router, deps: PhotoNasDeps): NasP
     res.json(await answer())
   })
 
+  // the running sync stopped (a big NAS takes hours the first time): what came so far stays, the next one at its time
+  router.post('/photos/nas/sync/cancel', requireSession, requireCsrf, async (_req, res) => {
+    sync.cancel()
+    await new Promise((r) => setTimeout(r, 500))
+    res.json(await answer())
+  })
+
   router.post('/photos/nas/sync', requireSession, requireCsrf, async (_req, res) => {
     if (!photoSettings(deps.getMupiboxConfig()).enabled) return void res.status(409).json({ error: 'photos_off' })
     void sync.run()

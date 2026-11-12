@@ -3878,5 +3878,7 @@
  "Spielzeit, Ruhezeiten, Bildzeit und Kacheln jetzt": "Čas poslechu, klidový čas, čas fotek a dlaždice teď",
  "Kacheln mit Tageslimit: Stand, +10 min, heute frei": "Dlaždice s denním limitem: stav, +10 min, dnes volno",
  "Diese Kachel ist für heute aufgebraucht.": "Tato dlaždice je pro dnešek vyčerpaná.",
- "Zertifikat geändert – bitte neu bestätigen": "Certifikát se změnil – potvrďte ho prosím znovu"
+ "Zertifikat geändert – bitte neu bestätigen": "Certifikát se změnil – potvrďte ho prosím znovu",
+ "Abgleich abbrechen": "Zrušit synchronizaci",
+ "Abgleich abgebrochen – die geholten Fotos bleiben": "Synchronizace zrušena – dosud stažené fotky zůstávají"
 }

@@ -15,7 +15,7 @@ Die Box holt die Fotos in Anzeigegröße auf die Speicherkarte. So sind sie auch
 | **Abgleich › Intervall** | wie oft die Box nach neuen, geänderten und gelöschten Fotos schaut (alle 15 Minuten bis täglich, oder nur von Hand) |
 | **Zwischenspeicher › Höchstens belegen** | wie viel Platz die Fotos vom NAS höchstens nehmen (500 MB bis 8 GB oder ohne Grenze) |
 
-**Jetzt abgleichen** schaut sofort nach. **Ordner nicht mehr verwenden** entfernt die Alben vom NAS von der Box. Auf dem NAS bleibt alles.
+**Jetzt abgleichen** schaut sofort nach. Läuft ein Abgleich, hält ihn **Abgleich abbrechen** an, etwa beim ersten Abgleich eines großen NAS. Die schon geholten Fotos bleiben, der nächste Abgleich kommt zur eingestellten Zeit. **Ordner nicht mehr verwenden** entfernt die Alben vom NAS von der Box. Auf dem NAS bleibt alles.
 
 > [!NOTE]
 > Findet die Box in den gewählten Ordnern keine Fotos, fehlen meist Leserechte: Das Konto der Box braucht sie auf dem NAS für die Ordner **und** für die Dateien darin.
