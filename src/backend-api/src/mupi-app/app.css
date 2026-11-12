@@ -1410,6 +1410,9 @@ textarea[hidden] { display: none; }
 .ext-roster .ext-roster-mark { font-size: 13px; color: var(--mp-primary); padding: 0 8px; }
 .ext-roster .btn { min-height: 36px; padding: 0 12px; }
 .ext-roster .btn:disabled { opacity: .4; }
+.ext-roster .ext-roster-name small { display: block; font-size: 12px; font-weight: 400; color: var(--mp-muted, inherit); opacity: .8; }
+.ext-roster-from { margin-top: 8px; }
+.ext-roster-trash li { border-style: dashed; }
 .ext-order .ext-grip { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: var(--mp-r-sm); background: transparent; cursor: grab; touch-action: none; }
 .ext-order .ext-grip::before { content: ''; width: 12px; height: 18px; background: radial-gradient(circle, var(--mp-muted) 1.6px, transparent 2px) 0 0 / 6px 6px; }
 .ext-order .ext-grip:focus-visible { outline: 2px solid var(--mp-primary); }

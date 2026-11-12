@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "”{}” tas bort tillsammans med sina inställningar och sitt bibliotek. Det går inte att ångra.",
  "{}: Löschen": "{}: Ta bort",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Flera användare på en box: var och en har egna inställningar och ett eget bibliotek. På displayen byter man med den runda symbolen högst upp, i webbappen skapar, byter och tar man bort användare. Spotify-inloggningen gäller för alla.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "På displayen visar en prick högst upp i användarens färg vem som är inloggad; ett tryck på den öppnar översikten med namnen. Den aktiva användaren och den sista användaren går inte att ta bort.",
  "Am Display wechseln": "Byt på displayen",
  "{}: Farbe wählen": "{}: Välj färg",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Tryck på en färgprick för att byta färg.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Fritt, med ett tryck",
  "Mit Halten": "Genom att hålla",
  "Nur in der Webapp": "Bara i webbappen",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Varje användare har sin egen speltid och vilotid. Den som byter till en annan användare på skärmen lyssnar vidare med den användarens speltid. ”Genom att hålla” kräver att en ruta hålls lika länge som när inställningarna öppnas på skärmen."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Varje användare har sin egen speltid och vilotid. Den som byter till en annan användare på skärmen lyssnar vidare med den användarens speltid. ”Genom att hålla” kräver att en ruta hålls lika länge som när inställningarna öppnas på skärmen.",
+ "{} Eintrag": "{} post",
+ "Einträge": "poster",
+ "Leere Bibliothek": "Tomt bibliotek",
+ "Kopie der Bibliothek von „{}“": "Kopia av biblioteket från ”{}”",
+ "Papierkorb": "Papperskorg",
+ "Wiederherstellen": "Återställ",
+ "gelöscht am {}": "raderad {}",
+ "„{}“ wiederhergestellt": "”{}” återställd",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Det finns redan så många poster som möjligt",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Raderade ligger kvar i papperskorgen i {} dagar, sedan är de borta för gott.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "”{}” hamnar i papperskorgen med sina inställningar och sitt bibliotek{}. Därifrån kan den återställas i {} dagar.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "”{}” raderas med sina inställningar och sitt bibliotek{}. Det går inte att ångra.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Överst på skärmen visar en prick i användarens färg vem som är inloggad; ett tryck på den öppnar översikten med namnen. En ny användare börjar med ett tomt bibliotek eller en kopia av en annan användares bibliotek. Raderade användare hamnar i papperskorgen. Den aktiva och den sista användaren kan inte raderas."
 }

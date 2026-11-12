@@ -73,7 +73,7 @@ export interface Manifest {
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
-  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string }[] }
+  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -395,9 +395,12 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
       if (item.type === 'roster') {
         // a list to look at, to add to, to take from and to choose from (hostApi 4): four routes of the extension's own API part
         if (x.hostApi < 4 || item.choices !== undefined) return `ui: a roster needs hostApi 4: ${item.label}`
-        for (const part of ['list', 'add', 'remove', 'select', 'color'] as const) {
-          // (`color` is the one that may be left out: the entries have a colour the user can change)
-          if (part === 'color' && item.color === undefined) continue
+        // (`addFrom`: a new entry may be a copy of one there - the add route takes { name, from })
+        if (item.addFrom !== undefined && typeof item.addFrom !== 'boolean') return `ui: bad roster addFrom: ${item.label}`
+        for (const part of ['list', 'add', 'remove', 'select', 'color', 'restore'] as const) {
+          // (`color` and `restore` may be left out: the entries have a colour the user can change; deleted ones are kept a while
+          // and come back with { id } - the list names them as `trash`)
+          if ((part === 'color' || part === 'restore') && item[part] === undefined) continue
           if (typeof item[part] !== 'string' || !new RegExp(`^/api/ext/${x.id}/[a-z]{1,30}$`).test(item[part] as string)) return `ui: bad roster address (${part}): ${item.label}`
         }
       } else if (item.type === 'order') {

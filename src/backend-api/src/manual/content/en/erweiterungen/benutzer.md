@@ -15,10 +15,17 @@ With the extension **User**, several children share one box: every user has **th
 
 After [installing](installieren.md) the extension, open the details of the card **User** under **Settings › System › Extensions**:
 
-- **Add**: enter a name and tap **Add**. A new user starts with the settings of whoever adds them, and with an **empty library**.
+- **Add**: enter a name, choose under **Library** and tap **Add**. A new user starts with the settings of whoever adds them, and either with an **empty library** or a **copy of the library** of another user. The copy is independent afterwards: changes to one do not change the other.
 - **Colour**: every user has a colour, which you can change in the list.
 - **Switch**: switches to that user.
-- **Delete**: removes the user with their settings and library. The active user and the last user cannot be deleted.
+- **Delete**: puts the user with their settings and library into the **trash**. The list shows for every user how many entries their library has. The active user and the last user cannot be deleted.
+
+### Trash
+
+Deleted users are listed under **Trash** and can be **restored for 30 days**, with their settings and library. After that they are gone for good. If the name has been taken meanwhile, the restored user gets a number after it, “Standard (2)” for example. The trash is not part of the [backup](../wartung/backup.md).
+
+> [!IMPORTANT]
+> The user **Standard** has the library the box had before the extension. If it is deleted and not taken back from the trash, that library is gone. For a new user to get it, add them as a **copy of the library of “Standard”**.
 
 ## Switching
 
@@ -35,9 +42,15 @@ Every user has their **own play time and quiet hours**, with today's count. Whoe
 > [!TIP]
 > If a child should not be able to switch to another child's user, choose **By holding** or **Only in the web app**. In the app, switching is protected by the parents' sign-in.
 
-## Switching off
+## Switching off or removing
 
-The multi-user mode is an extension. Under **Settings › System › Extensions** it can be switched off or removed. The box then keeps the settings and the library of the user who is active. The folders of the other users stay until the extension is removed; switched on again, it goes on with them.
+The multi-user mode is an extension. Under **Settings › System › Extensions** it can be switched off or removed.
+
+- The box keeps the settings and the library of the user who is **active at that moment**. To the box that is simply its library then; without the extension there are no users any more.
+- The other users, their trash and the list stay on the card, also when the extension is removed. Installed or switched on again, everybody is back, and the active one is whoever was last, with whatever the box got into its library meanwhile.
+
+> [!TIP]
+> If a certain library should stay, switch to that user before switching the extension off.
 
 ## Good to know
 

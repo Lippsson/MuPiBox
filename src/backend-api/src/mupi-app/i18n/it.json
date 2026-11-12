@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "«{}» verrà eliminato insieme alle sue impostazioni e alla sua libreria. L’operazione non può essere annullata.",
  "{}: Löschen": "{}: Elimina",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Più utenti su una scatola: ognuno ha le proprie impostazioni e la propria libreria. Sul display si cambia con il simbolo rotondo in alto; nella web app si creano, si cambiano e si eliminano gli utenti. L’accesso a Spotify vale per tutti.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Sul display, un punto del colore dell’utente in alto mostra chi ha eseguito l’accesso; toccandolo si apre la panoramica con i nomi. L’utente attivo e l’ultimo utente non possono essere eliminati.",
  "Am Display wechseln": "Cambia sul display",
  "{}: Farbe wählen": "{}: Scegli il colore",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Tocca un punto colorato per cambiare colore.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Liberamente, con un tocco",
  "Mit Halten": "Tenendo premuto",
  "Nur in der Webapp": "Solo nella web app",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Ogni utente ha il proprio tempo di ascolto e le proprie ore di silenzio. Chi passa a un altro utente sul display continua con il tempo di quell’utente. «Tenendo premuto» richiede di tenere premuta una tessera quanto per aprire le impostazioni sul display."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Ogni utente ha il proprio tempo di ascolto e le proprie ore di silenzio. Chi passa a un altro utente sul display continua con il tempo di quell’utente. «Tenendo premuto» richiede di tenere premuta una tessera quanto per aprire le impostazioni sul display.",
+ "{} Eintrag": "{} voce",
+ "Einträge": "voci",
+ "Leere Bibliothek": "Libreria vuota",
+ "Kopie der Bibliothek von „{}“": "Copia della libreria di «{}»",
+ "Papierkorb": "Cestino",
+ "Wiederherstellen": "Ripristina",
+ "gelöscht am {}": "eliminato il {}",
+ "„{}“ wiederhergestellt": "«{}» ripristinato",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Ci sono già tante voci quante possibili",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Gli elementi eliminati restano {} giorni nel cestino, poi spariscono definitivamente.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "«{}» finisce nel cestino con le sue impostazioni e la sua libreria{}. Da lì si può ripristinare per {} giorni.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "«{}» verrà eliminato con le sue impostazioni e la sua libreria{}. Non si può annullare.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "In alto sul display un punto del colore dell’utente mostra chi è connesso; un tocco apre la panoramica con i nomi. Un nuovo utente parte con una libreria vuota o con una copia della libreria di un altro. Gli utenti eliminati finiscono nel cestino. L’utente attivo e l’ultimo non si possono eliminare."
 }

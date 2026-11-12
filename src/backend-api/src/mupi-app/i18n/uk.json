@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "Користувача «{}» буде видалено разом із налаштуваннями та бібліотекою. Це неможливо скасувати.",
  "{}: Löschen": "{}: Видалити",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Кілька користувачів на одній коробці: у кожного свої налаштування і своя бібліотека. На дисплеї перемикають круглим значком угорі, у веб-застосунку користувачів створюють, перемикають і видаляють. Вхід у Spotify спільний для всіх.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "На дисплеї крапка кольору користувача вгорі показує, хто ввійшов; дотик до неї відкриває огляд з іменами. Активного й останнього користувача видалити не можна.",
  "Am Display wechseln": "Перемикати на дисплеї",
  "{}: Farbe wählen": "{}: Вибрати колір",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Торкніться кольорової крапки, щоб змінити колір.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Вільно, одним дотиком",
  "Mit Halten": "Утриманням",
  "Nur in der Webapp": "Лише у вебзастосунку",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Кожен користувач має власний час прослуховування й тихі години. Хто на екрані перемикається на іншого користувача, слухає далі з його часом. «Утриманням» вимагає тримати плитку стільки ж, скільки під час відкриття налаштувань на екрані."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Кожен користувач має власний час прослуховування й тихі години. Хто на екрані перемикається на іншого користувача, слухає далі з його часом. «Утриманням» вимагає тримати плитку стільки ж, скільки під час відкриття налаштувань на екрані.",
+ "{} Eintrag": "{} запис",
+ "Einträge": "записи",
+ "Leere Bibliothek": "Порожня бібліотека",
+ "Kopie der Bibliothek von „{}“": "Копія бібліотеки «{}»",
+ "Papierkorb": "Кошик",
+ "Wiederherstellen": "Відновити",
+ "gelöscht am {}": "видалено {}",
+ "„{}“ wiederhergestellt": "«{}» відновлено",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Записів уже максимальна кількість",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Видалене зберігається в кошику {} днів, потім зникає остаточно.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "«{}» потрапить до кошика разом із налаштуваннями й бібліотекою{}. Звідти його можна відновити протягом {} днів.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "«{}» буде видалено разом із налаштуваннями й бібліотекою{}. Це не можна скасувати.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Угорі екрана крапка кольору користувача показує, хто увійшов; дотик відкриває огляд з іменами. Новий користувач починає з порожньою бібліотекою або з копією бібліотеки іншого. Видалені користувачі потрапляють до кошика. Активного й останнього користувача видалити не можна."
 }

@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "„{}“ slettes sammen med sine indstillinger og sit bibliotek. Det kan ikke fortrydes.",
  "{}: Löschen": "{}: Slet",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Flere brugere på én boks: Hver har sine egne indstillinger og sit eget bibliotek. På displayet skifter man med det runde mærke øverst, i webappen opretter, skifter og sletter man brugere. Spotify-login gælder for alle.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "På displayet viser en prik øverst i brugerens farve, hvem der er logget ind; et tryk på den åbner oversigten med navnene. Den aktive bruger og den sidste bruger kan ikke slettes.",
  "Am Display wechseln": "Skift på displayet",
  "{}: Farbe wählen": "{}: Vælg farve",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Tryk på en farveprik for at ændre farven.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Frit, med et tryk",
  "Mit Halten": "Ved at holde",
  "Nur in der Webapp": "Kun i webappen",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Hver bruger har sin egen spilletid og hviletid. Den, der skifter til en anden bruger på skærmen, lytter videre med dennes spilletid. “Ved at holde” kræver, at en flise holdes lige så længe, som når indstillingerne åbnes på skærmen."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Hver bruger har sin egen spilletid og hviletid. Den, der skifter til en anden bruger på skærmen, lytter videre med dennes spilletid. “Ved at holde” kræver, at en flise holdes lige så længe, som når indstillingerne åbnes på skærmen.",
+ "{} Eintrag": "{} post",
+ "Einträge": "poster",
+ "Leere Bibliothek": "Tomt bibliotek",
+ "Kopie der Bibliothek von „{}“": "Kopi af biblioteket fra “{}”",
+ "Papierkorb": "Papirkurv",
+ "Wiederherstellen": "Gendan",
+ "gelöscht am {}": "slettet {}",
+ "„{}“ wiederhergestellt": "“{}” gendannet",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Der er allerede så mange poster, som muligt",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Slettede bliver i papirkurven i {} dage, derefter er de væk for altid.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "“{}” kommer i papirkurven med sine indstillinger og sit bibliotek{}. Derfra kan den gendannes i {} dage.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "“{}” slettes med sine indstillinger og sit bibliotek{}. Det kan ikke fortrydes.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Øverst på skærmen viser en prik i brugerens farve, hvem der er logget ind; et tryk på den åbner oversigten med navnene. En ny bruger starter med et tomt bibliotek eller en kopi af en anden brugers bibliotek. Slettede brugere kommer i papirkurven. Den aktive og den sidste bruger kan ikke slettes."
 }

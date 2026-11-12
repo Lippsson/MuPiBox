@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "‘{}’ wordt verwijderd samen met de instellingen en de bibliotheek. Dit kan niet ongedaan worden gemaakt.",
  "{}: Löschen": "{}: Verwijderen",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Meerdere gebruikers op één box: elk heeft eigen instellingen en een eigen bibliotheek. Op het display wissel je met het ronde teken bovenaan, in de web-app maak je gebruikers aan, wissel je en verwijder je ze. De Spotify-login geldt voor iedereen.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Op het display toont bovenaan een stip in de kleur van de gebruiker wie is aangemeld; een tik erop opent het overzicht met de namen. De actieve gebruiker en de laatste gebruiker kunnen niet worden verwijderd.",
  "Am Display wechseln": "Wisselen op het display",
  "{}: Farbe wählen": "{}: Kleur kiezen",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Tik op een kleurstip om de kleur te wijzigen.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Vrij, met een tik",
  "Mit Halten": "Door vast te houden",
  "Nur in der Webapp": "Alleen in de webapp",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Elke gebruiker heeft een eigen speeltijd en rusttijd. Wie op het scherm naar een andere gebruiker wisselt, luistert verder met diens speeltijd. „Door vast te houden” vraagt een tegel zo lang vast te houden als bij het openen van de instellingen op het scherm."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Elke gebruiker heeft een eigen speeltijd en rusttijd. Wie op het scherm naar een andere gebruiker wisselt, luistert verder met diens speeltijd. „Door vast te houden” vraagt een tegel zo lang vast te houden als bij het openen van de instellingen op het scherm.",
+ "{} Eintrag": "{} item",
+ "Einträge": "items",
+ "Leere Bibliothek": "Lege bibliotheek",
+ "Kopie der Bibliothek von „{}“": "Kopie van de bibliotheek van „{}”",
+ "Papierkorb": "Prullenbak",
+ "Wiederherstellen": "Herstellen",
+ "gelöscht am {}": "verwijderd op {}",
+ "„{}“ wiederhergestellt": "„{}” hersteld",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Er zijn al zoveel items als mogelijk",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Verwijderde blijven {} dagen in de prullenbak, daarna zijn ze definitief weg.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "„{}” gaat met instellingen en bibliotheek{} naar de prullenbak. Daar is hij {} dagen lang te herstellen.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "„{}” wordt met instellingen en bibliotheek{} verwijderd. Dit kan niet ongedaan worden gemaakt.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Bovenaan het scherm toont een stip in de kleur van de gebruiker wie is aangemeld; een tik erop opent het overzicht met de namen. Een nieuwe gebruiker begint met een lege bibliotheek of een kopie van de bibliotheek van een ander. Verwijderde gebruikers gaan naar de prullenbak. De actieve en de laatste gebruiker kunnen niet worden verwijderd."
 }

@@ -14635,7 +14635,7 @@ function extFormHtml(e, fields) {
       }
       if (it.type === 'roster') {
         // a list the extension keeps itself (the users of the box, say): to look at, to add to, to take from and to choose from
-        return `<div class="field"><label>${esc(it.label)}</label><ul class="ext-roster" data-xroster="${index}" aria-live="polite"></ul><div class="row" style="gap:8px"><input class="input" type="text" maxlength="24" data-xradd="${index}" placeholder="Name" autocomplete="off" aria-label="${esc(it.label)}" ${NO_PW_MANAGER}><button type="button" class="btn" data-xraddgo="${index}">Anlegen</button></div>${help}</div>`
+        return `<div class="field"><label>${esc(it.label)}</label><ul class="ext-roster" data-xroster="${index}" aria-live="polite"></ul><div class="row" style="gap:8px"><input class="input" type="text" maxlength="24" data-xradd="${index}" placeholder="Name" autocomplete="off" aria-label="${esc(it.label)}" ${NO_PW_MANAGER}><button type="button" class="btn" data-xraddgo="${index}">Anlegen</button></div>${it.addFrom ? `<div class="field ext-roster-from"><label for="xrfrom-${index}">Bibliothek</label><select class="input" id="xrfrom-${index}" data-xrfrom="${index}"><option value="">Leere Bibliothek</option></select></div>` : ''}<div data-xrtrash="${index}"></div>${help}</div>`
       }
       if (type(it) === 'boolean') {
         return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
@@ -14968,6 +14968,10 @@ function extFormMount(sheet, e, fields, saved) {
     if (item.type !== 'roster') return
     const list = sheet.querySelector(`[data-xroster="${index}"]`)
     const input = sheet.querySelector(`[data-xradd="${index}"]`)
+    const from = sheet.querySelector(`[data-xrfrom="${index}"]`)
+    const bin = sheet.querySelector(`[data-xrtrash="${index}"]`)
+    // (the entries of an entry's library, when the list names them)
+    const countText = (n) => (Number.isInteger(n) ? tr(`${n} ${n === 1 ? 'Eintrag' : 'Einträge'}`) : '')
     let busy = false
     const post = (route, body) => api(route, { method: 'POST', body, timeoutMs: 20000 })
     const draw = async () => {
@@ -15018,6 +15022,11 @@ function extFormMount(sheet, e, fields, saved) {
         const name = document.createElement('span')
         name.className = 'ext-roster-name'
         name.textContent = u.name
+        if (countText(u.count)) {
+          const small = document.createElement('small')
+          small.textContent = countText(u.count)
+          name.append(small)
+        }
         li.append(name)
         if (u.id === r.body.current) {
           li.classList.add('current')
@@ -15039,11 +15048,64 @@ function extFormMount(sheet, e, fields, saved) {
         del.textContent = 'Löschen'
         del.setAttribute('aria-label', `${u.name}: Löschen`)
         del.disabled = u.id === r.body.current || r.body.users.length < 2
-        del.onclick = () => remove(u)
+        del.onclick = () => remove(u, r.body)
         li.append(del)
         list.append(li)
       }
+      // (a new one as a copy: whose library - the choice stays while the list is drawn again)
+      if (from) {
+        const was = from.value
+        from.textContent = ''
+        from.append(new Option(tr('Leere Bibliothek'), ''))
+        for (const u of r.body.users) from.append(new Option(`${tr(`Kopie der Bibliothek von „${u.name}“`)}${countText(u.count) ? ` (${countText(u.count)})` : ''}`, u.id))
+        from.value = r.body.users.some((u) => u.id === was) ? was : ''
+      }
+      // (the trash: deleted ones, restored within the days the list names)
+      if (bin) {
+        bin.textContent = ''
+        const gone = item.restore && Array.isArray(r.body.trash) ? r.body.trash : []
+        if (gone.length) {
+          const head = document.createElement('label')
+          head.textContent = tr('Papierkorb')
+          const ul = document.createElement('ul')
+          ul.className = 'ext-roster ext-roster-trash'
+          for (const t of gone) {
+            const li = document.createElement('li')
+            if (/^#[0-9a-fA-F]{6}$/.test(String(t.color ?? ''))) {
+              const dot = document.createElement('span')
+              dot.className = 'ext-roster-dot'
+              dot.style.background = t.color
+              li.append(dot)
+            }
+            const name = document.createElement('span')
+            name.className = 'ext-roster-name'
+            name.textContent = t.name
+            const small = document.createElement('small')
+            small.textContent = [tr(`gelöscht am ${new Date(t.deletedAt).toLocaleDateString(LOCALE)}`), countText(t.count)].filter(Boolean).join(' · ')
+            name.append(small)
+            const back = document.createElement('button')
+            back.type = 'button'
+            back.className = 'btn'
+            back.textContent = tr('Wiederherstellen')
+            back.setAttribute('aria-label', `${t.name}: ${tr('Wiederherstellen')}`)
+            back.onclick = () => restore(t)
+            li.append(name, back)
+            ul.append(li)
+          }
+          const hint = document.createElement('small')
+          hint.className = 'help'
+          hint.textContent = tr(`Gelöschte bleiben ${r.body.trashDays ?? 30} Tage im Papierkorb, dann sind sie endgültig weg.`)
+          bin.append(head, ul, hint)
+        }
+      }
       return r.body
+    }
+    const restore = async (t) => {
+      if (busy) return
+      const r = await post(item.restore, { id: t.id })
+      if (!r.ok) return toast(r.body?.error === 'full' ? 'Es gibt schon so viele Einträge, wie möglich sind' : r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
+      toast(tr(`„${r.body?.name ?? t.name}“ wiederhergestellt`))
+      draw()
     }
     const choose = async (u) => {
       if (busy) return
@@ -15069,9 +15131,13 @@ function extFormMount(sheet, e, fields, saved) {
       }
       setTimeout(wait, 8000)
     }
-    const remove = async (u) => {
+    const remove = async (u, body) => {
       if (busy) return
-      if (!(await ask('Benutzer löschen', `„${u.name}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.`, 'Löschen'))) return
+      const n = Number.isInteger(u.count) ? ` (${countText(u.count)})` : ''
+      const text = item.restore
+        ? tr(`„${u.name}“ kommt mit seinen Einstellungen und seiner Bibliothek${n} in den Papierkorb. Dort lässt er sich ${body?.trashDays ?? 30} Tage lang wiederherstellen.`)
+        : tr(`„${u.name}“ wird mit seinen Einstellungen und seiner Bibliothek${n} gelöscht. Das lässt sich nicht rückgängig machen.`)
+      if (!(await ask('Benutzer löschen', text, 'Löschen'))) return
       const r = await post(item.remove, { id: u.id })
       if (!r.ok) toast(r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
       else toast('Gelöscht')
@@ -15080,9 +15146,10 @@ function extFormMount(sheet, e, fields, saved) {
     const add = async () => {
       const name = input.value.trim()
       if (!name || busy) return
-      const r = await post(item.add, { name })
+      const r = await post(item.add, { name, ...(from?.value ? { from: from.value } : {}) })
       if (!r.ok) return toast(r.body?.error === 'exists' ? 'Den Namen gibt es schon' : r.body?.error === 'busy' ? 'Es läuft gerade etwas anderes' : 'Hat nicht geklappt', 'info')
       input.value = ''
+      if (from) from.value = ''
       toast('Angelegt')
       draw()
     }

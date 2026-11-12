@@ -58,13 +58,13 @@
   {
     "id": "users",
     "name": "Benutzer",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "description": "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.",
     "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIxNzYiIGN5PSIxNTYiIHI9IjY4IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIvPjxwYXRoIGQ9Ik01MiA0MjBhMTI0IDEyNCAwIDAgMSAyNDggMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjM2MCIgY3k9IjE5NiIgcj0iNDgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iY3VycmVudENvbG9yIiBzdHJva2Utd2lkdGg9IjI4Ii8+PHBhdGggZD0iTTM0MCAzMDBhMTA0IDEwNCAwIDAgMSAxMjQgMTIwIiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+Cg==",
     "hostApi": 4,
-    "url": "https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/dist/users-1.3.0.mpx",
-    "sha256": "0e2301c61c921ea6a58be48866ec2d0064513edba3f04d23b2994c72b8c8a089",
-    "size": 10497,
+    "url": "https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/dist/users-1.4.0.mpx",
+    "sha256": "890975b41bdeb819283865863d8d0db8b0be437347c65c186f77f508b162d8c9",
+    "size": 11753,
     "resources": {},
     "system": {
       "udev": 0,

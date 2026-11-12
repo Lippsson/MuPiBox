@@ -1,7 +1,7 @@
 {
   "id": "users",
   "name": "Benutzer",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.",
   "hostApi": 4,
   "resources": {},
@@ -31,7 +31,9 @@
         "remove": "/api/ext/users/remove",
         "select": "/api/ext/users/select",
         "color": "/api/ext/users/color",
-        "help": "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen."
+        "help": "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.",
+        "restore": "/api/ext/users/restore",
+        "addFrom": true
       },
       {
         "key": "switchMode",

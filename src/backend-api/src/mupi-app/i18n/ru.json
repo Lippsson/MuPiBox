@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "Пользователь «{}» будет удалён вместе с настройками и библиотекой. Это нельзя отменить.",
  "{}: Löschen": "{}: Удалить",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Несколько пользователей на одной коробке: у каждого свои настройки и своя библиотека. На дисплее переключаются круглым значком вверху, в веб-приложении пользователей создают, переключают и удаляют. Вход в Spotify общий для всех.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "На дисплее точка цвета пользователя вверху показывает, кто вошёл; нажатие на неё открывает обзор с именами. Активного и последнего пользователя удалить нельзя.",
  "Am Display wechseln": "Переключать на дисплее",
  "{}: Farbe wählen": "{}: Выбрать цвет",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Нажмите на цветную точку, чтобы сменить цвет.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Свободно, одним касанием",
  "Mit Halten": "Удержанием",
  "Nur in der Webapp": "Только в веб-приложении",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "У каждого пользователя своё время прослушивания и тихие часы. Кто на экране переключается на другого пользователя, слушает дальше с его временем. «Удержанием» требует держать плитку столько же, сколько при открытии настроек на экране."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "У каждого пользователя своё время прослушивания и тихие часы. Кто на экране переключается на другого пользователя, слушает дальше с его временем. «Удержанием» требует держать плитку столько же, сколько при открытии настроек на экране.",
+ "{} Eintrag": "{} запись",
+ "Einträge": "записи",
+ "Leere Bibliothek": "Пустая библиотека",
+ "Kopie der Bibliothek von „{}“": "Копия библиотеки «{}»",
+ "Papierkorb": "Корзина",
+ "Wiederherstellen": "Восстановить",
+ "gelöscht am {}": "удалено {}",
+ "„{}“ wiederhergestellt": "«{}» восстановлен",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Записей уже максимальное количество",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Удалённое хранится в корзине {} дней, затем исчезает окончательно.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "«{}» попадёт в корзину вместе с настройками и библиотекой{}. Оттуда его можно восстановить в течение {} дней.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "«{}» будет удалён вместе с настройками и библиотекой{}. Это нельзя отменить.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Вверху экрана точка цвета пользователя показывает, кто вошёл; касание открывает обзор с именами. Новый пользователь начинает с пустой библиотекой или с копией библиотеки другого. Удалённые пользователи попадают в корзину. Активного и последнего пользователя удалить нельзя."
 }

@@ -15,10 +15,17 @@ Mit der Erweiterung **Benutzer** teilen sich mehrere Kinder eine Box: Jeder Benu
 
 Nach der [Installation](installieren.md) öffnest du die Details der Karte **Benutzer** unter **Einstellungen › System › Erweiterungen**:
 
-- **Anlegen**: Namen eintragen und auf **Anlegen** tippen. Ein neuer Benutzer startet mit den Einstellungen dessen, der ihn anlegt, und mit einer **leeren Bibliothek**.
+- **Anlegen**: Namen eintragen, unter **Bibliothek** wählen und auf **Anlegen** tippen. Ein neuer Benutzer startet mit den Einstellungen dessen, der ihn anlegt, und entweder mit einer **leeren Bibliothek** oder einer **Kopie der Bibliothek** eines anderen Benutzers. Die Kopie ist danach unabhängig: Änderungen an der einen ändern die andere nicht.
 - **Farbe**: Jeder Benutzer hat eine Farbe, die du in der Liste ändern kannst.
 - **Wechseln**: schaltet auf diesen Benutzer um.
-- **Löschen**: entfernt den Benutzer mit seinen Einstellungen und seiner Bibliothek. Der aktive und der letzte Benutzer lassen sich nicht löschen.
+- **Löschen**: legt den Benutzer mit seinen Einstellungen und seiner Bibliothek in den **Papierkorb**. Die Liste zeigt bei jedem Benutzer, wie viele Einträge seine Bibliothek hat. Der aktive und der letzte Benutzer lassen sich nicht löschen.
+
+### Papierkorb
+
+Gelöschte Benutzer stehen unter **Papierkorb** und lassen sich dort **30 Tage lang wiederherstellen**, samt Einstellungen und Bibliothek. Danach sind sie endgültig weg. Ist der Name inzwischen vergeben, bekommt der wiederhergestellte Benutzer eine Nummer dahinter, zum Beispiel „Standard (2)“. Der Papierkorb kommt nicht ins [Backup](../wartung/backup.md).
+
+> [!IMPORTANT]
+> Der Benutzer **Standard** hat die Bibliothek, die die Box vor der Erweiterung hatte. Wird er gelöscht und auch aus dem Papierkorb nicht zurückgeholt, ist diese Bibliothek weg. Soll ein neuer Benutzer sie bekommen, lege ihn als **Kopie der Bibliothek von „Standard“** an.
 
 ## Wechseln
 
@@ -35,9 +42,15 @@ Jeder Benutzer hat seine **eigene Spielzeit und Ruhezeit** samt dem Zähler für
 > [!TIP]
 > Soll ein Kind nicht selbst auf den Benutzer eines anderen wechseln können, stelle **Mit Halten** oder **Nur in der Webapp** ein. In der App ist das Wechseln durch die Anmeldung der Eltern geschützt.
 
-## Ausschalten
+## Ausschalten oder entfernen
 
-Der Mehrbenutzer-Betrieb ist eine Erweiterung. Unter **Einstellungen › System › Erweiterungen** lässt er sich ausschalten oder entfernen. Die Box behält dann die Einstellungen und die Bibliothek des Benutzers, der gerade aktiv ist. Die Ordner der anderen Benutzer bleiben liegen, bis die Erweiterung entfernt wird; eingeschaltet geht es mit ihnen weiter.
+Der Mehrbenutzer-Betrieb ist eine Erweiterung. Unter **Einstellungen › System › Erweiterungen** lässt er sich ausschalten oder entfernen.
+
+- Die Box behält die Einstellungen und die Bibliothek des Benutzers, der **gerade aktiv** ist. Für sie ist das dann einfach ihre Bibliothek; ohne Erweiterung gibt es keine Benutzer mehr.
+- Die anderen Benutzer, ihr Papierkorb und die Liste bleiben auf der Karte, auch wenn die Erweiterung entfernt wird. Wird sie wieder installiert oder eingeschaltet, sind alle wieder da, und aktiv ist der, der es zuletzt war, mit dem, was die Box inzwischen in ihre Bibliothek bekommen hat.
+
+> [!TIP]
+> Soll eine bestimmte Bibliothek bleiben, wechsle vor dem Ausschalten zu diesem Benutzer.
 
 ## Gut zu wissen
 

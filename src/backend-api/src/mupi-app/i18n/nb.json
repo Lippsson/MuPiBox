@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "«{}» slettes sammen med innstillinger og bibliotek. Dette kan ikke angres.",
  "{}: Löschen": "{}: Slett",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Flere brukere på én boks: Hver har sine egne innstillinger og sitt eget bibliotek. På skjermen bytter du med det runde merket øverst, i nettappen oppretter, bytter og sletter du brukere. Spotify-innloggingen gjelder for alle.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "På skjermen viser en prikk øverst i brukerens farge hvem som er logget inn; et trykk på den åpner oversikten med navnene. Den aktive brukeren og den siste brukeren kan ikke slettes.",
  "Am Display wechseln": "Bytt på skjermen",
  "{}: Farbe wählen": "{}: Velg farge",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Trykk på en fargeprikk for å endre fargen.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Fritt, med ett trykk",
  "Mit Halten": "Ved å holde",
  "Nur in der Webapp": "Bare i webappen",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Hver bruker har sin egen spilletid og hviletid. Den som bytter til en annen bruker på skjermen, lytter videre med den brukerens spilletid. «Ved å holde» krever at en flis holdes like lenge som når innstillingene åpnes på skjermen."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Hver bruker har sin egen spilletid og hviletid. Den som bytter til en annen bruker på skjermen, lytter videre med den brukerens spilletid. «Ved å holde» krever at en flis holdes like lenge som når innstillingene åpnes på skjermen.",
+ "{} Eintrag": "{} oppføring",
+ "Einträge": "oppføringer",
+ "Leere Bibliothek": "Tomt bibliotek",
+ "Kopie der Bibliothek von „{}“": "Kopi av biblioteket til «{}»",
+ "Papierkorb": "Papirkurv",
+ "Wiederherstellen": "Gjenopprett",
+ "gelöscht am {}": "slettet {}",
+ "„{}“ wiederhergestellt": "«{}» gjenopprettet",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Det finnes allerede så mange oppføringer som mulig",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Slettede blir liggende i papirkurven i {} dager, deretter er de borte for godt.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "«{}» havner i papirkurven med innstillingene og biblioteket sitt{}. Derfra kan den gjenopprettes i {} dager.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "«{}» slettes med innstillingene og biblioteket sitt{}. Det kan ikke angres.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Øverst på skjermen viser en prikk i brukerens farge hvem som er logget inn; et trykk på den åpner oversikten med navnene. En ny bruker starter med et tomt bibliotek eller en kopi av en annen brukers bibliotek. Slettede brukere havner i papirkurven. Den aktive og den siste brukeren kan ikke slettes."
 }

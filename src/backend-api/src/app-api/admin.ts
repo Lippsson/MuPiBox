@@ -447,7 +447,7 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
         'sh',
         '-c',
         `mkdir -p '${path.dirname(staged)}' && { [ ! -e '${LIBRARY}/data.json' ] || cp '${LIBRARY}/data.json' '${staged}'; } && cd '${stage}' && ` +
-          `zip -q -r '${zip}' $([ -e '${staged}' ] && echo '${LIBRARY_ENTRY_BEFORE}') ${sources.map((s) => `'${s}'`).join(' ')} -x '*.tmp' '*.tmp[0-9]*' '*.part' '*.heic.jpg' '*.poster.jpg' '*/users/.staging/*' '*/users/.old/*'; ` +
+          `zip -q -r '${zip}' $([ -e '${staged}' ] && echo '${LIBRARY_ENTRY_BEFORE}') ${sources.map((s) => `'${s}'`).join(' ')} -x '*.tmp' '*.tmp[0-9]*' '*.part' '*.heic.jpg' '*.poster.jpg' '*/users/.staging/*' '*/users/.old/*' '*/users/trash/*'; ` +
           `chmod 644 '${zip}'; rm -rf '${stage}'`,
       ],
       full ? 3600000 : 120000,

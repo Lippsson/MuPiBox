@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "“{}” ayarları ve kitaplığıyla birlikte silinecek. Bu geri alınamaz.",
  "{}: Löschen": "{}: Sil",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Tek kutuda birden çok kullanıcı: Her birinin kendi ayarları ve kendi kitaplığı vardır. Ekranda üstteki yuvarlak simgeyle geçiş yapılır; web uygulamasında kullanıcılar oluşturulur, değiştirilir ve silinir. Spotify girişi herkes için aynıdır.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Ekranın üstündeki kullanıcının renginde bir nokta kimin oturum açtığını gösterir; ona dokununca isimlerin olduğu genel bakış açılır. Etkin kullanıcı ve son kalan kullanıcı silinemez.",
  "Am Display wechseln": "Ekranda geç",
  "{}: Farbe wählen": "{}: Renk seç",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Rengi değiştirmek için renkli noktaya dokunun.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Serbestçe, bir dokunuşla",
  "Mit Halten": "Basılı tutarak",
  "Nur in der Webapp": "Yalnızca web uygulamasında",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Her kullanıcının kendi dinleme süresi ve sessiz saatleri vardır. Ekranda başka bir kullanıcıya geçen, onun süresiyle dinlemeye devam eder. “Basılı tutarak”, bir kutucuğun ekranda ayarları açarken olduğu kadar basılı tutulmasını ister."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Her kullanıcının kendi dinleme süresi ve sessiz saatleri vardır. Ekranda başka bir kullanıcıya geçen, onun süresiyle dinlemeye devam eder. “Basılı tutarak”, bir kutucuğun ekranda ayarları açarken olduğu kadar basılı tutulmasını ister.",
+ "{} Eintrag": "{} öğe",
+ "Einträge": "öğeler",
+ "Leere Bibliothek": "Boş kitaplık",
+ "Kopie der Bibliothek von „{}“": "“{}” kitaplığının kopyası",
+ "Papierkorb": "Çöp kutusu",
+ "Wiederherstellen": "Geri yükle",
+ "gelöscht am {}": "{} tarihinde silindi",
+ "„{}“ wiederhergestellt": "“{}” geri yüklendi",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Zaten olabilecek kadar çok öğe var",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Silinenler {} gün çöp kutusunda kalır, sonra kalıcı olarak gider.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "“{}”, ayarları ve kitaplığıyla{} çöp kutusuna gider. Oradan {} gün boyunca geri yüklenebilir.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "“{}”, ayarları ve kitaplığıyla{} silinecek. Bu geri alınamaz.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Ekranın üstünde kullanıcının renginde bir nokta kimin oturum açtığını gösterir; dokununca adların olduğu genel bakış açılır. Yeni bir kullanıcı boş bir kitaplıkla ya da başka birinin kitaplığının kopyasıyla başlar. Silinen kullanıcılar çöp kutusuna gider. Etkin kullanıcı ve son kullanıcı silinemez."
 }

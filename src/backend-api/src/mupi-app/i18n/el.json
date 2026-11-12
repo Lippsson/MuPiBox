@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "Ο χρήστης «{}» θα διαγραφεί μαζί με τις ρυθμίσεις και τη βιβλιοθήκη του. Αυτό δεν μπορεί να αναιρεθεί.",
  "{}: Löschen": "{}: Διαγραφή",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Πολλοί χρήστες σε ένα κουτί: ο καθένας έχει τις δικές του ρυθμίσεις και τη δική του βιβλιοθήκη. Στην οθόνη η αλλαγή γίνεται από το στρογγυλό σήμα στο πάνω μέρος, ενώ στην εφαρμογή ιστού προσθέτετε, αλλάζετε και διαγράφετε χρήστες. Η σύνδεση στο Spotify ισχύει για όλους.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Στην οθόνη, μια τελεία στο χρώμα του χρήστη στο πάνω μέρος δείχνει ποιος είναι συνδεδεμένος· πατώντας την ανοίγει η επισκόπηση με τα ονόματα. Ο ενεργός χρήστης και ο τελευταίος χρήστης δεν μπορούν να διαγραφούν.",
  "Am Display wechseln": "Αλλαγή στην οθόνη",
  "{}: Farbe wählen": "{}: Επιλογή χρώματος",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Πατήστε μια έγχρωμη τελεία για να αλλάξετε το χρώμα.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Ελεύθερα, με ένα πάτημα",
  "Mit Halten": "Με κράτημα",
  "Nur in der Webapp": "Μόνο στην εφαρμογή web",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Κάθε χρήστης έχει δικό του χρόνο ακρόασης και ώρες ησυχίας. Όποιος αλλάζει σε άλλον χρήστη στην οθόνη συνεχίζει με τον χρόνο εκείνου. Το «Με κράτημα» απαιτεί να κρατηθεί ένα πλακίδιο όσο και για το άνοιγμα των ρυθμίσεων στην οθόνη."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Κάθε χρήστης έχει δικό του χρόνο ακρόασης και ώρες ησυχίας. Όποιος αλλάζει σε άλλον χρήστη στην οθόνη συνεχίζει με τον χρόνο εκείνου. Το «Με κράτημα» απαιτεί να κρατηθεί ένα πλακίδιο όσο και για το άνοιγμα των ρυθμίσεων στην οθόνη.",
+ "{} Eintrag": "{} καταχώριση",
+ "Einträge": "καταχωρίσεις",
+ "Leere Bibliothek": "Κενή βιβλιοθήκη",
+ "Kopie der Bibliothek von „{}“": "Αντίγραφο της βιβλιοθήκης του «{}»",
+ "Papierkorb": "Κάδος",
+ "Wiederherstellen": "Επαναφορά",
+ "gelöscht am {}": "διαγράφηκε στις {}",
+ "„{}“ wiederhergestellt": "Το «{}» επανήλθε",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Υπάρχουν ήδη όσες καταχωρίσεις επιτρέπονται",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Όσα διαγράφονται μένουν στον κάδο {} ημέρες και μετά χάνονται οριστικά.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "Το «{}» πηγαίνει στον κάδο με τις ρυθμίσεις και τη βιβλιοθήκη του{}. Από εκεί επαναφέρεται για {} ημέρες.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "Το «{}» θα διαγραφεί με τις ρυθμίσεις και τη βιβλιοθήκη του{}. Δεν αναιρείται.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Πάνω στην οθόνη μια τελεία στο χρώμα του χρήστη δείχνει ποιος είναι συνδεδεμένος· ένα πάτημα ανοίγει τη λίστα με τα ονόματα. Ένας νέος χρήστης ξεκινά με κενή βιβλιοθήκη ή με αντίγραφο της βιβλιοθήκης άλλου. Οι διαγραμμένοι χρήστες πηγαίνουν στον κάδο. Ο ενεργός και ο τελευταίος χρήστης δεν διαγράφονται."
 }

@@ -3790,7 +3790,6 @@
  "„{}“ wird mit seinen Einstellungen und seiner Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.": "Użytkownik „{}” zostanie usunięty razem z ustawieniami i biblioteką. Tego nie można cofnąć.",
  "{}: Löschen": "{}: Usuń",
  "Mehrere Benutzer an einer Box: Jeder hat seine eigenen Einstellungen und seine eigene Bibliothek. Am Display wechselt man über das runde Zeichen oben, in der Webapp legt man Benutzer an, wechselt und löscht sie. Der Spotify-Login gilt für alle.": "Kilku użytkowników na jednym pudełku: każdy ma własne ustawienia i własną bibliotekę. Na wyświetlaczu przełącza się okrągłą odznaką u góry, w aplikacji webowej tworzy się, przełącza i usuwa użytkowników. Logowanie do Spotify obowiązuje wszystkich.",
- "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "Na wyświetlaczu kropka w kolorze użytkownika u góry pokazuje, kto jest zalogowany; po jej dotknięciu otwiera się przegląd z nazwami. Aktywnego i ostatniego użytkownika nie można usunąć.",
  "Am Display wechseln": "Przełączaj na wyświetlaczu",
  "{}: Farbe wählen": "{}: Wybierz kolor",
  "Tippe auf einen Farbpunkt, um die Farbe zu ändern.": "Dotknij kolorowej kropki, aby zmienić kolor.",
@@ -3844,5 +3843,18 @@
  "Frei, mit einem Tipp": "Swobodnie, jednym dotknięciem",
  "Mit Halten": "Przytrzymaniem",
  "Nur in der Webapp": "Tylko w aplikacji webowej",
- "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Każdy użytkownik ma własny czas słuchania i godziny ciszy. Kto na ekranie przełączy się na innego użytkownika, słucha dalej w jego czasie. „Przytrzymaniem” wymaga przytrzymania kafelka tak długo, jak przy otwieraniu ustawień na ekranie."
+ "Jeder Benutzer hat seine eigene Spielzeit und Ruhezeit. Wer am Display zu einem anderen Benutzer wechselt, hört mit dessen Spielzeit weiter. „Mit Halten“ verlangt, eine Kachel so lange gedrückt zu halten, wie die Einstellungen am Display geöffnet werden.": "Każdy użytkownik ma własny czas słuchania i godziny ciszy. Kto na ekranie przełączy się na innego użytkownika, słucha dalej w jego czasie. „Przytrzymaniem” wymaga przytrzymania kafelka tak długo, jak przy otwieraniu ustawień na ekranie.",
+ "{} Eintrag": "{} wpis",
+ "Einträge": "wpisy",
+ "Leere Bibliothek": "Pusta biblioteka",
+ "Kopie der Bibliothek von „{}“": "Kopia biblioteki użytkownika „{}”",
+ "Papierkorb": "Kosz",
+ "Wiederherstellen": "Przywróć",
+ "gelöscht am {}": "usunięto {}",
+ "„{}“ wiederhergestellt": "„{}” przywrócono",
+ "Es gibt schon so viele Einträge, wie möglich sind": "Jest już tyle wpisów, ile to możliwe",
+ "Gelöschte bleiben {} Tage im Papierkorb, dann sind sie endgültig weg.": "Usunięte zostają w koszu przez {} dni, potem znikają na zawsze.",
+ "„{}“ kommt mit seinen Einstellungen und seiner Bibliothek{} in den Papierkorb. Dort lässt er sich {} Tage lang wiederherstellen.": "„{}” trafi do kosza razem z ustawieniami i biblioteką{}. Stamtąd można go przywrócić przez {} dni.",
+ "„{}“ wird mit seinen Einstellungen und seiner Bibliothek{} gelöscht. Das lässt sich nicht rückgängig machen.": "„{}” zostanie usunięty razem z ustawieniami i biblioteką{}. Tego nie można cofnąć.",
+ "Am Display zeigt oben ein Punkt in der Farbe des Benutzers, wer angemeldet ist; ein Tipp darauf öffnet die Übersicht mit den Namen. Ein neuer Benutzer startet mit einer leeren Bibliothek oder einer Kopie der Bibliothek eines anderen. Gelöschte Benutzer kommen in den Papierkorb. Der aktive Benutzer und der letzte Benutzer lassen sich nicht löschen.": "U góry ekranu kropka w kolorze użytkownika pokazuje, kto jest zalogowany; dotknięcie otwiera przegląd z nazwami. Nowy użytkownik zaczyna z pustą biblioteką albo z kopią biblioteki innego. Usunięci użytkownicy trafiają do kosza. Aktywnego i ostatniego użytkownika nie można usunąć."
 }
