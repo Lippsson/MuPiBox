@@ -4202,13 +4202,15 @@ app.get('/tidal/artist/:id/albums', async (req, res) => {
     const q = new URLSearchParams()
     for (const k of ['from', 'to']) if (typeof req.query[k] === 'string' && /^\d{1,5}$/.test(req.query[k])) q.set(k, req.query[k])
     if (typeof req.query.exclude === 'string' && /^\d{1,15}(,\d{1,15}){0,499}$/.test(req.query.exclude)) q.set('exclude', req.query.exclude)
+    if (req.query.by === 'number') q.set('by', 'number')
     const response = await fetch(`${TIDAL_SERVICE}/artist/${id}/albums${q.size ? `?${q}` : ''}`, { signal: AbortSignal.timeout(45000) })
     const body = response.ok ? await response.json() : null
     if (!Array.isArray(body?.albums)) {
       res.status(response.status === 401 ? 401 : 502).json({ error: 'albums not available' })
       return
     }
-    res.json({ albums: body.albums.map((a) => ({ id: a.id, name: a.name, cover: a.cover ?? null, year: a.year ?? null })) })
+    // (the full date too: "Älteste zuerst" of an entry orders the episodes of one year by it)
+    res.json({ albums: body.albums.map((a) => ({ id: a.id, name: a.name, cover: a.cover ?? null, year: a.year ?? null, date: typeof a.date === 'string' && /^\d{4}(-\d\d){0,2}$/.test(a.date) ? a.date : null })) })
   } catch (error) {
     log.debug(`${now()}: [Spotify Control] Error fetching TIDAL albums of artist ${id}: ${error}`)
     res.status(502).json({ error: 'albums not available' })

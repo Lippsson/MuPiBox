@@ -129,6 +129,7 @@ export function registerTidalRoutes(router: Router, deps: TidalDeps): void {
     for (const k of ['from', 'to']) if (typeof req.query[k] === 'string' && /^\d{1,5}$/.test(req.query[k] as string)) q.set(k, req.query[k] as string)
     if (typeof req.query.exclude === 'string' && /^\d{1,15}(,\d{1,15}){0,499}$/.test(req.query.exclude)) q.set('exclude', req.query.exclude)
     if (req.query.all === '1') q.set('all', '1')
+    if (req.query.by === 'number') q.set('by', 'number')
     relay(await service('GET', `/artist/${id}/albums${q.size ? `?${q}` : ''}`, 30000), res)
   })
 

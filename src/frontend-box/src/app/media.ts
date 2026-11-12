@@ -51,6 +51,8 @@ export interface Media {
   // a whole TIDAL artist: only the albums at these positions by release (1 = the oldest), and without these ids
   range_from?: number
   range_to?: number
+  /** a TIDAL artist's range counts the episodes' numbers in their names, not the positions by release */
+  range_by?: 'number'
   exclude_album_ids?: string[]
   // Full NAS path of this entry's folder, used for NAS media (type: 'nas')
   // to browse/stream it live instead of resolving a local file path.

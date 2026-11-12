@@ -5027,12 +5027,13 @@ async function openTidalItem(x) {
   )
 }
 
-// The range (positions by release, 1 = the oldest) and the left-out albums of an entry of a whole TIDAL artist, as the
-// box's TIDAL service takes them (tidal_service.py narrowed) - '' without any
+// The range (positions by release, 1 = the oldest, or the episodes' numbers: range_by "number") and the left-out albums
+// of an entry of a whole TIDAL artist, as the box's TIDAL service takes them (tidal_service.py narrowed) - '' without any
 function tidalRangeQuery(it) {
   const q = new URLSearchParams()
   if (Number(it?.range_from) >= 1) q.set('from', String(Math.floor(it.range_from)))
   if (Number(it?.range_to) >= 1) q.set('to', String(Math.floor(it.range_to)))
+  if (it?.range_by === 'number' && q.size) q.set('by', 'number')
   const ex = (Array.isArray(it?.exclude_album_ids) ? it.exclude_album_ids : []).filter((x) => /^\d{1,15}$/.test(String(x)))
   if (ex.length) q.set('exclude', ex.join(','))
   return q.toString()
@@ -5041,8 +5042,11 @@ function tidalRangeQuery(it) {
 // The library's sheet of a whole TIDAL artist: the range and the albums left out (as a Spotify subscription has them
 // at its artist in the library) - saved with the sheet. The albums with their positions come from the service.
 function tidalRangeFields(item) {
-  return `<div class="section-label" style="margin:0">${esc('Folgen und Alben')}</div>
-    <p class="help" style="margin:0">${esc('„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = alle.')}</p>
+  const opts = SORTINGS.map(([v, l]) => `<option value="${v}"${(item.sorting ?? '') === v ? ' selected' : ''}>${esc(tr(l))}</option>`).join('')
+  return `<div class="field"><label for="e-tsort">${esc(tr('Reihenfolge am Display'))}</label><select class="input" id="e-tsort">${opts}</select>
+      <small>${esc(tr('Standard: alphabetisch, Zahlen als Zahlen – „Folge 2“ vor „Folge 10“.'))}</small></div>
+    <div class="section-label" style="margin:0">${esc('Folgen und Alben')}</div>
+    <p class="help" style="margin:0" id="e-thelp">${esc('„Folge“ ist die Position nach Erscheinungsdatum (1 = die älteste). Leer = alle.')}</p>
     <div class="rule-times"><div class="field"><label for="e-tfrom">Folge von</label><input class="input" id="e-tfrom" type="number" min="1" value="${esc(item.range_from ?? '')}"></div>
       <div class="field"><label for="e-tto">Folge bis</label><input class="input" id="e-tto" type="number" min="1" value="${esc(item.range_to ?? '')}"></div></div>
     <div id="e-talbums"><p class="help">${esc('Lade die Alben von TIDAL …')}</p></div>`
@@ -5056,7 +5060,14 @@ async function wireTidalRange(item, sheet) {
     box.innerHTML = `<p class="help">${esc(tidalFailText(r))}</p>`
     return
   }
-  const albums = [...(r.body?.albums ?? [])].sort((a, b) => a.position - b.position)
+  // (an artist whose albums carry their episode's number: the range counts those - for an entry without a range yet, or
+  // one saved that way; a range saved by positions before stays as it is)
+  const hasRange = Number(item.range_from) >= 1 || Number(item.range_to) >= 1
+  const byNumber = !!r.body?.numbered && (item.range_by === 'number' || !hasRange)
+  sheet.tidalByNumber = byNumber
+  const keyOf = (al) => (byNumber ? (al.number ?? null) : al.position)
+  const albums = [...(r.body?.albums ?? [])].sort((a, b) => (keyOf(a) ?? Infinity) - (keyOf(b) ?? Infinity) || a.position - b.position)
+  if (byNumber) sheet.querySelector('#e-thelp').textContent = tr('„Folge“ ist die Nummer im Titel (z. B. „Folge 12“). Leer = alle; Alben ohne Nummer gehören dann zu keinem Bereich.')
   const num = (id) => {
     const v = Number(sheet.querySelector(id).value)
     return v >= 1 ? Math.floor(v) : null
@@ -5067,8 +5078,9 @@ async function wireTidalRange(item, sheet) {
     box.innerHTML = albums.length
       ? `<div class="rows">${albums
           .map((al, i) => {
-            const inRange = (lo === null || al.position >= lo) && (hi === null || al.position <= hi)
-            return `<div class="entry${inRange ? '' : ' out'}"><span class="pos">${al.position}</span><span class="lib-thumb">${al.thumb || al.cover ? `<img src="${esc(al.thumb || al.cover)}" alt="" loading="lazy">` : ''}</span>
+            const key = keyOf(al)
+            const inRange = key === null ? lo === null && hi === null : (lo === null || key >= lo) && (hi === null || key <= hi)
+            return `<div class="entry${inRange ? '' : ' out'}"><span class="pos">${key ?? '–'}</span><span class="lib-thumb">${al.thumb || al.cover ? `<img src="${esc(al.thumb || al.cover)}" alt="" loading="lazy">` : ''}</span>
               <span class="lbl"><b translate="no">${esc(al.name)}</b><small>${esc([al.date?.slice(0, 4), inRange ? '' : 'außerhalb des Bereichs'].filter(Boolean).join(' · '))}</small></span>
               <label class="switch"><input type="checkbox" data-tal="${i}" ${inRange && !sheet.tidalExcluded.has(al.id) ? 'checked' : ''} ${inRange ? '' : 'disabled'} aria-label="${esc(al.name)} auf der Box"><span></span></label></div>`
           })
@@ -5099,6 +5111,16 @@ function readTidalRange(sheet, updated) {
   else delete updated.range_from
   if (to) updated.range_to = to
   else delete updated.range_to
+  // (counted by the episodes' numbers: kept with the entry, so the display and the box ask the same way)
+  if (sheet.tidalByNumber && (from || to)) updated.range_by = 'number'
+  else if (from || to) {
+    if (sheet.tidalByNumber === false) delete updated.range_by
+  } else delete updated.range_by
+  const sort = sheet.querySelector('#e-tsort')
+  if (sort) {
+    if (sort.value) updated.sorting = sort.value
+    else delete updated.sorting
+  }
   const ex = [...(sheet.tidalExcluded ?? [])]
   if (ex.length) updated.exclude_album_ids = ex
   else delete updated.exclude_album_ids
