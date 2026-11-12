@@ -154,9 +154,9 @@ test('photo Immich: the test and an album against a server like Immich (old vers
     assert.deepEqual(await testImmich(new ImmichClient(base, 'wrong-key-0123')), { ok: false, error: 'unauthorized' })
     // (a key with chosen rights: one missing is told apart from a wrong key)
     for (const key of ['no-albums-0123', 'no-view-01234', 'no-read-01234']) assert.deepEqual(await testImmich(new ImmichClient(base, key)), { ok: false, error: 'permissions' }, key)
-    const album = await new ImmichClient(base, 'good-key-0123').album(A)
+    const album = await new ImmichClient(base, 'good-key-0123').album(A, AbortSignal.timeout(5000), false)
     assert.equal(album.name, 'Urlaub')
-    assert.deepEqual(album.assets.map((x) => x.id), [P])
+    assert.deepEqual(album.items.map((x) => x.ref), [P])
     version = { major: 1, minor: 105, patch: 0 }
     assert.deepEqual(await testImmich(new ImmichClient(base, 'good-key-0123')), { ok: false, error: 'unsupportedVersion' })
     version = null

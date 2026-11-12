@@ -8,11 +8,30 @@ import { pipeline } from 'node:stream/promises'
 import type { Express, Request, Response, Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
 import { requireCsrf, requireSession } from '../middleware'
-import { checkImmichNow, immichLiveAway, sendImmichLive } from './immich'
+import { checkRemotesNow, remoteOf } from './remote'
 import { VIDEO_EXTENSIONS, videoQueue } from './video'
 import { extOf, NotAPicture, PHOTO_EXTENSIONS, PhotoAborted, photoFiles, processPhoto } from './process'
 import { photoSettings, type PhotoOrder } from './settings'
-import { album as findAlbum, albumDir, albums, assetBase, cardSpace, coverOf, IMMICH_PHOTO_DIR, INCOMING_DIR, isId, NAS_PHOTO_DIR, newId, type PhotoAlbum, type PhotoAsset, photoBytes, sweepLeftovers, update } from './store'
+import {
+  album as findAlbum,
+  albumDir,
+  albums,
+  assetBase,
+  cardSpace,
+  coverOf,
+  IMMICH_PHOTO_DIR,
+  INCOMING_DIR,
+  isId,
+  NAS_PHOTO_DIR,
+  newId,
+  type PhotoAlbum,
+  type PhotoAsset,
+  photoBytes,
+  SERVICE_SOURCES,
+  SYNOLOGY_PHOTO_DIR,
+  sweepLeftovers,
+  update,
+} from './store'
 
 export interface PhotoAlbumDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -60,9 +79,9 @@ const summary = (a: PhotoAlbum) => ({
   count: a.assets.length,
   videos: a.assets.filter((x) => x.kind === 'video').length,
   cover: coverOf(a) ?? null,
-  // (a NAS album: its folder; an Immich album: its id there, and whether it is shown live)
-  ...(a.source === 'nas' || a.source === 'immich' ? { ref: a.ref ?? null } : {}),
-  ...(a.source === 'immich' ? { live: a.live === true } : {}),
+  // (a NAS album: its folder; an album of a photo service: its id there, and whether it is shown live)
+  ...(a.source === 'nas' || SERVICE_SOURCES.includes(a.source) ? { ref: a.ref ?? null } : {}),
+  ...(SERVICE_SOURCES.includes(a.source) ? { live: a.live === true } : {}),
 })
 
 /** Sends one size of a picture of an album (s: grid, f: full, b: background) - only one the list knows */
@@ -75,10 +94,11 @@ async function sendPicture(req: Request, res: Response, onlyShown: boolean): Pro
   if (!a || (onlyShown && !a.display) || !asset) return void res.status(404).end()
   // (a clip still waiting to be made has no picture yet; only a clip has a video)
   if (asset.ready === false || (size === 'v' && asset.kind !== 'video')) return void res.status(404).end()
-  // (an Immich album shown live: the picture comes from Immich; one kept on the box whose picture is not there yet -
-  // switched from live a moment ago, the cache's limit reached - too)
-  if (a.source === 'immich' && (a.live || !(await fsp.access(`${assetBase(a, assetId)}${suffix}`).then(() => true, () => false)))) {
-    return void sendImmichLive(req, res, asset.ref ?? '', size)
+  // (an album of a photo service shown live: the picture comes from the service; one kept on the box whose picture is not
+  // there yet - switched from live a moment ago, the cache's limit reached - too)
+  const remote = remoteOf(a.source)
+  if (remote && (a.live || !(await fsp.access(`${assetBase(a, assetId)}${suffix}`).then(() => true, () => false)))) {
+    return void remote.live.send(req, res, a.ref ?? '', { ref: asset.ref ?? '', ver: asset.ver ?? '' }, size)
   }
   // (an id is never used for another picture: kept by the browser for long)
   // (dotfiles: the data folder is below /home/dietpi/.mupibox - express refuses a path with a dot folder by default)
@@ -135,12 +155,14 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
     res.setHeader('Cache-Control', 'no-store')
     const list = await albums()
     // (the pictures on the card: the uploaded ones and those of the NAS folders in the cache)
-    const [space, used, nasUsed, immichUsed] = req.query.light ? [null, 0, 0, 0] : await Promise.all([cardSpace(), photoBytes(), photoBytes(NAS_PHOTO_DIR), photoBytes(IMMICH_PHOTO_DIR)])
+    const [space, used, nasUsed, immichUsed, synologyUsed] = req.query.light
+      ? [null, 0, 0, 0, 0]
+      : await Promise.all([cardSpace(), photoBytes(), photoBytes(NAS_PHOTO_DIR), photoBytes(IMMICH_PHOTO_DIR), photoBytes(SYNOLOGY_PHOTO_DIR)])
     res.json({
       enabled: photoSettings(deps.getMupiboxConfig()).enabled,
       albums: list.map(summary),
       totals: { photos: list.reduce((n, a) => n + a.assets.length, 0), videos: 0, albums: list.length },
-      storage: space ? { total: space.total, free: space.free, photos: used + nasUsed + immichUsed } : null,
+      storage: space ? { total: space.total, free: space.free, photos: used + nasUsed + immichUsed + synologyUsed } : null,
     })
   })
 
@@ -397,10 +419,10 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
     const s = photoSettings(deps.getMupiboxConfig())
     if (!s.enabled) return void res.json({ enabled: false, albums: [] })
     const list = (await albums()).map(withShown).filter((a) => a.display && a.assets.length > 0)
-    // (albums shown live from Immich while it is away: "Gerade nicht da" on the display; ?check=1 - "Nochmal", or the
-    // display asking while albums are not there - asks Immich first)
-    if (req.query.check === '1') await checkImmichNow()
-    const away = immichLiveAway()
+    // (albums shown live from a photo service while it is away: "Gerade nicht da" on the display; ?check=1 - "Nochmal",
+    // or the display asking while albums are not there - asks the services first)
+    if (req.query.check === '1') await checkRemotesNow()
+    const away = (a: PhotoAlbum) => a.live === true && remoteOf(a.source)?.live.away() === true
     res.json({
       enabled: true,
       startAsSlideshow: s.startAsSlideshow,
@@ -409,7 +431,7 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
         // (the stack: pictures - a clip's own picture too, when it is shown)
         const first = coverOf(a)
         const second = a.assets.find((x) => x.id !== first)?.id ?? null
-        return { id: a.id, title: a.title, count: a.assets.length, pictures: [first, second].filter(Boolean), ...(away && a.source === 'immich' && a.live ? { away: true } : {}) }
+        return { id: a.id, title: a.title, count: a.assets.length, pictures: [first, second].filter(Boolean), ...(away(a) ? { away: true } : {}) }
       }),
     })
   })
