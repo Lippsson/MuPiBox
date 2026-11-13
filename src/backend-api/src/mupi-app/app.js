@@ -14807,6 +14807,11 @@ function extFormHtml(e, fields) {
         // The label stands left of the list.
         return `<div class="field ext-pin" data-ext-dep="${esc(it.dep ?? '')}"><label for="xg-${k}">${esc(it.label)}</label><select class="input" id="xg-${k}" data-xgpio="${k}" translate="no"><option value="0">–</option></select>${help}</div>`
       }
+      if (it.type === 'status') {
+        // a few lines the extension reports about itself (hostApi 6: is the device there, what did it see last): filled in and kept up
+        // to date by extFormMount
+        return `<div class="field ext-status" data-ext-dep=""><label>${esc(it.label)}</label><dl class="ext-status-rows" data-xstatus="${index}" aria-live="polite"></dl>${help}</div>`
+      }
       if (it.type === 'roster') {
         // a list the extension keeps itself (the users of the box, say): to look at, to add to, to take from and to choose from
         return `<div class="field"><label>${esc(it.label)}</label><ul class="ext-roster" data-xroster="${index}" aria-live="polite"></ul><div class="row" style="gap:8px"><input class="input" type="text" maxlength="24" data-xradd="${index}" placeholder="Name" autocomplete="off" aria-label="${esc(it.label)}" ${NO_PW_MANAGER}><button type="button" class="btn" data-xraddgo="${index}">Anlegen</button></div>${it.addFrom ? `<div class="field ext-roster-from"><label for="xrfrom-${index}">Bibliothek</label><select class="input" id="xrfrom-${index}" data-xrfrom="${index}"><option value="">Leere Bibliothek</option></select></div>` : ''}<div data-xrtrash="${index}"></div>${help}</div>`
@@ -14851,7 +14856,7 @@ function extFormHtml(e, fields) {
       return lastOfSeries ? `${html}<div class="ext-add" data-xaddrow="${g.series}"><button type="button" class="btn" data-xadd="${g.series}"><span aria-hidden="true">+</span> <span>${esc(g.heading.label)}</span></button></div>` : html
     })
     .join('')
-  const hasText = fields.some((it) => type(it) !== 'boolean' && type(it) !== 'gpio' && !it.choices && it.type !== 'lookup' && it.type !== 'roster' && it.type !== 'heading')
+  const hasText = fields.some((it) => type(it) !== 'boolean' && type(it) !== 'gpio' && !it.choices && it.type !== 'lookup' && it.type !== 'roster' && it.type !== 'heading' && it.type !== 'status')
   return { form, hasText }
 }
 
@@ -15136,6 +15141,31 @@ function extFormMount(sheet, e, fields, saved) {
       keep()
     })
   }
+  // (a status: the route of the extension answers { rows: [{ label, value, tone }] }; drawn now and again every few seconds for as
+  // long as the card is on the page)
+  fields.forEach((item, index) => {
+    if (item.type !== 'status') return
+    const box = sheet.querySelector(`[data-xstatus="${index}"]`)
+    if (!box) return
+    let timer = 0
+    const draw = async () => {
+      if (!box.isConnected) return clearInterval(timer)
+      const r = await api(item.state, { timeoutMs: 8000 })
+      if (!box.isConnected) return clearInterval(timer)
+      const rows = r.ok && Array.isArray(r.body?.rows) ? r.body.rows : [{ label: 'Status', value: 'Nicht erreichbar', tone: 'warn' }]
+      box.textContent = ''
+      for (const row of rows.slice(0, 12)) {
+        const dt = document.createElement('dt')
+        dt.textContent = tr(String(row.label ?? ''))
+        const dd = document.createElement('dd')
+        dd.textContent = tr(String(row.value ?? ''))
+        if (['ok', 'warn', 'error'].includes(row.tone)) dd.className = `ext-status-${row.tone}`
+        box.append(dt, dd)
+      }
+    }
+    draw()
+    timer = setInterval(draw, 2500)
+  })
   // (a roster: the extension's list route says who is there and who is the current one; a change goes through the add, remove
   // and select routes. Choosing takes the box a while - it restarts - so the app waits for it and then loads itself again.)
   fields.forEach((item, index) => {

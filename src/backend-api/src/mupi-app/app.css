@@ -1394,6 +1394,13 @@ textarea[hidden] { display: none; }
 .field.ext-pin > label { flex: 0 0 auto; }
 .field.ext-pin > select { flex: 1 1 200px; min-width: 0; }
 .field.ext-pin > small { flex-basis: 100%; }
+/* the lines an extension reports about itself (a "status" field): a label, and what it says, with a colour for good and bad */
+.ext-status-rows { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 4px 0 0; padding: 10px 12px; border: 1px solid var(--mp-border); border-radius: var(--mp-r); background: var(--mp-surface); font-size: 15px; }
+.ext-status-rows dt { color: var(--mp-muted, inherit); opacity: .8; }
+.ext-status-rows dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.ext-status-rows dd.ext-status-ok { color: var(--mp-ok, #2e9d57); }
+.ext-status-rows dd.ext-status-warn { color: var(--mp-warn, #c98a00); }
+.ext-status-rows dd.ext-status-error { color: var(--mp-danger, #d64545); }
 /* a list to put in order by dragging (an "order" field of an extension) */
 .ext-order { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ext-order li { display: flex; align-items: center; gap: 12px; padding: 4px 12px 4px 4px; border: 1px solid var(--mp-border); border-radius: var(--mp-r); background: var(--mp-surface); font-size: 15px; font-weight: 600; user-select: none; }

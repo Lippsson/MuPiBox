@@ -344,6 +344,19 @@ describe('GPIO pins the user chooses, and a page of its own (hostApi 5)', () => 
   })
 })
 
+describe('a status block (hostApi 6)', () => {
+  const manifest = (items: unknown[], hostApi = 6) => base({ id: 'xy', hostApi, settings: { t: { type: 'string' } }, ui: { title: 'T', items } })
+  it('a status block names a route of the extension that tells what to show', () => {
+    assert.strictEqual(checkManifest(manifest([{ type: 'status', label: 'Leser', state: '/api/ext/xy/state' }, { key: 't', label: 'T' }]), files()), null)
+    assert.match(String(checkManifest(manifest([{ type: 'status', label: 'Leser', state: '/api/ext/xy/state' }], 5), files())), /status needs hostApi 6/)
+    assert.match(String(checkManifest(manifest([{ type: 'status', label: 'Leser' }]), files())), /status address/)
+    assert.match(String(checkManifest(manifest([{ type: 'status', label: 'Leser', state: '/api/ext/other/state' }]), files())), /status address/)
+    assert.match(String(checkManifest(manifest([{ type: 'status', label: 'Leser', state: '/api/ext/xy/../state' }]), files())), /status address/)
+    assert.ok(checkManifest(manifest([{ type: 'status', label: 'Leser', state: '/api/ext/xy/state', key: 't' }]), files()), 'no setting')
+    assert.ok(checkManifest(manifest([{ type: 'status', label: 'Leser', state: '/api/ext/xy/state', choices: [] }]), files()))
+  })
+})
+
 describe('the buttons extension of this repository', () => {
   const extDir = path.join(process.cwd(), '..', '..', 'extensions')
   const buttons = JSON.parse(readFileSync(path.join(extDir, 'buttons', 'manifest.json'), 'utf8')) as Manifest
@@ -368,6 +381,41 @@ describe('the buttons extension of this repository', () => {
     const checked = verifyPackage(bytes)
     assert.strictEqual(checked.ok, true)
     if (checked.ok) assert.deepStrictEqual(checked.pkg.manifest, buttons, 'the package holds the manifest of the repository')
+  })
+})
+
+describe('the NFC extension of this repository', () => {
+  const extDir = path.join(process.cwd(), '..', '..', 'extensions')
+  const nfc = JSON.parse(readFileSync(path.join(extDir, 'nfc', 'manifest.json'), 'utf8')) as Manifest
+  it('has a manifest the installer accepts: a status block, two pins to choose, a page under System', () => {
+    assert.strictEqual(checkManifest(nfc, files('api.js', 'icon.svg', '99-mpx-nfc.rules')), null)
+    assert.strictEqual(nfc.hostApi, 6)
+    assert.strictEqual(nfc.ui?.place, 'system')
+    assert.deepStrictEqual(nfc.resources, {}, 'no pin of its own: the user chooses BUSY and RST')
+    assert.deepStrictEqual(nfc.system?.packages, ['python3-spidev', 'python3-lgpio'])
+  })
+  it('has a udev rule that opens the SPI device for the group of the header pins - and nothing that runs a program', () => {
+    const rule = readFileSync(path.join(extDir, 'nfc', '99-mpx-nfc.rules'), 'utf8')
+    assert.strictEqual(checkUdevRules(rule), null)
+    assert.match(rule, /SUBSYSTEM=="spidev"/)
+    assert.match(rule, /GROUP="gpio"/)
+  })
+  it('takes the settings the app sends: a reader, a chip select, two pins, the kinds of tags', () => {
+    assert.strictEqual(checkSettings(nfc, { reader: 'pn5180', spiDevice: '0.1', busyPin: 25, resetPin: 23, tech: 'v' }).ok, true)
+    assert.strictEqual(checkSettings(nfc, { reader: 'rc522' }).ok, false)
+    assert.strictEqual(checkSettings(nfc, { spiDevice: '1.0' }).ok, false)
+    assert.strictEqual(checkSettings(nfc, { busyPin: 40 }).ok, false)
+  })
+  it('is packed as the catalog says, with its Python driver in it', () => {
+    const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'nfc')
+    const bytes = readFileSync(path.join(extDir, 'dist', `nfc-${entry.version}.mpx`))
+    assert.strictEqual(createHash('sha256').update(bytes).digest('hex'), entry.sha256)
+    const checked = verifyPackage(bytes)
+    assert.strictEqual(checked.ok, true)
+    if (checked.ok) {
+      assert.deepStrictEqual(checked.pkg.manifest, nfc, 'the package holds the manifest of the repository')
+      assert.ok(checked.pkg.files.has('pn5180.py'))
+    }
   })
 })
 

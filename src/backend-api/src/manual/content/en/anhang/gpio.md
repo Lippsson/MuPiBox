@@ -27,7 +27,7 @@ On your box this table shows **only the pins that are in use there** with the cu
 
 ## Pins for your own buttons
 
-With the extension [Buttons & GPIO Input](../erweiterungen/buttons.md) you connect your own buttons to free GPIO pins. Which pins are free on your box is shown by the extension's own list: pins in use cannot be chosen there, and the list says who holds them. Other [extensions](../erweiterungen/index.md) can hold pins too; the box checks that before installing.
+With the extension [Buttons & GPIO Input](../erweiterungen/buttons.md) you connect your own buttons to free GPIO pins. Which pins are free on your box is shown by the extension's own list: pins in use cannot be chosen there, and the list says who holds them. Other [extensions](../erweiterungen/index.md) can hold pins too; the box checks that before installing. The [NFC reader](../erweiterungen/nfc.md) takes the SPI port (GPIO 8, 9, 10 and 11) and two pins you choose in the extension; you can choose it as an accessory in the map above.
 
 ## Where else is the pin setting?
 

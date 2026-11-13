@@ -15,6 +15,7 @@ Ein ZIP (wie die `.wsz`-Skins) mit festen Namen:
 | `api.js` | API (`server`, Node, CommonJS) | `exports.activate(host)` – Routen unter `/api/ext/<id>/`, Dienste |
 | `display.js` | Display (Chromium, ES-Modul) | `export function activate(api)` – Tabs, Knöpfe, Anzeigen |
 | `icon.svg`, weitere Dateien | alle | werden unter `/ext/<id>/…` ausgeliefert (Skripte nur `display.js` und was es lädt; `player.js`/`api.js` nie) |
+| `*.py` | vom API-Teil gestartet | Python-Programme (`hostApi` 6), die der API-Teil als Kindprozess startet, wenn Node nicht reicht (SPI zum Beispiel); nie ausgeliefert |
 
 Die Webapp der Eltern führt **keinen Code** einer Extension aus (sie läuft mit der Anmeldung der Eltern): die Einstellungen
 beschreibt die Extension im Manifest (`ui`), die Webapp zeichnet sie.
@@ -135,7 +136,17 @@ Webapp › Einstellungen › System › **Erweiterungen**: Karten wie auf der Er
 was der Katalog bietet, steht mit „Installieren“ dahinter. Nur mit Anmeldung (Eltern). Nach einer Änderung starten Player, API und Display neu (eine Wiedergabe
 bricht dabei ab; die Webapp sagt es vorher).
 
-## Die Schnittstellen (`hostApi` 1 bis 5)
+## Die Schnittstellen (`hostApi` 1 bis 6)
+
+Die Nummer 6 (NFC-Reader) bringt zwei Dinge:
+
+- **`type: "status"`** in `ui.items`: ein Block mit Zeilen, den die Extension selbst meldet (`label`, `state` = die Adresse einer Route ihres API-Teils,
+  `/api/ext/<id>/<name>`, mit Anmeldung; ohne `key`, `dep`, `choices`). Die Route antwortet mit `{ rows: [{ label, value, tone }] }` (`tone`:
+  `ok`, `warn` oder `error`, sonst keine Farbe, höchstens 12 Zeilen); die Webapp fragt sie alle zweieinhalb Sekunden, solange die Karte offen ist.
+  `label` und `value` übersetzt die Webapp, wenn sie den Text genau kennt; also feste Sätze melden, keine zusammengesetzten.
+- Dateien **`*.py`** im Paket: Python-Programme, die der API-Teil als Kindprozess startet (wie die Taster `gpiomon`). Sie werden nie ausgeliefert.
+  Debian-Pakete dafür (`python3-spidev`) kommen über `system.packages`; den Zugriff auf `/dev/spidev…` gibt eine udev-Regel (`GROUP`, `MODE`).
+  Nach dem Einsetzen einer Regel für den SPI-Bus stößt der Kern `udevadm trigger --subsystem-match=spidev` an.
 
 Die Nummer 5 (Taster) bringt im Manifest:
 
@@ -234,6 +245,8 @@ Extension (`extensions/clock/`, `api.header` im Display); sie ist nicht mehr im 
 `hostApi` 2: `api.overlay`, `api.fetchApi`, `lookup`): Open-Meteo oder MET Norway, die Anzeigen sind die SteelSeries-Messuhren
 (BSD-2, im Paket mitgeliefert). Die vierte sind die Benutzer (`extensions/users/`, `hostApi` 4): jeder Benutzer hat seine Einstellungen und seine Bibliothek, gewechselt wird am Display (rundes Zeichen in der Kopfzeile) oder in der Webapp; der Spotify-Login, WLAN, NAS und die Hardware sind für alle gleich. Beim Wechsel sichert die Extension den Stand des bisherigen Benutzers in ihrem Ordner, lädt den des neuen, und die Box startet neu.
 
+Die sechste ist der NFC-Reader (`extensions/nfc/`, `hostApi` 6): ein Leser mit dem Chip PN5180 am SPI-Anschluss. Der Treiber (`pn5180.py`, Python mit `python3-spidev` und `python3-lgpio`) spricht den Chip an, wie sein Datenblatt es für die Verbindung vorsieht (BUSY-Handshake, Register, `SEND_DATA`/`READ_DATA`), sucht ISO-14443-A-Tags (Anticollision über die drei Cascade-Stufen, bis zu 10 Byte UID) und ISO-15693-Tags (Inventory) und meldet je eine JSON-Zeile (`ready`, `tag`, `gone`, `error`). Der API-Teil (`api.js`, `runner.js`) startet ihn mit den gewählten Pins (BUSY und RST: Einstellungen vom Typ `gpio`), startet ihn nach einem Ende neu (3 s, dann langsamer bis 60 s) und meldet den Zustand mit einem `status`-Block. Getestet ist alles ohne Hardware: ein Modell des Chips beantwortet die Rahmen des Treibers (`python -m unittest discover -s extensions/nfc/test`, `node --test extensions/nfc/test/nfc.test.js`). Was ein Tag auslösen soll (ein Album starten), ist der nächste Schritt; der API-Teil hat dafür die Stelle (`onEvent`, Berichte `tag` und `gone`).
+
 Die fünfte sind die Taster (`extensions/buttons/`, „Buttons & GPIO Input“, `hostApi` 5, nur ein API-Teil): bis zu sechs einzelne Taster und zwei
 Tasterpaare an frei wählbaren GPIO-Pins (gegen Masse, der interne Pull-up ist eingeschaltet). Am Anfang steht nur ein Taster da, weitere und die
 Paare kommen mit „+“ dazu, und jeder kann einen eigenen Namen bekommen. Ein Taster hat eine Aktion für kurzes Drücken
@@ -247,7 +260,7 @@ die Logik (`logic.js`) ist ohne Hardware getestet (`node --test extensions/butto
 ## Offen (für Foto/Immich, NFC)
 
 Was eine Foto- oder Immich-Extension noch bräuchte (Ruhezustand im Display, eigene Nutzungsdauer, ein `lookup` ohne Suchwort) und was NFC
-bräuchte (`spi`/`i2c`), steht mit dem Abgleich zu Waldemars Zweig `layout` in `docs/5.1-abstimmung.md`.
+noch bräuchte (ein Tag startet ein Album: `host.albums`/`player.open`; der Zugriff auf SPI läuft über die udev-Regel, nicht über `system.groups`), steht mit dem Abgleich zu Waldemars Zweig `layout` in `docs/5.1-abstimmung.md`.
 Dort steht auch, dass `EXT_DIR` (API und Player) beim Umzug auf die vier Ordner von 5.1 über `paths.ts` gehen soll.
 
 ## Eine Extension bauen

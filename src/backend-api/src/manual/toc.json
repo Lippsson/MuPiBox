@@ -388,6 +388,13 @@
           "de": "Benutzer",
           "en": "Users"
         }
+      },
+      {
+        "id": "nfc",
+        "title": {
+          "de": "NFC-Reader",
+          "en": "NFC reader"
+        }
       }
     ]
   },

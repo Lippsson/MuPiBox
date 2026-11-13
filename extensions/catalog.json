@@ -56,6 +56,27 @@
     }
   },
   {
+    "id": "nfc",
+    "name": "NFC-Reader",
+    "version": "0.1.0",
+    "description": "Ein NFC-Leser mit dem Chip PN5180 am SPI-Anschluss der Box liest Tags (ISO 14443 A und ISO 15693). Die Einstellungen stehen unter System › NFC-Reader.",
+    "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIxNTAiIGN5PSIyNTYiIHI9IjI2IiBmaWxsPSJjdXJyZW50Q29sb3IiLz48cGF0aCBkPSJNMjI2IDE5MGE4MiA4MiAwIDAgMSAwIDEzMk0yOTIgMTQ2YTE0MCAxNDAgMCAwIDEgMCAyMjBNMzU4IDEwMmExOTggMTk4IDAgMCAxIDAgMzA4IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIzMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+Cg==",
+    "hostApi": 6,
+    "url": "https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/dist/nfc-0.1.0.mpx",
+    "sha256": "8d21be497b59387e2c0c6d75d711f5cdb6abdd9db0f5719a8187a821a67b12eb",
+    "size": 12962,
+    "resources": {},
+    "system": {
+      "udev": 1,
+      "units": [],
+      "groups": [],
+      "packages": [
+        "python3-spidev",
+        "python3-lgpio"
+      ]
+    }
+  },
+  {
     "id": "users",
     "name": "Benutzer",
     "version": "1.4.0",

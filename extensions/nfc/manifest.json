@@ -1,0 +1,59 @@
+{
+  "id": "nfc",
+  "name": "NFC-Reader",
+  "version": "0.1.0",
+  "description": "Ein NFC-Leser mit dem Chip PN5180 am SPI-Anschluss der Box liest Tags (ISO 14443 A und ISO 15693). Die Einstellungen stehen unter System › NFC-Reader.",
+  "hostApi": 6,
+  "resources": {},
+  "api": "api.js",
+  "icon": "icon.svg",
+  "settings": {
+    "reader": { "type": "string", "default": "none", "options": ["none", "pn5180"] },
+    "spiDevice": { "type": "string", "default": "0.0", "options": ["0.0", "0.1"] },
+    "busyPin": { "type": "gpio", "default": 0 },
+    "resetPin": { "type": "gpio", "default": 0 },
+    "tech": { "type": "string", "default": "both", "options": ["both", "a", "v"] }
+  },
+  "system": {
+    "udev": [{ "name": "99-mpx-nfc.rules", "file": "99-mpx-nfc.rules" }],
+    "packages": ["python3-spidev", "python3-lgpio"]
+  },
+  "ui": {
+    "title": "NFC-Reader",
+    "heading": "NFC-Reader",
+    "help": "Der Leser PN5180 spricht über SPI mit der Box; SPI muss eingeschaltet sein (dtparam=spi=on in der config.txt, danach neu starten). Die Leitungen MOSI, MISO, SCK und NSS sind fest, BUSY und RST legst du hier auf zwei freie Pins. Die Belegung steht im Handbuch unter Erweiterungen › NFC-Reader.",
+    "place": "system",
+    "items": [
+      { "type": "status", "label": "Zustand", "state": "/api/ext/nfc/state" },
+      { "type": "heading", "label": "Leser" },
+      {
+        "key": "reader",
+        "label": "Typ",
+        "choices": [
+          { "value": "none", "label": "Kein Leser" },
+          { "value": "pn5180", "label": "PN5180" }
+        ]
+      },
+      {
+        "key": "spiDevice",
+        "label": "NSS an",
+        "choices": [
+          { "value": "0.0", "label": "CE0 · Pin 24" },
+          { "value": "0.1", "label": "CE1 · Pin 26" }
+        ]
+      },
+      { "key": "busyPin", "label": "GPIO-Pin BUSY", "help": "Zum Beispiel GPIO 25 (Pin 22)." },
+      { "key": "resetPin", "label": "GPIO-Pin RST", "help": "Zum Beispiel GPIO 23 (Pin 16)." },
+      { "type": "heading", "label": "Tags", "help": "ISO 14443 A sind NTAG, MIFARE und die meisten Karten und Sticker, ISO 15693 sind ICODE und SLIX." },
+      {
+        "key": "tech",
+        "label": "Erkennen",
+        "choices": [
+          { "value": "both", "label": "Beide" },
+          { "value": "a", "label": "ISO 14443 A" },
+          { "value": "v", "label": "ISO 15693" }
+        ]
+      }
+    ]
+  }
+}

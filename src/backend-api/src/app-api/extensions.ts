@@ -33,7 +33,7 @@ if (!process.env.MUPIBOX_EXT_DIR && process.env.NODE_ENV !== 'test' && process.e
     // (the other process was faster, or it is not possible: then they stay where they are and are not found - logged by the load)
   }
 }
-export const HOST_API = 5
+export const HOST_API = 6
 // (the catalog of the MuPiBox, in its repository: what is in it is trusted - an extension can do everything on the box; while 5.1
 // is not with splitti yet, the 5.1 branch of the fork that builds it)
 const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/catalog.json'
@@ -48,7 +48,8 @@ const FILE = /^[A-Za-z0-9_][A-Za-z0-9_./-]{0,100}$/
 // what a package may hold (a file of another kind is a reason to refuse it)
 const ALLOWED_FILES = /\.(js|mjs|json|svg|png|jpg|css|txt|md|rules|html)$/i
 // ... and what a package may hold beyond that: the unit files of its systemd services (never served to a browser)
-const PACKAGE_FILES = /\.(js|mjs|json|svg|png|jpg|css|txt|md|rules|html|service|timer)$/i
+// (hostApi 6: also Python programs, which the API part starts itself - a driver that talks to a device needs more than Node has; never served either)
+const PACKAGE_FILES = /\.(js|mjs|json|svg|png|jpg|css|txt|md|rules|html|service|timer|py)$/i
 const GROUPS = new Set(['cdrom', 'audio', 'video', 'plugdev'])
 // (a Debian package name; never one that ends in - : apt-get reads "name-" as "remove name" - "g++" is a real one)
 const PACKAGE = /^[a-z0-9][a-z0-9+.-]{0,59}[a-z0-9+]$/
@@ -73,7 +74,7 @@ export interface Manifest {
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
-  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading'; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean }[] }
+  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading' | 'status'; state?: string; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -374,7 +375,7 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
     const settings = x.settings ?? {}
     for (const item of ui.items) {
       // (a roster is a list of things the extension keeps itself - users, say - and needs no setting; a heading is only a line of text)
-      if (item?.type !== 'roster' && item?.type !== 'heading' && !Object.hasOwn(settings, String(item?.key))) return `ui: no such setting: ${item?.key}`
+      if (item?.type !== 'roster' && item?.type !== 'heading' && item?.type !== 'status' && !Object.hasOwn(settings, String(item?.key))) return `ui: no such setting: ${item?.key}`
       if (typeof item.label !== 'string' || item.label.length > 100 || (item.help !== undefined && (typeof item.help !== 'string' || item.help.length > 800))) return `ui: bad text: ${item.key}`
       // (a field that depends on another: shown while a switch is on, or - hostApi 5 - while a pin is chosen)
       const depType = item.dep !== undefined && Object.hasOwn(settings, String(item.dep)) ? settings[item.dep].type : undefined
@@ -387,6 +388,13 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
         // or while one of its pins is chosen)
         if (item.rename !== undefined && !(Object.hasOwn(settings, String(item.rename)) && settings[item.rename].type === 'string' && settings[item.rename].options === undefined)) return `ui: rename must be a text setting: ${item.label}`
         if (item.optional !== undefined && !(Object.hasOwn(settings, String(item.optional)) && settings[item.optional].type === 'boolean')) return `ui: optional must be a switch: ${item.label}`
+        continue
+      }
+      if (item.type === 'status') {
+        // (hostApi 6) a read-only block of lines the extension's own API part reports: the app asks the route now and then while the
+        // card is open and shows what it answers ({ rows: [{ label, value, tone }] }) - whether a device is there, what it saw last
+        if (x.hostApi < 6 || item.key !== undefined || item.choices !== undefined || item.extra !== undefined || item.dep !== undefined) return `ui: a status needs hostApi 6 and has no setting: ${item.label}`
+        if (typeof item.state !== 'string' || !new RegExp(`^/api/ext/${x.id}/[a-z]{1,30}$`).test(item.state)) return `ui: bad status address: ${item.label}`
         continue
       }
       // (a pin is chosen from the pins of the box: the app draws the choice, the manifest has no say in it)
@@ -719,6 +727,8 @@ async function installExtension(id: string, deps: ExtensionDeps, uploaded?: Pack
     if ((sys.udev ?? []).length > 0 || staleRules.length > 0) {
       await run('sudo', ['udevadm', 'control', '--reload'], 20000)
       await run('sudo', ['udevadm', 'trigger', '--subsystem-match=block', '--action=change'], 20000)
+      // (a rule for the SPI bus - an NFC reader, say - applies to the device that is there already)
+      await run('sudo', ['udevadm', 'trigger', '--subsystem-match=spidev', '--action=change'], 20000)
     }
     for (const group of sys.groups ?? []) {
       const r = await run('sudo', ['usermod', '-aG', group, 'dietpi'], 20000)
