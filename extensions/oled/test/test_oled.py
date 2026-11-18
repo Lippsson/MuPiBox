@@ -554,8 +554,8 @@ class PicturesTest(unittest.TestCase):
         self.assertEqual(lit(got, (0, 16, 128, 48)), 128 * 32)
 
 
-class ConvertTest(unittest.TestCase):
-    """What the picture of the user becomes: 1 bit, 128 x 64, white on black."""
+class CheckTest(unittest.TestCase):
+    """The picture of the user is taken only when it is 1 bit and 128 x 64 already: nothing is converted."""
 
     def png(self, image):
         import io
@@ -564,80 +564,70 @@ class ConvertTest(unittest.TestCase):
         return buffer.getvalue()
 
     def drawing_on_white(self):
-        image = Image.new('RGB', (200, 100), 'white')
-        for x in range(60, 140):
-            for y in range(30, 70):
+        image = Image.new('RGB', (128, 64), 'white')
+        for x in range(40, 90):
+            for y in range(20, 44):
                 image.putpixel((x, y), (0, 0, 0))
         return image
 
-    def test_the_result_is_a_1_bit_picture_of_128_x_64(self):
-        out = render.convert_picture(self.png(self.drawing_on_white()))
+    def test_a_1bit_picture_of_128_x_64_is_taken_as_it_is(self):
+        out = render.check_picture(self.png(self.drawing_on_white()))
         self.assertEqual((out.size, out.mode), ((128, 64), '1'))
+        self.assertEqual(out.getpixel((64, 32)), 0, 'nothing is turned around: the black drawing stays black')
+        self.assertEqual(out.getpixel((2, 2)), 255, 'and the white ground stays lit')
+        # (a real 1-bit PNG, and a grey-scale one with only 0 and 255, are taken too)
+        bits = Image.new('1', (128, 64), 1)
+        self.assertEqual(render.check_picture(self.png(bits)).tobytes(), bits.tobytes())
+        self.assertEqual(render.check_picture(self.png(Image.new('L', (128, 64), 255))).getpixel((0, 0)), 255)
 
-    def test_a_black_drawing_on_white_is_turned_around_in_auto(self):
-        out = render.convert_picture(self.png(self.drawing_on_white()), style='auto')
-        self.assertEqual(out.getpixel((64, 32)), 255, 'the drawing is lit')
-        self.assertEqual(out.getpixel((2, 2)), 0, 'the ground is dark')
-        kept = render.convert_picture(self.png(self.drawing_on_white()), style='keep')
-        self.assertEqual(kept.getpixel((64, 32)), 0)
-        self.assertEqual(kept.getpixel((2, 2)), 255)
-        turned = render.convert_picture(self.png(self.drawing_on_white()), style='invert')
-        self.assertEqual(turned.tobytes(), out.tobytes())
+    def test_any_other_size_is_refused_not_scaled(self):
+        for size in ((256, 128), (127, 64), (128, 63), (64, 128), (50, 100)):
+            with self.assertRaises(render.PictureError) as caught:
+                render.check_picture(self.png(Image.new('RGB', size, 'white')))
+            self.assertEqual(caught.exception.code, 'bad_size', size)
 
-    def test_a_bright_drawing_on_black_stays_in_auto(self):
-        image = Image.new('RGB', (128, 64), 'black')
-        for x in range(20, 100):
-            for y in range(10, 50):
-                image.putpixel((x, y), (255, 255, 255))
-        out = render.convert_picture(self.png(image), style='auto')
-        self.assertEqual((out.getpixel((60, 30)), out.getpixel((2, 2))), (255, 0))
-
-    def test_a_logo_with_a_transparent_ground_is_drawn_on_black(self):
-        image = Image.new('RGBA', (128, 64), (0, 0, 0, 0))
-        for x in range(30, 100):
-            for y in range(10, 55):
-                image.putpixel((x, y), (200, 30, 30, 255))
-        out = render.convert_picture(self.png(image))
-        self.assertEqual((out.getpixel((60, 30)), out.getpixel((2, 2))), (255, 0))
-        # (a dark logo on a transparent ground shows too)
-        dark = Image.new('RGBA', (128, 64), (0, 0, 0, 0))
-        for x in range(30, 100):
-            for y in range(10, 55):
-                dark.putpixel((x, y), (10, 10, 10, 255))
-        self.assertEqual(render.convert_picture(self.png(dark)).getpixel((60, 30)), 255)
-
-    def test_a_picture_that_is_not_2_to_1_is_centered_with_its_aspect(self):
-        tall = Image.new('RGB', (50, 100), 'white')
-        out = render.convert_picture(self.png(tall), style='keep')
-        self.assertEqual(lit(out, (0, 0, 32, 64)), 0)
-        self.assertEqual(lit(out, (32, 0, 96, 64)), 32 * 64)
-
-    def test_the_photo_style_makes_dots_of_grey(self):
-        grey = Image.new('L', (128, 64), 128)
-        out = render.convert_picture(self.png(grey), style='dither')
-        count = lit(out, (0, 0, 128, 64))
-        self.assertTrue(0.3 * 8192 < count < 0.7 * 8192, count)
-        plain = render.convert_picture(self.png(grey), style='keep')
-        self.assertIn(lit(plain, (0, 0, 128, 64)), (0, 8192))
+    def test_grey_colour_and_transparency_are_refused(self):
+        grey = Image.new('L', (128, 64), 255)
+        grey.putpixel((5, 5), 128)
+        coloured = Image.new('RGB', (128, 64), 'white')
+        coloured.putpixel((5, 5), (255, 0, 0))
+        clear = Image.new('RGBA', (128, 64), (255, 255, 255, 255))
+        clear.putpixel((5, 5), (255, 255, 255, 0))
+        for image in (grey, coloured, clear, Image.new('L', (128, 64), 254), Image.new('L', (128, 64), 1)):
+            with self.assertRaises(render.PictureError) as caught:
+                render.check_picture(self.png(image))
+            self.assertEqual(caught.exception.code, 'not_1bit')
 
     def test_what_is_no_picture_is_refused(self):
         with self.assertRaises(Exception):
-            render.convert_picture(b'this is not a picture')
+            render.check_picture(b'this is not a picture')
 
-    def test_the_program_converts_a_file_and_says_when_it_cannot(self):
+    def test_the_program_checks_a_file_and_says_why_it_does_not_take_it(self):
+        import contextlib
+        import io
+        import json
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             src = os.path.join(tmp, 'in.png')
             dst = os.path.join(tmp, 'out.png')
-            with open(src, 'wb') as handle:
-                handle.write(self.png(self.drawing_on_white()))
-            self.assertEqual(oled.main(['--convert', src, dst, '--style', 'auto']), 0)
+
+            def check(data):
+                with open(src, 'wb') as handle:
+                    handle.write(data)
+                if os.path.exists(dst):
+                    os.remove(dst)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    code = oled.main(['--check', src, dst])
+                last = out.getvalue().strip().splitlines()[-1] if out.getvalue().strip() else '{}'
+                return code, json.loads(last).get('code')
+
+            self.assertEqual(check(self.png(self.drawing_on_white()))[0], 0)
             with Image.open(dst) as image:
                 self.assertEqual((image.size, image.mode), ((128, 64), '1'))
-            with open(src, 'wb') as handle:
-                handle.write(b'no picture')
-            os.remove(dst)
-            self.assertEqual(oled.main(['--convert', src, dst]), 3)
+            self.assertEqual(check(self.png(Image.new('RGB', (256, 128), 'white'))), (3, 'bad_size'))
+            self.assertEqual(check(self.png(Image.new('L', (128, 64), 100))), (3, 'not_1bit'))
+            self.assertEqual(check(b'no picture'), (3, 'bad_picture'))
             self.assertFalse(os.path.exists(dst))
 
 

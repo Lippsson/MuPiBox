@@ -11,7 +11,7 @@ The extension (api.js) starts this program and talks to it by lines of JSON on s
 
 Two more jobs without a loop (the box's own scripts use them, see scripts/mupibox/oled_picture.sh):
     --show NAME --settings FILE   draw one of the pictures (update, shutdown ...) and end; the panel stays on with it
-    --convert IN OUT [--style S]  make a picture the user chose into a 1-bit picture of 128 x 64 (white on black)
+    --check IN OUT                take a picture the user chose if it is a 1-bit picture of exactly 128 x 64 (black and white points only)
           {"event": "error", "code": "no_i2c" | "i2c_access" | "no_display" | "no_pil", "message": "..."}
 
 Nothing but the Python standard library and Pillow (python3-pil): the display is written through /dev/i2c-N with the ioctl that
@@ -318,8 +318,7 @@ def main(argv=None):
     parser.add_argument('--custom', help='the folder of the pictures the user chose')
     parser.add_argument('--show', metavar='NAME', help='draw one picture (boot, update, rest, shutdown, nfc, barcode, idle) and end')
     parser.add_argument('--settings', help='the settings file of the extension: the display --show draws on')
-    parser.add_argument('--convert', nargs=2, metavar=('IN', 'OUT'), help='make a picture into a 1-bit picture of 128 x 64')
-    parser.add_argument('--style', default='auto', help='how --convert does it: auto, invert, keep or dither')
+    parser.add_argument('--check', nargs=2, metavar=('IN', 'OUT'), help='take a picture if it is a 1-bit picture of exactly 128 x 64')
     parser.add_argument('--preview', metavar='PNG', help='draw the state in --state (a JSON file) into a picture and end, no display needed')
     parser.add_argument('--state', help='the state to draw with --preview')
     args = parser.parse_args(argv)
@@ -331,11 +330,14 @@ def main(argv=None):
         emit(event='error', code='no_pil', message='python3-pil is missing: %s' % error)
         return 1
 
-    if args.convert:
+    if args.check:
         try:
-            with open(args.convert[0], 'rb') as handle:
-                picture = render.convert_picture(handle.read(), 128, 64, args.style)
-            picture.save(args.convert[1], format='PNG')
+            with open(args.check[0], 'rb') as handle:
+                picture = render.check_picture(handle.read(), 128, 64)
+            picture.save(args.check[1], format='PNG')
+        except render.PictureError as error:
+            emit(event='error', code=error.code, message=str(error))
+            return 3
         except (OSError, ValueError, Image.DecompressionBombError) as error:
             emit(event='error', code='bad_picture', message='the picture cannot be read: %s' % error)
             return 3

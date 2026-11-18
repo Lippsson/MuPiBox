@@ -1,7 +1,7 @@
 {
   "id": "oled",
   "name": "OLED-Display",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Ein kleines OLED-Display (SSD1306, SH1106 oder SSD1309 am I2C-Anschluss, 128 × 64 oder 128 × 32) zeigt, was die Box spielt: Titel, Interpret, Laufzeit, Titelnummer, Lautstärke, WLAN, Akku, Zufall und Wiederholen, Ausgang (Lautsprecher, Kopfhörer, Bluetooth) und die Uhrzeit. Dazu lässt sich die Box ganz ohne DSI-Display betreiben. Die Einstellungen stehen unter Einstellungen › OLED-Display.",
   "hostApi": 10,
   "resources": {},
@@ -106,16 +106,6 @@
         "loop",
         "once",
         "off"
-      ]
-    },
-    "imageStyle": {
-      "type": "string",
-      "default": "auto",
-      "options": [
-        "auto",
-        "invert",
-        "keep",
-        "dither"
       ]
     }
   },
@@ -329,7 +319,7 @@
         "type": "heading",
         "label": "Bilder",
         "card": true,
-        "help": "Die Bilder, die das Display bei Start, Update, Ruhezeit und Herunterfahren zeigt. Start, Leerlauf, Update und Ruhezeit lassen sich durch ein eigenes Bild ersetzen; „Zurücksetzen“ bringt das Original zurück. Die Bilder sind 128 × 64 Punkte, weiß auf schwarz."
+        "help": "Die Bilder, die das Display bei Start, Update, Ruhezeit und Herunterfahren zeigt. Start, Leerlauf, Update und Ruhezeit lassen sich durch ein eigenes Bild ersetzen; „Zurücksetzen“ bringt das Original zurück. Eigene Bilder müssen genau 128 × 64 Punkte groß sein und nur aus Schwarz und Weiß bestehen (1 Bit), Weiß leuchtet."
       },
       {
         "key": "idleScreen",
@@ -351,29 +341,6 @@
           {
             "value": "custom",
             "label": "Eigenes Bild"
-          }
-        ]
-      },
-      {
-        "key": "imageStyle",
-        "label": "Eigene Bilder umwandeln",
-        "help": "Wie ein gewähltes Bild schwarzweiß wird. Automatisch dreht helle Zeichnungen auf weißem Grund um, Umkehren dreht immer um, Unverändert lässt es, Foto streut Grautöne als Punkte. Gilt für das nächste gewählte Bild.",
-        "choices": [
-          {
-            "value": "auto",
-            "label": "Automatisch"
-          },
-          {
-            "value": "invert",
-            "label": "Umkehren"
-          },
-          {
-            "value": "keep",
-            "label": "Unverändert"
-          },
-          {
-            "value": "dither",
-            "label": "Foto (Punkte)"
           }
         ]
       },

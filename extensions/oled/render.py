@@ -6,7 +6,7 @@ and tested without a display. The layouts are made for 128 x 64 and 128 x 32 pix
 import io
 import os
 
-from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageStat
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 FONT_CANDIDATES = (
     '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
@@ -24,7 +24,6 @@ CHANGEABLE = ('boot', 'idle', 'update', 'rest')
 VIEW_PICTURES = {'boot': 'boot', 'bye': 'shutdown', 'update': 'update', 'rest': 'rest'}
 # (the picture of the idle display: the reader that waits for a tag, the scanner that waits for a code, or the user's own one)
 IDLE_PICTURES = {'nfc': 'nfc', 'barcode': 'barcode', 'custom': 'idle'}
-IMAGE_STYLES = ('auto', 'invert', 'keep', 'dither')
 
 # marquee: a long line waits a moment, scrolls to its end, waits again and starts over
 SCROLL_PX_PER_S = 28.0
@@ -70,41 +69,33 @@ def fit_picture(image, width, height):
     return image.point(lambda v: 255 if v > 127 else 0).convert('1')
 
 
-def convert_picture(data, width=128, height=64, style='auto'):
-    """A picture the user chose (the bytes of a PNG, JPEG ... ) as a 1-bit picture of width x height, white on black.
-    style: 'auto' - a picture that is mostly bright (a drawing on white) is turned around; 'invert' - always turned around;
-    'keep' - as it is; 'dither' - a photo: grey values become dots (Floyd-Steinberg). A picture with transparent parts (a logo)
-    is drawn on black, and a dark one is turned around so that it shows."""
-    if style not in IMAGE_STYLES:
-        style = 'auto'
+class PictureError(ValueError):
+    """A picture the user chose that the display does not take: `code` says why (bad_size, not_1bit)."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def check_picture(data, width=128, height=64):
+    """A picture the user chose (the bytes of a PNG, JPEG ...) as a 1-bit picture of width x height, white on black - only if it is one
+    already: exactly width x height points, every point pure black or pure white (no grey, no colour, nothing transparent). Nothing is
+    scaled, turned around or dithered: PictureError('bad_size' | 'not_1bit') for any other picture."""
     source = Image.open(io.BytesIO(data))
     source.load()
+    if source.size != (width, height):
+        raise PictureError('bad_size', 'the picture is %d x %d points, not %d x %d' % (source.width, source.height, width, height))
     rgba = source.convert('RGBA')
-    scale = min(width / rgba.width, height / rgba.height)
-    size = (max(1, round(rgba.width * scale)), max(1, round(rgba.height * scale)))
-    rgba = rgba.resize(size, Image.LANCZOS)
-    gray = rgba.convert('L')
-    alpha = rgba.getchannel('A')
-    clear = sum(alpha.histogram()[:128])
-    if clear > 0.02 * size[0] * size[1]:
-        # (a shape on a transparent ground: what is drawn is the opaque part; the turning round looks at that part only)
-        opaque = alpha.point(lambda v: 255 if v >= 128 else 0)
-        mean = ImageStat.Stat(gray, opaque).mean[0] if opaque.getbbox() else 0
-        if style == 'invert' or (style in ('auto', 'dither') and mean < 128):
-            gray = ImageChops.invert(gray)
-        gray = ImageChops.multiply(gray, alpha)
-    else:
-        mean = ImageStat.Stat(gray).mean[0]
-        if style == 'invert' or (style == 'auto' and mean > 127):
-            gray = ImageChops.invert(gray)
-    canvas = Image.new('L', (width, height), 0)
-    canvas.paste(gray, ((width - size[0]) // 2, (height - size[1]) // 2))
-    if style == 'dither':
-        return canvas.convert('1')
-    # (a drawing of thin lines gets grey when it is made smaller: the less of the picture is lit, the lower the limit - else the lines go)
-    lit = ImageStat.Stat(canvas).mean[0]
-    limit = 127 if lit >= 90 else int(45 + (lit / 90.0) * 82)
-    return canvas.point(lambda v: 255 if v > limit else 0).convert('1')
+    if rgba.getchannel('A').getextrema()[0] != 255:
+        raise PictureError('not_1bit', 'the picture has transparent points')
+    red, green, blue = rgba.convert('RGB').split()
+    for channel in (red, green, blue):
+        histogram = channel.histogram()
+        if any(histogram[1:255]):
+            raise PictureError('not_1bit', 'the picture has grey or coloured points')
+    if ImageChops.difference(red, green).getbbox() or ImageChops.difference(green, blue).getbbox():
+        raise PictureError('not_1bit', 'the picture has coloured points')
+    return red.point(lambda v: 255 if v else 0).convert('1')
 
 
 class Pictures:

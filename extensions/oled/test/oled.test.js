@@ -17,8 +17,8 @@ test('the settings of the extension become the arguments of the driver', () => {
 })
 
 test('a setting that makes no sense falls back to its default', () => {
-  const c = logic.readConfig({ controller: 'ssd9999', size: '64x48', address: '0x10', contrast: 999, mode: 'x', sleepAfter: 7, idleScreen: 'x', imageStyle: 'blur' })
-  assert.deepStrictEqual([c.controller, c.width, c.height, c.address, c.contrast, c.mode, c.sleepAfter, c.idleScreen, c.imageStyle, c.rotate, c.headless], ['ssd1306', 128, 64, '0x3C', 255, 'full', 5, 'nfc', 'auto', false, false])
+  const c = logic.readConfig({ controller: 'ssd9999', size: '64x48', address: '0x10', contrast: 999, mode: 'x', sleepAfter: 7, idleScreen: 'x' })
+  assert.deepStrictEqual([c.controller, c.width, c.height, c.address, c.contrast, c.mode, c.sleepAfter, c.idleScreen, c.rotate, c.headless], ['ssd1306', 128, 64, '0x3C', 255, 'full', 5, 'nfc', false, false])
   assert.strictEqual(logic.readConfig({ contrast: 'x' }).contrast, 127)
 })
 
@@ -34,7 +34,7 @@ test('the volume animation is on and long lines loop unless the settings say oth
 
 test('only what the chip needs makes the driver start again: the contrast and the mode go on while it runs', () => {
   const a = logic.readConfig({})
-  assert.strictEqual(logic.needsRestart(a, logic.readConfig({ contrast: 10, mode: 'lite', idleScreen: 'clock', imageStyle: 'dither', sleepAfter: 0 })), false)
+  assert.strictEqual(logic.needsRestart(a, logic.readConfig({ contrast: 10, mode: 'lite', idleScreen: 'clock', sleepAfter: 0 })), false)
   for (const change of [{ controller: 'sh1106' }, { size: '128x32' }, { address: '0x3D' }, { rotate: true }]) assert.strictEqual(logic.needsRestart(a, logic.readConfig(change)), true, JSON.stringify(change))
 })
 
@@ -883,17 +883,17 @@ test('an update that stood when the server started is over: its state is cleared
 
 test("the picture routes: the list, a picture of the user's, and the original again", async () => {
   const dataDir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'oled-data-'))
-  const converted = []
+  const checked = []
   const box = fakeHost(
-    { imageStyle: 'dither' },
+    {},
     {
       dataDir,
       deps: {
         execFile: (command, args, options, done) => {
-          // (oled.py --convert IN OUT --style S: makes the file OUT)
-          if (args.includes('--convert')) {
-            converted.push(args.slice(args.indexOf('--convert') + 3).join(' '))
-            fsx.writeFileSync(args[args.indexOf('--convert') + 2], 'PNG')
+          // (oled.py --check IN OUT: takes the picture IN and makes the file OUT)
+          if (args.includes('--check')) {
+            checked.push(args[args.indexOf('--check')])
+            fsx.writeFileSync(args[args.indexOf('--check') + 2], 'PNG')
           }
           done(null, '')
         },
@@ -917,7 +917,7 @@ test("the picture routes: the list, a picture of the user's, and the original ag
   // (a picture of the user: made 1-bit with the style of the settings, then it is the one that is shown)
   const saved = await pictureRoute(box, 'post /imageset', { id: 'boot', image: PNG_URL })
   assert.strictEqual(saved.body.ok, true)
-  assert.deepStrictEqual(converted, ['--style dither'])
+  assert.deepStrictEqual(checked, ['--check'])
   assert.strictEqual(fsx.readFileSync(pathx.join(dataDir, 'images', 'boot.png'), 'utf8'), 'PNG')
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(dataDir, 'images')), ['boot.png'], 'no half-done files stay')
   const own = (await list()).find((r) => r.id === 'boot')
@@ -960,14 +960,20 @@ test('the route that shows a picture refuses an id that is no picture', async ()
   assert.strictEqual(shown.body.ok, true)
 })
 
-test('a picture the program cannot convert is refused and leaves nothing behind', async () => {
+test('a picture the program does not take is refused with the reason and leaves nothing behind', async () => {
   const dataDir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'oled-data-'))
-  const box = fakeHost({}, { dataDir, deps: { execFile: (command, args, options, done) => done(new Error('exit 3'), '') } })
+  let says = '{"event": "error", "code": "bad_size", "message": "x"}'
+  const box = fakeHost({}, { dataDir, deps: { execFile: (command, args, options, done) => done(new Error('exit 3'), says) } })
   api.activate(box.host)
   await settle()
   await settle()
   const refused = await pictureRoute(box, 'post /imageset', { id: 'update', image: PNG_URL })
   assert.strictEqual(refused.status, 400)
+  assert.deepStrictEqual([refused.body.error, refused.body.message], ['bad_size', 'Das Bild muss genau 128 × 64 Punkte groß sein'])
+  says = 'starting' + String.fromCharCode(10) + '{"event": "error", "code": "not_1bit", "message": "x"}'
+  assert.strictEqual((await pictureRoute(box, 'post /imageset', { id: 'update', image: PNG_URL })).body.message, 'Das Bild darf nur Schwarz und Weiß enthalten (1 Bit)')
+  says = 'rubbish'
+  assert.strictEqual((await pictureRoute(box, 'post /imageset', { id: 'update', image: PNG_URL })).body.error, 'bad_picture')
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(dataDir, 'images')), [])
   fsx.rmSync(dataDir, { recursive: true, force: true })
 })

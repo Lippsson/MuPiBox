@@ -540,7 +540,7 @@ exports.activate = (host) => {
           { label: 'Zeige Bild', post: '/api/ext/oled/imageshow', safe: true },
           ...(row.changeable
             ? [
-                { label: 'Bild ändern', post: '/api/ext/oled/imageset', upload: true, safe: true },
+                { label: 'Bild ändern', post: '/api/ext/oled/imageset', upload: true, exact: [128, 64], safe: true },
                 ...(row.own ? [{ label: 'Zurücksetzen', post: '/api/ext/oled/imagereset', confirm: 'Das Original wieder zeigen?', safe: true }] : []),
               ]
             : []),
@@ -565,8 +565,8 @@ exports.activate = (host) => {
     { session: true },
   )
 
-  // A picture the user chose ({ id, image: "data:image/png;base64,..." } - the app made a PNG of it): made black and white as the setting says
-  // (oled.py --convert) and kept in the data folder, where the driver finds it
+  // A picture the user chose ({ id, image: "data:image/png;base64,..." } - the app checked it and made a PNG of it): taken only if it is a 1-bit
+  // picture of exactly 128 x 64 (oled.py --check says so again, the browser is not to be trusted) and kept in the data folder, where the driver finds it
   host.route(
     'post',
     '/imageset',
@@ -583,8 +583,11 @@ exports.activate = (host) => {
       try {
         fs.mkdirSync(customDir, { recursive: true })
         fs.writeFileSync(upload, bytes)
-        const result = await run('python3', [path.join(dir, 'oled.py'), '--convert', upload, made, '--style', config.imageStyle], 30000)
-        if (result.error || !fs.existsSync(made)) return res.status(400).json({ ok: false, error: 'bad_picture', message: 'Das Bild ließ sich nicht umwandeln' })
+        const result = await run('python3', [path.join(dir, 'oled.py'), '--check', upload, made], 30000)
+        if (result.error || !fs.existsSync(made)) {
+          const code = logic.pictureErrorCode(result.stdout)
+          return res.status(400).json({ ok: false, error: code, message: logic.PICTURE_MESSAGES[code] })
+        }
         fs.renameSync(made, path.join(customDir, `${id}.png`))
       } catch (error) {
         log.warn(`[oled] picture ${id}: ${error?.message ?? error}`)

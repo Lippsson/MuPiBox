@@ -620,7 +620,7 @@ describe('the NFC extension of this repository', () => {
     const items = nfc.ui?.items ?? []
     const heads = items.filter((i) => i.type === 'heading' && i.label === 'Leser')
     assert.deepStrictEqual(heads.map((h) => h.optional), [undefined, 'reader2On', 'reader3On'])
-    assert.deepStrictEqual(items.filter((i) => i.type === 'status').map((i) => i.state), ['/api/ext/nfc/spistate', '/api/ext/nfc/iicstate', '/api/ext/nfc/uartstate', '/api/ext/nfc/stateone', '/api/ext/nfc/statetwo', '/api/ext/nfc/statethree'], 'the card of the ports first (a block for each), then one status per reader')
+    assert.deepStrictEqual(items.filter((i) => i.type === 'status').map((i) => i.state), ['/api/ext/nfc/spistate', '/api/ext/nfc/iicstate', '/api/ext/nfc/uartstate', '/api/ext/nfc/stateone', '/api/ext/nfc/statetwo', '/api/ext/nfc/statethree', '/api/ext/nfc/knobstate'], 'the card of the ports first (a block for each), then one status per reader, then the one of the knob')
     const at = (h: unknown) => items.indexOf(h as never)
     assert.strictEqual(items[at(heads[1]) - 1].key, 'tech', 'no heading between the groups of the readers')
     assert.strictEqual(items[at(heads[0]) + 1].type, 'status', 'the status is the first line of its reader')
@@ -677,7 +677,7 @@ describe('the OLED extension of this repository', () => {
     assert.match(rule, /GROUP="gpio"/)
   })
   it('takes the settings the app sends: chip, size, address, mode, the time, sleep and the start without the DSI display', () => {
-    assert.strictEqual(checkSettings(oled, { controller: 'sh1106', size: '128x32', address: '0x3D', rotate: true, contrast: 80, mode: 'mix', idleScreen: 'clock', imageStyle: 'dither', timeMode: 'down', sleepAfter: 15, headless: true }).ok, true)
+    assert.strictEqual(checkSettings(oled, { controller: 'sh1106', size: '128x32', address: '0x3D', rotate: true, contrast: 80, mode: 'mix', idleScreen: 'clock', timeMode: 'down', sleepAfter: 15, headless: true }).ok, true)
     assert.strictEqual(checkSettings(oled, { controller: 'ssd1331' }).ok, false)
     assert.strictEqual(checkSettings(oled, { size: '64x48' }).ok, false)
     assert.strictEqual(checkSettings(oled, { address: '0x10' }).ok, false)
@@ -685,7 +685,6 @@ describe('the OLED extension of this repository', () => {
     assert.strictEqual(checkSettings(oled, { sleepAfter: 7 }).ok, false)
     assert.strictEqual(checkSettings(oled, { timeMode: 'sideways' }).ok, false)
     assert.strictEqual(checkSettings(oled, { idleScreen: 'photo' }).ok, false)
-    assert.strictEqual(checkSettings(oled, { imageStyle: 'blur' }).ok, false)
   })
   it('has the list of its pictures on the page, and its pictures in the package', () => {
     assert.deepStrictEqual(oled.ui?.items.filter((i) => i.type === 'list').map((i) => i.list), ['/api/ext/oled/images'])

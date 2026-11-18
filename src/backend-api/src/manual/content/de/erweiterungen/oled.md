@@ -91,7 +91,7 @@ Die Karte **Bilder** zeigt die Bilder des Displays und wo sie erscheinen. Alle s
 
 Jedes Bild hat einen Knopf **Zeige Bild**: Das Bild steht dann **zehn Sekunden** auf dem Display, danach zeigt es wieder, was vorher zu sehen war. So siehst du ein Bild, ohne dass der Anlass eintritt.
 
-Bei einem änderbaren Bild tippst du auf **Bild ändern** und wählst ein Bild vom Gerät. Die App verkleinert es, die Box macht daraus ein Schwarzweißbild; die Einstellung **Eigene Bilder umwandeln** bestimmt wie: **Automatisch** dreht helle Zeichnungen auf weißem Grund um, **Umkehren** dreht immer um, **Unverändert** lässt das Bild, **Foto (Punkte)** streut Grautöne als Punkte. Ein Bild mit durchsichtigem Grund (ein Logo) wird auf Schwarz gezeichnet. Das Seitenverhältnis bleibt erhalten; was nicht passt, bleibt schwarz. Mit **Zurücksetzen** kommt das Original wieder.
+Bei einem änderbaren Bild tippst du auf **Bild ändern** und wählst ein Bild vom Gerät. Die Box nimmt **nur Bilder, die genau 128 × 64 Punkte groß sind und nur aus reinem Schwarz und Weiß bestehen (1 Bit)**; Weiß leuchtet. Die App prüft das gleich beim Wählen, die Box noch einmal. Ein Bild mit anderer Größe, Graustufen, Farben oder durchsichtigen Stellen wird **abgelehnt**, nichts wird verkleinert oder umgewandelt. Mach das Bild vorher in einem Grafikprogramm fertig (Größe 128 × 64, Modus „Schwarzweiß“ ohne Dithering oder mit, wie du es willst). Mit **Zurücksetzen** kommt das Original wieder.
 
 Das Update- und das Herunterfahr-Bild zeichnet die Box selbst auf das Display, auch wenn der Server dabei schon steht. Das Startbild erscheint, sobald die Anzeige gestartet ist; ein Bild davor, während Linux noch startet, ist nicht möglich.
 

@@ -4488,20 +4488,31 @@ function chooseImageFile() {
   })
 }
 
-// The picture of a file made small, the aspect kept (it fits in w x h, never made bigger), as a PNG data URL; transparent parts stay
-// transparent. '' when the file is no picture the browser can read.
-async function smallPicture(file, w, h) {
+// The picture of a file as a PNG data URL, only when it is exactly w x h points and 1 bit - every point pure black or pure white, nothing
+// transparent. Nothing is scaled or changed. { image } when it is, else { problem }: 'unreadable' (no picture the browser can read), 'size'
+// or 'bits' (the box checks again, see the OLED extension's oled.py --check).
+async function exactPicture(file, w, h) {
   try {
     const bitmap = await createImageBitmap(file)
-    const scale = Math.min(1, w / bitmap.width, h / bitmap.height)
+    const size = bitmap.width === w && bitmap.height === h
+    if (!size) {
+      bitmap.close?.()
+      return { problem: 'size' }
+    }
     const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    canvas.width = w
+    canvas.height = h
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    context.drawImage(bitmap, 0, 0)
     bitmap.close?.()
-    return canvas.toDataURL('image/png')
+    const data = context.getImageData(0, 0, w, h).data
+    for (let i = 0; i < data.length; i += 4) {
+      const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]]
+      if (a !== 255 || (r !== 0 && r !== 255) || g !== r || b !== r) return { problem: 'bits' }
+    }
+    return { image: canvas.toDataURL('image/png') }
   } catch {
-    return ''
+    return { problem: 'unreadable' }
   }
 }
 
@@ -4620,15 +4631,18 @@ function fillTagRows(box, rows, redraw, tiles = false) {
         add('Tag ändern', async () => startNfcChange(row), { glyph })
         continue
       }
-      // upload: a picture of the device, made small in the app (aspect kept, at most 256 x 128) and sent as a PNG { id, image }
+      // upload: a picture of the device that has exactly the size the action says (`exact`: [w, h]) and is 1 bit - checked here, nothing is
+      // scaled or converted - and sent as a PNG { id, image }
       if (action.upload === true) {
+        const [exactW, exactH] = Array.isArray(action.exact) ? action.exact.map((n) => Math.trunc(Number(n))) : [0, 0]
         add(
           String(action.label ?? ''),
           async () => {
             const file = await chooseImageFile()
             if (!file) return
-            const image = await smallPicture(file, 256, 128)
-            if (!image) return toast(tr('Das ist kein Bild, das die Box lesen kann'), 'info')
+            if (!(exactW > 0 && exactW <= 2048 && exactH > 0 && exactH <= 2048)) return toast(tr('Hat nicht geklappt'), 'info')
+            const { image, problem } = await exactPicture(file, exactW, exactH)
+            if (!image) return toast(tr(problem === 'size' ? 'Das Bild muss genau 128 × 64 Punkte groß sein' : problem === 'bits' ? 'Das Bild darf nur Schwarz und Weiß enthalten (1 Bit)' : 'Das ist kein Bild, das die Box lesen kann'), 'info')
             const done = await post(action.post, { id: row.id, image })
             toast(said(done, done.ok ? 'Erledigt' : 'Hat nicht geklappt'), done.ok ? 'ok' : 'info')
             redraw()

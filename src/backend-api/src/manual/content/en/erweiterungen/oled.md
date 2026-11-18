@@ -91,7 +91,7 @@ The **Pictures** card shows the pictures of the display and where they appear. A
 
 Every picture has a button **Show picture**: the picture is then on the display for **ten seconds**, after which the display shows what it showed before. That way you see a picture without its occasion happening.
 
-For a changeable picture tap **Change picture** and choose a picture from your device. The app makes it smaller and the box turns it into a black-and-white picture; the setting **Convert own pictures** says how: **Automatic** turns bright drawings on a white ground around, **Invert** always turns around, **Unchanged** leaves the picture, **Photo (dots)** scatters grey tones as dots. A picture with a transparent ground (a logo) is drawn on black. The aspect ratio is kept; what does not fit stays black. **Reset** brings the original back.
+For a changeable picture tap **Change picture** and choose a picture from your device. The box takes **only pictures that are exactly 128 × 64 points and consist of pure black and white only (1 bit)**; white is lit. The app checks this when you choose, the box checks again. A picture with another size, grey tones, colours or transparent parts is **refused**; nothing is scaled or converted. Prepare the picture beforehand in a graphics program (size 128 × 64, mode "black and white", with or without dithering as you like). **Reset** brings the original back.
 
 The update and shutdown pictures are drawn by the box itself, even when the server has stopped by then. The start picture appears as soon as the display program has started; a picture before that, while Linux is still starting, is not possible.
 

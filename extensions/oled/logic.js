@@ -10,9 +10,14 @@ const TIME_MODES = ['up', 'down']
 const SCROLL_MODES = ['loop', 'once', 'off']
 const SLEEP_MINUTES = [0, 1, 5, 15, 60]
 // what the display shows while nothing plays (nfc: the reader that waits for a tag, barcode: the scanner, clock: the time, custom: a picture
-// the user chose) and how a picture the user chooses is made black and white (see render.py convert_picture)
+// the user chose)
 const IDLE_SCREENS = ['nfc', 'barcode', 'clock', 'custom']
-const IMAGE_STYLES = ['auto', 'invert', 'keep', 'dither']
+// (why a picture of the user is not taken: oled.py --check says it as an "error" event; the words go to the app)
+const PICTURE_MESSAGES = {
+  bad_size: 'Das Bild muss genau 128 × 64 Punkte groß sein',
+  not_1bit: 'Das Bild darf nur Schwarz und Weiß enthalten (1 Bit)',
+  bad_picture: 'Das ist kein Bild, das die Box lesen kann',
+}
 // the pictures: the ones the user may change (boot, idle, update, rest) and the ones that are fixed; `idle` is the user's own picture of
 // the idle display. Their names are the file names (images/<id>.png, the user's own in the data folder).
 const IMAGE_ROWS = [
@@ -57,7 +62,6 @@ function readConfig(settings = {}) {
     contrast: Math.round(number(settings.contrast, 127, 0, 255)),
     mode: pick(settings.mode, MODES, 'full'),
     idleScreen: pick(settings.idleScreen, IDLE_SCREENS, 'nfc'),
-    imageStyle: pick(settings.imageStyle, IMAGE_STYLES, 'auto'),
     volumeOverlay: settings.volumeOverlay !== false,
     nightDim: settings.nightDim === true,
     nightContrast: Math.round(number(settings.nightContrast, 20, 1, 255)),
@@ -172,6 +176,17 @@ function holdFrom(text, now) {
   if (!m || !HOLD_SLOTS.includes(m[1])) return null
   const at = Number(m[2]) * 1000
   return now - at < HOLD_MS && at - now < HOLD_MS ? { slot: m[1], at } : null
+}
+
+/** The reason oled.py --check gave for a picture it did not take (the last JSON line of its output): a key of PICTURE_MESSAGES. */
+function pictureErrorCode(output) {
+  const line = String(output ?? '').trim().split('\n').pop()
+  try {
+    const code = JSON.parse(line)?.code
+    return Object.prototype.hasOwnProperty.call(PICTURE_MESSAGES, code) ? code : 'bad_picture'
+  } catch {
+    return 'bad_picture'
+  }
 }
 
 /** The rows of the list of pictures of the page: the picture, where it is shown, whether it is the user's own; `own` the ids the user changed. */
@@ -432,7 +447,8 @@ module.exports = {
   SCROLL_MODES,
   SLEEP_MINUTES,
   IDLE_SCREENS,
-  IMAGE_STYLES,
+  PICTURE_MESSAGES,
+  pictureErrorCode,
   IMAGE_ROWS,
   IMAGE_IDS,
   CHANGEABLE_IMAGES,
