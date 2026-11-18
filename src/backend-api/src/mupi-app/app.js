@@ -4476,6 +4476,35 @@ function openNfcSheet(media, { back = null, image = '' } = {}) {
   )
 }
 
+// A picture of the device: the file chooser (a promise of the file, null when it was left without one)
+function chooseImageFile() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = () => resolve(input.files?.[0] ?? null)
+    input.addEventListener('cancel', () => resolve(null))
+    input.click()
+  })
+}
+
+// The picture of a file made small, the aspect kept (it fits in w x h, never made bigger), as a PNG data URL; transparent parts stay
+// transparent. '' when the file is no picture the browser can read.
+async function smallPicture(file, w, h) {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, w / bitmap.width, h / bitmap.height)
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close?.()
+    return canvas.toDataURL('image/png')
+  } catch {
+    return ''
+  }
+}
+
 // The rows of a list of tags (the list of the extension page, hostApi 8 `list`, and the sheet "NFC-Tag" of a medium): a picture for each
 // row, a button for the picture and the extension's own buttons; each posts { id }. redraw(): the list asks again after a change.
 // tiles (the page): each row is a tile - the title, the picture, the text and a row of buttons with symbols; an own button of the
@@ -4488,8 +4517,10 @@ function fillTagRows(box, rows, redraw, tiles = false) {
     li.className = tiles ? 'ext-tag tag-tile' : 'ext-tag'
     const pic = document.createElement('span')
     pic.className = tiles ? 'lib-thumb ext-tag-pic tag-tile-pic' : 'lib-thumb ext-tag-pic'
-    // (an own picture is /cover/<name>, the others come through /api/ or from the web)
-    if (/^(\/api\/|\/cover\/|https:\/\/|http:\/\/)/.test(String(row.image ?? ''))) {
+    // (wide: the picture is a display picture of 2:1 - the OLED extension's pictures - and is not cut square)
+    if (row.wide === true) pic.classList.add('ext-tag-wide')
+    // (an own picture is /cover/<name>, the others come through /api/ or from the web; a PNG as a data URL is a picture the extension drew itself)
+    if (/^(\/api\/|\/cover\/|https:\/\/|http:\/\/|data:image\/png;base64,)/.test(String(row.image ?? ''))) {
       const img = document.createElement('img')
       img.src = row.image
       img.alt = ''
@@ -4503,7 +4534,8 @@ function fillTagRows(box, rows, redraw, tiles = false) {
     main.className = 'ext-tag-main'
     const name = document.createElement('b')
     name.translate = false
-    name.textContent = String(row.title ?? '')
+    // (translate: the title is a text of the extension that the app translates)
+    name.textContent = row.translate === true ? tr(String(row.title ?? '')) : String(row.title ?? '')
     // (the tile cuts a long title off: the whole title is in the tooltip)
     if (tiles) name.title = name.textContent
     const sub = document.createElement('small')
@@ -4586,6 +4618,23 @@ function fillTagRows(box, rows, redraw, tiles = false) {
       const glyph = /^[a-z0-9]{1,12}$/.test(String(action.icon ?? '')) ? action.icon : 'info'
       if (action.change === true) {
         add('Tag ändern', async () => startNfcChange(row), { glyph })
+        continue
+      }
+      // upload: a picture of the device, made small in the app (aspect kept, at most 256 x 128) and sent as a PNG { id, image }
+      if (action.upload === true) {
+        add(
+          String(action.label ?? ''),
+          async () => {
+            const file = await chooseImageFile()
+            if (!file) return
+            const image = await smallPicture(file, 256, 128)
+            if (!image) return toast(tr('Das ist kein Bild, das die Box lesen kann'), 'info')
+            const done = await post(action.post, { id: row.id, image })
+            toast(said(done, done.ok ? 'Erledigt' : 'Hat nicht geklappt'), done.ok ? 'ok' : 'info')
+            redraw()
+          },
+          { glyph: /^[a-z0-9]{1,12}$/.test(String(action.icon ?? '')) ? action.icon : 'image' },
+        )
         continue
       }
       add(

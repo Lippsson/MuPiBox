@@ -17,8 +17,8 @@ test('the settings of the extension become the arguments of the driver', () => {
 })
 
 test('a setting that makes no sense falls back to its default', () => {
-  const c = logic.readConfig({ controller: 'ssd9999', size: '64x48', address: '0x10', contrast: 999, mode: 'x', sleepAfter: 7, clock: 'no' })
-  assert.deepStrictEqual([c.controller, c.width, c.height, c.address, c.contrast, c.mode, c.sleepAfter, c.clock, c.rotate, c.headless], ['ssd1306', 128, 64, '0x3C', 255, 'full', 5, true, false, false])
+  const c = logic.readConfig({ controller: 'ssd9999', size: '64x48', address: '0x10', contrast: 999, mode: 'x', sleepAfter: 7, idleScreen: 'x', imageStyle: 'blur' })
+  assert.deepStrictEqual([c.controller, c.width, c.height, c.address, c.contrast, c.mode, c.sleepAfter, c.idleScreen, c.imageStyle, c.rotate, c.headless], ['ssd1306', 128, 64, '0x3C', 255, 'full', 5, 'nfc', 'auto', false, false])
   assert.strictEqual(logic.readConfig({ contrast: 'x' }).contrast, 127)
 })
 
@@ -34,7 +34,7 @@ test('the volume animation is on and long lines loop unless the settings say oth
 
 test('only what the chip needs makes the driver start again: the contrast and the mode go on while it runs', () => {
   const a = logic.readConfig({})
-  assert.strictEqual(logic.needsRestart(a, logic.readConfig({ contrast: 10, mode: 'lite', clock: false, sleepAfter: 0 })), false)
+  assert.strictEqual(logic.needsRestart(a, logic.readConfig({ contrast: 10, mode: 'lite', idleScreen: 'clock', imageStyle: 'dither', sleepAfter: 0 })), false)
   for (const change of [{ controller: 'sh1106' }, { size: '128x32' }, { address: '0x3D' }, { rotate: true }]) assert.strictEqual(logic.needsRestart(a, logic.readConfig(change)), true, JSON.stringify(change))
 })
 
@@ -452,6 +452,8 @@ test('the info page and the next mode are routes of the page', async () => {
   const ext = api.activate(box.host)
   await settle()
   await settle()
+  ready(box)
+  await ext.tick() // (the player answers: the start picture is over)
   const answer = async (key) => {
     let body
     await box.routes[key]({ body: {} }, { json: (b) => (body = b), status: () => ({ json: (b) => (body = b) }) })
@@ -489,6 +491,8 @@ test('the select route: only from the box itself; it shows the name and { clear 
   const ext = api.activate(box.host)
   await settle()
   await settle()
+  ready(box)
+  await ext.tick() // (the player answers: the start picture is over)
   const answer = async (body, req = {}) => {
     let out
     const res = { json: (b) => (out = { status: 200, body: b }), status: (code) => ({ json: (b) => (out = { status: code, body: b }) }) }
@@ -775,4 +779,166 @@ test('a DSI display plugged in is the reason the log gives, also while the drive
   await ext.apply({ headless: true })
   assert.ok(warned.some((w) => w.includes('a DSI display is connected')), JSON.stringify(warned))
   fs.rmSync(drm, { recursive: true, force: true })
+})
+
+// ---- the pictures --------------------------------------------------------------------------------------------------------------
+test('the setting of the idle display: the reader unless another is chosen; the driver gets the folders of the pictures', () => {
+  assert.strictEqual(logic.readConfig({}).idleScreen, 'nfc')
+  for (const value of ['nfc', 'barcode', 'clock', 'custom']) assert.strictEqual(logic.readConfig({ idleScreen: value }).idleScreen, value)
+  assert.strictEqual(state({ config: { idleScreen: 'clock' } }).clock, true)
+  assert.deepStrictEqual([state({}).clock, state({}).idle], [false, 'nfc'])
+  assert.strictEqual(state({ config: { idleScreen: 'barcode' } }).idle, 'barcode')
+  const args = logic.driverArgs(logic.readConfig({}), { images: '/x/images', custom: '/d/images' })
+  assert.deepStrictEqual(args.slice(-4), ['--images', '/x/images', '--custom', '/d/images'])
+  assert.strictEqual(logic.driverArgs(logic.readConfig({})).includes('--images'), false)
+})
+
+test('the start picture until the box is ready; an update or the shutdown wins over everything; a rest time shows its picture', () => {
+  const play = { player: 'mplayer', playing: true, title: 'Michel', volume: 30 }
+  assert.strictEqual(state({ ui: { ready: false } }).view, 'boot')
+  assert.strictEqual(state({ ui: { ready: true } }).view, 'idle')
+  assert.strictEqual(state({ play, ui: { ready: false } }).view, 'boot', 'also when something plays at the start')
+  assert.strictEqual(state({ play, ui: { ready: true, hold: { slot: 'update' } } }).view, 'update')
+  assert.strictEqual(state({ play, ui: { ready: false, hold: { slot: 'shutdown' } } }).view, 'bye')
+  assert.strictEqual(state({ ui: { ready: true, blocked: true } }).view, 'rest')
+  assert.strictEqual(state({ play, ui: { ready: true, blocked: true } }).view, 'play', 'a track that plays on in the grace time is shown')
+  assert.strictEqual(state({ ui: { hold: { slot: 'update' }, blocked: true } }).view, 'update')
+})
+
+test('what the box says in its files: an update or the shutdown (current), and a rest time or the limit', () => {
+  const now = 1_763_500_000_000
+  assert.deepStrictEqual(logic.holdFrom('update 1763500000\n', now), { slot: 'update', at: now })
+  assert.strictEqual(logic.holdFrom('shutdown 1763500000', now + 60_000).slot, 'shutdown')
+  assert.strictEqual(logic.holdFrom('update 1763500000', now + 16 * 60_000), null, 'older than 15 minutes: cut short')
+  assert.strictEqual(logic.holdFrom('update 1763509999', now), null, 'in the future')
+  for (const text of ['', 'reboot 1763500000', 'update', 'update x', null, undefined]) assert.strictEqual(logic.holdFrom(text, now), null, String(text))
+  assert.strictEqual(logic.blockedFrom('{"enabled":true,"state":"blocked","blockSource":"quiet"}'), true)
+  for (const text of ['{"enabled":true,"state":"grace"}', '{"enabled":false,"state":"blocked"}', '{"state":"normal"}', 'x', '', null]) assert.strictEqual(logic.blockedFrom(text), false, String(text))
+})
+
+test("the list of the pictures: the ones that can be changed say whether they are the user's own; the chosen idle one says so", () => {
+  const rows = logic.imageRows({ own: ['boot'], idleScreen: 'barcode' })
+  assert.deepStrictEqual(rows.map((r) => r.id), logic.IMAGE_IDS)
+  const by = Object.fromEntries(rows.map((r) => [r.id, r]))
+  assert.deepStrictEqual([by.boot.own, by.boot.changeable, by.update.own, by.shutdown.changeable], [true, true, false, false])
+  assert.ok(by.boot.text.includes('Eigenes Bild'))
+  assert.ok(by.update.text.includes('Original'))
+  assert.ok(by.barcode.text.includes('Gerade gewählt'))
+  assert.strictEqual(by.nfc.text.includes('Gerade gewählt'), false)
+  assert.ok(by.idle.text.includes('Noch keins gewählt'))
+})
+
+const fsx = require('node:fs')
+const osx = require('node:os')
+const pathx = require('node:path')
+const pictureRoute = async (box, key, body) => {
+  let out
+  const res = { json: (b) => (out = { status: 200, body: b }), status: (code) => ({ json: (b) => (out = { status: code, body: b }) }) }
+  await box.routes[key]({ body, headers: {}, socket: { remoteAddress: '127.0.0.1' } }, res)
+  return out
+}
+const PNG_URL = 'data:image/png;base64,' + Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('rest of the picture')]).toString('base64')
+
+test('the start picture goes when the player answers; the state of the box in its files shows its picture', async () => {
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'oled-hold-'))
+  const holdFile = pathx.join(dir, 'hold')
+  const playtimeFile = pathx.join(dir, 'playtime.json')
+  let player = null
+  const box = fakeHost({}, { deps: { holdFile, playtimeFile, now: () => 1_763_500_000_000 } })
+  box.host.deps.fetch = async (url) => ({ ok: player !== null, json: async () => (String(url).endsWith('/local') ? player : {}) })
+  const ext = api.activate(box.host)
+  await settle()
+  await settle()
+  ready(box)
+  await ext.tick()
+  assert.strictEqual(ext.stateNow().view, 'boot', 'the player does not answer yet')
+  player = { currentPlayer: '', playing: false }
+  await ext.tick()
+  assert.strictEqual(ext.stateNow().view, 'idle')
+  fsx.writeFileSync(holdFile, `update ${1763500000}`)
+  await ext.tick()
+  assert.strictEqual(ext.stateNow().view, 'update')
+  fsx.writeFileSync(holdFile, `shutdown ${1763500000}`)
+  await ext.tick()
+  assert.strictEqual(ext.stateNow().view, 'bye')
+  fsx.writeFileSync(holdFile, '')
+  fsx.writeFileSync(playtimeFile, '{"enabled":true,"state":"blocked"}')
+  await ext.tick()
+  assert.strictEqual(ext.stateNow().view, 'rest')
+  fsx.rmSync(dir, { recursive: true, force: true })
+})
+
+test('an update that stood when the server started is over: its state is cleared; the shutdown stays', () => {
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'oled-hold-'))
+  const holdFile = pathx.join(dir, 'hold')
+  const deps = { holdFile, playtimeFile: pathx.join(dir, 'none'), now: () => 1_763_500_000_000 }
+  fsx.writeFileSync(holdFile, `update ${1763500000}`)
+  api.activate(fakeHost({}, { deps }).host)
+  assert.strictEqual(fsx.readFileSync(holdFile, 'utf8'), '')
+  fsx.writeFileSync(holdFile, `shutdown ${1763500000}`)
+  api.activate(fakeHost({}, { deps }).host)
+  assert.ok(fsx.readFileSync(holdFile, 'utf8').startsWith('shutdown'), 'the shutdown is not cleared')
+  fsx.rmSync(dir, { recursive: true, force: true })
+})
+
+test("the picture routes: the list, a picture of the user's, and the original again", async () => {
+  const dataDir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'oled-data-'))
+  const converted = []
+  const box = fakeHost(
+    { imageStyle: 'dither' },
+    {
+      dataDir,
+      deps: {
+        execFile: (command, args, options, done) => {
+          // (oled.py --convert IN OUT --style S: makes the file OUT)
+          if (args.includes('--convert')) {
+            converted.push(args.slice(args.indexOf('--convert') + 3).join(' '))
+            fsx.writeFileSync(args[args.indexOf('--convert') + 2], 'PNG')
+          }
+          done(null, '')
+        },
+      },
+    },
+  )
+  api.activate(box.host)
+  await settle()
+  await settle()
+  const list = async () => (await pictureRoute(box, 'get /images', {})).body.items
+  const rows = await list()
+  assert.deepStrictEqual(rows.map((r) => r.id), logic.IMAGE_IDS)
+  assert.ok(rows.find((r) => r.id === 'boot').image.startsWith('data:image/png;base64,'), 'the original is shown')
+  assert.deepStrictEqual(rows.find((r) => r.id === 'boot').actions.map((a) => a.label), ['Bild ändern'])
+  assert.deepStrictEqual(rows.find((r) => r.id === 'shutdown').actions, [])
+  // (a picture that cannot be changed, or no picture at all)
+  assert.strictEqual((await pictureRoute(box, 'post /imageset', { id: 'shutdown', image: PNG_URL })).status, 400)
+  assert.strictEqual((await pictureRoute(box, 'post /imageset', { id: 'boot', image: 'data:image/png;base64,AAAA' })).status, 400)
+  assert.strictEqual((await pictureRoute(box, 'post /imageset', { id: 'boot', image: 'https://evil.example/x.png' })).status, 400)
+  assert.strictEqual(fsx.existsSync(pathx.join(dataDir, 'images', 'boot.png')), false)
+  // (a picture of the user: made 1-bit with the style of the settings, then it is the one that is shown)
+  const saved = await pictureRoute(box, 'post /imageset', { id: 'boot', image: PNG_URL })
+  assert.strictEqual(saved.body.ok, true)
+  assert.deepStrictEqual(converted, ['--style dither'])
+  assert.strictEqual(fsx.readFileSync(pathx.join(dataDir, 'images', 'boot.png'), 'utf8'), 'PNG')
+  assert.deepStrictEqual(fsx.readdirSync(pathx.join(dataDir, 'images')), ['boot.png'], 'no half-done files stay')
+  const own = (await list()).find((r) => r.id === 'boot')
+  assert.deepStrictEqual(own.actions.map((a) => a.label), ['Bild ändern', 'Zurücksetzen'])
+  assert.strictEqual(own.image, 'data:image/png;base64,' + Buffer.from('PNG').toString('base64'))
+  // (the original again)
+  assert.strictEqual((await pictureRoute(box, 'post /imagereset', { id: 'shutdown' })).status, 400)
+  assert.strictEqual((await pictureRoute(box, 'post /imagereset', { id: 'boot' })).body.ok, true)
+  assert.strictEqual(fsx.existsSync(pathx.join(dataDir, 'images', 'boot.png')), false)
+  assert.deepStrictEqual((await list()).find((r) => r.id === 'boot').actions.map((a) => a.label), ['Bild ändern'])
+  fsx.rmSync(dataDir, { recursive: true, force: true })
+})
+
+test('a picture the program cannot convert is refused and leaves nothing behind', async () => {
+  const dataDir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'oled-data-'))
+  const box = fakeHost({}, { dataDir, deps: { execFile: (command, args, options, done) => done(new Error('exit 3'), '') } })
+  api.activate(box.host)
+  await settle()
+  await settle()
+  const refused = await pictureRoute(box, 'post /imageset', { id: 'update', image: PNG_URL })
+  assert.strictEqual(refused.status, 400)
+  assert.deepStrictEqual(fsx.readdirSync(pathx.join(dataDir, 'images')), [])
+  fsx.rmSync(dataDir, { recursive: true, force: true })
 })

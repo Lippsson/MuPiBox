@@ -471,5 +471,200 @@ class ScreensTest(unittest.TestCase):
         self.assertGreater(lit(wide, (100, 53, 128, 64)), 5, 'the track still stands at the right edge')
 
 
+class PicturesTest(unittest.TestCase):
+    """The pictures: the ones of the extension (images/), the ones the user chose, and what each view shows."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.custom = os.path.join(self.tmp, 'custom')
+        os.makedirs(self.custom)
+        self.builtin = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'images')
+        self.screens = render.Screens(128, 64, pictures=render.Pictures(self.builtin, self.custom, 128, 64))
+
+    def own(self, name, image):
+        image.save(os.path.join(self.custom, name + '.png'))
+
+    def test_the_pictures_of_the_extension_are_1_bit_pictures_of_the_size_of_the_display(self):
+        for name in ('boot', 'nfc', 'barcode', 'shutdown', 'update', 'rest'):
+            with Image.open(os.path.join(self.builtin, name + '.png')) as image:
+                self.assertEqual((image.size, image.mode), ((128, 64), '1'), name)
+                self.assertGreater(lit(image.convert('1'), (0, 0, 128, 64)), 50, name)
+
+    def test_each_view_shows_its_picture(self):
+        for view, name in (('boot', 'boot'), ('bye', 'shutdown'), ('update', 'update'), ('rest', 'rest')):
+            with Image.open(os.path.join(self.builtin, name + '.png')) as want:
+                got = self.screens.render({'view': view}, 0)
+                self.assertEqual(got.tobytes(), want.convert('1').tobytes(), view)
+        self.assertEqual(self.screens.boot().size, (128, 64))
+
+    def test_the_idle_display_shows_the_reader_the_scanner_or_the_clock(self):
+        def pic(name):
+            with Image.open(os.path.join(self.builtin, name + '.png')) as image:
+                return image.convert('1').tobytes()
+        self.assertEqual(self.screens.render({'view': 'idle', 'idle': 'nfc'}, 0).tobytes(), pic('nfc'))
+        self.assertEqual(self.screens.render({'view': 'idle', 'idle': 'barcode'}, 0).tobytes(), pic('barcode'))
+        clock = self.screens.render({'view': 'idle', 'idle': 'clock', 'clock': True, 'time': '07:05', 'date': 'Mo 16.11.'}, 0)
+        self.assertNotIn(clock.tobytes(), (pic('nfc'), pic('barcode')))
+        # (no picture of the user's own yet: the reader)
+        self.assertEqual(self.screens.render({'view': 'idle', 'idle': 'custom'}, 0).tobytes(), pic('nfc'))
+
+    def test_a_picture_the_user_chose_replaces_the_original_and_goes_again(self):
+        mine = Image.new('1', (128, 64), 0)
+        mine.paste(1, (10, 10, 60, 40))
+        self.own('update', mine)
+        self.assertEqual(self.screens.render({'view': 'update'}, 0).tobytes(), mine.tobytes())
+        self.own('idle', mine)
+        self.assertEqual(self.screens.render({'view': 'idle', 'idle': 'custom'}, 0).tobytes(), mine.tobytes())
+        os.remove(os.path.join(self.custom, 'update.png'))
+        with Image.open(os.path.join(self.builtin, 'update.png')) as original:
+            self.assertEqual(self.screens.render({'view': 'update'}, 0).tobytes(), original.convert('1').tobytes())
+
+    def test_a_picture_that_is_changed_is_read_again_and_one_that_cannot_be_read_is_none(self):
+        first = Image.new('1', (128, 64), 0)
+        first.paste(1, (0, 0, 20, 20))
+        self.own('rest', first)
+        self.assertEqual(self.screens.render({'view': 'rest'}, 0).tobytes(), first.tobytes())
+        second = Image.new('1', (128, 64), 0)
+        second.paste(1, (50, 20, 100, 60))
+        self.own('rest', second)
+        self.assertEqual(self.screens.render({'view': 'rest'}, 0).tobytes(), second.tobytes())
+        with open(os.path.join(self.custom, 'rest.png'), 'wb') as handle:
+            handle.write(b'not a picture')
+        # (a file of the user's that cannot be read is no picture: the view is blank rather than wrong)
+        self.assertIsNone(self.screens.pictures.get('rest'))
+
+    def test_only_four_pictures_can_be_changed(self):
+        self.own('shutdown', Image.new('1', (128, 64), 1))
+        self.own('nfc', Image.new('1', (128, 64), 1))
+        pictures = self.screens.pictures
+        self.assertFalse(pictures.is_own('shutdown'))
+        self.assertFalse(pictures.is_own('nfc'))
+        self.assertEqual(lit(pictures.get('shutdown'), (0, 0, 128, 64)) < 8192, True)
+
+    def test_a_picture_of_another_size_is_fitted_not_stretched(self):
+        wide = Image.new('L', (256, 64), 255)
+        self.own('boot', wide)
+        got = self.screens.pictures.get('boot')
+        self.assertEqual(got.size, (128, 64))
+        # (twice as wide as the display: scaled to 128 x 32 and centered)
+        self.assertEqual(lit(got, (0, 0, 128, 16)), 0)
+        self.assertEqual(lit(got, (0, 16, 128, 48)), 128 * 32)
+
+
+class ConvertTest(unittest.TestCase):
+    """What the picture of the user becomes: 1 bit, 128 x 64, white on black."""
+
+    def png(self, image):
+        import io
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        return buffer.getvalue()
+
+    def drawing_on_white(self):
+        image = Image.new('RGB', (200, 100), 'white')
+        for x in range(60, 140):
+            for y in range(30, 70):
+                image.putpixel((x, y), (0, 0, 0))
+        return image
+
+    def test_the_result_is_a_1_bit_picture_of_128_x_64(self):
+        out = render.convert_picture(self.png(self.drawing_on_white()))
+        self.assertEqual((out.size, out.mode), ((128, 64), '1'))
+
+    def test_a_black_drawing_on_white_is_turned_around_in_auto(self):
+        out = render.convert_picture(self.png(self.drawing_on_white()), style='auto')
+        self.assertEqual(out.getpixel((64, 32)), 255, 'the drawing is lit')
+        self.assertEqual(out.getpixel((2, 2)), 0, 'the ground is dark')
+        kept = render.convert_picture(self.png(self.drawing_on_white()), style='keep')
+        self.assertEqual(kept.getpixel((64, 32)), 0)
+        self.assertEqual(kept.getpixel((2, 2)), 255)
+        turned = render.convert_picture(self.png(self.drawing_on_white()), style='invert')
+        self.assertEqual(turned.tobytes(), out.tobytes())
+
+    def test_a_bright_drawing_on_black_stays_in_auto(self):
+        image = Image.new('RGB', (128, 64), 'black')
+        for x in range(20, 100):
+            for y in range(10, 50):
+                image.putpixel((x, y), (255, 255, 255))
+        out = render.convert_picture(self.png(image), style='auto')
+        self.assertEqual((out.getpixel((60, 30)), out.getpixel((2, 2))), (255, 0))
+
+    def test_a_logo_with_a_transparent_ground_is_drawn_on_black(self):
+        image = Image.new('RGBA', (128, 64), (0, 0, 0, 0))
+        for x in range(30, 100):
+            for y in range(10, 55):
+                image.putpixel((x, y), (200, 30, 30, 255))
+        out = render.convert_picture(self.png(image))
+        self.assertEqual((out.getpixel((60, 30)), out.getpixel((2, 2))), (255, 0))
+        # (a dark logo on a transparent ground shows too)
+        dark = Image.new('RGBA', (128, 64), (0, 0, 0, 0))
+        for x in range(30, 100):
+            for y in range(10, 55):
+                dark.putpixel((x, y), (10, 10, 10, 255))
+        self.assertEqual(render.convert_picture(self.png(dark)).getpixel((60, 30)), 255)
+
+    def test_a_picture_that_is_not_2_to_1_is_centered_with_its_aspect(self):
+        tall = Image.new('RGB', (50, 100), 'white')
+        out = render.convert_picture(self.png(tall), style='keep')
+        self.assertEqual(lit(out, (0, 0, 32, 64)), 0)
+        self.assertEqual(lit(out, (32, 0, 96, 64)), 32 * 64)
+
+    def test_the_photo_style_makes_dots_of_grey(self):
+        grey = Image.new('L', (128, 64), 128)
+        out = render.convert_picture(self.png(grey), style='dither')
+        count = lit(out, (0, 0, 128, 64))
+        self.assertTrue(0.3 * 8192 < count < 0.7 * 8192, count)
+        plain = render.convert_picture(self.png(grey), style='keep')
+        self.assertIn(lit(plain, (0, 0, 128, 64)), (0, 8192))
+
+    def test_what_is_no_picture_is_refused(self):
+        with self.assertRaises(Exception):
+            render.convert_picture(b'this is not a picture')
+
+    def test_the_program_converts_a_file_and_says_when_it_cannot(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, 'in.png')
+            dst = os.path.join(tmp, 'out.png')
+            with open(src, 'wb') as handle:
+                handle.write(self.png(self.drawing_on_white()))
+            self.assertEqual(oled.main(['--convert', src, dst, '--style', 'auto']), 0)
+            with Image.open(dst) as image:
+                self.assertEqual((image.size, image.mode), ((128, 64), '1'))
+            with open(src, 'wb') as handle:
+                handle.write(b'no picture')
+            os.remove(dst)
+            self.assertEqual(oled.main(['--convert', src, dst]), 3)
+            self.assertFalse(os.path.exists(dst))
+
+
+class ShowTest(unittest.TestCase):
+    """--show: one picture on the display, the program ends."""
+
+    def test_a_picture_that_is_not_there_is_an_error_not_a_blank_display(self):
+        screens = render.Screens(128, 64, pictures=render.Pictures('/nowhere', None, 128, 64))
+        import argparse
+        args = argparse.Namespace(show='idle', bus=1, address='0x3C', controller='ssd1306', width=128, height=64, rotate=False, contrast=127)
+        self.assertEqual(oled.show_picture(args, screens), 3)
+
+    def test_the_settings_of_the_extension_say_which_display(self):
+        import argparse
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = os.path.join(tmp, 'oled.json')
+            with open(settings, 'w', encoding='utf8') as handle:
+                json.dump({'controller': 'sh1106', 'size': '128x32', 'address': '0x3D', 'rotate': True, 'contrast': 40}, handle)
+            args = argparse.Namespace(settings=settings, controller='ssd1306', height=64, address='0x3C', rotate=False, contrast=127)
+            got = oled.settings_args(args)
+            self.assertEqual((got.controller, got.height, got.address, got.rotate, got.contrast), ('sh1106', 32, '0x3D', True, 40))
+            # (no file: what the arguments say stays)
+            args = argparse.Namespace(settings=os.path.join(tmp, 'none.json'), controller='ssd1306', height=64, address='0x3C', rotate=False, contrast=127)
+            got = oled.settings_args(args)
+            self.assertEqual((got.controller, got.height, got.address, got.rotate, got.contrast), ('ssd1306', 64, '0x3C', False, 127))
+
+
 if __name__ == '__main__':
     unittest.main()

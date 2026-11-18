@@ -1,6 +1,6 @@
 # OLED display
 
-The **OLED display** extension shows on a small OLED display what the box plays: title, artist and album, the time, the track number, the volume, the WLAN, the battery of a MuPiHAT, shuffle and repeat, and the output (speaker, headphones, Bluetooth). When nothing plays it shows the clock. The box can also run **without the DSI display altogether** (see [Without DSI display](ohne-dsi-display.md)).
+The **OLED display** extension shows on a small OLED display what the box plays: title, artist and album, the time, the track number, the volume, the WLAN, the battery of a MuPiHAT, shuffle and repeat, and the output (speaker, headphones, Bluetooth). When nothing plays it shows a picture: by default the NFC reader, which waits for a tag. At start, during an update, in the rest time and at shutdown it has pictures of its own, which can be changed. The box can also run **without the DSI display altogether** (see [Without DSI display](ohne-dsi-display.md)).
 
 The chips **SSD1306**, **SH1106** and **SSD1309** on the **I2C connector** are supported, with **128 × 64** or **128 × 32** pixels, on the **Raspberry Pi 4 and the Pi 5**. The display needs no package apart from `python3-pil`, which the installation of the extension brings along.
 
@@ -40,7 +40,7 @@ Below are **title**, **artist** and **album**; a long line scrolls by itself (or
 
 ![The time counts down, the output is Bluetooth](oled-play-bt.png)
 
-When nothing plays, the display shows the **clock** with the date (the weekday in the language of the box, which you choose under **Settings › System › Language**; German if none is chosen); after the time you set it switches off.
+When nothing plays, the display shows what is chosen under **Idle display**: the **NFC reader** (a hand with a card: the box waits for a tag, the default), the **barcode scanner**, the **clock** with the date (the weekday in the language of the box, which you choose under **Settings › System › Language**; German if none is chosen) or **your own picture**; after the time you set it switches off.
 
 ![The clock when idle](oled-idle.png)
 
@@ -59,7 +59,7 @@ If the **rotary knob** chooses an album with the NFC extension ([NFC: Rotary kno
 | **I2C address** | **0x3C** or **0x3D** |
 | **Turn by 180°** | if the display is mounted upside down |
 | **Display while playing** | **Full** (the picture above), **Mix** (the track number large) or **Compact** (the time large) |
-| **Show the clock** | the clock when idle |
+| **Idle display** | what the display shows while nothing plays: **NFC reader** (default), **Barcode scanner**, **Clock** or **Own picture** |
 | **Show the volume animation** | the short picture when the volume changes; when it is off the display stays as it is (play and pause still show theirs) |
 | **Show the time** | **Elapsed** (counts up from the start) or **Remaining** (counts down to the end, with a minus); a station or podcast of unknown length counts up |
 | **Long texts** | **Scroll again and again** (default), **Scroll once** (the line scrolls through completely one time and then stays with "…" at the end) or **Do not scroll** (the line is cut with "…") |
@@ -72,6 +72,24 @@ If the **rotary knob** chooses an album with the NFC extension ([NFC: Rotary kno
 The buttons **Show the address of the box** and **Next layout** try the display out: the second switches between **Full**, **Mix** and **Compact** until the next save. A change of chip, size, address or rotation restarts the display; the others apply at once.
 
 The **128 × 32** display shows title, artist, time, volume and WLAN in one layout.
+
+## Pictures
+
+The **Pictures** card shows the pictures of the display and where they appear. All are **128 × 64** dots, white on black.
+
+| Picture | When it appears | Changeable |
+| --- | --- | --- |
+| **Start picture** (the MuPiBox logo) | at boot, as soon as the display program starts, until the box is ready (two minutes at most) | yes |
+| **Idle: NFC reader** | when idle, if **Idle display** is **NFC reader** | no |
+| **Idle: Barcode scanner** | when idle, if **Idle display** is **Barcode scanner** | no |
+| **Idle: Own picture** | when idle, if **Idle display** is **Own picture** (until you choose one, the NFC reader stays) | yes |
+| **Update** | while an update runs | yes |
+| **Rest time and limit** (a sleeping face) | while a rest time runs or the limit is reached | yes |
+| **Shutdown** (the power symbol) | as soon as the box shuts down | no |
+
+For a changeable picture tap **Change picture** and choose a picture from your device. The app makes it smaller and the box turns it into a black-and-white picture; the setting **Convert own pictures** says how: **Automatic** turns bright drawings on a white ground around, **Invert** always turns around, **Unchanged** leaves the picture, **Photo (dots)** scatters grey tones as dots. A picture with a transparent ground (a logo) is drawn on black. The aspect ratio is kept; what does not fit stays black. **Reset** brings the original back.
+
+The update and shutdown pictures are drawn by the box itself, even when the server has stopped by then. The start picture appears as soon as the display program has started; a picture before that, while Linux is still starting, is not possible.
 
 ## If the display stays dark
 

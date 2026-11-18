@@ -9,6 +9,29 @@ const MODES = ['full', 'mix', 'lite']
 const TIME_MODES = ['up', 'down']
 const SCROLL_MODES = ['loop', 'once', 'off']
 const SLEEP_MINUTES = [0, 1, 5, 15, 60]
+// what the display shows while nothing plays (nfc: the reader that waits for a tag, barcode: the scanner, clock: the time, custom: a picture
+// the user chose) and how a picture the user chooses is made black and white (see render.py convert_picture)
+const IDLE_SCREENS = ['nfc', 'barcode', 'clock', 'custom']
+const IMAGE_STYLES = ['auto', 'invert', 'keep', 'dither']
+// the pictures: the ones the user may change (boot, idle, update, rest) and the ones that are fixed; `idle` is the user's own picture of
+// the idle display. Their names are the file names (images/<id>.png, the user's own in the data folder).
+const IMAGE_ROWS = [
+  { id: 'boot', title: 'Startbild', text: 'Beim Hochfahren, bis die Box bereit ist', changeable: true },
+  { id: 'nfc', title: 'Leerlauf: NFC-Leser', text: 'Zeigt, dass der Leser auf einen Tag wartet', changeable: false },
+  { id: 'barcode', title: 'Leerlauf: Barcodescanner', text: 'Zeigt, dass der Scanner auf einen Code wartet', changeable: false },
+  { id: 'idle', title: 'Leerlauf: Eigenes Bild', text: 'Für „Anzeige im Leerlauf“ › „Eigenes Bild“', changeable: true },
+  { id: 'update', title: 'Update', text: 'Solange ein Update läuft', changeable: true },
+  { id: 'rest', title: 'Ruhezeit und Limit', text: 'Wenn eine Ruhezeit läuft oder das Limit erreicht ist', changeable: true },
+  { id: 'shutdown', title: 'Herunterfahren', text: 'Sobald die Box herunterfährt', changeable: false },
+]
+const IMAGE_IDS = IMAGE_ROWS.map((row) => row.id)
+const CHANGEABLE_IMAGES = IMAGE_ROWS.filter((row) => row.changeable).map((row) => row.id)
+// (the box's scripts say "an update runs" or "the box goes down" in a file, see scripts/mupibox/oled_picture.sh; the update one is refreshed with
+// every step, so a stale one - the box was switched off in the middle - ends by itself)
+const HOLD_SLOTS = ['update', 'shutdown']
+const HOLD_MS = 15 * 60 * 1000
+// (the box has not answered for this long: the start picture goes anyway)
+const BOOT_MAX_MS = 120000
 // (a short picture - play, pause, volume - and the page with the address of the box stay this long)
 const OVERLAY_MS = 900
 const INFO_MS = 10000
@@ -31,7 +54,8 @@ function readConfig(settings = {}) {
     rotate: settings.rotate === true,
     contrast: Math.round(number(settings.contrast, 127, 0, 255)),
     mode: pick(settings.mode, MODES, 'full'),
-    clock: settings.clock !== false,
+    idleScreen: pick(settings.idleScreen, IDLE_SCREENS, 'nfc'),
+    imageStyle: pick(settings.imageStyle, IMAGE_STYLES, 'auto'),
     volumeOverlay: settings.volumeOverlay !== false,
     nightDim: settings.nightDim === true,
     nightContrast: Math.round(number(settings.nightContrast, 20, 1, 255)),
@@ -42,10 +66,12 @@ function readConfig(settings = {}) {
   }
 }
 
-/** The arguments of oled.py for a configuration. */
-function driverArgs(config) {
+/** The arguments of oled.py for a configuration (`dirs`: where the pictures are - the extension's own and the ones the user chose). */
+function driverArgs(config, dirs = {}) {
   const args = ['--controller', config.controller, '--width', String(config.width), '--height', String(config.height), '--address', config.address, '--contrast', String(config.contrast)]
   if (config.rotate) args.push('--rotate')
+  if (dirs.images) args.push('--images', dirs.images)
+  if (dirs.custom) args.push('--custom', dirs.custom)
   return args
 }
 
@@ -125,6 +151,37 @@ function overlayFor(before, after, volumeShown = true) {
   return null
 }
 
+/** Is the box stopped for the player's rest time or limit? From /tmp/playtime.json (state "blocked": not "grace", where the track plays on). */
+function blockedFrom(text) {
+  try {
+    const status = JSON.parse(String(text ?? ''))
+    return status?.enabled === true && status.state === 'blocked'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * What the box's scripts say with their file ("update 1763500000": a picture they drew on the display themselves, and since when): { slot, at }
+ * while it is current, else null. The update refreshes it with every step.
+ */
+function holdFrom(text, now) {
+  const m = /^\s*([a-z]+)\s+(\d{9,11})\s*$/.exec(String(text ?? ''))
+  if (!m || !HOLD_SLOTS.includes(m[1])) return null
+  const at = Number(m[2]) * 1000
+  return now - at < HOLD_MS && at - now < HOLD_MS ? { slot: m[1], at } : null
+}
+
+/** The rows of the list of pictures of the page: the picture, where it is shown, whether it is the user's own; `own` the ids the user changed. */
+function imageRows({ own = [], idleScreen = 'nfc' } = {}) {
+  return IMAGE_ROWS.map((row) => {
+    const mine = own.includes(row.id)
+    const chosen = (row.id === 'nfc' && idleScreen === 'nfc') || (row.id === 'barcode' && idleScreen === 'barcode') || (row.id === 'idle' && idleScreen === 'custom')
+    const status = !row.changeable ? 'Fest eingebaut' : mine ? 'Eigenes Bild' : row.id === 'idle' ? 'Noch keins gewählt' : 'Original'
+    return { id: row.id, title: row.title, text: [row.text, status, ...(chosen ? ['Gerade gewählt'] : [])], own: mine, changeable: row.changeable }
+  })
+}
+
 /** The charge of the MuPiHAT's battery from /tmp/mupihat.json (a number 0 to 100), null without a reading. */
 function batteryPercent(text) {
   try {
@@ -198,13 +255,15 @@ function timeTexts(date, language = 'de') {
 
 /**
  * The state the driver draws. `now` in ms; `ui` is what the extension holds besides the player: { infoUntil, overlay: { kind, volume, until },
- * select: { title, artist, index, count, until }, idleSince, wake, mode } and `net` { ssid, ip, wifi, lan, battery, output }.
+ * select: { title, artist, index, count, until }, idleSince, wake, mode, ready (false while the box starts), hold: { slot } (an update runs or the box
+ * goes down: the box's scripts drew it, see holdFrom), blocked (a rest time or the limit) } and `net` { ssid, ip, wifi, lan, battery, output }.
  */
 function buildState({ config, play, ui, net, date, now, version, language }) {
   const { time, date: dateText } = timeTexts(date, language)
   const base = {
     mode: ui.mode ?? config.mode,
-    clock: config.clock,
+    clock: config.idleScreen === 'clock',
+    idle: config.idleScreen,
     time,
     date: dateText,
     wifi: net.wifi ?? -1,
@@ -226,6 +285,10 @@ function buildState({ config, play, ui, net, date, now, version, language }) {
     duration: play.duration,
     stream: play.stream,
   }
+  // (the box goes down or an update runs: that picture, whatever else; the start picture until the box is ready to play)
+  if (ui.hold?.slot === 'shutdown') return { ...base, view: 'bye' }
+  if (ui.hold?.slot === 'update') return { ...base, view: 'update' }
+  if (ui.ready === false) return { ...base, view: 'boot' }
   if (ui.infoUntil && now < ui.infoUntil) {
     return { ...base, view: 'info', ssid: net.lan ? '' : (net.ssid ?? ''), ip: net.ip ?? '', version: `OLED ${version}`, infoLeft: Math.max(0, (ui.infoUntil - now) / INFO_MS) }
   }
@@ -236,6 +299,8 @@ function buildState({ config, play, ui, net, date, now, version, language }) {
   // (nothing plays - a paused medium too, its still picture would burn in: after the time the user chose the display goes off, a
   // button, a tag or a tap wakes it)
   if (config.sleepAfter > 0 && ui.idleSince && now - ui.idleSince >= config.sleepAfter * 60000 && !(ui.wake && now < ui.wake)) return { ...base, view: 'off' }
+  // (a rest time or the limit has stopped the box: the picture that says so, instead of the one of the idle display)
+  if (ui.blocked === true) return { ...base, view: 'rest' }
   const something = play.player !== '' && (play.title !== '' || play.artist !== '' || play.album !== '')
   return { ...base, view: something ? 'play' : 'idle' }
 }
@@ -338,6 +403,15 @@ module.exports = {
   TIME_MODES,
   SCROLL_MODES,
   SLEEP_MINUTES,
+  IDLE_SCREENS,
+  IMAGE_STYLES,
+  IMAGE_ROWS,
+  IMAGE_IDS,
+  CHANGEABLE_IMAGES,
+  BOOT_MAX_MS,
+  blockedFrom,
+  holdFrom,
+  imageRows,
   OVERLAY_MS,
   INFO_MS,
   readConfig,

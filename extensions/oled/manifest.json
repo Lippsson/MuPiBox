@@ -1,7 +1,7 @@
 {
   "id": "oled",
   "name": "OLED-Display",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Ein kleines OLED-Display (SSD1306, SH1106 oder SSD1309 am I2C-Anschluss, 128 × 64 oder 128 × 32) zeigt, was die Box spielt: Titel, Interpret, Laufzeit, Titelnummer, Lautstärke, WLAN, Akku, Zufall und Wiederholen, Ausgang (Lautsprecher, Kopfhörer, Bluetooth) und die Uhrzeit. Dazu lässt sich die Box ganz ohne DSI-Display betreiben. Die Einstellungen stehen unter Einstellungen › OLED-Display.",
   "hostApi": 10,
   "resources": {},
@@ -62,9 +62,15 @@
         "lite"
       ]
     },
-    "clock": {
-      "type": "boolean",
-      "default": true
+    "idleScreen": {
+      "type": "string",
+      "default": "nfc",
+      "options": [
+        "nfc",
+        "barcode",
+        "clock",
+        "custom"
+      ]
     },
     "volumeOverlay": {
       "type": "boolean",
@@ -100,6 +106,16 @@
         "loop",
         "once",
         "off"
+      ]
+    },
+    "imageStyle": {
+      "type": "string",
+      "default": "auto",
+      "options": [
+        "auto",
+        "invert",
+        "keep",
+        "dither"
       ]
     }
   },
@@ -209,9 +225,27 @@
         ]
       },
       {
-        "key": "clock",
-        "label": "Uhrzeit zeigen",
-        "help": "Im Leerlauf, wenn nichts spielt."
+        "key": "idleScreen",
+        "label": "Anzeige im Leerlauf",
+        "help": "Was das Display zeigt, solange nichts spielt: der NFC-Leser (er wartet auf einen Tag), der Barcodescanner, die Uhrzeit oder ein eigenes Bild (unter „Bilder“ wählen).",
+        "choices": [
+          {
+            "value": "nfc",
+            "label": "NFC-Leser"
+          },
+          {
+            "value": "barcode",
+            "label": "Barcodescanner"
+          },
+          {
+            "value": "clock",
+            "label": "Uhrzeit"
+          },
+          {
+            "value": "custom",
+            "label": "Eigenes Bild"
+          }
+        ]
       },
       {
         "key": "volumeOverlay",
@@ -307,6 +341,41 @@
         "label": "Nächste Anzeige",
         "post": "/api/ext/oled/mode",
         "help": "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt."
+      },
+      {
+        "type": "heading",
+        "label": "Bilder",
+        "card": true,
+        "help": "Die Bilder, die das Display bei Start, Update, Ruhezeit und Herunterfahren zeigt. Start, Leerlauf, Update und Ruhezeit lassen sich durch ein eigenes Bild ersetzen; „Zurücksetzen“ bringt das Original zurück. Die Bilder sind 128 × 64 Punkte, weiß auf schwarz."
+      },
+      {
+        "key": "imageStyle",
+        "label": "Eigene Bilder umwandeln",
+        "help": "Wie ein gewähltes Bild schwarzweiß wird. Automatisch dreht helle Zeichnungen auf weißem Grund um, Umkehren dreht immer um, Unverändert lässt es, Foto streut Grautöne als Punkte. Gilt für das nächste gewählte Bild.",
+        "choices": [
+          {
+            "value": "auto",
+            "label": "Automatisch"
+          },
+          {
+            "value": "invert",
+            "label": "Umkehren"
+          },
+          {
+            "value": "keep",
+            "label": "Unverändert"
+          },
+          {
+            "value": "dither",
+            "label": "Foto (Punkte)"
+          }
+        ]
+      },
+      {
+        "type": "list",
+        "label": "Bilder",
+        "list": "/api/ext/oled/images",
+        "empty": "Keine Bilder gefunden."
       },
       {
         "type": "heading",

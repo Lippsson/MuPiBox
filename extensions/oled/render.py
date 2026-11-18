@@ -3,9 +3,10 @@
 Pure drawing (Pillow only): no hardware, no clock of its own besides the `now` it is given, so the screens can be tried
 and tested without a display. The layouts are made for 128 x 64 and 128 x 32 pixels.
 """
+import io
 import os
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageStat
 
 FONT_CANDIDATES = (
     '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
@@ -16,6 +17,14 @@ BOLD_CANDIDATES = (
     '/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf',
     '/usr/share/fonts/dejavu/DejaVuSansMono-Bold.ttf',
 )
+
+# The pictures of the display (128 x 64, white on black): the ones the extension brings in images/ and, for the four the user may
+# change, their own ones in the data folder of the extension. What each view shows:
+CHANGEABLE = ('boot', 'idle', 'update', 'rest')
+VIEW_PICTURES = {'boot': 'boot', 'bye': 'shutdown', 'update': 'update', 'rest': 'rest'}
+# (the picture of the idle display: the reader that waits for a tag, the scanner that waits for a code, or the user's own one)
+IDLE_PICTURES = {'nfc': 'nfc', 'barcode': 'barcode', 'custom': 'idle'}
+IMAGE_STYLES = ('auto', 'invert', 'keep', 'dither')
 
 # marquee: a long line waits a moment, scrolls to its end, waits again and starts over
 SCROLL_PX_PER_S = 28.0
@@ -46,6 +55,101 @@ class Fonts:
         self.big = _load(BOLD_CANDIDATES, 30)
         self.huge = _load(BOLD_CANDIDATES, 44)
         self.clock = _load(BOLD_CANDIDATES, 26)
+
+
+def fit_picture(image, width, height):
+    """A picture (any mode and size) as a 1-bit picture of width x height: scaled to fit (not stretched), black around it."""
+    image = image.convert('L')
+    if image.size != (width, height):
+        scale = min(width / image.width, height / image.height)
+        size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
+        image = image.resize(size, Image.LANCZOS)
+        canvas = Image.new('L', (width, height), 0)
+        canvas.paste(image, ((width - size[0]) // 2, (height - size[1]) // 2))
+        image = canvas
+    return image.point(lambda v: 255 if v > 127 else 0).convert('1')
+
+
+def convert_picture(data, width=128, height=64, style='auto'):
+    """A picture the user chose (the bytes of a PNG, JPEG ... ) as a 1-bit picture of width x height, white on black.
+    style: 'auto' - a picture that is mostly bright (a drawing on white) is turned around; 'invert' - always turned around;
+    'keep' - as it is; 'dither' - a photo: grey values become dots (Floyd-Steinberg). A picture with transparent parts (a logo)
+    is drawn on black, and a dark one is turned around so that it shows."""
+    if style not in IMAGE_STYLES:
+        style = 'auto'
+    source = Image.open(io.BytesIO(data))
+    source.load()
+    rgba = source.convert('RGBA')
+    scale = min(width / rgba.width, height / rgba.height)
+    size = (max(1, round(rgba.width * scale)), max(1, round(rgba.height * scale)))
+    rgba = rgba.resize(size, Image.LANCZOS)
+    gray = rgba.convert('L')
+    alpha = rgba.getchannel('A')
+    clear = sum(alpha.histogram()[:128])
+    if clear > 0.02 * size[0] * size[1]:
+        # (a shape on a transparent ground: what is drawn is the opaque part; the turning round looks at that part only)
+        opaque = alpha.point(lambda v: 255 if v >= 128 else 0)
+        mean = ImageStat.Stat(gray, opaque).mean[0] if opaque.getbbox() else 0
+        if style == 'invert' or (style in ('auto', 'dither') and mean < 128):
+            gray = ImageChops.invert(gray)
+        gray = ImageChops.multiply(gray, alpha)
+    else:
+        mean = ImageStat.Stat(gray).mean[0]
+        if style == 'invert' or (style == 'auto' and mean > 127):
+            gray = ImageChops.invert(gray)
+    canvas = Image.new('L', (width, height), 0)
+    canvas.paste(gray, ((width - size[0]) // 2, (height - size[1]) // 2))
+    if style == 'dither':
+        return canvas.convert('1')
+    # (a drawing of thin lines gets grey when it is made smaller: the less of the picture is lit, the lower the limit - else the lines go)
+    lit = ImageStat.Stat(canvas).mean[0]
+    limit = 127 if lit >= 90 else int(45 + (lit / 90.0) * 82)
+    return canvas.point(lambda v: 255 if v > limit else 0).convert('1')
+
+
+class Pictures:
+    """Finds and loads the pictures: images/<name>.png of the extension, and for the changeable ones <custom>/<name>.png first.
+    A picture is read again when its file changed (the user chose another one); a file that cannot be read is no picture."""
+
+    def __init__(self, builtin=None, custom=None, width=128, height=64):
+        self.builtin = builtin if builtin is not None else os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+        self.custom = custom
+        self.width = width
+        self.height = height
+        self._kept = {}
+
+    def path(self, name):
+        if name in CHANGEABLE and self.custom:
+            own = os.path.join(self.custom, name + '.png')
+            if os.path.isfile(own):
+                return own
+        if name in ('idle',):
+            return None  # (no ready-made picture: the idle display shows the reader then)
+        built = os.path.join(self.builtin, name + '.png') if self.builtin else None
+        return built if built and os.path.isfile(built) else None
+
+    def is_own(self, name):
+        return name in CHANGEABLE and bool(self.custom) and os.path.isfile(os.path.join(self.custom, name + '.png'))
+
+    def get(self, name):
+        path = self.path(name)
+        if not path:
+            return None
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return None
+        key = (path, stat.st_mtime_ns, stat.st_size)
+        kept = self._kept.get(name)
+        if kept and kept[0] == key:
+            return kept[1]
+        try:
+            with Image.open(path) as source:
+                image = fit_picture(source, self.width, self.height)
+        except (OSError, ValueError):
+            return None
+        self._kept[name] = (key, image)
+        return image
 
 
 def clock_text(seconds):
@@ -151,11 +255,12 @@ SPEAKER = ('......#.', '.....##.', '..#####.', '.#..###.', '.#..###.', '.#..###.
 
 
 class Screens:
-    def __init__(self, width=128, height=64, fonts=None):
+    def __init__(self, width=128, height=64, fonts=None, pictures=None):
         self.width = width
         self.height = height
         self.tall = height >= 48
         self.fonts = fonts or Fonts()
+        self.pictures = pictures or Pictures(width=width, height=height)
         # (the text of the lines that scroll and the moment it was set: a new text starts at its beginning)
         self._line_since = {}
         # (set while a picture is drawn: does a line of it scroll? Then the driver draws again soon)
@@ -335,6 +440,10 @@ class Screens:
 
     # ---- the screens ----------------------------------------------------------------------------------------------
     def boot(self):
+        # (the picture of the start: the logo, or the user's own one)
+        picture = self.pictures.get('boot')
+        if picture is not None:
+            return picture
         image, draw = self._canvas()
         self._note(draw, self.width // 2 - 14, 2 if self.tall else 0, 28 if self.tall else 24)
         if self.tall:
@@ -352,6 +461,9 @@ class Screens:
         draw.polygon([(stem_x, y + 2), (stem_x + size // 2, y + size // 3), (stem_x + size // 2 - 2, y + size // 2), (stem_x, y + size // 4)], fill=1)
 
     def poweroff(self):
+        picture = self.pictures.get('shutdown')
+        if picture is not None:
+            return picture
         image, draw = self._canvas()
         size = 30 if self.tall else 22
         cx, cy = self.width // 2, self.height // 2
@@ -363,7 +475,14 @@ class Screens:
         return Image.new('1', (self.width, self.height), 0)
 
     def idle(self, state, now):
-        """Nothing plays: the clock (with the date) when it is wanted, else the note."""
+        """Nothing plays: the picture the settings name (state['idle']: nfc, barcode or custom), the clock (with the date) when it is
+        wanted, else the note."""
+        slot = IDLE_PICTURES.get(state.get('idle'))
+        if slot:
+            # (the user's own picture, as long as there is none: the one of the reader)
+            picture = self.pictures.get(slot) or self.pictures.get('nfc')
+            if picture is not None:
+                return picture
         image, draw = self._canvas()
         if state.get('clock') and state.get('time'):
             time_text = state['time']
@@ -555,6 +674,10 @@ class Screens:
             return self.poweroff()
         if view == 'off':
             return self.blank()
+        # (an update runs, or a rest time or the limit stops the box: the picture that says so)
+        if view in ('update', 'rest'):
+            picture = self.pictures.get(VIEW_PICTURES[view])
+            return picture if picture is not None else self.blank()
         if view == 'overlay' or state.get('overlay'):
             return self.overlay(state)
         if view == 'info':

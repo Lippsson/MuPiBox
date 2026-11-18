@@ -1,6 +1,6 @@
 # OLED-Display
 
-Die Erweiterung **OLED-Display** zeigt auf einem kleinen OLED-Display, was die Box spielt: Titel, Interpret und Album, die Zeit, die Titelnummer, die Lautstärke, das WLAN, den Akku eines MuPiHAT, Zufall und Wiederholen und den Ausgang (Lautsprecher, Kopfhörer, Bluetooth). Wenn nichts spielt, zeigt es die Uhrzeit. Dazu kann die Box **ganz ohne DSI-Display** laufen (siehe [Ohne DSI-Display](ohne-dsi-display.md)).
+Die Erweiterung **OLED-Display** zeigt auf einem kleinen OLED-Display, was die Box spielt: Titel, Interpret und Album, die Zeit, die Titelnummer, die Lautstärke, das WLAN, den Akku eines MuPiHAT, Zufall und Wiederholen und den Ausgang (Lautsprecher, Kopfhörer, Bluetooth). Wenn nichts spielt, zeigt es ein Bild: standardmäßig den NFC-Leser, der auf einen Tag wartet. Beim Start, beim Update, in der Ruhezeit und beim Herunterfahren hat es eigene Bilder, die sich ändern lassen. Dazu kann die Box **ganz ohne DSI-Display** laufen (siehe [Ohne DSI-Display](ohne-dsi-display.md)).
 
 Unterstützt werden die Chips **SSD1306**, **SH1106** und **SSD1309** am **I2C-Anschluss** mit **128 × 64** oder **128 × 32** Pixeln, auf dem **Raspberry Pi 4 und dem Pi 5**. Die Anzeige braucht kein Paket außer `python3-pil`, das die Installation der Erweiterung mitbringt.
 
@@ -40,7 +40,7 @@ Darunter stehen **Titel**, **Interpret** und **Album**; eine lange Zeile läuft 
 
 ![Die Zeit läuft rückwärts, der Ausgang ist Bluetooth](oled-play-bt.png)
 
-Wenn nichts spielt, zeigt das Display die **Uhrzeit** mit dem Datum (der Wochentag in der Sprache der Box, die du unter **Einstellungen › System › Sprache** wählst; ohne Auswahl deutsch); nach der eingestellten Zeit schaltet es sich aus.
+Wenn nichts spielt, zeigt das Display das Bild, das unter **Anzeige im Leerlauf** gewählt ist: den **NFC-Leser** (eine Hand mit Karte: die Box wartet auf einen Tag, das ist die Voreinstellung), den **Barcodescanner**, die **Uhrzeit** mit dem Datum (der Wochentag in der Sprache der Box, die du unter **Einstellungen › System › Sprache** wählst; ohne Auswahl deutsch) oder ein **eigenes Bild**; nach der eingestellten Zeit schaltet es sich aus.
 
 ![Die Uhr im Leerlauf](oled-idle.png)
 
@@ -59,7 +59,7 @@ Wählt der **Drehregler** mit der NFC-Extension ein Album ([NFC: Drehregler](nfc
 | **I2C-Adresse** | **0x3C** oder **0x3D** |
 | **Um 180° drehen** | wenn das Display auf dem Kopf eingebaut ist |
 | **Anzeige beim Spielen** | **Voll** (das Bild oben), **Mix** (die Titelnummer groß) oder **Kompakt** (die Zeit groß) |
-| **Uhrzeit zeigen** | die Uhr im Leerlauf |
+| **Anzeige im Leerlauf** | was das Display zeigt, solange nichts spielt: **NFC-Leser** (Voreinstellung), **Barcodescanner**, **Uhrzeit** oder **Eigenes Bild** |
 | **Lautstärke-Animation zeigen** | das kurze Bild beim Ändern der Lautstärke; ausgeschaltet bleibt die Anzeige, wie sie ist (Start und Pause zeigen weiter ihr Bild) |
 | **Zeit zeigen** | **Vergangen** (zählt vom Anfang hoch) oder **Restzeit** (zählt mit einem Minus bis zum Ende herunter); bei einem Sender oder Podcast ohne bekannte Länge zählt sie hoch |
 | **Zu lange Texte** | **Immer wieder durchlaufen** (Standard), **Einmal durchlaufen** (die Zeile läuft einmal komplett durch und steht danach mit „…“ am Ende) oder **Nicht durchlaufen** (die Zeile wird mit „…“ gekürzt) |
@@ -72,6 +72,24 @@ Wählt der **Drehregler** mit der NFC-Extension ein Album ([NFC: Drehregler](nfc
 Die Knöpfe **Adresse der Box zeigen** und **Nächste Anzeige** probieren die Anzeige aus: Der zweite wechselt bis zum nächsten Speichern zwischen **Voll**, **Mix** und **Kompakt**. Eine Änderung von Chip, Größe, Adresse und Drehung startet das Display neu; die anderen gelten sofort.
 
 Das **128 × 32**-Display zeigt Titel, Interpret, Zeit, Lautstärke und WLAN in einer Anzeige.
+
+## Bilder
+
+Die Karte **Bilder** zeigt die Bilder des Displays und wo sie erscheinen. Alle sind **128 × 64** Punkte, weiß auf schwarz.
+
+| Bild | Wann es erscheint | Änderbar |
+| --- | --- | --- |
+| **Startbild** (das MuPiBox-Logo) | beim Hochfahren, sobald die Anzeige startet, bis die Box bereit ist (höchstens zwei Minuten) | ja |
+| **Leerlauf: NFC-Leser** | im Leerlauf, wenn **Anzeige im Leerlauf** auf **NFC-Leser** steht | nein |
+| **Leerlauf: Barcodescanner** | im Leerlauf, wenn **Anzeige im Leerlauf** auf **Barcodescanner** steht | nein |
+| **Leerlauf: Eigenes Bild** | im Leerlauf, wenn **Anzeige im Leerlauf** auf **Eigenes Bild** steht (bis du eins wählst, bleibt der NFC-Leser) | ja |
+| **Update** | solange ein Update läuft | ja |
+| **Ruhezeit und Limit** (ein schlafendes Gesicht) | solange eine Ruhezeit läuft oder das Limit erreicht ist | ja |
+| **Herunterfahren** (das Ein/Aus-Symbol) | sobald die Box herunterfährt | nein |
+
+Bei einem änderbaren Bild tippst du auf **Bild ändern** und wählst ein Bild vom Gerät. Die App verkleinert es, die Box macht daraus ein Schwarzweißbild; die Einstellung **Eigene Bilder umwandeln** bestimmt wie: **Automatisch** dreht helle Zeichnungen auf weißem Grund um, **Umkehren** dreht immer um, **Unverändert** lässt das Bild, **Foto (Punkte)** streut Grautöne als Punkte. Ein Bild mit durchsichtigem Grund (ein Logo) wird auf Schwarz gezeichnet. Das Seitenverhältnis bleibt erhalten; was nicht passt, bleibt schwarz. Mit **Zurücksetzen** kommt das Original wieder.
+
+Das Update- und das Herunterfahr-Bild zeichnet die Box selbst auf das Display, auch wenn der Server dabei schon steht. Das Startbild erscheint, sobald die Anzeige gestartet ist; ein Bild davor, während Linux noch startet, ist nicht möglich.
 
 ## Wenn das Display dunkel bleibt
 

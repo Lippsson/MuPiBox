@@ -665,13 +665,22 @@ describe('the OLED extension of this repository', () => {
     assert.match(rule, /GROUP="gpio"/)
   })
   it('takes the settings the app sends: chip, size, address, mode, the time, sleep and the start without the DSI display', () => {
-    assert.strictEqual(checkSettings(oled, { controller: 'sh1106', size: '128x32', address: '0x3D', rotate: true, contrast: 80, mode: 'mix', clock: false, timeMode: 'down', sleepAfter: 15, headless: true }).ok, true)
+    assert.strictEqual(checkSettings(oled, { controller: 'sh1106', size: '128x32', address: '0x3D', rotate: true, contrast: 80, mode: 'mix', idleScreen: 'clock', imageStyle: 'dither', timeMode: 'down', sleepAfter: 15, headless: true }).ok, true)
     assert.strictEqual(checkSettings(oled, { controller: 'ssd1331' }).ok, false)
     assert.strictEqual(checkSettings(oled, { size: '64x48' }).ok, false)
     assert.strictEqual(checkSettings(oled, { address: '0x10' }).ok, false)
     assert.strictEqual(checkSettings(oled, { contrast: 300 }).ok, false)
     assert.strictEqual(checkSettings(oled, { sleepAfter: 7 }).ok, false)
     assert.strictEqual(checkSettings(oled, { timeMode: 'sideways' }).ok, false)
+    assert.strictEqual(checkSettings(oled, { idleScreen: 'photo' }).ok, false)
+    assert.strictEqual(checkSettings(oled, { imageStyle: 'blur' }).ok, false)
+  })
+  it('has the list of its pictures on the page, and its pictures in the package', () => {
+    assert.deepStrictEqual(oled.ui?.items.filter((i) => i.type === 'list').map((i) => i.list), ['/api/ext/oled/images'])
+    const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'oled')
+    const checked = verifyPackage(readFileSync(path.join(extDir, 'dist', `oled-${entry.version}.mpx`)))
+    assert.strictEqual(checked.ok, true)
+    if (checked.ok) for (const name of ['boot', 'nfc', 'barcode', 'shutdown', 'update', 'rest']) assert.ok(checked.pkg.files.has(`images/${name}.png`), name)
   })
   it('is packed as the catalog says, with its Python driver and screens in it - and no test', () => {
     const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'oled')
