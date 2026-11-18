@@ -52,6 +52,8 @@ Wählt der **Drehregler** mit der NFC-Extension ein Album ([NFC: Drehregler](nfc
 
 ## Einstellungen
 
+Die Einstellungen stehen in Karten: **Display** (Chip, Größe, Adresse, Drehung), **Anzeige**, **Helligkeit** (Helligkeit, Abends dunkler, Display aus nach), **Bilder** und **Ohne DSI-Display**.
+
 | Einstellung | Wirkung |
 | --- | --- |
 | **Chip** | **SSD1306** (fast alle 0,96-Zoll-Module), **SH1106** (meist 1,3 Zoll) oder **SSD1309**. Zeigt das Bild einen Versatz oder Streifen am Rand, den anderen Chip wählen |
@@ -59,7 +61,7 @@ Wählt der **Drehregler** mit der NFC-Extension ein Album ([NFC: Drehregler](nfc
 | **I2C-Adresse** | **0x3C** oder **0x3D** |
 | **Um 180° drehen** | wenn das Display auf dem Kopf eingebaut ist |
 | **Anzeige beim Spielen** | **Voll** (das Bild oben), **Mix** (die Titelnummer groß) oder **Kompakt** (die Zeit groß) |
-| **Anzeige im Leerlauf** | was das Display zeigt, solange nichts spielt: **NFC-Leser** (Voreinstellung), **Barcodescanner**, **Uhrzeit** oder **Eigenes Bild** |
+| **Anzeige im Leerlauf** (Karte **Bilder**) | was das Display zeigt, solange nichts spielt: **NFC-Leser** (Voreinstellung), **Barcodescanner**, **Uhrzeit** oder **Eigenes Bild** |
 | **Lautstärke-Animation zeigen** | das kurze Bild beim Ändern der Lautstärke; ausgeschaltet bleibt die Anzeige, wie sie ist (Start und Pause zeigen weiter ihr Bild) |
 | **Zeit zeigen** | **Vergangen** (zählt vom Anfang hoch) oder **Restzeit** (zählt mit einem Minus bis zum Ende herunter); bei einem Sender oder Podcast ohne bekannte Länge zählt sie hoch |
 | **Zu lange Texte** | **Immer wieder durchlaufen** (Standard), **Einmal durchlaufen** (die Zeile läuft einmal komplett durch und steht danach mit „…“ am Ende) oder **Nicht durchlaufen** (die Zeile wird mit „…“ gekürzt) |
@@ -86,6 +88,8 @@ Die Karte **Bilder** zeigt die Bilder des Displays und wo sie erscheinen. Alle s
 | **Update** | solange ein Update läuft | ja |
 | **Ruhezeit und Limit** (ein schlafendes Gesicht) | solange eine Ruhezeit läuft oder das Limit erreicht ist | ja |
 | **Herunterfahren** (das Ein/Aus-Symbol) | sobald die Box herunterfährt | nein |
+
+Jedes Bild hat einen Knopf **Zeige Bild**: Das Bild steht dann **zehn Sekunden** auf dem Display, danach zeigt es wieder, was vorher zu sehen war. So siehst du ein Bild, ohne dass der Anlass eintritt.
 
 Bei einem änderbaren Bild tippst du auf **Bild ändern** und wählst ein Bild vom Gerät. Die App verkleinert es, die Box macht daraus ein Schwarzweißbild; die Einstellung **Eigene Bilder umwandeln** bestimmt wie: **Automatisch** dreht helle Zeichnungen auf weißem Grund um, **Umkehren** dreht immer um, **Unverändert** lässt das Bild, **Foto (Punkte)** streut Grautöne als Punkte. Ein Bild mit durchsichtigem Grund (ein Logo) wird auf Schwarz gezeichnet. Das Seitenverhältnis bleibt erhalten; was nicht passt, bleibt schwarz. Mit **Zurücksetzen** kommt das Original wieder.
 

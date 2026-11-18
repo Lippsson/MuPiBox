@@ -52,6 +52,8 @@ If the **rotary knob** chooses an album with the NFC extension ([NFC: Rotary kno
 
 ## Settings
 
+The settings are in cards: **Display** (chip, size, address, rotation), **Display** mode (what is shown), **Brightness** (brightness, darker in the evening, display off after), **Pictures** and **Without DSI display**.
+
 | Setting | Effect |
 | --- | --- |
 | **Chip** | **SSD1306** (almost all 0.96 inch modules), **SH1106** (mostly 1.3 inch) or **SSD1309**. If the picture is shifted or has stripes at the edge, choose the other chip |
@@ -59,7 +61,7 @@ If the **rotary knob** chooses an album with the NFC extension ([NFC: Rotary kno
 | **I2C address** | **0x3C** or **0x3D** |
 | **Turn by 180°** | if the display is mounted upside down |
 | **Display while playing** | **Full** (the picture above), **Mix** (the track number large) or **Compact** (the time large) |
-| **Idle display** | what the display shows while nothing plays: **NFC reader** (default), **Barcode scanner**, **Clock** or **Own picture** |
+| **Idle display** (card **Pictures**) | what the display shows while nothing plays: **NFC reader** (default), **Barcode scanner**, **Clock** or **Own picture** |
 | **Show the volume animation** | the short picture when the volume changes; when it is off the display stays as it is (play and pause still show theirs) |
 | **Show the time** | **Elapsed** (counts up from the start) or **Remaining** (counts down to the end, with a minus); a station or podcast of unknown length counts up |
 | **Long texts** | **Scroll again and again** (default), **Scroll once** (the line scrolls through completely one time and then stays with "…" at the end) or **Do not scroll** (the line is cut with "…") |
@@ -86,6 +88,8 @@ The **Pictures** card shows the pictures of the display and where they appear. A
 | **Update** | while an update runs | yes |
 | **Rest time and limit** (a sleeping face) | while a rest time runs or the limit is reached | yes |
 | **Shutdown** (the power symbol) | as soon as the box shuts down | no |
+
+Every picture has a button **Show picture**: the picture is then on the display for **ten seconds**, after which the display shows what it showed before. That way you see a picture without its occasion happening.
 
 For a changeable picture tap **Change picture** and choose a picture from your device. The app makes it smaller and the box turns it into a black-and-white picture; the setting **Convert own pictures** says how: **Automatic** turns bright drawings on a white ground around, **Invert** always turns around, **Unchanged** leaves the picture, **Photo (dots)** scatters grey tones as dots. A picture with a transparent ground (a logo) is drawn on black. The aspect ratio is kept; what does not fit stays black. **Reset** brings the original back.
 

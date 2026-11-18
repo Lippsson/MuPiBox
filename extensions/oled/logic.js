@@ -35,6 +35,8 @@ const BOOT_MAX_MS = 120000
 // (a short picture - play, pause, volume - and the page with the address of the box stay this long)
 const OVERLAY_MS = 900
 const INFO_MS = 10000
+// (a picture of the list on the page, shown for a short time to look at it)
+const PREVIEW_MS = 10000
 
 const pick = (value, allowed, fallback) => (allowed.includes(value) ? value : fallback)
 const number = (value, fallback, min, max) => {
@@ -258,6 +260,27 @@ function timeTexts(date, language = 'de') {
  * select: { title, artist, index, count, until }, idleSince, wake, mode, ready (false while the box starts), hold: { slot } (an update runs or the box
  * goes down: the box's scripts drew it, see holdFrom), blocked (a rest time or the limit) } and `net` { ssid, ip, wifi, lan, battery, output }.
  */
+/** What the display shows for a picture of the page's list ("show picture"): the view of buildState, or null for an id that is no picture. */
+function previewView(id) {
+  switch (id) {
+    case 'boot':
+      return { view: 'boot' }
+    case 'nfc':
+    case 'barcode':
+      return { view: 'idle', idle: id, clock: false }
+    case 'idle':
+      return { view: 'idle', idle: 'custom', clock: false }
+    case 'update':
+      return { view: 'update' }
+    case 'rest':
+      return { view: 'rest' }
+    case 'shutdown':
+      return { view: 'bye' }
+    default:
+      return null
+  }
+}
+
 function buildState({ config, play, ui, net, date, now, version, language }) {
   const { time, date: dateText } = timeTexts(date, language)
   const base = {
@@ -284,6 +307,11 @@ function buildState({ config, play, ui, net, date, now, version, language }) {
     elapsed: play.elapsed,
     duration: play.duration,
     stream: play.stream,
+  }
+  // (a picture the user asked to see on the page: for a few seconds, then what was shown before)
+  if (ui.preview && now < ui.preview.until) {
+    const shown = previewView(ui.preview.id)
+    if (shown) return { ...base, ...shown }
   }
   // (the box goes down or an update runs: that picture, whatever else; the start picture until the box is ready to play)
   if (ui.hold?.slot === 'shutdown') return { ...base, view: 'bye' }
@@ -414,6 +442,8 @@ module.exports = {
   imageRows,
   OVERLAY_MS,
   INFO_MS,
+  PREVIEW_MS,
+  previewView,
   readConfig,
   driverArgs,
   needsRestart,

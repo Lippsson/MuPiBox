@@ -61,7 +61,7 @@ exports.activate = (host) => {
   let play = logic.readPlayback(null, null)
   let previous = null // the reading before this one, for the short pictures
   // (ready: the box can play - the start picture stays until the player answers, but not longer than BOOT_MAX_MS)
-  const ui = { infoUntil: 0, overlay: null, select: null, idleSince: clock(), wake: 0, mode: null, ready: false, hold: null, blocked: false }
+  const ui = { infoUntil: 0, overlay: null, select: null, idleSince: clock(), wake: 0, mode: null, ready: false, hold: null, blocked: false, preview: null }
   const bootDeadline = clock() + logic.BOOT_MAX_MS
   const imagesDir = path.join(dir, 'images')
   const customDir = path.join(dataDir, 'images')
@@ -536,14 +536,31 @@ exports.activate = (host) => {
         text: row.text,
         image: dataUrl(pictureFile(row.id)),
         wide: true,
-        actions: row.changeable
-          ? [
-              { label: 'Bild ändern', post: '/api/ext/oled/imageset', upload: true, safe: true },
-              ...(row.own ? [{ label: 'Zurücksetzen', post: '/api/ext/oled/imagereset', confirm: 'Das Original wieder zeigen?', safe: true }] : []),
-            ]
-          : [],
+        actions: [
+          { label: 'Zeige Bild', post: '/api/ext/oled/imageshow', safe: true },
+          ...(row.changeable
+            ? [
+                { label: 'Bild ändern', post: '/api/ext/oled/imageset', upload: true, safe: true },
+                ...(row.own ? [{ label: 'Zurücksetzen', post: '/api/ext/oled/imagereset', confirm: 'Das Original wieder zeigen?', safe: true }] : []),
+              ]
+            : []),
+        ],
       }))
       res.json({ items })
+    },
+    { session: true },
+  )
+
+  // A picture of the list on the display for 10 seconds ({ id }), then what it showed before (the state decides again by itself)
+  host.route(
+    'post',
+    '/imageshow',
+    (req, res) => {
+      const id = String(req.body?.id ?? '')
+      if (!logic.previewView(id)) return res.status(400).json({ ok: false, error: 'bad_id', message: 'Dieses Bild gibt es nicht' })
+      ui.preview = { id, until: clock() + logic.PREVIEW_MS }
+      push(true)
+      res.json({ ok: true, message: 'Das Bild steht zehn Sekunden auf dem Display' })
     },
     { session: true },
   )
