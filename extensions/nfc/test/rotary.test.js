@@ -31,14 +31,18 @@ test('an album that is not in the list: the knob starts at the first', () => {
   assert.strictEqual(rotary.begin({ uid: 'AA', albums: three, currentKey: 'gone', seconds: 5, now: 0 }).index, 0)
 })
 
-test('a press chooses only after the knob was turned; then the knob is free again', () => {
+test('a press chooses only after the knob was turned; then the knob stays on that album and can choose again', () => {
   const start = rotary.begin({ uid: 'AA', albums: three, currentKey: 'a', seconds: 30, now: 0 })
   assert.strictEqual(rotary.press(start, 100), null, 'not turned yet: the press is for what the box does otherwise')
   const turned = rotary.turn(start, 1, 200)
   const pressed = rotary.press(turned.state, 300)
   assert.strictEqual(pressed.album.key, 'b')
-  assert.strictEqual(rotary.isActive(pressed.state, 301), false)
-  assert.strictEqual(rotary.turn(pressed.state, 1, 400), null)
+  // (the knob is still the knob of the albums of this tag: on the one that plays now, with the time anew, and a press chooses nothing until it is turned)
+  assert.strictEqual(rotary.isActive(pressed.state, 301), true)
+  assert.strictEqual(rotary.press(pressed.state, 350), null)
+  assert.strictEqual(rotary.turn(pressed.state, 1, 400).shown.album.key, 'c')
+  assert.strictEqual(rotary.isActive(pressed.state, 300 + 30000), false, 'the time runs from the press')
+  assert.strictEqual(rotary.isActive(pressed.state, 300 + 29999), true)
 })
 
 test('the time: every turn starts it anew, when it is over the knob is the box again', () => {
@@ -51,7 +55,7 @@ test('the time: every turn starts it anew, when it is over the knob is the box a
   assert.strictEqual(rotary.press(turned.state, 19000), null)
 })
 
-test('0 seconds: no time limit - the knob stays the knob of the albums until one is chosen', () => {
+test('0 seconds: no time limit - the knob stays the knob of the albums until another tag is laid on', () => {
   const start = rotary.begin({ uid: 'AA', albums: three, currentKey: 'a', seconds: 0, now: 0 })
   const day = 24 * 3600 * 1000
   assert.strictEqual(rotary.isActive(start, day), true)
@@ -60,7 +64,7 @@ test('0 seconds: no time limit - the knob stays the knob of the albums until one
   assert.strictEqual(rotary.isActive(turned.state, 3 * day), true, 'every turn keeps it without a limit')
   const pressed = rotary.press(turned.state, 3 * day)
   assert.strictEqual(pressed.album.key, 'b')
-  assert.strictEqual(rotary.isActive(pressed.state, 3 * day + 1), false, 'the choice ends it')
+  assert.strictEqual(rotary.isActive(pressed.state, 3 * day + 1), true, 'a choice does not end it: another tag does')
 })
 
 test('one album, or none: there is nothing to choose from', () => {
@@ -182,7 +186,7 @@ test('an artist cover: assigned, laid on, the knob chooses an album, a press pla
 
     // turn: the display shows the name; again; back; a press plays that album and the display goes back to the player
     nfc.feedKnob({ event: 'turn', direction: 1 })
-    assert.deepStrictEqual(oled.at(-1), { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, seconds: 20 })
+    assert.deepStrictEqual(oled.at(-1), { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, seconds: 10 })
     nfc.feedKnob({ event: 'turn', direction: 1 })
     assert.strictEqual(oled.at(-1).title, 'Ronja')
     nfc.feedKnob({ event: 'turn', direction: -1 })
@@ -190,10 +194,12 @@ test('an artist cover: assigned, laid on, the knob chooses an album, a press pla
     await nfc.feedKnob({ event: 'button' })
     assert.deepStrictEqual(oled.at(-1), { clear: true })
     assert.strictEqual((await call(routes['get /pending'])).body.media.libraryPath, 'audiobook/Astrid Lindgren/Pippi')
-    // (the choice is made: turning does nothing now)
-    const after = oled.length
+    // (the choice is made, the knob goes on: from the album that plays, to the next one)
     nfc.feedKnob({ event: 'turn', direction: 1 })
-    assert.strictEqual(oled.length, after)
+    assert.strictEqual(oled.at(-1).title, 'Ronja')
+    await nfc.feedKnob({ event: 'button' })
+    assert.deepStrictEqual(oled.at(-1), { clear: true })
+    assert.strictEqual((await call(routes['get /pending'])).body.media.libraryPath, 'audiobook/Astrid Lindgren/Ronja')
     // (there is no route for the knob any more: the core's knobs have nothing to do with the albums)
     assert.strictEqual(routes['post /rotary'], undefined)
 
@@ -211,7 +217,7 @@ test('an artist cover: assigned, laid on, the knob chooses an album, a press pla
   }
 })
 
-test('0 seconds in the settings: the knob stays taken over, the display shows the name for the longest time, another tag ends it', async () => {
+test('0 seconds in the settings: the knob stays taken over, the display still goes back after 10 seconds, another tag ends it', async () => {
   const realFetch = global.fetch
   const oled = []
   global.fetch = async (url, init) => {
@@ -232,7 +238,7 @@ test('0 seconds in the settings: the knob stays taken over, the display shows th
     nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04A1B2C3' })
     await later()
     nfc.feedKnob({ event: 'turn', direction: 1 })
-    assert.deepStrictEqual(oled.at(-1), { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, seconds: 300 })
+    assert.deepStrictEqual(oled.at(-1), { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, seconds: 10 })
     // (another tag, no collection: the choice is over and the display shows the player)
     nfc.feed({ event: 'gone' })
     nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04FFEEDD' })
@@ -243,6 +249,57 @@ test('0 seconds in the settings: the knob stays taken over, the display shows th
     assert.strictEqual(oled.length, after)
   } finally {
     global.fetch = realFetch
+  }
+})
+
+test('turned but nothing chosen: after 10 seconds the display goes back to the player and a press chooses nothing until the next turn', async () => {
+  const realFetch = global.fetch
+  const realTimeout = global.setTimeout
+  const oled = []
+  let browse = null
+  // (only the timer of the display is held back: the test fires it itself)
+  global.setTimeout = (fn, ms, ...rest) => {
+    if (ms === 10000) {
+      browse = fn
+      return { unref() {} }
+    }
+    return realTimeout(fn, ms, ...rest)
+  }
+  global.fetch = async (url, init) => {
+    const u = String(url)
+    if (u.startsWith('http://api.test/api/library/children')) return { ok: true, json: async () => children }
+    if (u.startsWith('http://api.test/api/ext/oled/select')) {
+      oled.push(JSON.parse(init.body))
+      return { ok: true, json: async () => ({ ok: true }) }
+    }
+    return { ok: true, json: async () => ({ currentPlayer: '', playing: false }) }
+  }
+  try {
+    const { host, routes } = makeHost({ reader: 'none', onRemove: 'nothing', playOnTag: true, ...KNOB, rotarySeconds: 0 })
+    const nfc = require('../api.js').activate(host)
+    await later(0)
+    nfc.feed({ event: 'ready', firmware: '4.0', product: '4.0' })
+    await call(routes['post /arm'], { body: { media: folder } })
+    nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04A1B2C3' })
+    await later()
+    nfc.feedKnob({ event: 'turn', direction: 1 })
+    assert.strictEqual(oled.at(-1).seconds, 10)
+    assert.ok(browse, 'a timer of 10 seconds runs')
+    browse()
+    assert.deepStrictEqual(oled.at(-1), { clear: true })
+    // (a press now chooses nothing - the display shows the player, not an album)
+    const shown = oled.length
+    await nfc.feedKnob({ event: 'button' })
+    assert.strictEqual(oled.length, shown)
+    assert.strictEqual((await call(routes['get /pending'])).body.media.libraryPath, 'audiobook/Astrid Lindgren/Michel', 'still the album the tag started')
+    // (turning again shows the album next to the one it stood on, and a press chooses it)
+    nfc.feedKnob({ event: 'turn', direction: 1 })
+    assert.strictEqual(oled.at(-1).title, 'Ronja')
+    await nfc.feedKnob({ event: 'button' })
+    assert.strictEqual((await call(routes['get /pending'])).body.media.libraryPath, 'audiobook/Astrid Lindgren/Ronja')
+  } finally {
+    global.fetch = realFetch
+    global.setTimeout = realTimeout
   }
 })
 

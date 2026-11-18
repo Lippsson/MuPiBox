@@ -32,7 +32,7 @@ The **status bar** at the top shows, from left to right:
 | aerial with bars | WLAN reception (without bars: no connection) |
 | screen with a network plug | the box is on the **LAN cable** (the symbol then takes the place of the aerial) |
 | number with battery | charge of the battery (only with a MuPiHAT) |
-| arrows with **A** or **1** | **repeat**: the whole list (A) or one track (1, with Spotify) |
+| arrows with **A** or **1** | **repeat**: the whole list (A) or one track (1). The repeat button of the Buttons & GPIO Input extension cycles through them: all (A), one (1), off |
 | crossed arrows | **shuffle** is on |
 | number and symbol at the right | volume and **output**: speaker, headphones or Bluetooth |
 
@@ -44,7 +44,7 @@ When nothing plays, the display shows what is chosen under **Idle display**: the
 
 ![The clock when idle](oled-idle.png)
 
-A short picture appears when playback starts or pauses and when the volume changes. The picture for the volume can be switched off with **Show the volume animation**. With **Show the address of the box** the **network page** appears for ten seconds: WLAN name (on the LAN cable **LAN** instead), address and version, with the symbol (i) at the top.
+A short picture appears when playback starts or pauses and when the volume changes. The picture for the volume can be switched off with **Show the volume animation**, the one for start and pause with **Show the play/pause animation**. With **Show the address of the box** the **network page** appears for ten seconds: WLAN name (on the LAN cable **LAN** instead), address and version, with the symbol (i) at the top.
 
 ![The network page](oled-info.png)
 
@@ -62,7 +62,8 @@ The settings are in cards: **Display** (chip, size, address, rotation), **Displa
 | **Turn by 180°** | if the display is mounted upside down |
 | **Display while playing** | **Full** (the picture above), **Mix** (the track number large) or **Compact** (the time large) |
 | **Idle display** (card **Pictures**) | what the display shows while nothing plays: **NFC reader** (default), **Barcode scanner**, **Clock** or **Own picture** |
-| **Show the volume animation** | the short picture when the volume changes; when it is off the display stays as it is (play and pause still show theirs) |
+| **Show the volume animation** | the short picture when the volume changes; when it is off the display stays as it is |
+| **Show the play/pause animation** | the short picture with play or pause when playback starts or stops; when it is off the display stays as it is |
 | **Show the time** | **Elapsed** (counts up from the start) or **Remaining** (counts down to the end, with a minus); a station or podcast of unknown length counts up |
 | **Long texts** | **Scroll again and again** (default), **Scroll once** (the line scrolls through completely one time and then stays with "…" at the end) or **Do not scroll** (the line is cut with "…") |
 | **Brightness** | 0 to 255 |

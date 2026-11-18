@@ -32,7 +32,7 @@ Die **Statusleiste** oben zeigt von links nach rechts:
 | Antenne mit Balken | Empfang des WLAN (ohne Balken: keine Verbindung) |
 | Bildschirm mit Netzwerkstecker | die Box hängt am **LAN-Kabel** (das Symbol steht dann anstelle der Antenne) |
 | Zahl mit Batterie | Ladung des Akkus (nur mit einem MuPiHAT) |
-| Pfeile mit **A** oder **1** | **Wiederholen**: die ganze Liste (A) oder ein Titel (1, bei Spotify) |
+| Pfeile mit **A** oder **1** | **Wiederholen**: die ganze Liste (A) oder ein Titel (1). Der Taster für Wiederholen in der Erweiterung Buttons & GPIO Input schaltet durch: alle (A), eins (1), aus |
 | gekreuzte Pfeile | **Zufall** ist an |
 | Zahl und Symbol rechts | Lautstärke und **Ausgang**: Lautsprecher, Kopfhörer oder Bluetooth |
 
@@ -44,7 +44,7 @@ Wenn nichts spielt, zeigt das Display das Bild, das unter **Anzeige im Leerlauf*
 
 ![Die Uhr im Leerlauf](oled-idle.png)
 
-Ein kurzes Bild erscheint, wenn die Wiedergabe startet oder pausiert und wenn sich die Lautstärke ändert. Dieses Bild für die Lautstärke lässt sich mit **Lautstärke-Animation zeigen** ausschalten. Mit **Adresse der Box zeigen** erscheint zehn Sekunden lang die **Netzwerkseite**: WLAN-Name (am LAN-Kabel stattdessen **LAN**), Adresse und Version, mit dem Symbol (i) oben.
+Ein kurzes Bild erscheint, wenn die Wiedergabe startet oder pausiert und wenn sich die Lautstärke ändert. Dieses Bild für die Lautstärke lässt sich mit **Lautstärke-Animation zeigen** ausschalten, das Bild für Start und Pause mit **Play/Pause-Animation zeigen**. Mit **Adresse der Box zeigen** erscheint zehn Sekunden lang die **Netzwerkseite**: WLAN-Name (am LAN-Kabel stattdessen **LAN**), Adresse und Version, mit dem Symbol (i) oben.
 
 ![Die Netzwerkseite](oled-info.png)
 
@@ -62,7 +62,8 @@ Die Einstellungen stehen in Karten: **Display** (Chip, Größe, Adresse, Drehung
 | **Um 180° drehen** | wenn das Display auf dem Kopf eingebaut ist |
 | **Anzeige beim Spielen** | **Voll** (das Bild oben), **Mix** (die Titelnummer groß) oder **Kompakt** (die Zeit groß) |
 | **Anzeige im Leerlauf** (Karte **Bilder**) | was das Display zeigt, solange nichts spielt: **NFC-Leser** (Voreinstellung), **Barcodescanner**, **Uhrzeit** oder **Eigenes Bild** |
-| **Lautstärke-Animation zeigen** | das kurze Bild beim Ändern der Lautstärke; ausgeschaltet bleibt die Anzeige, wie sie ist (Start und Pause zeigen weiter ihr Bild) |
+| **Lautstärke-Animation zeigen** | das kurze Bild beim Ändern der Lautstärke; ausgeschaltet bleibt die Anzeige, wie sie ist |
+| **Play/Pause-Animation zeigen** | das kurze Bild mit Play oder Pause beim Starten und Anhalten der Wiedergabe; ausgeschaltet bleibt die Anzeige, wie sie ist |
 | **Zeit zeigen** | **Vergangen** (zählt vom Anfang hoch) oder **Restzeit** (zählt mit einem Minus bis zum Ende herunter); bei einem Sender oder Podcast ohne bekannte Länge zählt sie hoch |
 | **Zu lange Texte** | **Immer wieder durchlaufen** (Standard), **Einmal durchlaufen** (die Zeile läuft einmal komplett durch und steht danach mit „…“ am Ende) oder **Nicht durchlaufen** (die Zeile wird mit „…“ gekürzt) |
 | **Helligkeit** | 0 bis 255 |

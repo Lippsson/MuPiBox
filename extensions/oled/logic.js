@@ -63,6 +63,7 @@ function readConfig(settings = {}) {
     mode: pick(settings.mode, MODES, 'full'),
     idleScreen: pick(settings.idleScreen, IDLE_SCREENS, 'nfc'),
     volumeOverlay: settings.volumeOverlay !== false,
+    playOverlay: settings.playOverlay !== false,
     nightDim: settings.nightDim === true,
     nightContrast: Math.round(number(settings.nightContrast, 20, 1, 255)),
     timeMode: pick(settings.timeMode, TIME_MODES, 'up'),
@@ -124,8 +125,8 @@ function readPlayback(local, spotify) {
     else if (out.kind === 'nas') out.artist = parts[parts.length - 2] ?? ''
     out.stream = out.kind === 'radio'
     out.shuffle = local.shuffle === true
-    // (the player loops the whole list - there is no repeat of one track)
-    out.repeat = local.repeat === true ? 'all' : 'off'
+    // (the player says repeatMode: 'all' loops the whole list, 'one' the track; an older player knows only `repeat`, which is "all")
+    out.repeat = local.repeatMode === 'one' ? 'track' : local.repeatMode === 'all' ? 'all' : local.repeatMode === 'off' ? 'off' : local.repeat === true ? 'all' : 'off'
     if (out.stream) {
       out.track = 0
       out.tracks = 0
@@ -148,12 +149,12 @@ function readPlayback(local, spotify) {
 /**
  * A short picture for what changed between two readings: play and pause when the playing starts or stops, the volume when it moves
  * (the very first reading shows nothing: the extension just started). Returns { kind, volume } or null.
- * With `volumeShown` false a change of the volume shows no picture of its own.
+ * With `volumeShown` false a change of the volume shows no picture of its own, with `playShown` false neither does play or pause.
  */
-function overlayFor(before, after, volumeShown = true) {
+function overlayFor(before, after, volumeShown = true, playShown = true) {
   if (!before || !after) return null
   if (volumeShown && before.volume !== null && after.volume !== null && before.volume !== after.volume) return { kind: after.volume === 0 ? 'mute' : 'volume', volume: after.volume }
-  if (before.playing !== after.playing && (after.player !== '' || before.player !== '')) return { kind: after.playing ? 'play' : 'pause', volume: after.volume }
+  if (playShown && before.playing !== after.playing && (after.player !== '' || before.player !== '')) return { kind: after.playing ? 'play' : 'pause', volume: after.volume }
   return null
 }
 

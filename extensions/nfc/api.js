@@ -48,8 +48,9 @@ const ERROR_LOG_MS = 6 * 60 * 60 * 1000
 // The album knob has its own rotary encoder (knob.py, the pins knobA, knobB and knobButton of the settings): it chooses among the albums of the
 // tag that was laid on - nothing else; the box's knobs for the volume and the tracks are the core's (scripts/mupibox/rotary_control.py)
 const ROTARY_SECONDS = 20
-// (the display shows the name this long at most when the knob has no time limit: it takes up to five minutes)
-const OLED_SELECT_MAX_S = 300
+// (the display shows the album the knob stands on this long after the last turn: without a choice it goes back to what it showed before - the
+// player - and a press chooses nothing until the knob is turned again)
+const OLED_SELECT_S = 10
 // the albums of a collection are kept this long (the list of tags and the knob ask for them often), and no more are taken
 const ALBUMS_KEEP_MS = 60000
 const ALBUMS_MAX = 200
@@ -416,8 +417,20 @@ exports.activate = (host) => {
   }
   // The choice is over (another tag was laid on): the knob is the box's again and the display shows the player
   const endChoice = () => {
+    clearTimeout(browseTimer)
     knob = rotary.idle()
     showOnOled({ clear: true })
+  }
+  // Turned but nothing chosen for OLED_SELECT_S seconds: the display goes back to the player, and the knob waits for the next turn (the album it
+  // stands on stays; a press does not choose it any more)
+  let browseTimer = null
+  const browseStart = () => {
+    clearTimeout(browseTimer)
+    browseTimer = setTimeout(() => {
+      if (knob.selecting) knob = { ...knob, selecting: false }
+      showOnOled({ clear: true })
+    }, OLED_SELECT_S * 1000)
+    browseTimer.unref?.()
   }
   // A tag of a collection was laid on: the knob is for its albums now (when the settings allow it)
   const rotaryBegin = async (tag, settings) => {
@@ -437,7 +450,8 @@ exports.activate = (host) => {
     knob = result.state
     const { album, index, count } = result.shown
     const collection = tags.collectionOf(album.media)
-    showOnOled({ title: album.label, artist: String(collection?.browseTitle ?? ''), index: index + 1, count, seconds: knob.windowMs > 0 ? Math.round(knob.windowMs / 1000) : OLED_SELECT_MAX_S })
+    showOnOled({ title: album.label, artist: String(collection?.browseTitle ?? ''), index: index + 1, count, seconds: OLED_SELECT_S })
+    browseStart()
   }
   // The button of the knob was pressed: the album it stands on plays (only after the knob was turned)
   const knobPressed = async () => {
@@ -445,6 +459,7 @@ exports.activate = (host) => {
     const result = rotary.press(knob, Date.now())
     if (!result) return
     knob = result.state
+    clearTimeout(browseTimer)
     showOnOled({ clear: true })
     const tag = data.tags[uid]
     if (tag) {

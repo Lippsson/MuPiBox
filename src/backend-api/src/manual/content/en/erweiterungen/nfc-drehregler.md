@@ -27,11 +27,11 @@ The knob chooses only among the **albums of the artist cover whose tag is lying 
 
 The knob **changes nothing** about the tag: the next time it is laid on, it plays the album from the drop-down list again.
 
-A press **before** you have turned does not choose anything. If nobody turns, the choice ends after the set time. Every turn starts the time anew. With no tag laid on, the album knob does nothing.
+A press **before** you have turned does not choose anything. After a choice the knob stays on the album that plays now: you can keep turning at once and choose another album. If nobody turns, the choice ends after the set time. Every turn and every choice starts the time anew. With no tag laid on, the album knob does nothing.
 
 ## OLED display
 
-If the [OLED display](oled.md) is connected, turning shows **in the information area** the artist (or folder) and below it the **name** of the album the knob is on, with its place in the list ("< 2/12 >"). Long names scroll. The status bar and the bottom row with the time stay, they show what is still playing. A press on the button plays the album, and the display shows the **normal player picture** again.
+If the [OLED display](oled.md) is connected, turning shows **in the information area** the artist (or folder) and below it the **name** of the album the knob is on, with its place in the list ("< 2/12 >"). Long names scroll. The status bar and the bottom row with the time stay, they show what is still playing. A press on the button plays the album, and the display shows the **normal player picture** again. If you turn but choose nothing, the display goes back by itself to what it showed before (the player) after **10 seconds** without turning. A press then chooses nothing until you turn again.
 
 ## Connection and settings
 
@@ -42,7 +42,7 @@ If the [OLED display](oled.md) is connected, turning shows **in the information 
 | **Status** | whether the knob's driver runs ("Ready") and when you **last turned** and **pressed** it: that tells you at once whether it is wired right. If it shows an error, the note gives the reason |
 | **GPIO pin A (CLK)**, **GPIO pin B (DT)** | the two pins of the knob |
 | **GPIO pin (button)** | the pin of the button (switched to ground): a press plays the chosen album |
-| **Active after laying on (seconds)** | A slider from **0 to 120 seconds** (default 20): for this long after laying on, and after each turn, the knob chooses albums. **0** means **always active**: the knob chooses albums until you choose one with the button or lay on another tag. The OLED display then shows the name for up to five minutes after the last turn. |
+| **Active after laying on (seconds)** | A slider from **0 to 120 seconds** (default 20): for this long after laying on, after each turn and after each choice, the knob chooses albums. **0** means **always active**: the knob chooses albums until you lay on another tag. |
 
 The lists show **only free pins**: none that the box itself, the boot configuration, an NFC reader, another extension or another rotary knob uses. Without all **three** pins there is no album knob. **One detent is one album**, and the **button confirms** the album the knob is on. If the knob turns the wrong way, swap connections A and B.
 

@@ -9727,14 +9727,24 @@ const ROTARY_PIN_ITEMS = [
   ['rotPinB', 'b', 'pinB', 'GPIO-Pin B (DT)'],
   ['rotPinBtn', 'button', 'pinButton', 'GPIO-Pin Taster'],
 ]
-const rotaryPinText = (pin) => `GPIO ${pin} (Pin ${GPIO_HEADER[pin] ?? '?'})`
-const rotaryPinNumber = (text) => Number(/GPIO (\d+)/.exec(String(text ?? ''))?.[1])
+// (a pin may be left out: "Kein Pin" is 0 - without pin A or B the knob does not turn, without the button's pin it has no button)
+const ROTARY_NONE = 'Kein Pin'
+const rotaryPinText = (pin) => (Number(pin) === 0 ? ROTARY_NONE : `GPIO ${pin} (Pin ${GPIO_HEADER[pin] ?? '?'})`)
+const rotaryPinNumber = (text) => (String(text ?? '') === ROTARY_NONE ? 0 : Number(/GPIO (\d+)/.exec(String(text ?? ''))?.[1]))
 
-// More rotary encoders (rotary.extra): the function of each, and what its push button does. Their settings are called rk_<id>_<what>.
-const RK_FUNCTIONS = [
-  ['Lautstärke', 'volume'],
-  ['Titel vor und zurück', 'tracks'],
+// What a turn of a knob does, for each direction (rotary.right / rotary.left, and right / left of an entry of rotary.extra)
+const RK_DIRECTIONS = [
+  ['Aus', 'off'],
+  ['Lauter', 'up'],
+  ['Leiser', 'down'],
+  ['Nächster Titel', 'next'],
+  ['Voriger Titel', 'previous'],
 ]
+const directionText = (value, fallback) => (RK_DIRECTIONS.find(([, v]) => v === value) ?? RK_DIRECTIONS.find(([, v]) => v === fallback))[0]
+const directionValue = (text) => RK_DIRECTIONS.find(([l]) => l === text)?.[1]
+const directionUsesVolume = (...texts) => texts.some((text) => text === 'Lauter' || text === 'Leiser')
+
+// More rotary encoders (rotary.extra): what each does, and what its push button does. Their settings are called rk_<id>_<what>.
 const RK_BUTTONS = [
   ['Aus', 'off'],
   ['Play/Pause', 'playpause'],
@@ -9747,13 +9757,15 @@ const RK_PIN_PARTS = [
   ['btn', 'button', 'pinButton', 'GPIO-Pin Taster'],
 ]
 const rkKey = (id, part) => `rk_${id}_${part}`
-const rkParse = (key) => /^rk_([a-z0-9]+)_(fn|a|b|btn|step|bfn)$/.exec(String(key))
+const rkParse = (key) => /^rk_([a-z0-9]+)_(right|left|a|b|btn|step|bfn)$/.exec(String(key))
 
 async function loadRotary() {
   await loadHardware()
   const r = hw.data.rotary
   state.values.set('rotary', r.active)
   state.values.set('rotStep', r.step)
+  state.values.set('rotRight', directionText(r.right, 'up'))
+  state.values.set('rotLeft', directionText(r.left, 'down'))
   state.values.set('btnFn', BTN_FN.find(([, v]) => v === r.button)?.[0] ?? 'Aus')
   const free = await api(`${API}/rotary-pins`, { timeoutMs: 20000 })
   // (no answer: the pins it has stay, nothing else is offered)
@@ -9765,13 +9777,15 @@ async function loadRotary() {
     ...(r.active ? Object.entries(r.pins ?? {}).filter(([name]) => name !== 'button' || (r.button && r.button !== 'off')).map(([, pin]) => Number(pin)) : []),
     ...(r.extra ?? []).flatMap((k) => Object.entries(k.pins).filter(([name]) => name !== 'button' || k.button !== 'off').map(([, pin]) => Number(pin))),
   ])
+  own.delete(0)
   hw.rotaryClash = new Map(free.ok && Array.isArray(free.body?.pins) ? free.body.pins.filter((p) => own.has(Number(p.pin)) && (p.holders ?? []).length).map((p) => [Number(p.pin), p.holders]) : [])
   hw.rotaryStopped = (r.active === true || (r.extra ?? []).length > 0) && r.running === false
   for (const [key, name] of ROTARY_PIN_ITEMS) state.values.set(key, rotaryPinText(r.pins[name]))
   hw.rotaryExtra = r.extra ?? []
   hw.rotaryExtraMax = r.extraMax ?? 4
   for (const k of hw.rotaryExtra) {
-    state.values.set(rkKey(k.id, 'fn'), RK_FUNCTIONS.find(([, v]) => v === k.function)?.[0] ?? RK_FUNCTIONS[0][0])
+    state.values.set(rkKey(k.id, 'right'), directionText(k.right, 'up'))
+    state.values.set(rkKey(k.id, 'left'), directionText(k.left, 'down'))
     for (const [part, name] of RK_PIN_PARTS) state.values.set(rkKey(k.id, part), rotaryPinText(k.pins[name]))
     state.values.set(rkKey(k.id, 'step'), k.step)
     state.values.set(rkKey(k.id, 'bfn'), RK_BUTTONS.find(([, v]) => v === k.button)?.[0] ?? RK_BUTTONS[0][0])
@@ -17647,7 +17661,9 @@ function extFormMount(sheet, e, fields, saved) {
     // (what a field is called in the list of another one: the name of its group, "Taster 2")
     const groupOf = (key) => {
       const g = groups.find((x) => x.keys.includes(key))
-      return g ? groupTitle(g) : tr(fields.find((it) => it.key === key)?.label ?? key)
+      const named = fields.find((it) => it.key === key)
+      // (`holder`: what the field's pin is called in the lists - "Drehregler NFC" - instead of the field's own name)
+      return named?.holder ? tr(named.holder) : g ? groupTitle(g) : tr(named?.label ?? key)
     }
     const draw = () => {
       for (const select of pinSelects) {
@@ -17666,7 +17682,9 @@ function extFormMount(sheet, e, fields, saved) {
           const other = pinSelects.find((o) => o !== select && Number(e.settings?.[o.dataset.xgpio] ?? 0) === pin)
           // (its own pin stays its own, whatever holds it right now - the extension itself reads it)
           const who = pin === now ? '' : other ? groupOf(other.dataset.xgpio) : (taken.get(pin) ?? []).map(extWho).join(', ')
-          const hint = who ? '' : (hints.get(pin) ?? []).map(extWho).join(', ')
+          // (its own pin says what it is for, if the field names that: "Drehregler NFC" - not what the box would use it for otherwise)
+          const own = pin === now ? fields.find((it) => it.key === select.dataset.xgpio)?.holder : ''
+          const hint = who ? '' : own ? tr(own) : (hints.get(pin) ?? []).map(extWho).join(', ')
           add(pin, `GPIO ${pin} (Pin ${GPIO_HEADER[pin]})${who ? ` – ${tr('belegt')}: ${who}` : hint ? ` – ${hint}` : ''}`, !!who)
         }
       }
@@ -18372,6 +18390,8 @@ function extPageController(entry, sub = 0) {
       const { form, hasText } = extFormHtml(own.e, slice(), 'half')
       return [form, hasText ? '<div class="btns wide"><button class="btn primary" data-xsave>Speichern</button></div>' : '']
     },
+    // (the buttons of the pages of the core that moved here - "Drehregler hinzufügen" - are run by the page that owns them)
+    act: new Proxy({}, { get: (_, kind) => adopted().map((a) => a.ctrl.act?.[kind]).find(Boolean) }),
     // (the pages of the core that moved here: their cards under the extension's own, the first with the title of its page)
     sections: () => [
       ...adopted().flatMap((a) => (a.ctrl.sections?.(a.page) ?? a.page.sections ?? []).map((sec, i) => ({ ...sec, title: i === 0 ? (EXT_ADOPTED_TITLE[a.page.id] ?? (sec.title || a.page.title)) : sec.title || '' }))),
@@ -18381,7 +18401,8 @@ function extPageController(entry, sub = 0) {
     change(key, v, page) {
       const part = own.e?.enabled ? merged().find((m) => m.keys.includes(key)) : null
       if (part) return part.ctrl.change?.(key, v, page)
-      const owner = adopted().find((a) => (a.page.sections || []).some((sec) => (sec.items || []).some((it) => it.key === key)))
+      // (the fields a page of the core draws itself - the knobs it was told to add - are not in its schema: its own sections say)
+      const owner = adopted().find((a) => (a.ctrl.sections?.(a.page) ?? a.page.sections ?? []).some((sec) => (sec.items || []).some((it) => it.key === key)))
       return owner?.ctrl.change?.(key, v, page)
     },
     mount(root, page) {
@@ -19594,61 +19615,89 @@ const CONTROLLERS = {
     load: loadRotary,
     sections: (page) => {
       const chosen = new Map(ROTARY_PIN_ITEMS.map(([key]) => [key, rotaryPinNumber(state.values.get(key))]))
-      const buttonPin = chosen.get('rotPinBtn')
       const clash = [...(hw.rotaryClash ?? new Map())].map(([pin, holders]) => `GPIO ${pin} nutzt auch: ${holders.map(extWho).join(', ')}`)
       // (the pins of all encoders, each by one only: what another one has is not offered)
       const extras = hw.rotaryExtra ?? []
       const everyPin = new Map([...chosen, ...extras.flatMap((k) => RK_PIN_PARTS.map(([part]) => [rkKey(k.id, part), rotaryPinNumber(state.values.get(rkKey(k.id, part)))]))])
       const pinOptions = (key) => {
         const mine = everyPin.get(key)
-        return [...new Set([mine, ...(hw.rotaryFree ?? [])])]
-          .filter((pin) => Number.isInteger(pin) && GPIO_HEADER[pin] && (pin === mine || ![...everyPin].some(([other, p]) => other !== key && p === pin)))
-          .sort((x, y) => x - y)
-          .map(rotaryPinText)
+        return [
+          rotaryPinText(0),
+          ...[...new Set([mine, ...(hw.rotaryFree ?? [])])]
+            .filter((pin) => Number.isInteger(pin) && GPIO_HEADER[pin] && (pin === mine || ![...everyPin].some(([other, p]) => other !== key && p === pin)))
+            .sort((x, y) => x - y)
+            .map(rotaryPinText),
+        ]
       }
-      const extraSections = extras.map((k, i) => {
-        const volume = state.values.get(rkKey(k.id, 'fn')) === RK_FUNCTIONS[0][0]
-        return {
-          title: `${tr('Drehregler')} ${i + 2}`,
-          help: tr(volume ? 'Dieser Drehregler stellt die Lautstärke ein.' : 'Dieser Drehregler wählt den nächsten oder vorigen Titel: rechts herum weiter, links herum zurück.'),
-          items: [
-            { type: 'select', label: 'Funktion des Drehreglers', key: rkKey(k.id, 'fn'), default: state.values.get(rkKey(k.id, 'fn')), options: RK_FUNCTIONS.map(([label]) => label) },
-            ...(volume ? [{ type: 'slider', label: 'Schritt pro Raste', key: rkKey(k.id, 'step'), default: k.step, min: 1, max: 10, step: 1, unit: ' %' }] : []),
-            ...RK_PIN_PARTS.map(([part, , , label]) => ({ type: 'select', label, key: rkKey(k.id, part), default: state.values.get(rkKey(k.id, part)), options: pinOptions(rkKey(k.id, part)) })),
-            { type: 'select', label: `Funktion des Tasters (GPIO ${everyPin.get(rkKey(k.id, 'btn'))})`, key: rkKey(k.id, 'bfn'), default: state.values.get(rkKey(k.id, 'bfn')), options: RK_BUTTONS.map(([label]) => label) },
-            { type: 'buttons', buttons: [['Drehregler entfernen', 'danger', `rkdel:${k.id}`]] },
-          ],
-        }
-      })
+      // The fields of one knob: each pin (or none), under the two of the knob what a turn in that direction does, the step while the volume
+      // is set, and under the button's pin what the button does - a function is offered only where its pin is there
+      const knobItems = ({ a, b, btn, right, left, step, stepItem, buttonItem }) => {
+        const pin = (label, key) => ({ type: 'select', label, key, default: state.values.get(key), options: pinOptions(key) })
+        const direction = (label, key) => ({ type: 'select', label, key, default: state.values.get(key), options: RK_DIRECTIONS.map(([l]) => l) })
+        const hasA = everyPin.get(a) > 0
+        const hasB = everyPin.get(b) > 0
+        const usesVolume = (hasA && directionUsesVolume(state.values.get(right))) || (hasB && directionUsesVolume(state.values.get(left)))
+        return [
+          pin(RK_PIN_PARTS[0][3], a),
+          ...(hasA ? [direction('Rechts herum drehen', right)] : []),
+          pin(RK_PIN_PARTS[1][3], b),
+          ...(hasB ? [direction('Links herum drehen', left)] : []),
+          ...(usesVolume ? [stepItem(step)] : []),
+          pin(RK_PIN_PARTS[2][3], btn),
+          ...(everyPin.get(btn) > 0 ? [buttonItem(everyPin.get(btn))] : []),
+        ]
+      }
+      const extraSections = extras.map((k, i) => ({
+        title: `${tr('Drehregler')} ${i + 2}`,
+        help: tr('Dieser Drehregler tut, was du für jede Drehrichtung wählst. Zum Drehen braucht er Pin A und Pin B.'),
+        items: [
+          ...knobItems({
+            a: rkKey(k.id, 'a'),
+            b: rkKey(k.id, 'b'),
+            btn: rkKey(k.id, 'btn'),
+            right: rkKey(k.id, 'right'),
+            left: rkKey(k.id, 'left'),
+            step: rkKey(k.id, 'step'),
+            stepItem: (key) => ({ type: 'slider', label: 'Schritt pro Raste', key, default: k.step, min: 1, max: 10, step: 1, unit: ' %' }),
+            buttonItem: (pin) => ({ type: 'select', label: `Funktion des Tasters (GPIO ${pin})`, key: rkKey(k.id, 'bfn'), default: state.values.get(rkKey(k.id, 'bfn')), options: RK_BUTTONS.map(([label]) => label) }),
+          }),
+          { type: 'buttons', buttons: [['Drehregler entfernen', 'danger', `rkdel:${k.id}`]] },
+        ],
+      }))
       const addSection = {
         title: '',
-        help: tr(extras.length >= (hw.rotaryExtraMax ?? 4) ? 'Mehr Drehregler gehen nicht.' : 'Jeder weitere Drehregler braucht drei freie GPIO-Pins. Die Pins wählst du danach selbst.'),
+        help: tr(extras.length >= (hw.rotaryExtraMax ?? 4) ? 'Mehr Drehregler gehen nicht.' : 'Ein weiterer Drehregler kommt ohne Pins dazu: Die Pins wählst du danach selbst.'),
         items: extras.length >= (hw.rotaryExtraMax ?? 4) ? [] : [{ type: 'buttons', buttons: [['Drehregler hinzufügen', 'primary', 'rkadd']] }],
       }
       return [...withoutSave(page).map((sec) => ({
         ...sec,
         help: [
-          `Drehregler an GPIO ${chosen.get('rotPinA')}/${chosen.get('rotPinB')}, Taster an GPIO ${buttonPin}. Zur Wahl stehen nur Pins, die nichts anderes nutzt.`,
+          'Zur Wahl stehen nur Pins, die nichts anderes nutzt. „Kein Pin“ lässt einen Anschluss weg. Zum Drehen braucht der Drehregler Pin A und Pin B, für jede Drehrichtung wählst du, was passiert.',
           ...clash,
           ...(clash.length ? ['So geht beides nicht: den Pin des Drehreglers unten umstellen und danach die Box neu starten.'] : []),
           ...(hw.rotaryStopped ? ['Der Drehregler läuft gerade nicht. Einen anderen Pin wählen oder die Box neu starten.'] : []),
         ]
           .map((part) => tr(part))
           .join(' '),
-        items: sec.items.flatMap((it) => {
-          if (it.key !== 'btnFn') return [it]
-          const pinItems = ROTARY_PIN_ITEMS.map(([key, , , label]) => ({ type: 'select', label, key, default: rotaryPinText(chosen.get(key)), options: pinOptions(key) }))
-          return [...pinItems, { ...it, label: `Funktion des Tasters (GPIO ${buttonPin})` }]
-        }),
+        items: [
+          ...sec.items.filter((it) => it.key === 'rotary').map((it) => ({ ...it, label: 'Drehregler' })),
+          ...knobItems({
+            a: 'rotPinA',
+            b: 'rotPinB',
+            btn: 'rotPinBtn',
+            right: 'rotRight',
+            left: 'rotLeft',
+            step: 'rotStep',
+            stepItem: () => sec.items.find((it) => it.key === 'rotStep'),
+            buttonItem: (pin) => ({ ...sec.items.find((it) => it.key === 'btnFn'), label: `Funktion des Tasters (GPIO ${pin})` }),
+          }),
+        ],
       })), ...extraSections, addSection]
     },
     act: {
-      // another encoder: three free pins are taken for it, the person chooses them afterwards
+      // another encoder: it comes without pins (volume up and down), the person chooses them afterwards
       async rkadd() {
-        const taken = new Set([...ROTARY_PIN_ITEMS.map(([key]) => rotaryPinNumber(state.values.get(key))), ...(hw.rotaryExtra ?? []).flatMap((k) => RK_PIN_PARTS.map(([part]) => rotaryPinNumber(state.values.get(rkKey(k.id, part)))))])
-        const free = (hw.rotaryFree ?? []).filter((pin) => GPIO_HEADER[pin] && !taken.has(pin)).sort((x, y) => x - y)
-        if (free.length < 3) return toast('Es sind nicht genug GPIO-Pins frei', 'info')
-        const r = await api(`${API}/rotary-extra`, { method: 'POST', body: { function: 'tracks', pinA: free[0], pinB: free[1], pinButton: free[2], button: 'off' }, timeoutMs: 30000 })
+        const r = await api(`${API}/rotary-extra`, { method: 'POST', body: { right: 'up', left: 'down', pinA: 0, pinB: 0, pinButton: 0, button: 'off' }, timeoutMs: 30000 })
         if (!r.ok) return toast(r.body?.error === 'gpio_taken' ? `GPIO ${r.body.pin} ist schon belegt: ${String(r.body.by ?? '').split(', ').map(extWho).join(', ')}` : 'Nicht gespeichert', 'info')
         await loadRotary()
         renderPage(currentPage(), false)
@@ -19668,7 +19717,7 @@ const CONTROLLERS = {
         const [, id, what] = extra
         const part = RK_PIN_PARTS.find(([name]) => name === what)
         const body = { id }
-        if (what === 'fn') body.function = RK_FUNCTIONS.find(([l]) => l === v)?.[1]
+        if (what === 'right' || what === 'left') body[what] = directionValue(v)
         else if (part) body[part[2]] = rotaryPinNumber(v)
         else if (what === 'step') body.step = v
         else if (what === 'bfn') body.button = RK_BUTTONS.find(([l]) => l === v)?.[1]
@@ -19687,7 +19736,7 @@ const CONTROLLERS = {
         return toast(r.body?.running === false ? 'Gespeichert – der Drehregler startet gerade nicht' : 'Gespeichert', r.body?.running === false ? 'info' : 'ok')
       }
       const pinItem = ROTARY_PIN_ITEMS.find(([k]) => k === key)
-      const body = pinItem ? { [pinItem[2]]: rotaryPinNumber(v) } : key === 'rotary' ? { active: v } : key === 'rotStep' ? { step: v } : key === 'btnFn' ? { button: BTN_FN.find(([l]) => l === v)?.[1] } : null
+      const body = pinItem ? { [pinItem[2]]: rotaryPinNumber(v) } : key === 'rotary' ? { active: v } : key === 'rotStep' ? { step: v } : key === 'rotRight' ? { right: directionValue(v) } : key === 'rotLeft' ? { left: directionValue(v) } : key === 'btnFn' ? { button: BTN_FN.find(([l]) => l === v)?.[1] } : null
       if (!body) return
       const r = await api(`${API}/rotary`, { method: 'POST', body })
       if (r.body?.error === 'gpio_taken' || r.body?.error === 'gpio_twice') {
@@ -19708,7 +19757,7 @@ const CONTROLLERS = {
         renderPage(currentPage(), false)
         return toast('Gespeichert – der Drehregler startet gerade nicht', 'info')
       }
-      if (r.ok && (pinItem || key === 'rotary' || key === 'btnFn')) {
+      if (r.ok && (pinItem || key === 'rotary' || key === 'btnFn' || key === 'rotRight' || key === 'rotLeft')) {
         // (the pin it let go is free for the others, the one it took is not; switched on or off: whether it runs, what it shares;
         // the button switched off or on: its pin is let go or taken)
         await loadRotary()

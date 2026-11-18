@@ -63,10 +63,13 @@ test('Spotify says what plays in /state, not in /local', () => {
   assert.deepStrictEqual([episode.playing, episode.artist], [false, 'Die Sendung'])
 })
 
-test('shuffle and repeat: the player loops the whole list; Spotify can repeat one track', () => {
+test('shuffle and repeat: the player repeats all or one track (repeatMode); Spotify too', () => {
   const local = { currentPlayer: 'mplayer', currentType: 'local', playing: true, shuffle: true, repeat: true }
   assert.deepStrictEqual([logic.readPlayback(local, null).shuffle, logic.readPlayback(local, null).repeat], [true, 'all'])
   assert.strictEqual(logic.readPlayback({ ...local, shuffle: false, repeat: false }, null).repeat, 'off')
+  // (the player's repeatMode: off, all - the top symbol with the A - and one - the bottom symbol with the 1; it wins over the old flag)
+  const mode = (repeatMode, repeat) => logic.readPlayback({ ...local, repeatMode, repeat }, null).repeat
+  assert.deepStrictEqual([mode('all', true), mode('one', true), mode('off', false), mode('off', true), mode(undefined, true), mode(undefined, false)], ['all', 'track', 'off', 'off', 'all', 'off'])
   const spotify = (repeat_state, shuffle_state) => logic.readPlayback({ currentPlayer: 'spotify' }, { is_playing: true, repeat_state, shuffle_state, item: { name: 'x' } })
   assert.deepStrictEqual([spotify('track', true).repeat, spotify('context', false).repeat, spotify('off', false).repeat, spotify('off', true).shuffle], ['track', 'all', 'off', true])
 })
@@ -111,6 +114,12 @@ test('a short picture for the volume and for play and pause - not for the first 
   assert.strictEqual(logic.overlayFor(was, { ...was, volume: 0 }, false), null)
   assert.deepStrictEqual(logic.overlayFor(was, { ...was, volume: 60, playing: false }, false), { kind: 'pause', volume: 60 })
   assert.strictEqual(logic.overlayFor({ player: '', playing: false, volume: null }, { player: '', playing: false, volume: null }), null)
+  // (the animation of play and pause can be switched off on its own: the volume one stays, and the other way round)
+  assert.strictEqual(logic.overlayFor(was, { ...was, playing: false }, true, false), null)
+  assert.strictEqual(logic.overlayFor({ ...was, playing: false }, was, true, false), null)
+  assert.deepStrictEqual(logic.overlayFor(was, { ...was, volume: 60 }, true, false), { kind: 'volume', volume: 60 })
+  assert.deepStrictEqual(logic.overlayFor(was, { ...was, playing: false }, false, true), { kind: 'pause', volume: 50 })
+  assert.deepStrictEqual([logic.readConfig({}).playOverlay, logic.readConfig({ playOverlay: false }).playOverlay], [true, false])
 })
 
 // ---- what the display shows ----------------------------------------------------------------------------------------------------

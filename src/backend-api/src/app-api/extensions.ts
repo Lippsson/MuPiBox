@@ -77,7 +77,7 @@ export interface Manifest {
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
-  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; showIf?: { key: string; is: string[] }; hideIf?: { key: string; is: string[] }; live?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading' | 'status' | 'action' | 'list'; state?: string; post?: string; confirm?: string; empty?: string; page?: boolean; card?: boolean; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean; slider?: boolean; adopt?: string[]; download?: string; upload?: string; file?: string; ext?: string; accept?: string; beside?: boolean }[] }
+  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; showIf?: { key: string; is: string[] }; hideIf?: { key: string; is: string[] }; live?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading' | 'status' | 'action' | 'list'; state?: string; post?: string; confirm?: string; empty?: string; page?: boolean; card?: boolean; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean; slider?: boolean; adopt?: string[]; download?: string; upload?: string; file?: string; ext?: string; accept?: string; beside?: boolean; holder?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -340,7 +340,7 @@ export async function takenForRotary(config: Record<string, unknown> | undefined
   // (the additional encoders' pins are the encoders' own as well; the page and the routes keep the encoders apart from each other)
   const extra = rotaryExtras(config).flatMap((k) => [k.a, k.b, k.button])
   return gatherTaken({
-    selfDeclared: { gpio: [own.a, own.b, own.button, ...extra].map((pin) => ({ pin })) },
+    selfDeclared: { gpio: [own.a, own.b, own.button, ...extra].filter((pin) => pin !== 0).map((pin) => ({ pin })) },
     // (switched off for the test: the pins it holds now are not "taken by others")
     config: { ...(config ?? {}), rotary: { ...rotary, active: false, extra: [] } },
     others: await Promise.all(installed.map(async (m) => ({ id: m.id, resources: await heldResources(m) }))),
@@ -664,6 +664,8 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
         if (item.type !== 'lookup' || settings[item.key].type !== 'string' || item.choices !== undefined) return `ui: bad type: ${item.key}`
         if (typeof item.search !== 'string' || !new RegExp(`^/api/ext/${x.id}/[a-z]{1,30}$`).test(item.search)) return `ui: bad search address: ${item.key}`
       }
+      // what the pin of a field is called in the lists of the pins (a setting of the type gpio)
+      if (item.holder !== undefined && (typeof item.holder !== 'string' || item.holder.length < 1 || item.holder.length > 60 || settings[item.key].type !== GPIO_SETTING)) return `ui: holder is a short text on a setting of the type gpio: ${item.key}`
       // a number from min to max as a slider whose value can also be typed (hostApi 10)
       if (item.slider !== undefined) {
         const spec = settings[item.key]

@@ -1,6 +1,6 @@
 # Rotary knob and button
 
-A **rotary knob with button** (rotary encoder in the style of the KY-040) makes the volume easy to reach for children's hands. You switch it on in the app under **Settings › Audio › Rotary knob and button**.
+A **rotary knob with button** (rotary encoder in the style of the KY-040) makes the volume (or skipping between tracks) easy to reach for children's hands. You switch it on in the app under **Settings › Audio › Rotary knob and button**.
 
 > [!NOTE]
 > If the extension [Buttons & GPIO Input](../erweiterungen/buttons.md) is switched on, this setting is under **Settings › Buttons & GPIO Input** instead, as the card **Rotary knob**. With the extension you can also connect any number of further buttons.
@@ -13,22 +13,23 @@ A **rotary knob with button** (rotary encoder in the style of the KY-040) makes 
 | B (DT) | **24** (default) |
 | Button | **10** (default; the button switches to GND) |
 
-The three pins are the default after installation. You can change them in the settings (see below), for example when a pin is already needed for something else. If the knob turns the wrong way, swap connections A and B.
+The three pins are the default after installation. You can change them in the settings (see below), for example when a pin is already needed for something else. If the knob turns the wrong way, swap connections A and B (or swap the functions under the pins).
 
 ## Settings
 
 | Setting | Effect |
 | --- | --- |
-| **Rotary knob for the volume** | switches the knob on (after installation it is off) |
-| **Step per detent** | how many percent each detent changes the volume, 1 to 10 (default 5) |
-| **GPIO pin A (CLK)**, **GPIO pin B (DT)**, **GPIO pin (button)** | the pins the knob is connected to (see "Changing the pins") |
+| **Rotary knob** | switches the knob on (after installation it is off) |
+| **GPIO pin A (CLK)**, **GPIO pin B (DT)**, **GPIO pin (button)** | the pins the knob is connected to (see "Changing the pins"). Each pin may also be **No pin** |
+| **Turn clockwise** (under pin A), **Turn counterclockwise** (under pin B) | what a detent in that direction does: **Louder**, **Quieter**, **Next track**, **Previous track** or **Off**. The default is louder clockwise and quieter counterclockwise |
+| **Step per detent** | how many percent each detent changes the volume, 1 to 10 (default 5); it appears only while a direction is **Louder** or **Quieter** |
 | **Function of the button (GPIO …)** | **Off**, **Play/Pause**, **Next track**, **Track selection (press to switch)** or **Fast-forward** |
 
 The volume **maximum** (**Audio › Volume › Maximum (hearing protection)**) also applies to the knob: it never turns louder than allowed ([Sound and volume](sound.md)). The choice of button behaviour and the step size take effect at once. Switching the knob on and off restarts its service.
 
 ## Changing the pins
 
-The three lists offer **only pins that suit the rotary knob and are free**: all pins of the header that nothing else uses. Not offered are pins of the box itself (power button, LED, fan, MuPiHAT), pins the boot configuration takes (for example I²C, SPI or the sound card), pins of extensions and pins a program holds right now. A pin that one of the three connections already has is no longer offered in the other two lists. The current pin always stays in its list.
+In the three lists **No pin** comes first (the connection is left out: without pin A or B the knob does not turn, without a pin for the button there is no button; the function under the pin disappears then). After it the lists offer **only pins that suit the rotary knob and are free**: all pins of the header that nothing else uses. Not offered are pins of the box itself (power button, LED, fan, MuPiHAT), pins the boot configuration takes (for example I²C, SPI or the sound card), pins of extensions and pins a program holds right now. A pin that one of the three connections already has is no longer offered in the other two lists. The current pin always stays in its list.
 
 A change takes effect at once: if the knob is running, the box restarts its service with the new pins. Rewire the knob first (best with the box switched off) or switch it off for a moment. Switching on checks the pins once more; if one has been taken meanwhile, the knob stays off and the app says who holds the pin. The LED and the fan do not offer the pins of a switched-on knob.
 
@@ -62,12 +63,13 @@ Below the first knob there is **Add rotary knob**. Each further knob has a card 
 
 | Setting | Effect |
 | --- | --- |
-| **Function of the knob** | **Volume** (each detent changes it by the set **step per detent**) or **Previous / next track** (clockwise the next track, counter-clockwise the previous one) |
-| **GPIO pin A (CLK)**, **GPIO pin B (DT)**, **GPIO pin (button)** | the three pins of this knob |
+| **GPIO pin A (CLK)**, **GPIO pin B (DT)**, **GPIO pin (button)** | the three pins of this knob (each may be **No pin**; a new knob is added without pins, you choose them afterwards) |
+| **Turn clockwise**, **Turn counterclockwise** | what a detent in that direction does: **Louder**, **Quieter**, **Next track**, **Previous track** or **Off** (default: louder clockwise, quieter counterclockwise) |
+| **Step per detent** | with **Louder** and **Quieter**: how many percent a detent changes |
 | **Function of the button** | **Off**, **Play/Pause**, **Next track** or **Fast-forward** |
 | **Remove knob** | deletes it; its pins are free again |
 
-So you can have, say, one knob for the volume and a second only for the tracks. Up to **four more** are possible as long as enough GPIO pins are free. The lists show only pins nothing else uses, including no other knob. Changing the pins or removing a knob takes effect at once: the box restarts the service.
+So you can have, say, one knob for the volume and a second only for the tracks (clockwise **Next track**, counterclockwise **Previous track**). Up to **four more** are possible as long as enough GPIO pins are free. The lists show only pins nothing else uses, including no other knob. Changing the pins or removing a knob takes effect at once: the box restarts the service.
 
 ### Choosing albums with the NFC extension
 
@@ -75,7 +77,7 @@ Choosing **albums** after a tag on an **artist cover** is laid on is done by a k
 
 ## If it does not react
 
-- Is the **Rotary knob for the volume** switch on? The service only starts then.
+- Is the **Rotary knob** switch on? The service only starts then.
 - Check the wiring of the three pins (default 26, 24 and 10; the chosen ones are in the settings and in the [GPIO assignment](../anhang/gpio.md)).
 - If the knob cannot be switched on and the app names a GPIO pin in use, a button of the extension [Buttons & GPIO Input](../erweiterungen/buttons.md) (or something else) has one of the three pins. Choose a free pin.
 - A further knob does nothing: check its three pins and whether **Function of the knob** fits. The service never takes pins of the SPI or I²C port.

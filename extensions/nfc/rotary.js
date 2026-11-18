@@ -6,7 +6,7 @@
 //   albums    [{ key, label, media }] in the order of the list
 //   index     the album the knob is on
 //   until     the time up to which the knob is taken over; every turn of the knob starts the time anew (Infinity: no limit - 0 seconds)
-//   selecting true once the knob was turned: only then does a press choose the album (before, it does what it always does)
+//   selecting true once the knob was turned: only then does a press choose the album (a press before turning chooses nothing)
 'use strict'
 
 /** A state in which the knob belongs to nobody. */
@@ -38,12 +38,13 @@ function turn(state, direction, now) {
 }
 
 /**
- * The button of the knob was pressed. Returns { state, album } - the album to play, the knob is free again - or null when nothing was
- * chosen (the knob not taken over, or not turned yet: the press is for what the box does with it otherwise).
+ * The button of the knob was pressed. Returns { state, album } - the album to play - or null when nothing was chosen (the knob not taken over,
+ * or not turned yet). The knob stays the knob of this tag's albums, now standing on the one that plays, and the time starts anew: another
+ * album can be chosen right away. It ends with the time, or when another tag is laid on.
  */
 function press(state, now) {
   if (!isActive(state, now) || !state.selecting) return null
-  return { state: idle(), album: state.albums[state.index] }
+  return { state: { ...state, until: state.windowMs > 0 ? now + state.windowMs : Infinity, selecting: false }, album: state.albums[state.index] }
 }
 
 module.exports = { idle, isActive, begin, turn, press }

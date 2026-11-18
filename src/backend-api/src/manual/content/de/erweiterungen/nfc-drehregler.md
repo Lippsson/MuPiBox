@@ -27,11 +27,11 @@ Der Drehregler wählt nur unter den **Alben des Artistcovers, dessen Tag gerade 
 
 Der Drehregler **ändert dabei nichts** am Tag: Beim nächsten Auflegen spielt wieder das Album aus der Auswahlliste.
 
-Ein Druck, **bevor** du gedreht hast, wählt nichts aus. Dreht niemand, geht die Wahl nach der eingestellten Zeit zu Ende. Jede Drehung startet die Zeit neu. Ohne aufgelegten Tag tut der Album-Drehregler nichts.
+Ein Druck, **bevor** du gedreht hast, wählt nichts aus. Nach einer Wahl bleibt der Drehregler beim Album, das jetzt spielt: Du kannst sofort weiterdrehen und ein anderes Album wählen. Dreht niemand, geht die Wahl nach der eingestellten Zeit zu Ende. Jede Drehung und jede Wahl startet die Zeit neu. Ohne aufgelegten Tag tut der Album-Drehregler nichts.
 
 ## OLED-Display
 
-Ist das [OLED-Display](oled.md) angeschlossen, zeigt es beim Drehen **in den Informationen** den Interpreten (oder Ordner) und darunter den **Namen** des Albums, bei dem der Drehregler gerade steht, mit seinem Platz in der Liste („< 2/12 >“). Lange Namen laufen durch. Statusleiste und die Zeile unten mit der Zeit bleiben, sie zeigen, was gerade noch spielt. Ein Druck auf den Taster spielt das Album, und das Display zeigt wieder die **normale Anzeige des Players**.
+Ist das [OLED-Display](oled.md) angeschlossen, zeigt es beim Drehen **in den Informationen** den Interpreten (oder Ordner) und darunter den **Namen** des Albums, bei dem der Drehregler gerade steht, mit seinem Platz in der Liste („< 2/12 >“). Lange Namen laufen durch. Statusleiste und die Zeile unten mit der Zeit bleiben, sie zeigen, was gerade noch spielt. Ein Druck auf den Taster spielt das Album, und das Display zeigt wieder die **normale Anzeige des Players**. Drehst du, wählst aber nichts aus, geht das Display nach **10 Sekunden** ohne Drehen von selbst zurück zur vorherigen Anzeige (dem Player). Ein Druck wählt dann nichts aus, bis du wieder drehst.
 
 ## Anschluss und Einstellungen
 
@@ -42,7 +42,7 @@ Ist das [OLED-Display](oled.md) angeschlossen, zeigt es beim Drehen **in den Inf
 | **Zustand** | ob der Treiber des Drehreglers läuft („Bereit“) und wann du ihn **zuletzt gedreht** und **gedrückt** hast: So siehst du gleich, ob er richtig verdrahtet ist. Steht dort ein Fehler, nennt der Hinweis den Grund |
 | **GPIO-Pin A (CLK)**, **GPIO-Pin B (DT)** | die beiden Pins des Drehreglers |
 | **GPIO-Pin Taster** | der Pin des Tasters (nach Masse geschaltet): Ein Druck spielt das gewählte Album |
-| **Nach dem Auflegen aktiv (Sekunden)** | Ein Regler von **0 bis 120 Sekunden** (Vorgabe 20): so lange nach dem Auflegen und nach jedem Drehen wählt der Drehregler Alben. **0** heißt **immer aktiv**: Der Drehregler wählt Alben, bis du eines mit dem Taster wählst oder einen anderen Tag auflegst. Das OLED-Display zeigt den Namen dann bis zu fünf Minuten nach dem letzten Drehen. |
+| **Nach dem Auflegen aktiv (Sekunden)** | Ein Regler von **0 bis 120 Sekunden** (Vorgabe 20): so lange nach dem Auflegen, nach jedem Drehen und nach jeder Wahl wählt der Drehregler Alben. **0** heißt **immer aktiv**: Der Drehregler wählt Alben, bis du einen anderen Tag auflegst. |
 
 Die Listen zeigen **nur freie Pins**: keine, die die Box selbst, die Boot-Konfiguration, ein NFC-Leser, eine andere Erweiterung oder ein anderer Drehregler nutzt. Ohne alle **drei** Pins gibt es den Album-Drehregler nicht. **Eine Raste ist ein Album**, und der **Taster bestätigt** das Album, bei dem der Drehregler steht. Dreht der Regler in die falsche Richtung, tausche die Anschlüsse A und B.
 

@@ -261,7 +261,7 @@ exports.activate = (host) => {
       const reading = logic.readPlayback(local, spotify)
       // (no answer of the player at all: the picture stays as it was - not a short picture for a volume that "changed" to nothing)
       if (local) {
-        const overlay = logic.overlayFor(previous, reading, config.volumeOverlay)
+        const overlay = logic.overlayFor(previous, reading, config.volumeOverlay, config.playOverlay)
         if (overlay) ui.overlay = { ...overlay, until: now + logic.OVERLAY_MS }
         previous = reading
         play = reading

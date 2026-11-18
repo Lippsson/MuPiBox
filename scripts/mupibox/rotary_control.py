@@ -2,9 +2,11 @@
 # Rotary encoders with push button (KY-040 style): the first one for the volume, and up to MAX_EXTRA more.
 #   First encoder, default pins: GPIO 26 = encoder A (CLK), GPIO 24 = encoder B (DT), GPIO 10 = push button (to GND);
 #   rotary.pinA, rotary.pinB and rotary.pinButton in mupiboxconfig.json choose others. It runs while rotary.active is set.
-#   More encoders: rotary.extra in mupiboxconfig.json, a list of { id, function, pinA, pinB, pinButton, button, step }.
-#   function "volume": turning sets the volume by `step` percent per detent; function "tracks": a detent clockwise is the next track, counter
-#   clockwise the previous one. Each has its own three pins. (The pins are read when the service starts; the app restarts it when they change.)
+#   More encoders: rotary.extra in mupiboxconfig.json, a list of { id, right, left, pinA, pinB, pinButton, button, step }.
+#   Each pin is 2..27, or 0 for none (without pin A or B the knob does not turn, without a button pin it has no button). What a turn does is
+#   chosen per direction (rotary.right / rotary.left of the first one, right / left of an entry): up = the volume up by `step` percent per
+#   detent, down = the volume down, next = the next track, previous = the previous track, off = nothing. Each knob has its own pins.
+#   (The pins are read when the service starts; the app restarts it when they change. What a turn does is read again while it runs.)
 # The first encoder's push button does what is chosen in the admin interface (rotary.button, read again when it changed); the other
 # encoders' buttons are chosen in their own entry (button: off, playpause, next, ffwd).
 # With "track selection" chosen the first encoder's button works as a switch (with "next track" a press skips one track, as before): the first press
@@ -26,7 +28,7 @@ CONFIG = "/etc/mupibox/mupiboxconfig.json"
 PLAYER = "http://localhost:5005"
 DEFAULT_PINS = (26, 24, 10)
 MAX_EXTRA = 4
-FUNCTIONS = ("volume", "tracks")
+DIRECTIONS = ("off", "up", "down", "next", "previous")
 BUTTONS = ("off", "playpause", "next", "ffwd")
 
 
@@ -39,19 +41,25 @@ def read_config():
 
 
 def pin_of(value):
+    # a pin of 2..27, 0 for none, None for anything else
     try:
         number = int(str(value))
     except (TypeError, ValueError):
         return None
-    return number if 2 <= number <= 27 else None
+    return number if number == 0 or 2 <= number <= 27 else None
 
 
 def first_pins(section):
-    # three different pins of 2..27 from the config, else the pins the box shipped with
-    pins = tuple(pin_of(section.get(key)) for key in ("pinA", "pinB", "pinButton"))
-    if None not in pins and len(set(pins)) == 3:
+    # each pin from the config (2..27 or 0 for none; one that is not set is the one the box shipped with), all different, else the shipped pins
+    pins = tuple(DEFAULT_PINS[i] if section.get(key) in (None, "") else pin_of(section.get(key)) for i, key in enumerate(("pinA", "pinB", "pinButton")))
+    chosen = [pin for pin in pins if pin]
+    if None not in pins and len(set(chosen)) == len(chosen):
         return pins
     return DEFAULT_PINS
+
+
+def direction_of(value, fallback):
+    return value if value in DIRECTIONS else fallback
 
 
 def kernel_pins():
@@ -131,9 +139,9 @@ def playing():
 class Knob:
     """One encoder: its pins, what it does, and what its loop has seen so far."""
 
-    def __init__(self, name, function, a, b, button):
+    def __init__(self, name, a, b, button, legacy=None):
         self.name = name  # "first", or the id of an entry of rotary.extra
-        self.function = function
+        self.legacy = legacy  # an entry of the first version had a function (volume, tracks) instead of right and left
         self.a, self.b, self.button = a, b, button
         self.state = 0
         self.accumulated = 0
@@ -151,6 +159,19 @@ class Knob:
             if isinstance(entry, dict) and entry.get("id") == self.name:
                 return entry
         return {}
+
+    def direction(self, side):
+        # what a turn to the right ("right") or to the left ("left") does now
+        settings = self.settings()
+        if self.legacy == "tracks":
+            fallback = "next" if side == "right" else "previous"
+        else:
+            fallback = "up" if side == "right" else "down"
+        return direction_of(settings.get(side), fallback)
+
+    def turns(self):
+        # a knob turns only with both of its pins
+        return bool(self.a and self.b)
 
     def button_action(self):
         action = str(self.settings().get("button", "off"))
@@ -188,12 +209,19 @@ class Knob:
             player("seek+30")
 
     def turned(self, direction):
-        if self.function == "tracks" or self.track_mode():
-            if self.track_mode():
-                self.track_mode_until = time.monotonic() + TRACK_MODE_S  # turning keeps the mode alive
+        if self.track_mode():
+            self.track_mode_until = time.monotonic() + TRACK_MODE_S  # turning keeps the mode alive
             player("next" if direction > 0 else "previous")
-        else:
-            player("%+d" % (direction * self.step()))
+            return
+        action = self.direction("right" if direction > 0 else "left")
+        if action == "up":
+            player("%+d" % self.step())
+        elif action == "down":
+            player("%+d" % -self.step())
+        elif action == "next":
+            player("next")
+        elif action == "previous":
+            player("previous")
 
 
 def worker():
@@ -210,19 +238,20 @@ def configured_knobs():
     section = read_config()
     knobs = []
     if section.get("active") is True or str(section.get("active")).lower() == "true":
-        knobs.append(Knob("first", "volume", *first_pins(section)))
+        knobs.append(Knob("first", *first_pins(section)))
     seen = set()
     for entry in (section.get("extra") or [])[:MAX_EXTRA]:
         if not isinstance(entry, dict):
             continue
         pins = tuple(pin_of(entry.get(key)) for key in ("pinA", "pinB", "pinButton"))
         name = str(entry.get("id", ""))
-        if entry.get("function") not in FUNCTIONS or not name.isalnum() or len(name) > 12 or name in seen:
+        if not name.isalnum() or len(name) > 12 or name in seen:
             continue
-        if None in pins or len(set(pins)) != 3:
+        chosen = [pin for pin in pins if pin]
+        if None in pins or len(set(chosen)) != len(chosen):
             continue
         seen.add(name)
-        knobs.append(Knob(name, entry["function"], *pins))
+        knobs.append(Knob(name, *pins, legacy=entry.get("function")))
     return knobs
 
 
@@ -235,7 +264,9 @@ def setup():
     held = kernel_pins()
     usable = []
     for knob in configured_knobs():
-        if held & {knob.a, knob.b}:
+        if not knob.turns() and not knob.button:
+            continue  # no pins at all: nothing to read (a knob just added, its pins not chosen yet)
+        if knob.turns() and held & {knob.a, knob.b}:
             # (the app shows the clash on the page of the encoder; taking the pin would stop the other device)
             print("rotary control: GPIO %s of encoder %s belongs to SPI or I2C - not used" % (", ".join(str(p) for p in sorted(held & {knob.a, knob.b})), knob.name), flush=True)
             continue
@@ -245,8 +276,9 @@ def setup():
     knobs = usable
     pins = gpio_compat.Gpio()
     for knob in knobs:
-        for pin in (knob.a, knob.b):
-            pins.setup_input(pin)
+        if knob.turns():
+            for pin in (knob.a, knob.b):
+                pins.setup_input(pin)
     if pins.refused:
         print("rotary control: RPi.GPIO does not work here (%s), using %s" % (pins.refused, pins.name), flush=True)
 
@@ -254,7 +286,7 @@ def setup():
 def button_wanted(knob):
     # The button's pin is taken once the button has a function (it can be chosen later - read once a second); with the
     # button off it stays free for others. A pin of SPI or I2C is never taken: the knob works without the button then.
-    if knob.button_ready or knob.button_refused or knob.button_action() == "off":
+    if knob.button_ready or knob.button_refused or knob.button_action() == "off" or not knob.button:
         return knob.button_ready
     if knob.button in kernel_pins():
         knob.button_refused = True
@@ -274,12 +306,12 @@ def main():
     threading.Thread(target=worker, daemon=True).start()
 
     for knob in knobs:
-        knob.state = (read(knob.a) << 1) | read(knob.b)
+        knob.state = (read(knob.a) << 1) | read(knob.b) if knob.turns() else 3
         button_wanted(knob)
         knob.button_down = knob.button_ready and read(knob.button) == 0
     button_checked = time.monotonic()
     fast_until = 0.0
-    print("rotary control started (%s)" % ", ".join("%s: %s A=%d B=%d button=%s" % (k.name, k.function, k.a, k.b, k.button if k.button_ready else "off") for k in knobs), flush=True)
+    print("rotary control started (%s)" % ", ".join("%s: A=%d B=%d button=%s" % (k.name, k.a, k.b, k.button if k.button_ready else "off") for k in knobs), flush=True)
 
     while True:
         if time.monotonic() - button_checked >= 1.0:
@@ -288,7 +320,7 @@ def main():
                 if not knob.button_ready and button_wanted(knob):
                     knob.button_down = read(knob.button) == 0
         for knob in knobs:
-            new_state = (read(knob.a) << 1) | read(knob.b)
+            new_state = (read(knob.a) << 1) | read(knob.b) if knob.turns() else knob.state
             if new_state != knob.state:
                 fast_until = time.monotonic() + FAST_FOR_S
                 knob.accumulated += TRANSITIONS.get((knob.state, new_state), 0)
