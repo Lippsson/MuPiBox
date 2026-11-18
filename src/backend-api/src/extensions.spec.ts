@@ -633,6 +633,18 @@ describe('the NFC extension of this repository', () => {
     assert.deepStrictEqual(base(shown(2), 2).filter(Boolean), base(shown(1), 1).filter(Boolean), 'the same fields for each reader')
     assert.deepStrictEqual(base(shown(3), 3).filter(Boolean), base(shown(1), 1).filter(Boolean))
   })
+  it('has its own pins for the album knob: three pins of the header, none by default; the knob is no longer the one of the core', () => {
+    for (const key of ['knobA', 'knobB', 'knobButton']) assert.deepStrictEqual(nfc.settings?.[key], { type: 'gpio', default: 0 }, key)
+    assert.strictEqual(nfc.settings?.rotary, undefined, 'no switch that hands the knob of the box over')
+    assert.strictEqual(nfc.ui?.items.some((i) => i.type === 'heading' && i.adopt !== undefined), false, 'the page of the volume knob stays with the core')
+    assert.strictEqual(checkSettings(nfc, { knobA: 5, knobB: 6, knobButton: 13, rotarySeconds: 0 }).ok, true)
+    assert.strictEqual(checkSettings(nfc, { knobA: 40 }).ok, false)
+    assert.strictEqual(checkSettings(nfc, { knobButton: 1 }).ok, false)
+    // (a pin twice, or one something else holds, is refused when the settings are saved)
+    const merged = { knobA: 5, knobB: 5, knobButton: 13 }
+    assert.strictEqual(gpioSettingError(nfc, merged, ['knobB'], new Map())?.error, 'gpio_twice')
+    assert.strictEqual(gpioSettingError(nfc, { knobA: 26, knobB: 6, knobButton: 13 }, ['knobA'], new Map([[26, ['MuPiBox (rotary encoder)']]]))?.error, 'gpio_taken')
+  })
   it('is packed as the catalog says, with its Python driver in it', () => {
     const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'nfc')
     const bytes = readFileSync(path.join(extDir, 'dist', `nfc-${entry.version}.mpx`))
@@ -641,7 +653,7 @@ describe('the NFC extension of this repository', () => {
     assert.strictEqual(checked.ok, true)
     if (checked.ok) {
       assert.deepStrictEqual(checked.pkg.manifest, nfc, 'the package holds the manifest of the repository')
-      for (const driver of ['pn5180.py', 'rc522.py', 'pn532.py', 'usbreader.py']) assert.ok(checked.pkg.files.has(driver), driver)
+      for (const driver of ['pn5180.py', 'rc522.py', 'pn532.py', 'usbreader.py', 'knob.py']) assert.ok(checked.pkg.files.has(driver), driver)
     }
   })
 })

@@ -7,6 +7,7 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { EventEmitter } = require('node:events')
 const rotary = require('../rotary.js')
 const tags = require('../tags.js')
 
@@ -100,21 +101,35 @@ test('saving the tags and taking them in again keeps the collection', () => {
 })
 
 // ---- the API part ---------------------------------------------------------------------------------------------------------------------
+// The pins of the album knob (its own three pins; without them there is no knob)
+const KNOB = { knobA: 5, knobB: 6, knobButton: 13 }
 function makeHost(settings) {
   const routes = {}
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nfc-rotary-'))
+  // (the driver of the knob: a made-up program that says nothing)
+  const started = []
+  const spawnFn = (command, args) => {
+    const proc = new EventEmitter()
+    proc.stdout = new EventEmitter()
+    proc.stderr = new EventEmitter()
+    proc.kill = () => setImmediate(() => proc.emit('exit', null, 'SIGTERM'))
+    proc.command = command
+    proc.args = args
+    started.push(proc)
+    return proc
+  }
   const host = {
+    spawnFn,
     dir: path.join(__dirname, '..'),
     dataDir,
     log: { info() {}, warn() {}, debug() {} },
     apiUrl: 'http://api.test',
     playerUrl: 'http://player.test',
-    rotaryFlagFile: path.join(dataDir, 'rotary-capture'),
     settings: async () => settings,
     onSettings() {},
     route: (method, sub, handler) => (routes[`${method} ${sub}`] = handler),
   }
-  return { host, routes, dataDir }
+  return { host, routes, dataDir, started }
 }
 const call = async (handler, req = {}) => {
   const out = { status: 200, body: null }
@@ -138,7 +153,7 @@ test('an artist cover: assigned, laid on, the knob chooses an album, a press pla
     return { ok: true, json: async () => ({}) }
   }
   try {
-    const { host, routes, dataDir } = makeHost({ reader: 'none', onRemove: 'nothing', playOnTag: true, rotary: true, rotarySeconds: 20 })
+    const { host, routes, dataDir } = makeHost({ reader: 'none', onRemove: 'nothing', playOnTag: true, ...KNOB, rotarySeconds: 20 })
     const nfc = require('../api.js').activate(host)
     await later(0)
     nfc.feed({ event: 'ready', firmware: '4.0', product: '4.0' })
@@ -150,8 +165,6 @@ test('an artist cover: assigned, laid on, the knob chooses an album, a press pla
     await later()
     const first = (await call(routes['get /pending'])).body
     assert.strictEqual(first.media.libraryPath, 'audiobook/Astrid Lindgren/Michel')
-    const flag = Number(fs.readFileSync(path.join(dataDir, 'rotary-capture'), 'utf8'))
-    assert.ok(flag > Date.now(), 'the core service is told that the knob is wanted')
 
     // the row of the tag has the list of albums with the one it plays; another one can be chosen for the laying on
     const row = (await call(routes['get /tags'])).body.items[0]
@@ -161,23 +174,28 @@ test('an artist cover: assigned, laid on, the knob chooses an album, a press pla
     assert.deepStrictEqual((await call(routes['post /tagsfor'], { body: { media: folder } })).body.items.map((t) => t.id), ['04A1B2C3'], 'the sheet of the artist cover finds it')
     assert.strictEqual((await call(routes['post /tagalbum'], { body: { id: '04A1B2C3', value: 'nope' } })).status, 400)
 
-    // a press before turning is not for the knob; a request that came through the web server is refused
-    assert.deepStrictEqual((await call(routes['post /rotary'], { body: { button: true } })).body, { handled: false })
-    assert.strictEqual((await call(routes['post /rotary'], { body: { turn: 1 }, headers: { 'x-forwarded-for': '10.0.0.7' } })).status, 403)
-    assert.strictEqual((await call(routes['post /rotary'], { body: { turn: 1 }, socket: { remoteAddress: '192.168.1.40' } })).status, 403)
+    // a press before turning chooses nothing
+    const shown = oled.length
+    await nfc.feedKnob({ event: 'button' })
+    assert.strictEqual(oled.length, shown)
+    assert.strictEqual((await call(routes['get /pending'])).body.media, undefined)
 
     // turn: the display shows the name; again; back; a press plays that album and the display goes back to the player
-    assert.deepStrictEqual((await call(routes['post /rotary'], { body: { turn: 1 } })).body, { handled: true })
+    nfc.feedKnob({ event: 'turn', direction: 1 })
     assert.deepStrictEqual(oled.at(-1), { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, seconds: 20 })
-    await call(routes['post /rotary'], { body: { turn: 1 } })
+    nfc.feedKnob({ event: 'turn', direction: 1 })
     assert.strictEqual(oled.at(-1).title, 'Ronja')
-    await call(routes['post /rotary'], { body: { turn: -1 } })
+    nfc.feedKnob({ event: 'turn', direction: -1 })
     assert.strictEqual(oled.at(-1).title, 'Pippi')
-    assert.deepStrictEqual((await call(routes['post /rotary'], { body: { button: true } })).body, { handled: true })
+    await nfc.feedKnob({ event: 'button' })
     assert.deepStrictEqual(oled.at(-1), { clear: true })
     assert.strictEqual((await call(routes['get /pending'])).body.media.libraryPath, 'audiobook/Astrid Lindgren/Pippi')
-    assert.strictEqual(fs.existsSync(path.join(dataDir, 'rotary-capture')), false, 'the knob is the box again')
-    assert.deepStrictEqual((await call(routes['post /rotary'], { body: { turn: 1 } })).body, { handled: false })
+    // (the choice is made: turning does nothing now)
+    const after = oled.length
+    nfc.feedKnob({ event: 'turn', direction: 1 })
+    assert.strictEqual(oled.length, after)
+    // (there is no route for the knob any more: the core's knobs have nothing to do with the albums)
+    assert.strictEqual(routes['post /rotary'], undefined)
 
     // what the knob chose does not change what the tag plays when it is laid on; the list does
     assert.strictEqual((await call(routes['post /tagalbum'], { body: { id: '04A1B2C3', value: row.select.choices[2].value } })).body.ok, true)
@@ -206,41 +224,46 @@ test('0 seconds in the settings: the knob stays taken over, the display shows th
     return { ok: true, json: async () => ({ currentPlayer: '', playing: false }) }
   }
   try {
-    const { host, routes, dataDir } = makeHost({ reader: 'none', onRemove: 'nothing', playOnTag: true, rotary: true, rotarySeconds: 0 })
+    const { host, routes } = makeHost({ reader: 'none', onRemove: 'nothing', playOnTag: true, ...KNOB, rotarySeconds: 0 })
     const nfc = require('../api.js').activate(host)
     await later(0)
     nfc.feed({ event: 'ready', firmware: '4.0', product: '4.0' })
     await call(routes['post /arm'], { body: { media: folder } })
     nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04A1B2C3' })
     await later()
-    assert.ok(Number(fs.readFileSync(path.join(dataDir, 'rotary-capture'), 'utf8')) > Date.now())
-    assert.deepStrictEqual((await call(routes['post /rotary'], { body: { turn: 1 } })).body, { handled: true })
+    nfc.feedKnob({ event: 'turn', direction: 1 })
     assert.deepStrictEqual(oled.at(-1), { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, seconds: 300 })
-    // (another tag, no collection: the knob is the box's again and the display shows the player)
+    // (another tag, no collection: the choice is over and the display shows the player)
     nfc.feed({ event: 'gone' })
     nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04FFEEDD' })
     await later(50)
-    assert.deepStrictEqual((await call(routes['post /rotary'], { body: { turn: 1 } })).body, { handled: false })
-    assert.strictEqual(fs.existsSync(path.join(dataDir, 'rotary-capture')), false)
     assert.deepStrictEqual(oled.at(-1), { clear: true })
+    const after = oled.length
+    nfc.feedKnob({ event: 'turn', direction: 1 })
+    assert.strictEqual(oled.length, after)
   } finally {
     global.fetch = realFetch
   }
 })
 
-test('the settings: with "Drehregler wählt das Album" off the knob stays the box', async () => {
+test('without the three pins of the knob there is no knob: no driver, and a tag of a collection takes nothing over', async () => {
   const realFetch = global.fetch
   global.fetch = async (url) => (String(url).startsWith('http://api.test/api/library/children') ? { ok: true, json: async () => children } : { ok: true, json: async () => ({ currentPlayer: '' }) })
   try {
-    const { host, routes, dataDir } = makeHost({ reader: 'none', onRemove: 'nothing', playOnTag: true, rotary: false })
-    const nfc = require('../api.js').activate(host)
-    await later(0)
-    nfc.feed({ event: 'ready', firmware: '4.0', product: '4.0' })
-    await call(routes['post /arm'], { body: { media: folder } })
-    nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04A1B2C3' })
-    await later()
-    assert.strictEqual(fs.existsSync(path.join(dataDir, 'rotary-capture')), false)
-    assert.deepStrictEqual((await call(routes['post /rotary'], { body: { turn: 1 } })).body, { handled: false })
+    for (const pins of [{}, { knobA: 5, knobB: 6 }, { knobA: 5, knobB: 5, knobButton: 13 }, { knobA: 1, knobB: 6, knobButton: 13 }]) {
+      const { host, routes, started } = makeHost({ reader: 'none', onRemove: 'nothing', playOnTag: true, ...pins })
+      const nfc = require('../api.js').activate(host)
+      await later(0)
+      nfc.feed({ event: 'ready', firmware: '4.0', product: '4.0' })
+      assert.strictEqual(started.length, 0, JSON.stringify(pins))
+      await call(routes['post /arm'], { body: { media: folder } })
+      nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04A1B2C3' })
+      await later()
+      const before = await call(routes['get /pending'])
+      assert.ok(before.body.media, 'the tag plays its first album as always')
+      // (a detent from nowhere changes nothing)
+      nfc.feedKnob({ event: 'turn', direction: 1 })
+    }
   } finally {
     global.fetch = realFetch
   }
@@ -287,4 +310,32 @@ test('the entries of an artist cover: the albums of the artist in the category, 
   } finally {
     global.fetch = realFetch
   }
+})
+
+test('the album knob: its driver starts with the three pins of the settings and ends when they are taken away', async () => {
+  const { host, started } = makeHost({ reader: 'none', ...KNOB })
+  const nfc = require('../api.js').activate(host)
+  await later(20)
+  assert.strictEqual(started.length, 1)
+  assert.deepStrictEqual(started[0].args.slice(1), ['--chip', '0', '--a', '5', '--b', '6', '--button', '13'])
+  assert.match(started[0].args[0], /knob\.py$/)
+  assert.ok(nfc)
+})
+
+test('the pins of the album knob are read from the settings', () => {
+  const logic = require('../logic.js')
+  assert.deepStrictEqual(logic.knobConfig({ knobA: 5, knobB: 6, knobButton: 13 }), { a: 5, b: 6, button: 13 })
+  for (const bad of [undefined, {}, { knobA: 5, knobB: 6 }, { knobA: 0, knobB: 6, knobButton: 13 }, { knobA: 5, knobB: 5, knobButton: 13 }, { knobA: 28, knobB: 6, knobButton: 13 }, { knobA: '5', knobB: 6, knobButton: 13 }]) {
+    assert.strictEqual(logic.knobConfig(bad), null, JSON.stringify(bad))
+  }
+  assert.deepStrictEqual(logic.knobArgs({ a: 5, b: 6, button: 13 }, 4), ['--chip', '4', '--a', '5', '--b', '6', '--button', '13'])
+})
+
+test('the reports of the knob driver are read; a direction that is not one is not', () => {
+  const { readEvent } = require('../logic.js')
+  assert.deepStrictEqual(readEvent({ event: 'turn', direction: 1 }), { event: 'turn', direction: 1 })
+  assert.deepStrictEqual(readEvent({ event: 'turn', direction: -1 }), { event: 'turn', direction: -1 })
+  assert.strictEqual(readEvent({ event: 'turn', direction: 2 }), null)
+  assert.strictEqual(readEvent({ event: 'turn' }), null)
+  assert.deepStrictEqual(readEvent({ event: 'button' }), { event: 'button' })
 })

@@ -1,6 +1,8 @@
 # NFC: Drehregler
 
-Ein Tag kann nicht nur ein Album starten, sondern ein **ganzes Artistcover**: alle Alben eines Interpreten in der Bibliothek, einen **Ordner der SD-Karte** oder einen **Ordner auf dem NAS**. Der Tag spielt dann **ein** Album davon, und mit dem **Drehregler** (KY-040) schaltest du durch die anderen.
+Ein Tag kann nicht nur ein Album starten, sondern ein **ganzes Artistcover**: alle Alben eines Interpreten in der Bibliothek, einen **Ordner der SD-Karte** oder einen **Ordner auf dem NAS**. Der Tag spielt dann **ein** Album davon, und mit dem **Album-Drehregler** (KY-040) schaltest du durch die anderen.
+
+Der Drehregler der NFC-Extension ist **nur für die Wahl des Albums** da. Er hat **eigene Pins** und ist ein anderer Drehregler als der für Lautstärke und Titel (siehe [Drehregler und Taster](../hardware/drehregler.md)). Du kannst beide zugleich anschließen.
 
 ## Einen Tag einem Artistcover zuordnen
 
@@ -15,7 +17,7 @@ Auf der Seite **Zugeordnete Tags** ([Zugeordnete Tags](nfc-zugeordnete-tags.md))
 
 ## Mit dem Drehregler ein anderes Album wählen
 
-Nach dem Auflegen eines solchen Tags übernimmt der Drehregler für eine Weile die Wahl des Albums:
+Der Drehregler wählt nur unter den **Alben des Artistcovers, dessen Tag gerade aufliegt** (oder zuletzt aufgelegt wurde). Nach dem Auflegen eines solchen Tags gilt für eine Weile:
 
 | Du | Die Box |
 | --- | --- |
@@ -25,29 +27,32 @@ Nach dem Auflegen eines solchen Tags übernimmt der Drehregler für eine Weile d
 
 Der Drehregler **ändert dabei nichts** am Tag: Beim nächsten Auflegen spielt wieder das Album aus der Auswahlliste.
 
-Ein Druck, **bevor** du gedreht hast, wählt nichts aus: Er tut, was der Taster sonst tut (siehe [Drehregler und Taster](../hardware/drehregler.md)). Dreht niemand, geht die Wahl nach der eingestellten Zeit zu Ende, und der Drehregler stellt wieder die **Lautstärke** ein. Jede Drehung startet die Zeit neu.
+Ein Druck, **bevor** du gedreht hast, wählt nichts aus. Dreht niemand, geht die Wahl nach der eingestellten Zeit zu Ende. Jede Drehung startet die Zeit neu. Ohne aufgelegten Tag tut der Album-Drehregler nichts.
 
 ## OLED-Display
 
 Ist das [OLED-Display](oled.md) angeschlossen, zeigt es beim Drehen **in den Informationen** den Interpreten (oder Ordner) und darunter den **Namen** des Albums, bei dem der Drehregler gerade steht, mit seinem Platz in der Liste („< 2/12 >“). Lange Namen laufen durch. Statusleiste und die Zeile unten mit der Zeit bleiben, sie zeigen, was gerade noch spielt. Ein Druck auf den Taster spielt das Album, und das Display zeigt wieder die **normale Anzeige des Players**.
 
-## Einstellungen
+## Anschluss und Einstellungen
 
-**Einstellungen › NFC-Extension › Drehregler**. In derselben Karte stehen die **Pins des Drehreglers** (A, B und Taster). Es sind dieselben Pins wie unter **Einstellungen › Drehregler**: Du stellst sie hier oder dort ein. Beim Wählen der Alben gibt es nichts weiter einzustellen: **eine Raste ist ein Album**, und der **Taster bestätigt** das Album, bei dem der Drehregler steht.
+**Einstellungen › NFC-Extension › Drehregler**:
 
 | Einstellung | Wirkung |
 | --- | --- |
-| **Drehregler wählt das Album** | Aus: Der Drehregler stellt weiter nur die Lautstärke ein. |
-| **Nach dem Auflegen aktiv (Sekunden)** | Ein Regler von **0 bis 120 Sekunden** (Vorgabe 20): so lange nach dem Auflegen und nach jedem Drehen wählt der Drehregler Alben, danach stellt er wieder die Lautstärke ein. **0** heißt **immer aktiv**: Der Drehregler wählt Alben, bis du eines mit dem Taster wählst oder einen anderen Tag auflegst. Das OLED-Display zeigt den Namen dann bis zu fünf Minuten nach dem letzten Drehen. |
+| **GPIO-Pin A (CLK)**, **GPIO-Pin B (DT)** | die beiden Pins des Drehreglers |
+| **GPIO-Pin Taster** | der Pin des Tasters (nach Masse geschaltet): Ein Druck spielt das gewählte Album |
+| **Nach dem Auflegen aktiv (Sekunden)** | Ein Regler von **0 bis 120 Sekunden** (Vorgabe 20): so lange nach dem Auflegen und nach jedem Drehen wählt der Drehregler Alben. **0** heißt **immer aktiv**: Der Drehregler wählt Alben, bis du eines mit dem Taster wählst oder einen anderen Tag auflegst. Das OLED-Display zeigt den Namen dann bis zu fünf Minuten nach dem letzten Drehen. |
+
+Die Listen zeigen **nur freie Pins**: keine, die die Box selbst, die Boot-Konfiguration, ein NFC-Leser, eine andere Erweiterung oder ein anderer Drehregler nutzt. Ohne alle **drei** Pins gibt es den Album-Drehregler nicht. **Eine Raste ist ein Album**, und der **Taster bestätigt** das Album, bei dem der Drehregler steht. Dreht der Regler in die falsche Richtung, tausche die Anschlüsse A und B.
 
 ## Was dafür nötig ist
 
-- Der **Drehregler** ist eingerichtet: seine Pins stehen auf dieser Seite oder unter **Einstellungen › Drehregler** ([Drehregler und Taster](../hardware/drehregler.md)).
-- Sein **Taster** hat einen **eigenen Pin**. GPIO 10, die Vorgabe, gehört bei einem NFC-Leser am SPI-Anschluss dem Leser: Dort bleibt der Taster ohne Wirkung. Wähle bei den Pins des Drehreglers einen anderen. Die Funktion des Tasters darf **Aus** sein; solange die NFC-Extension den Drehregler hat, benutzt sie ihn trotzdem.
+- Drei **freie GPIO-Pins** für diesen Drehregler. Pins des SPI-Anschlusses (GPIO 9, 10, 11, auch 7 und 8) gehören den NFC-Lesern.
 - Das Artistcover hat **mindestens zwei** Alben. Mit einem einzigen gibt es nichts zu wählen.
 
 ## Wenn es nicht klappt
 
-- Der Drehregler stellt weiter die Lautstärke ein: Die Zeit nach dem Auflegen ist um (Tag noch einmal auflegen), **Drehregler wählt das Album** ist aus, oder das Artistcover hat nur ein Album.
-- Der Taster wählt nichts aus: Du musst zuerst **drehen**; und der Pin des Tasters darf nicht der eines NFC-Lesers sein.
+- Der Drehregler tut nichts: Die Zeit nach dem Auflegen ist um (Tag noch einmal auflegen), einer der drei Pins fehlt, oder das Artistcover hat nur ein Album.
+- Der Taster wählt nichts aus: Du musst zuerst **drehen**.
+- Lautstärke oder Titel sollen auch einen Drehregler haben: Das ist ein anderer, unter **Einstellungen › Audio › Drehregler und Taster**.
 - Die Auswahlliste fehlt in der Kachel: Die Box konnte die Alben nicht lesen (das NAS ist nicht erreichbar, der Ordner ist weg). Sie erscheint wieder, wenn die Alben gelesen werden können.

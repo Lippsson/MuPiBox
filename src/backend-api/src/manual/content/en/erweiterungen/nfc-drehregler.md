@@ -1,6 +1,8 @@
 # NFC: Rotary knob
 
-A tag can start not just one album but a **whole artist cover**: all albums of an artist in the library, a **folder of the SD card** or a **folder on the NAS**. The tag then plays **one** album of it, and with the **rotary knob** (KY-040) you switch through the others.
+A tag can start not just one album but a **whole artist cover**: all albums of an artist in the library, a **folder of the SD card** or a **folder on the NAS**. The tag then plays **one** album of it, and with the **album knob** (KY-040) you switch through the others.
+
+The knob of the NFC extension is **only for choosing the album**. It has **pins of its own** and is a different knob from the one for volume and tracks (see [Rotary knob and button](../hardware/drehregler.md)). You can connect both at the same time.
 
 ## Assigning a tag to an artist cover
 
@@ -15,7 +17,7 @@ On the **Assigned tags** page ([Assigned tags](nfc-zugeordnete-tags.md)) the til
 
 ## Choosing another album with the rotary knob
 
-After such a tag is laid on, the rotary knob takes over the choice of the album for a while:
+The knob chooses only among the **albums of the artist cover whose tag is lying on the reader** (or was laid on last). After such a tag is laid on, this holds for a while:
 
 | You | The box |
 | --- | --- |
@@ -25,29 +27,32 @@ After such a tag is laid on, the rotary knob takes over the choice of the album 
 
 The knob **changes nothing** about the tag: the next time it is laid on, it plays the album from the drop-down list again.
 
-A press **before** you have turned does not choose anything: it does what the button does otherwise (see [Rotary knob and button](../hardware/drehregler.md)). If nobody turns, the choice ends after the set time and the knob sets the **volume** again. Every turn starts the time anew.
+A press **before** you have turned does not choose anything. If nobody turns, the choice ends after the set time. Every turn starts the time anew. With no tag laid on, the album knob does nothing.
 
 ## OLED display
 
 If the [OLED display](oled.md) is connected, turning shows **in the information area** the artist (or folder) and below it the **name** of the album the knob is on, with its place in the list ("< 2/12 >"). Long names scroll. The status bar and the bottom row with the time stay, they show what is still playing. A press on the button plays the album, and the display shows the **normal player picture** again.
 
-## Settings
+## Connection and settings
 
-**Settings › NFC extension › Rotary knob**. The same card has the **pins of the rotary knob** (A, B and button). They are the same pins as under **Settings › Rotary knob**: you set them here or there. There is nothing more to set for choosing albums: **one detent is one album**, and the **button confirms** the album the knob is on.
+**Settings › NFC extension › Rotary knob**:
 
 | Setting | Effect |
 | --- | --- |
-| **Rotary knob chooses the album** | Off: the rotary knob only sets the volume, as before. |
-| **Active after laying on (seconds)** | A slider from **0 to 120 seconds** (default 20): for this long after laying on, and after each turn, the knob chooses albums, then it sets the volume again. **0** means **always active**: the knob chooses albums until you choose one with the button or lay on another tag. The OLED display then shows the name for up to five minutes after the last turn. |
+| **GPIO pin A (CLK)**, **GPIO pin B (DT)** | the two pins of the knob |
+| **GPIO pin (button)** | the pin of the button (switched to ground): a press plays the chosen album |
+| **Active after laying on (seconds)** | A slider from **0 to 120 seconds** (default 20): for this long after laying on, and after each turn, the knob chooses albums. **0** means **always active**: the knob chooses albums until you choose one with the button or lay on another tag. The OLED display then shows the name for up to five minutes after the last turn. |
+
+The lists show **only free pins**: none that the box itself, the boot configuration, an NFC reader, another extension or another rotary knob uses. Without all **three** pins there is no album knob. **One detent is one album**, and the **button confirms** the album the knob is on. If the knob turns the wrong way, swap connections A and B.
 
 ## What it takes
 
-- The **rotary knob** is set up: its pins are on this page or under **Settings › Rotary knob** ([Rotary knob and button](../hardware/drehregler.md)).
-- Its **button** has a **pin of its own**. GPIO 10, the default, belongs to an NFC reader on the SPI connection: the button does nothing there. Choose another pin in the settings of the rotary knob. The function of the button can be **Off**; as long as the NFC extension has the knob, it uses it all the same.
+- Three **free GPIO pins** for this knob. Pins of the SPI connection (GPIO 9, 10, 11, also 7 and 8) belong to the NFC readers.
 - The artist cover has **at least two** albums. With a single one there is nothing to choose.
 
 ## If it does not work
 
-- The knob still sets the volume: the time after laying on is over (lay the tag on again), **Rotary knob chooses the album** is off, or the artist cover has only one album.
-- The button chooses nothing: you have to **turn** first; and the pin of the button must not be one of an NFC reader.
+- The knob does nothing: the time after laying on is over (lay the tag on again), one of the three pins is missing, or the artist cover has only one album.
+- The button chooses nothing: you have to **turn** first.
+- You want a knob for volume or tracks as well: that is another one, under **Settings › Audio › Rotary knob and button**.
 - The drop-down list is missing in the tile: the box could not read the albums (the NAS is not reachable, the folder is gone). It comes back when the albums can be read.

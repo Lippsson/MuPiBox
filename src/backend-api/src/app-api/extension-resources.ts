@@ -295,11 +295,59 @@ export function rotaryButtonOn(config: Record<string, unknown> | undefined): boo
   const rotary = config?.rotary && typeof config.rotary === 'object' ? (config.rotary as Record<string, unknown>) : {}
   return typeof rotary.button === 'string' && rotary.button !== '' && rotary.button !== 'off'
 }
-/** The pins the rotary encoder holds while it is on: the knob's two, the button's only while the button does something. */
+// More rotary encoders (rotary.extra in the configuration, at most ROTARY_EXTRA_MAX): each one sets the volume or skips tracks, with its own
+// three pins. They exist as long as they are in the list - there is no switch for them.
+export const ROTARY_EXTRA_MAX = 4
+export const ROTARY_EXTRA_FUNCTIONS = ['volume', 'tracks'] as const
+export type RotaryExtraFunction = (typeof ROTARY_EXTRA_FUNCTIONS)[number]
+export interface RotaryExtra {
+  id: string
+  function: RotaryExtraFunction
+  a: number
+  b: number
+  button: number
+  /** what the push button does: off, playpause, next (a track forward) or ffwd */
+  buttonFn: string
+  /** percent per detent of a volume knob */
+  step: number
+}
+export const ROTARY_EXTRA_BUTTONS = ['off', 'playpause', 'next', 'ffwd']
+/** The additional rotary encoders of a configuration: the ones with a known function and three different pins of 2-27 (others are left out). */
+export function rotaryExtras(config: Record<string, unknown> | undefined): RotaryExtra[] {
+  const rotary = config?.rotary && typeof config.rotary === 'object' ? (config.rotary as Record<string, unknown>) : {}
+  const list = Array.isArray(rotary.extra) ? rotary.extra : []
+  const pin = (v: unknown) => (/^\d+$/.test(String(v ?? '')) ? Number(v) : NaN)
+  const out: RotaryExtra[] = []
+  for (const entry of list.slice(0, ROTARY_EXTRA_MAX)) {
+    if (!entry || typeof entry !== 'object') continue
+    const e = entry as Record<string, unknown>
+    const pins = [pin(e.pinA), pin(e.pinB), pin(e.pinButton)]
+    const fn = ROTARY_EXTRA_FUNCTIONS.find((f) => f === e.function)
+    if (!fn || !/^[a-z0-9]{1,12}$/.test(String(e.id ?? '')) || out.some((o) => o.id === e.id)) continue
+    if (!pins.every((n) => Number.isInteger(n) && n >= 2 && n <= 27) || new Set(pins).size !== 3) continue
+    const step = Number(e.step)
+    out.push({
+      id: String(e.id),
+      function: fn,
+      a: pins[0],
+      b: pins[1],
+      button: pins[2],
+      buttonFn: ROTARY_EXTRA_BUTTONS.includes(String(e.button)) ? String(e.button) : 'off',
+      step: Number.isInteger(step) && step >= 1 && step <= 10 ? step : 5,
+    })
+  }
+  return out
+}
+/** The pins the additional encoders hold: the knob's two, the button's only while the button does something. */
+export function rotaryExtraHeldPins(config: Record<string, unknown> | undefined): number[] {
+  return rotaryExtras(config).flatMap((k) => (k.buttonFn !== 'off' ? [k.a, k.b, k.button] : [k.a, k.b]))
+}
+/** The pins the rotary encoders hold while they are on: the knob's two, the button's only while the button does something. */
 export function rotaryHeldPins(config: Record<string, unknown> | undefined): number[] {
-  if (!rotaryOn(config)) return []
+  const extra = rotaryExtraHeldPins(config)
+  if (!rotaryOn(config)) return extra
   const pins = rotaryPins(config)
-  return rotaryButtonOn(config) ? [pins.a, pins.b, pins.button] : [pins.a, pins.b]
+  return [...(rotaryButtonOn(config) ? [pins.a, pins.b, pins.button] : [pins.a, pins.b]), ...extra]
 }
 
 /** Pins a part of the core would use once it is switched on: free now, but worth a word to whoever chooses a pin. */

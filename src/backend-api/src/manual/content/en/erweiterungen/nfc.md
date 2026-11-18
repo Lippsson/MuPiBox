@@ -6,7 +6,7 @@ After the [installation](installieren.md) the settings are under **Settings › 
 
 - **NFC reader** sets up the readers: one card per reader with its status, type and settings.
 - **Assigned tags** shows all tags with their media.
-- **Rotary knob** sets whether the rotary knob chooses the albums after a tag on an artist cover is laid on.
+- **Rotary knob** sets up the album knob: after a tag on an artist cover is laid on, it chooses the albums. It has pins of its own.
 - **Speech output** sets what the box says with its voice when something is in the way (no WiFi, NAS not reachable, a tag without a medium, battery nearly empty).
 
 ## The manual pages on the NFC extension
@@ -16,7 +16,7 @@ After the [installation](installieren.md) the settings are under **Settings › 
 | [Linking a tag to an album](nfc-tag-zuordnen.md) | step by step: choose a medium, lay the tag on, flex tag |
 | [Changing the picture of a tag](nfc-bild.md) | the cover of the medium or your own picture |
 | [Assigned tags](nfc-zugeordnete-tags.md) | the page with all tags as tiles (play, change, remove) and the setting for taking off |
-| [Rotary knob](nfc-drehregler.md) | a tag on an artist cover: choose the album it plays, switch through the albums with the rotary knob |
+| [Rotary knob](nfc-drehregler.md) | a tag on an artist cover: choose the album it plays, switch through the albums with the album knob |
 | [Spoken messages](nfc-sprachnachrichten.md) | the messages of the box: WiFi, NAS, Spotify, a tag without a medium, battery at 10 % |
 | [Adding readers](nfc-leser.md) | setting up a reader, up to three at once, the status |
 | [Connecting the PN5180](nfc-pn5180.md) | wiring, SPI, settings |

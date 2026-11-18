@@ -56,13 +56,27 @@ Track selection also ends by itself: **10 seconds** after the last press or the 
 > [!TIP]
 > This is handy for albums with many tracks: jump to the audiobook chapter without looking at the display, then with one press back to the volume.
 
+## Further rotary knobs
+
+Below the first knob there is **Add rotary knob**. Each further knob has a card of its own with:
+
+| Setting | Effect |
+| --- | --- |
+| **Function of the knob** | **Volume** (each detent changes it by the set **step per detent**) or **Previous / next track** (clockwise the next track, counter-clockwise the previous one) |
+| **GPIO pin A (CLK)**, **GPIO pin B (DT)**, **GPIO pin (button)** | the three pins of this knob |
+| **Function of the button** | **Off**, **Play/Pause**, **Next track** or **Fast-forward** |
+| **Remove knob** | deletes it; its pins are free again |
+
+So you can have, say, one knob for the volume and a second only for the tracks. Up to **four more** are possible as long as enough GPIO pins are free. The lists show only pins nothing else uses, including no other knob. Changing the pins or removing a knob takes effect at once: the box restarts the service.
+
 ### Choosing albums with the NFC extension
 
-After a tag on an **artist cover** is laid on, the rotary knob chooses **albums** for a while: turning goes through the albums, a press on the button plays the chosen one (see [NFC: Rotary knob](../erweiterungen/nfc-drehregler.md)). The button needs a pin of its own for this; its function can be **Off**.
+Choosing **albums** after a tag on an **artist cover** is laid on is done by a knob of its own with its own pins, which you set up with the NFC extension (see [NFC: Rotary knob](../erweiterungen/nfc-drehregler.md)). It is only for that and does not disturb the knobs set here.
 
 ## If it does not react
 
 - Is the **Rotary knob for the volume** switch on? The service only starts then.
 - Check the wiring of the three pins (default 26, 24 and 10; the chosen ones are in the settings and in the [GPIO assignment](../anhang/gpio.md)).
 - If the knob cannot be switched on and the app names a GPIO pin in use, a button of the extension [Buttons & GPIO Input](../erweiterungen/buttons.md) (or something else) has one of the three pins. Choose a free pin.
-- The service is called `mupi_rotary`.
+- A further knob does nothing: check its three pins and whether **Function of the knob** fits. The service never takes pins of the SPI or I²C port.
+- The service is called `mupi_rotary` (it serves all knobs of this page).

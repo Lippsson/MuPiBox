@@ -8,7 +8,7 @@ import type { Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { requireCsrf, requireSession } from './middleware'
 import { bootConfigPath } from './boot-paths'
-import { rotaryButtonOn, rotaryHeldPins, rotaryPins } from './extension-resources'
+import { ROTARY_EXTRA_BUTTONS, ROTARY_EXTRA_FUNCTIONS, ROTARY_EXTRA_MAX, rotaryButtonOn, rotaryExtras, rotaryHeldPins, rotaryPins } from './extension-resources'
 import { extensionGpio, takenForRotary } from './extensions'
 import { hdmiAudioWritten, onboardAudioWritten, reapplyOnboardAudio, setHdmiAudio, setOnboardAudio } from '../audio-output'
 
@@ -181,7 +181,16 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
           active: /HDMI/i.test(await fsp.readFile('/proc/asound/cards', 'utf8').catch(() => '')),
         },
       },
-      rotary: { active: rotary.active === true, running: rotaryActive, pins: rotaryPinsOf(deps.getMupiboxConfig()), step: int(rotary.step, 1, 10) ?? 5, button: BUTTON.includes(String(rotary.button)) ? rotary.button : 'off' },
+      rotary: {
+        active: rotary.active === true,
+        running: rotaryActive,
+        pins: rotaryPinsOf(deps.getMupiboxConfig()),
+        step: int(rotary.step, 1, 10) ?? 5,
+        button: BUTTON.includes(String(rotary.button)) ? rotary.button : 'off',
+        // (more encoders: each sets the volume or skips tracks)
+        extra: rotaryExtras(deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined).map((k) => ({ id: k.id, function: k.function, pins: { a: k.a, b: k.b, button: k.button }, step: k.step, button: k.buttonFn })),
+        extraMax: ROTARY_EXTRA_MAX,
+      },
       mupihat: {
         active: hat.hat_active === true,
         battery: typeof hat.selected_battery === 'string' ? hat.selected_battery : '',
@@ -331,6 +340,12 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
       pinsGiven = true
     }
     if (pinsGiven && new Set([pins.a, pins.b, pins.button]).size !== 3) return void res.status(409).json({ error: 'gpio_twice' })
+    // (a pin one of the other encoders has)
+    const others = rotaryExtras(deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined).flatMap((k) => [k.a, k.b, k.button])
+    if (pinsGiven) {
+      const twice = [pins.a, pins.b, pins.button].find((pin) => others.includes(pin))
+      if (twice !== undefined) return void res.status(409).json({ error: 'gpio_twice', pin: twice })
+    }
     const pinsChanged = pins.a !== before.a || pins.b !== before.b || pins.button !== before.button
     const willBeOn = typeof body.active === 'boolean' ? body.active : section(deps, 'rotary').active === true
     // (the button's pin is taken only while the button does something - rotary_control.py: a pin of SPI stays the NFC reader's)
@@ -381,11 +396,90 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
       await new Promise((resolve) => setTimeout(resolve, 2500))
       running = (await run('systemctl', ['is-active', 'mupi_rotary.service'], 5000)).stdout.trim() === 'active'
     } else if (values.active === false) {
-      await run('sudo', ['systemctl', 'stop', 'mupi_rotary.service'])
-      await run('sudo', ['systemctl', 'disable', 'mupi_rotary.service'])
+      // (the service stays while another encoder is there: it only lets go of the first one's pins)
+      if (others.length > 0) running = await startRotaryService()
+      else await stopRotaryService()
     }
     res.json({ ok: true, ...(running === false ? { running: false } : {}) })
   })
+
+  const extraNow = () => rotaryExtras(deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined)
+  const configNow = () => deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined
+  type ExtraEntry = { id: string; function: string; pinA: number; pinB: number; pinButton: number; button: string; step: number }
+  const asEntry = (k: ReturnType<typeof extraNow>[number]): ExtraEntry => ({ id: k.id, function: k.function, pinA: k.a, pinB: k.b, pinButton: k.button, button: k.buttonFn, step: k.step })
+
+  /**
+   * POST /api/app/rotary-extra {id?, function, pinA, pinB, pinButton, button?, step?} - another rotary encoder: it sets the volume ("volume") or
+   * skips tracks ("tracks"). Without an id a new one is added (up to ROTARY_EXTRA_MAX), with the id of one it changes that one. Every pin of the
+   * header that nothing else holds can be chosen, each by one encoder only.
+   */
+  router.post('/rotary-extra', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const list = extraNow()
+    const current = body.id === undefined ? undefined : list.find((k) => k.id === body.id)
+    if (body.id !== undefined && !current) return void res.status(404).json({ error: 'not_found' })
+    if (!current && list.length >= ROTARY_EXTRA_MAX) return void res.status(409).json({ error: 'too_many' })
+    const fn = body.function === undefined ? current?.function : ROTARY_EXTRA_FUNCTIONS.find((f) => f === body.function)
+    if (!fn) return void res.status(400).json({ error: 'invalid function' })
+    const pin = (key: 'pinA' | 'pinB' | 'pinButton', now: number | undefined) => (body[key] === undefined ? now : int(body[key], 2, 27))
+    const pins = { a: pin('pinA', current?.a), b: pin('pinB', current?.b), button: pin('pinButton', current?.button) }
+    if (pins.a === undefined || pins.b === undefined || pins.button === undefined) return void res.status(400).json({ error: 'pins must be 2-27' })
+    const buttonFn = body.button === undefined ? (current?.buttonFn ?? 'off') : String(body.button)
+    if (!ROTARY_EXTRA_BUTTONS.includes(buttonFn)) return void res.status(400).json({ error: 'invalid button' })
+    const step = body.step === undefined ? (current?.step ?? 5) : int(body.step, 1, 10)
+    if (step === undefined) return void res.status(400).json({ error: 'step must be 1-10' })
+    if (new Set([pins.a, pins.b, pins.button]).size !== 3) return void res.status(409).json({ error: 'gpio_twice' })
+    // (not a pin of another encoder - the first one's pins count while it is on)
+    const config = configNow()
+    const usedByOthers = list.filter((k) => k.id !== current?.id).flatMap((k) => [k.a, k.b, k.button])
+    const first = rotaryPinsOf(deps.getMupiboxConfig())
+    if (section(deps, 'rotary').active === true) usedByOthers.push(first.a, first.b, first.button)
+    const twice = [pins.a, pins.b, pins.button].find((p) => usedByOthers.includes(p))
+    if (twice !== undefined) return void res.status(409).json({ error: 'gpio_twice', pin: twice })
+    // (what something else holds - the fan, an extension, the boot configuration, a running program - is not to be chosen; what the encoder has is its own)
+    const own = current ? [current.a, current.b, current.button] : []
+    const taken = (await takenForRotary(config)).gpio
+    for (const p of [pins.a, pins.b, ...(buttonFn !== 'off' ? [pins.button] : [])]) {
+      const holders = taken.get(p)
+      if (holders?.length && !own.includes(p)) return void res.status(409).json({ error: 'gpio_taken', pin: p, by: holders.join(', ') })
+    }
+    const id = current?.id ?? (Array.from({ length: ROTARY_EXTRA_MAX }, (_, i) => `k${i + 2}`).find((candidate) => !list.some((k) => k.id === candidate)) as string)
+    const entry: ExtraEntry = { id, function: fn, pinA: pins.a, pinB: pins.b, pinButton: pins.button, button: buttonFn, step }
+    // (in the order they were added: k2, k3 ...)
+    const next = [...list.filter((k) => k.id !== id).map(asEntry), entry].sort((x, y) => x.id.localeCompare(y.id))
+    await merge(deps, 'rotary', { extra: next })
+    // (the pins are read once at the start of the service; step and buttons are read again by it while it runs)
+    const pinsChanged = !current || current.function !== fn || current.a !== pins.a || current.b !== pins.b || current.button !== pins.button || (current.buttonFn === 'off') !== (buttonFn === 'off')
+    const running = pinsChanged ? await startRotaryService() : undefined
+    res.json({ ok: true, id, ...(running === false ? { running: false } : {}) })
+  })
+
+  /** DELETE /api/app/rotary-extra/:id - takes another rotary encoder away; its pins are free again. */
+  router.delete('/rotary-extra/:id', requireSession, requireCsrf, async (req, res) => {
+    const list = extraNow()
+    if (!list.some((k) => k.id === req.params.id)) return void res.status(404).json({ error: 'not_found' })
+    const next = list.filter((k) => k.id !== req.params.id).map(asEntry)
+    await merge(deps, 'rotary', { extra: next })
+    if (next.length > 0 || section(deps, 'rotary').active === true) await startRotaryService()
+    else await stopRotaryService()
+    res.json({ ok: true })
+  })
+
+  /** (Re)starts mupi_rotary.service - it reads its pins at the start - and says whether it runs a moment later. */
+  async function startRotaryService(): Promise<boolean> {
+    await run('sudo', ['systemctl', 'enable', 'mupi_rotary.service'])
+    // (every pin chosen restarts it: five within 5 minutes and systemd refused the sixth start - StartLimitBurst - and the
+    // encoder stayed dead while the app said "saved")
+    await run('sudo', ['systemctl', 'reset-failed', 'mupi_rotary.service'])
+    await run('sudo', ['systemctl', 'restart', 'mupi_rotary.service'])
+    // (a pin it cannot take ends it at once, with no restart: whether it still runs a moment later)
+    await new Promise((resolve) => setTimeout(resolve, 2500))
+    return (await run('systemctl', ['is-active', 'mupi_rotary.service'], 5000)).stdout.trim() === 'active'
+  }
+  async function stopRotaryService(): Promise<void> {
+    await run('sudo', ['systemctl', 'stop', 'mupi_rotary.service'])
+    await run('sudo', ['systemctl', 'disable', 'mupi_rotary.service'])
+  }
 
   /**
    * POST /api/app/mupihat {active} - switches the MuPiHAT on or off (overlays, services, sound card, see

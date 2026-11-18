@@ -56,13 +56,27 @@ Die Titelwahl endet auch von selbst: **10 Sekunden** nach dem letzten Druck oder
 > [!TIP]
 > Das ist praktisch bei Alben mit vielen Titeln: Zum Hörspiel-Kapitel springen, ohne aufs Display zu schauen, und danach mit einem Druck wieder zur Lautstärke.
 
+## Weitere Drehregler
+
+Unter dem ersten Drehregler steht **Drehregler hinzufügen**. Jeder weitere Drehregler hat eine eigene Karte mit:
+
+| Einstellung | Wirkung |
+| --- | --- |
+| **Funktion des Drehreglers** | **Lautstärke** (jede Raste ändert sie um den eingestellten **Schritt pro Raste**) oder **Titel vor und zurück** (rechts herum der nächste Titel, links herum der vorherige) |
+| **GPIO-Pin A (CLK)**, **GPIO-Pin B (DT)**, **GPIO-Pin Taster** | die drei Pins dieses Drehreglers |
+| **Funktion des Tasters** | **Aus**, **Play/Pause**, **Nächster Titel** oder **Vorspulen** |
+| **Drehregler entfernen** | löscht ihn; seine Pins sind wieder frei |
+
+So gibt es zum Beispiel einen Drehregler für die Lautstärke und einen zweiten nur für die Titel. Es sind bis zu **vier weitere** möglich, solange genug GPIO-Pins frei sind. Die Listen zeigen nur Pins, die nichts anderes nutzt, auch keinen anderen Drehregler. Die Pins ändern oder einen Drehregler entfernen gilt sofort: Die Box startet den Dienst neu.
+
 ### Alben wählen mit der NFC-Extension
 
-Nach dem Auflegen eines Tags auf einem **Artistcover** wählt der Drehregler für eine Weile **Alben**: Drehen geht durch die Alben, ein Druck auf den Taster spielt das gewählte (siehe [NFC: Drehregler](../erweiterungen/nfc-drehregler.md)). Der Taster braucht dafür einen eigenen Pin, seine Funktion darf **Aus** sein.
+Das Wählen von **Alben** nach dem Auflegen eines Tags auf einem **Artistcover** übernimmt ein eigener Drehregler mit eigenen Pins, den du bei der NFC-Extension einrichtest (siehe [NFC: Drehregler](../erweiterungen/nfc-drehregler.md)). Er ist nur dafür da und stört die hier eingestellten Drehregler nicht.
 
 ## Wenn er nicht reagiert
 
 - Ist der Schalter **Drehregler für die Lautstärke** eingeschaltet? Der Dienst startet nur dann.
 - Prüfe die Verkabelung der drei Pins (Vorgabe 26, 24 und 10; die gewählten stehen in den Einstellungen und in der [GPIO-Belegung](../anhang/gpio.md)).
 - Lässt sich der Regler nicht einschalten und die App nennt einen belegten GPIO-Pin, hat ein Taster der Erweiterung [Buttons & GPIO Input](../erweiterungen/buttons.md) (oder etwas anderes) einen der drei Pins. Wähle einen freien Pin.
-- Der Dienst heißt `mupi_rotary`.
+- Ein weiterer Drehregler tut nichts: Prüfe seine drei Pins und ob **Funktion des Drehreglers** passt. Pins des SPI- oder I²C-Anschlusses nimmt der Dienst nie.
+- Der Dienst heißt `mupi_rotary` (er bedient alle Drehregler dieser Seite).

@@ -16,7 +16,7 @@ import { acquireLock, DATA_LOCK, RESUME_LOCK, releaseLock } from '../file-lock'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { DATA_DIR, EXTENSIONS_DIR, EXTENSIONS_DIR_BEFORE, LIBRARY_DIR } from '../paths'
 import { clearCrashes, crashingExtensions, makeProblem, noteCrash, type PinSetting, planPinFix, type Problem, type ProblemCode, readProblem } from './extension-health'
-import { checkResources, type Conflict, describeResources, findConflicts, idleCoreGpio, type GpioUse, gatherTaken, realProbe, type Resources, rotaryPins, sameResources } from './extension-resources'
+import { checkResources, type Conflict, describeResources, findConflicts, idleCoreGpio, type GpioUse, gatherTaken, realProbe, type Resources, rotaryExtras, rotaryPins, sameResources } from './extension-resources'
 import { localNetworkOnly, requireCsrf, requireSession } from './middleware'
 import { nightDimOf, nightShare, quietNow } from './night-dim'
 import { announce } from '../speech'
@@ -337,10 +337,12 @@ export async function takenForRotary(config: Record<string, unknown> | undefined
   const installed = await installedManifests()
   const own = rotaryPins(config)
   const rotary = config?.rotary && typeof config.rotary === 'object' ? (config.rotary as Record<string, unknown>) : {}
+  // (the additional encoders' pins are the encoders' own as well; the page and the routes keep the encoders apart from each other)
+  const extra = rotaryExtras(config).flatMap((k) => [k.a, k.b, k.button])
   return gatherTaken({
-    selfDeclared: { gpio: [own.a, own.b, own.button].map((pin) => ({ pin })) },
+    selfDeclared: { gpio: [own.a, own.b, own.button, ...extra].map((pin) => ({ pin })) },
     // (switched off for the test: the pins it holds now are not "taken by others")
-    config: { ...(config ?? {}), rotary: { ...rotary, active: false } },
+    config: { ...(config ?? {}), rotary: { ...rotary, active: false, extra: [] } },
     others: await Promise.all(installed.map(async (m) => ({ id: m.id, resources: await heldResources(m) }))),
     probe: realProbe((cmd, args) => run(cmd, args, 15000)),
   })

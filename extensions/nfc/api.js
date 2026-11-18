@@ -19,7 +19,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFile } = require('node:child_process')
-const { readConfigs, driverScript, driverArgs, isUsb, statusRows, statusRowsAll, tagNumberText, spiState, spiRows, i2cState, i2cRows, i2cKeysOn, uartState, uartRows, uartConsoles, portIsOn } = require('./logic.js')
+const { readConfigs, driverScript, knobConfig, knobArgs, driverArgs, isUsb, statusRows, statusRowsAll, tagNumberText, spiState, spiRows, i2cState, i2cRows, i2cKeysOn, uartState, uartRows, uartConsoles, portIsOn } = require('./logic.js')
 const { createRunner, headerChipNumber, detect } = require('./runner.js')
 const tags = require('./tags.js')
 const rotary = require('./rotary.js')
@@ -45,10 +45,8 @@ const SEEN_SAVE_MS = 6 * 60 * 60 * 1000
 // the same error of the reader (not connected, a wire loose) is logged once, then again after this time at the earliest:
 // the driver is started again every 10 minutes and says it again each time
 const ERROR_LOG_MS = 6 * 60 * 60 * 1000
-// The rotary knob of the box (the core's service, scripts/mupibox/rotary_control.py) asks this file whether the extension wants it:
-// it holds the time (ms since 1970) up to which it does, renewed every few seconds, so that a server that went down lets go of the knob
-const ROTARY_FLAG_FILE = '/tmp/mupibox-rotary-capture'
-const ROTARY_FLAG_MS = 15000
+// The album knob has its own rotary encoder (knob.py, the pins knobA, knobB and knobButton of the settings): it chooses among the albums of the
+// tag that was laid on - nothing else; the box's knobs for the volume and the tracks are the core's (scripts/mupibox/rotary_control.py)
 const ROTARY_SECONDS = 20
 // (the display shows the name this long at most when the knob has no time limit: it takes up to five minutes)
 const OLED_SELECT_MAX_S = 300
@@ -386,30 +384,13 @@ exports.activate = (host) => {
     return albums ?? kept?.albums ?? null
   }
 
-  // What the knob does: the state of rotary.js, the file that tells the core's service to hand the knob over, and the display
+  // What the knob does: the state of rotary.js, and the display
   let knob = rotary.idle()
-  let flagUntil = 0
-  const flagFile = () => host.rotaryFlagFile ?? ROTARY_FLAG_FILE
-  const setFlag = (until) => {
-    flagUntil = until
-    try {
-      if (until > 0) fs.writeFileSync(flagFile(), String(until))
-      else fs.rmSync(flagFile(), { force: true })
-    } catch (error) {
-      log.warn(`[nfc] rotary: ${error?.message ?? error}`)
-    }
-  }
-  // (kept up to date while the knob is taken over; gone when its time is out)
-  const flagTimer = setInterval(() => {
-    if (flagUntil === 0) return
-    if (rotary.isActive(knob, Date.now())) setFlag(Date.now() + ROTARY_FLAG_MS)
-    else {
-      knob = rotary.idle()
-      setFlag(0)
-    }
+  // (the time of the choice is out: the knob has nothing to choose among any more, the display shows the player again)
+  const knobTimer = setInterval(() => {
+    if (knob.uid && !rotary.isActive(knob, Date.now())) endChoice()
   }, 5000)
-  flagTimer.unref?.()
-  process.once('exit', () => fs.rmSync(flagFile(), { force: true }))
+  knobTimer.unref?.()
   // (the display of the OLED extension, if it is there: what the knob stands on - or nothing, once the choice is made)
   const showOnOled = (body) =>
     fetch(`${host.apiUrl}/api/ext/oled/select`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(2000) }).catch(() => undefined)
@@ -436,20 +417,40 @@ exports.activate = (host) => {
   // The choice is over (another tag was laid on): the knob is the box's again and the display shows the player
   const endChoice = () => {
     knob = rotary.idle()
-    setFlag(0)
     showOnOled({ clear: true })
   }
   // A tag of a collection was laid on: the knob is for its albums now (when the settings allow it)
   const rotaryBegin = async (tag, settings) => {
     const collection = tags.collectionOf(tag.media)
-    if (!collection || settings.rotary === false) return
+    if (!collection || !knobConfig(settings)) return
     const albums = await albumsOf(collection)
     if (!albums || albums.length < 2) return
     // (0 seconds: no limit - until a choice is made or another tag is laid on; not set at all: the default)
     const asked = Number(settings.rotarySeconds)
     const seconds = settings.rotarySeconds === undefined || !Number.isFinite(asked) ? ROTARY_SECONDS : Math.max(0, asked)
     knob = rotary.begin({ uid: tag.uid, albums, currentKey: tags.albumKey(tag.media), seconds, now: Date.now() })
-    setFlag(Date.now() + ROTARY_FLAG_MS)
+  }
+  // The knob was turned by one detent: the next album or the one before, its name on the display
+  const knobTurned = (direction) => {
+    const result = rotary.turn(knob, direction, Date.now())
+    if (!result) return
+    knob = result.state
+    const { album, index, count } = result.shown
+    const collection = tags.collectionOf(album.media)
+    showOnOled({ title: album.label, artist: String(collection?.browseTitle ?? ''), index: index + 1, count, seconds: knob.windowMs > 0 ? Math.round(knob.windowMs / 1000) : OLED_SELECT_MAX_S })
+  }
+  // The button of the knob was pressed: the album it stands on plays (only after the knob was turned)
+  const knobPressed = async () => {
+    const uid = knob.uid
+    const result = rotary.press(knob, Date.now())
+    if (!result) return
+    knob = result.state
+    showOnOled({ clear: true })
+    const tag = data.tags[uid]
+    if (tag) {
+      log.info(`[nfc] tag ${uid}: the knob chose ${result.album.label}`)
+      await start({ ...tag, media: result.album.media }, (await host.settings()) ?? {}, null, true)
+    }
   }
 
   // (taking the tag off pauses or stops: a tag laid on only for a moment starts nothing - not for a USB reader, which never
@@ -712,11 +713,43 @@ exports.activate = (host) => {
   // (one change after the other: the pins and the SPI devices of the settings before are free before the new ones are taken)
   let chain = Promise.resolve()
   let running = '' // the driver and its arguments that run now
+  // the album knob's driver
+  let knobRunner = null
+  let knobRunning = ''
+  let knobError = ''
+  const onKnobEvent = (event) => {
+    if (event.event === 'turn') knobTurned(event.direction)
+    else if (event.event === 'button') return knobPressed().catch((error) => log.warn(`[nfc] knob: ${error?.message ?? error}`))
+    else if (event.event === 'error' && `${event.code}` !== knobError) {
+      knobError = `${event.code}`
+      log.warn(`[nfc] album knob: ${event.code}: ${event.message}`)
+    } else if (event.event === 'ready') knobError = ''
+  }
   const apply = (settings) => {
     chain = chain
       .then(async () => {
         const configs = readConfigs(settings)
-        const chip = configs.some((config) => config.reader !== 'none' && !config.problem) ? headerChipNumber(await detect()) : 0
+        const knobWanted = knobConfig(settings)
+        const chip = knobWanted || configs.some((config) => config.reader !== 'none' && !config.problem) ? headerChipNumber(await detect()) : 0
+        // (the album knob: its driver runs while its three pins are set; another pin or none ends it first, its pins are free before the new ones are taken)
+        const knobCommand = knobWanted ? JSON.stringify(knobArgs(knobWanted, chip)) : ''
+        if (knobCommand !== knobRunning) {
+          await knobRunner?.stop()
+          knobRunner = null
+          knobRunning = ''
+          if (knobWanted) {
+            knobRunning = knobCommand
+            knobRunner = createRunner({
+              command: 'python3',
+              args: [path.join(dir, 'knob.py'), ...knobArgs(knobWanted, chip)],
+              onEvent: onKnobEvent,
+              ...(typeof host.spawnFn === 'function' ? { spawnFn: host.spawnFn } : {}),
+              log,
+            })
+            knobRunner.start()
+            log.info(`[nfc] album knob started (GPIO ${knobWanted.a}, ${knobWanted.b}, button ${knobWanted.button})`)
+          } else if (knob.uid) endChoice()
+        }
         const wantedOf = (config) => (config.reader === 'none' || config.problem ? '' : JSON.stringify([driverScript(config), ...driverArgs(config, chip)]))
         // (only another setting of the app - on taking off, start on laying on: the driver goes on, the medium plays on)
         const kept = new Map()
@@ -774,7 +807,10 @@ exports.activate = (host) => {
     return chain
   }
   // (the server ends: no driver may stay behind and hold the pins and the SPI devices)
-  process.once('exit', () => readers.forEach((reader) => reader.runner?.kill()))
+  process.once('exit', () => {
+    readers.forEach((reader) => reader.runner?.kill())
+    knobRunner?.kill()
+  })
   if (typeof host.onSettings === 'function') host.onSettings(apply)
   Promise.resolve(host.settings()).then(apply)
 
@@ -1221,40 +1257,6 @@ exports.activate = (host) => {
     { session: true },
   )
 
-  // What the knob does while the extension has it (the core's rotary service asks for it with the file at ROTARY_FLAG_FILE and sends each
-  // detent and each press here): { turn: 1 | -1 } or { button: true } -> { handled } - false: the box does with it what it always does.
-  // Not behind the login (the service has none) but only from the box itself: not for a request that came through the web server.
-  host.route('post', '/rotary', async (req, res) => {
-    const from = String(req.socket?.remoteAddress ?? '')
-    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(from) || req.headers['x-forwarded-for']) return res.status(403).json({ handled: false })
-    const body = req.body && typeof req.body === 'object' ? req.body : {}
-    const now = Date.now()
-    if (body.turn === 1 || body.turn === -1) {
-      const result = rotary.turn(knob, body.turn, now)
-      if (!result) return res.json({ handled: false })
-      knob = result.state
-      const { album, index, count } = result.shown
-      const collection = tags.collectionOf(album.media)
-      showOnOled({ title: album.label, artist: String(collection?.browseTitle ?? ''), index: index + 1, count, seconds: knob.windowMs > 0 ? Math.round(knob.windowMs / 1000) : OLED_SELECT_MAX_S })
-      return res.json({ handled: true })
-    }
-    if (body.button === true) {
-      const uid = knob.uid
-      const result = rotary.press(knob, now)
-      if (!result) return res.json({ handled: false })
-      knob = result.state
-      setFlag(0)
-      showOnOled({ clear: true })
-      const tag = data.tags[uid]
-      if (tag) {
-        log.info(`[nfc] tag ${uid}: the knob chose ${result.album.label}`)
-        await start({ ...tag, media: result.album.media }, (await host.settings()) ?? {}, null, true)
-      }
-      return res.json({ handled: true })
-    }
-    res.json({ handled: false })
-  })
-
   // The medium of a tag starts as if the tag was laid on ({ id })
   host.route(
     'post',
@@ -1294,7 +1296,7 @@ exports.activate = (host) => {
 
   // (the reports of a driver, handed in directly: for the tests; `slot` is the reader that reports, the first by default.
   // checkBattery: one reading of the battery, as the timer makes it every half minute)
-  return { feed: (event, slot = 1) => onEvent(readers.find((reader) => reader.config.slot === slot) ?? readers[0], event), checkBattery: watchBattery }
+  return { feed: (event, slot = 1) => onEvent(readers.find((reader) => reader.config.slot === slot) ?? readers[0], event), feedKnob: onKnobEvent, checkBattery: watchBattery }
 }
 
 exports._test = { RESUME_WITHIN_MS }
