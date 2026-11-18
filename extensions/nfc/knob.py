@@ -9,9 +9,13 @@ button and says what happened, one JSON object per line on stdout:
 It needs python3-lgpio (the header's gpiochip: --chip). The pins are read by polling, as the box's own volume knob does (scripts/mupibox/rotary_control.py).
 A knob that turns the wrong way: swap its A and B wires."""
 import argparse
+import atexit
 import json
+import os
+import shutil
 import signal
 import sys
+import tempfile
 import time
 
 # Gray code: previous state (A<<1|B) and new state -> +1 clockwise (A falls first while B is high, as on a KY-040), -1 counter clockwise, 0 bounce / invalid
@@ -63,6 +67,11 @@ class Hardware:
     """The pins of the knob. Tests put a fake in its place (read(pin) -> 0 or 1, close())."""
 
     def __init__(self, chip, pins):
+        # (lgpio makes pipes in its working directory: the one of the server may not be writable, so it gets a directory of its own)
+        if 'LG_WD' not in os.environ:
+            directory = tempfile.mkdtemp(prefix='lgpio-')
+            atexit.register(shutil.rmtree, directory, True)
+            os.environ['LG_WD'] = directory
         try:
             import lgpio  # the Debian package python3-lgpio
         except ImportError as error:

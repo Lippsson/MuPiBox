@@ -39,6 +39,7 @@ Ist das [OLED-Display](oled.md) angeschlossen, zeigt es beim Drehen **in den Inf
 
 | Einstellung | Wirkung |
 | --- | --- |
+| **Zustand** | ob der Treiber des Drehreglers läuft („Bereit“) und wann du ihn **zuletzt gedreht** und **gedrückt** hast: So siehst du gleich, ob er richtig verdrahtet ist. Steht dort ein Fehler, nennt der Hinweis den Grund |
 | **GPIO-Pin A (CLK)**, **GPIO-Pin B (DT)** | die beiden Pins des Drehreglers |
 | **GPIO-Pin Taster** | der Pin des Tasters (nach Masse geschaltet): Ein Druck spielt das gewählte Album |
 | **Nach dem Auflegen aktiv (Sekunden)** | Ein Regler von **0 bis 120 Sekunden** (Vorgabe 20): so lange nach dem Auflegen und nach jedem Drehen wählt der Drehregler Alben. **0** heißt **immer aktiv**: Der Drehregler wählt Alben, bis du eines mit dem Taster wählst oder einen anderen Tag auflegst. Das OLED-Display zeigt den Namen dann bis zu fünf Minuten nach dem letzten Drehen. |
@@ -52,7 +53,7 @@ Die Listen zeigen **nur freie Pins**: keine, die die Box selbst, die Boot-Konfig
 
 ## Wenn es nicht klappt
 
-- Der Drehregler tut nichts: Die Zeit nach dem Auflegen ist um (Tag noch einmal auflegen), einer der drei Pins fehlt, oder das Artistcover hat nur ein Album.
+- Der Drehregler tut nichts: Schau bei **Zustand**, ob er „Bereit“ ist und ob **Letzte Drehung** eine Uhrzeit zeigt, wenn du drehst. Zeigt sie „Noch keine“, kommt die Drehung nicht an: Prüfe die Verkabelung (A und B nicht vertauscht, Masse und Pins richtig). Sonst: Die Zeit nach dem Auflegen ist um (Tag noch einmal auflegen), einer der drei Pins fehlt, oder das Artistcover hat nur ein Album.
 - Der Taster wählt nichts aus: Du musst zuerst **drehen**.
 - Lautstärke oder Titel sollen auch einen Drehregler haben: Das ist ein anderer, unter **Einstellungen › Audio › Drehregler und Taster**.
 - Die Auswahlliste fehlt in der Kachel: Die Box konnte die Alben nicht lesen (das NAS ist nicht erreichbar, der Ordner ist weg). Sie erscheint wieder, wenn die Alben gelesen werden können.

@@ -1,7 +1,7 @@
 {
   "id": "nfc",
   "name": "NFC-Extension",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "Bis zu drei NFC-Leser lesen Tags und Karten, auch gleichzeitig: der PN5180 (ISO 14443 A und ISO 15693), der RC522 und der PN532 (ISO 14443 A) oder ein USB-Leser, der die Kartennummer wie eine Tastatur tippt (auch ein USB-Barcodeleser). Jeder Tag kann ein Album, ein Hörspiel, einen Sender oder einen Podcast starten: In der Bibliothek das Medium öffnen, „NFC-Tag“ antippen und den Tag auflegen. Die Einstellungen stehen unter Einstellungen › NFC-Extension.",
   "hostApi": 12,
   "resources": {},
@@ -859,6 +859,11 @@
         "label": "Drehregler",
         "page": true,
         "help": "Ein Tag auf einem Artistcover (in der Bibliothek den Artisten öffnen, „NFC-Tag“ antippen) spielt das Album, das du in der Liste „Zugeordnete Tags“ gewählt hast. Dieser Drehregler (KY-040) ist nur für die Auswahl des Albums da: Nach dem Auflegen wählt er unter den Alben dieses Artisten, Drehen geht zum nächsten oder vorigen Album, ein Druck auf den Taster spielt es. Ein OLED-Display zeigt dabei den Namen, den der Drehregler gerade hat. Er hat eigene Pins, die nichts anderes nutzen; die Drehregler für Lautstärke und Titel stellst du unter Einstellungen › Audio › Drehregler und Taster ein. Ohne alle drei Pins gibt es den Album-Drehregler nicht."
+      },
+      {
+        "type": "status",
+        "label": "Zustand",
+        "state": "/api/ext/nfc/knobstate"
       },
       {
         "key": "knobA",

@@ -322,6 +322,30 @@ test('the album knob: its driver starts with the three pins of the settings and 
   assert.ok(nfc)
 })
 
+test('the status of the album knob: off without pins, starting, ready with the last turn and press, or the error', async () => {
+  const logic = require('../logic.js')
+  const labels = (rows) => rows.map((r) => `${r.label}=${r.value}`)
+  assert.deepStrictEqual(labels(logic.knobRows(null, { phase: '' })), ['Drehregler=Aus', 'Hinweis=Es sind nicht alle drei Pins gewählt'])
+  const knob = { a: 5, b: 6, button: 13 }
+  assert.deepStrictEqual(labels(logic.knobRows(knob, { phase: '' })), ['Drehregler=Wird gestartet …'])
+  assert.deepStrictEqual(labels(logic.knobRows(knob, { phase: 'error', message: 'GPIO busy' })), ['Drehregler=Nicht bereit', 'Hinweis=GPIO busy'])
+  const ready = logic.knobRows(knob, { phase: 'ready', turnAt: 0, pressAt: Date.now() })
+  assert.deepStrictEqual(labels(ready).slice(0, 2), ['Drehregler=Bereit', 'Letzte Drehung=Noch keine'])
+  assert.notStrictEqual(ready[2].value, 'Noch keine')
+  // (through the API: the driver says ready, the knob is turned - the page shows both)
+  const { host, routes } = makeHost({ reader: 'none', ...KNOB })
+  const nfc = require('../api.js').activate(host)
+  await later(20)
+  assert.deepStrictEqual(labels((await call(routes['get /knobstate'])).body.rows), ['Drehregler=Wird gestartet …'])
+  nfc.feedKnob({ event: 'ready' })
+  nfc.feedKnob({ event: 'turn', direction: 1 })
+  const rows = (await call(routes['get /knobstate'])).body.rows
+  assert.deepStrictEqual(labels(rows).slice(0, 3), ['Drehregler=Bereit', `Letzte Drehung=${rows[1].value}`, 'Letzter Druck=Noch keine'])
+  assert.notStrictEqual(rows[1].value, 'Noch keine')
+  nfc.feedKnob({ event: 'error', code: 'gpio', message: 'busy' })
+  assert.deepStrictEqual(labels((await call(routes['get /knobstate'])).body.rows), ['Drehregler=Nicht bereit', 'Hinweis=busy'])
+})
+
 test('the pins of the album knob are read from the settings', () => {
   const logic = require('../logic.js')
   assert.deepStrictEqual(logic.knobConfig({ knobA: 5, knobB: 6, knobButton: 13 }), { a: 5, b: 6, button: 13 })
