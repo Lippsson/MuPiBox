@@ -4341,7 +4341,7 @@
  "15 Minuten": "15 minut",
  "1 Stunde": "1 hodina",
  "Adresse der Box zeigen": "Zobrazit adresu krabičky",
- "Zeigt zehn Sekunden lang WLAN-Name, Adresse und Version.": "Na deset sekund ukáže název WLAN, adresu a verzi.",
+ "Zeigt zehn Sekunden lang einen QR-Code mit der Adresse der Box und sonst nichts. Mit dem Handy scannen öffnet die Box.": "Na deset sekund ukáže QR kód s adresou boxu a nic jiného. Po naskenování mobilem se box otevře.",
  "Nächste Anzeige": "Další zobrazení",
  "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt.": "Přepíná mezi Plným, Mix a Kompaktním až do dalšího uložení.",
  "Ohne DSI-Display": "Bez DSI displeje",

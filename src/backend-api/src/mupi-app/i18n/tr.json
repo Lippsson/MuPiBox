@@ -4341,7 +4341,7 @@
  "15 Minuten": "15 dakika",
  "1 Stunde": "1 saat",
  "Adresse der Box zeigen": "Kutunun adresini göster",
- "Zeigt zehn Sekunden lang WLAN-Name, Adresse und Version.": "WLAN adını, adresi ve sürümü on saniye boyunca gösterir.",
+ "Zeigt zehn Sekunden lang einen QR-Code mit der Adresse der Box und sonst nichts. Mit dem Handy scannen öffnet die Box.": "On saniye boyunca kutunun adresini içeren bir QR kodu gösterir, başka bir şey göstermez. Telefonla taranınca kutu açılır.",
  "Nächste Anzeige": "Sonraki görünüm",
  "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt.": "Bir sonraki kaydetmeye kadar Tam, Mix ve Kompakt arasında geçiş yapar.",
  "Ohne DSI-Display": "DSI ekransız",

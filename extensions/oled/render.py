@@ -5,8 +5,11 @@ and tested without a display. The layouts are made for 128 x 64 and 128 x 32 pix
 """
 import io
 import os
+import re
 
 from PIL import Image, ImageChops, ImageDraw, ImageFont
+
+import qr
 
 FONT_CANDIDATES = (
     '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
@@ -199,6 +202,7 @@ DIGITS = {
     '-': ('....', '....', '....', '####', '....', '....', '....'),
 }
 DIGIT_ADVANCE = 5
+IPV4 = re.compile(r'^\d{1,3}(\.\d{1,3}){3}$')
 # (the pictures of the status bar are the ones of the layout drawing, pixel by pixel; the digits of the drawing are "88" for the battery
 # and "100" for the volume - the other digits follow their style)
 ANTENNA = ('#########', '#...#...#', '.#..#..#.', '..#.#.#..', '...###...', '....#....', '....#....', '....#....', '....#....')
@@ -515,8 +519,31 @@ class Screens:
                 draw.rectangle((x0 + 2, cy - 2, max(x0 + 2, fill), cy + 2), fill=1)
         return image
 
+    def address_qr(self, ip):
+        """The address of the box as a QR code and nothing else: dark modules on a lit square (a phone reads that best), as large as the
+        display allows with a quiet zone of two modules. None when there is no address to make a code of."""
+        if not IPV4.match(str(ip or '')):
+            return None
+        matrix = qr.encode('http://%s' % ip)
+        n = len(matrix)
+        module = max(1, self.height // (n + 4))
+        side = (n + 4) * module
+        image, draw = self._canvas()
+        left, top = (self.width - side) // 2, (self.height - side) // 2
+        draw.rectangle((left, top, left + side - 1, top + side - 1), fill=1)
+        for y, row in enumerate(matrix):
+            for x, dark in enumerate(row):
+                if dark:
+                    px, py = left + (x + 2) * module, top + (y + 2) * module
+                    draw.rectangle((px, py, px + module - 1, py + module - 1), fill=0)
+        return image
+
     def info(self, state, now=0):
-        """WLAN name, address and version of the box. On 128 x 64: the layout of the status bar, three lines and the bottom row."""
+        """The address of the box as a QR code (see address_qr). Without an address (the box has no network): WLAN name, address and version -
+        on 128 x 64 the layout of the status bar, three lines and the bottom row."""
+        code = self.address_qr(state.get('ip'))
+        if code is not None:
+            return code
         image, draw = self._canvas()
         lines = ['LAN' if state.get('lan') else 'SSID:%s' % (state.get('ssid') or '-'), 'IP:%s' % (state.get('ip') or '-'), str(state.get('version') or '')]
         if self.tall:

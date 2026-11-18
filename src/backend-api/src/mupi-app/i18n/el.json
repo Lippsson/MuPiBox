@@ -4341,7 +4341,7 @@
  "15 Minuten": "15 λεπτά",
  "1 Stunde": "1 ώρα",
  "Adresse der Box zeigen": "Εμφάνιση της διεύθυνσης του κουτιού",
- "Zeigt zehn Sekunden lang WLAN-Name, Adresse und Version.": "Δείχνει για δέκα δευτερόλεπτα το όνομα WLAN, τη διεύθυνση και την έκδοση.",
+ "Zeigt zehn Sekunden lang einen QR-Code mit der Adresse der Box und sonst nichts. Mit dem Handy scannen öffnet die Box.": "Δείχνει για δέκα δευτερόλεπτα έναν κωδικό QR με τη διεύθυνση του κουτιού και τίποτα άλλο. Σαρώνοντάς τον με το κινητό ανοίγει το κουτί.",
  "Nächste Anzeige": "Επόμενη εμφάνιση",
  "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt.": "Εναλλάσσει μεταξύ Πλήρους, Mix και Συμπαγούς μέχρι την επόμενη αποθήκευση.",
  "Ohne DSI-Display": "Χωρίς οθόνη DSI",

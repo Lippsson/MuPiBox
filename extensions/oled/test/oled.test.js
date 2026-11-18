@@ -475,6 +475,26 @@ test('the info page and the next mode are routes of the page', async () => {
   assert.strictEqual((await answer('post /mode')).mode, 'full')
 })
 
+test('the address as a QR code for a button of the box: only from the box itself, without the login', async () => {
+  const box = fakeHost({})
+  const ext = api.activate(box.host)
+  await settle()
+  await settle()
+  ready(box)
+  await ext.tick()
+  const answer = async (req) => {
+    let out = {}
+    const res = { json: (b) => (out = { ...out, body: b }), status: (code) => ({ json: (b) => (out = { status: code, body: b }) }) }
+    await box.routes['post /address']({ body: {}, headers: {}, socket: { remoteAddress: '127.0.0.1' }, ...req }, res)
+    return out
+  }
+  assert.strictEqual((await answer({ headers: { 'x-forwarded-for': '10.0.0.2' } })).status, 403)
+  assert.strictEqual((await answer({ socket: { remoteAddress: '192.168.1.9' } })).status, 403)
+  assert.strictEqual(ext.stateNow().view, 'play', 'the others changed nothing')
+  assert.strictEqual((await answer({})).body.ok, true)
+  assert.strictEqual(ext.stateNow().view, 'info')
+})
+
 test('the rotary knob choosing an album: its name where the information is, until the choice is made or the time is out', () => {
   const pick = logic.selectionOf({ title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, seconds: 20 }, 1000)
   assert.deepStrictEqual(pick, { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, until: 21000 })

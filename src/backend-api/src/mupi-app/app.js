@@ -9724,6 +9724,7 @@ const BTN_FN = [
   // (a press switches the knob for 10 s from the volume to the tracks: one track per detent)
   ['Titelwahl (Drücken schaltet um)', 'tracks'],
   ['Vorspulen', 'ffwd'],
+  ['Adresse der Box zeigen', 'address'],
 ]
 
 // The three pins of the rotary encoder: the setting, the name in the box's answer and in its configuration, what the field is called.
@@ -9757,6 +9758,7 @@ const RK_BUTTONS = [
   ['Play/Pause', 'playpause'],
   ['Nächster Titel', 'next'],
   ['Vorspulen', 'ffwd'],
+  ['Adresse der Box zeigen', 'address'],
 ]
 const RK_PIN_PARTS = [
   ['a', 'a', 'pinA', 'GPIO-Pin A (CLK)'],

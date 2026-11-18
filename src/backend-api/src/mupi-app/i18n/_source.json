@@ -4368,7 +4368,7 @@
  "15 Minuten",
  "1 Stunde",
  "Adresse der Box zeigen",
- "Zeigt zehn Sekunden lang WLAN-Name, Adresse und Version.",
+ "Zeigt zehn Sekunden lang einen QR-Code mit der Adresse der Box und sonst nichts. Mit dem Handy scannen öffnet die Box.",
  "Nächste Anzeige",
  "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt.",
  "Ohne DSI-Display",

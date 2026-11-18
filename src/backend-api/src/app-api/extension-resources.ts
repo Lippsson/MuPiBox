@@ -331,7 +331,7 @@ export interface RotaryExtra {
   /** percent per detent of a volume knob */
   step: number
 }
-export const ROTARY_EXTRA_BUTTONS = ['off', 'playpause', 'next', 'ffwd']
+export const ROTARY_EXTRA_BUTTONS = ['off', 'playpause', 'next', 'ffwd', 'address']
 /** The additional rotary encoders of a configuration: the ones whose pins are 0 (none) or different pins of 2-27 (others are left out). */
 export function rotaryExtras(config: Record<string, unknown> | undefined): RotaryExtra[] {
   const rotary = config?.rotary && typeof config.rotary === 'object' ? (config.rotary as Record<string, unknown>) : {}

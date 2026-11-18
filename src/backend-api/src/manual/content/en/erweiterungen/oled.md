@@ -44,9 +44,9 @@ When nothing plays, the display shows what is chosen under **Idle display**: the
 
 ![The clock when idle](oled-idle.png)
 
-A short picture appears when playback starts or pauses and when the volume changes. The picture for the volume can be switched off with **Show the volume animation**, the one for start and pause with **Show the play/pause animation**. With **Show the address of the box** the **network page** appears for ten seconds: WLAN name (on the LAN cable **LAN** instead), address and version, with the symbol (i) at the top.
+A short picture appears when playback starts or pauses and when the volume changes. The picture for the volume can be switched off with **Show the volume animation**, the one for start and pause with **Show the play/pause animation**. With **Show the address of the box** a **QR code** with the address of the box appears for ten seconds, and nothing else. A phone scans it and opens the box in the browser. The same action can also be given to a button, a double button or the rotary knob ([Buttons & GPIO Input](buttons.md), [Rotary knob and button](../hardware/drehregler.md)). If the box has no network address, the display shows the **network page** instead, with WLAN name, address and version.
 
-![The network page](oled-info.png)
+![The QR code with the address of the box](oled-info.png)
 
 If the **rotary knob** chooses an album with the NFC extension ([NFC: Rotary knob](nfc-drehregler.md)), the information area shows the **name** the knob is on, with its place in the list. After the choice the normal picture comes back.
 

@@ -44,9 +44,9 @@ Wenn nichts spielt, zeigt das Display das Bild, das unter **Anzeige im Leerlauf*
 
 ![Die Uhr im Leerlauf](oled-idle.png)
 
-Ein kurzes Bild erscheint, wenn die Wiedergabe startet oder pausiert und wenn sich die Lautstärke ändert. Dieses Bild für die Lautstärke lässt sich mit **Lautstärke-Animation zeigen** ausschalten, das Bild für Start und Pause mit **Play/Pause-Animation zeigen**. Mit **Adresse der Box zeigen** erscheint zehn Sekunden lang die **Netzwerkseite**: WLAN-Name (am LAN-Kabel stattdessen **LAN**), Adresse und Version, mit dem Symbol (i) oben.
+Ein kurzes Bild erscheint, wenn die Wiedergabe startet oder pausiert und wenn sich die Lautstärke ändert. Dieses Bild für die Lautstärke lässt sich mit **Lautstärke-Animation zeigen** ausschalten, das Bild für Start und Pause mit **Play/Pause-Animation zeigen**. Mit **Adresse der Box zeigen** erscheint zehn Sekunden lang ein **QR-Code** mit der Adresse der Box und sonst nichts. Das Handy scannt ihn und öffnet die Box im Browser. Dieselbe Aktion lässt sich auch einem Taster, einem Doppeltaster oder dem Drehregler geben ([Buttons & GPIO Input](buttons.md), [Drehregler und Taster](../hardware/drehregler.md)). Hat die Box keine Netzwerkadresse, zeigt die Anzeige stattdessen die **Netzwerkseite** mit WLAN-Name, Adresse und Version.
 
-![Die Netzwerkseite](oled-info.png)
+![Der QR-Code mit der Adresse der Box](oled-info.png)
 
 Wählt der **Drehregler** mit der NFC-Extension ein Album ([NFC: Drehregler](nfc-drehregler.md)), steht in den Informationen der **Name**, bei dem er gerade steht, mit seinem Platz in der Liste. Nach der Wahl kommt die normale Anzeige zurück.
 

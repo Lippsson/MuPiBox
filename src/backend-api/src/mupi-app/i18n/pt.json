@@ -4341,7 +4341,7 @@
  "15 Minuten": "15 minutos",
  "1 Stunde": "1 hora",
  "Adresse der Box zeigen": "Mostrar o endereço da caixa",
- "Zeigt zehn Sekunden lang WLAN-Name, Adresse und Version.": "Mostra durante dez segundos o nome da WLAN, o endereço e a versão.",
+ "Zeigt zehn Sekunden lang einen QR-Code mit der Adresse der Box und sonst nichts. Mit dem Handy scannen öffnet die Box.": "Mostra durante dez segundos um código QR com o endereço da caixa e nada mais. Ao digitalizá-lo com o telemóvel, a caixa abre.",
  "Nächste Anzeige": "Vista seguinte",
  "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt.": "Alterna entre Completa, Mix e Compacta até à próxima gravação.",
  "Ohne DSI-Display": "Sem ecrã DSI",

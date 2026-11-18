@@ -383,8 +383,44 @@ class ScreensTest(unittest.TestCase):
         image = render.Screens(128, 32).render({'view': 'info', 'ssid': 'W' * 80, 'ip': '1', 'version': '2'}, 0)
         self.assertEqual(lit(image, (120, 0, 124, 32)), 0)
 
+    def test_the_address_is_a_qr_code_and_nothing_else(self):
+        for width, height in ((128, 64), (128, 32)):
+            screens = render.Screens(width, height)
+            image = screens.render({'view': 'info', 'ssid': 'Example', 'ip': '192.168.1.128', 'version': 'OLED 1', 'wifi': 2, 'playing': True, 'elapsed': 5}, 0)
+            self.assertEqual(image.size, (width, height))
+            # (a lit square in the middle, with the code in it; nothing outside of it: no status bar, no text, no bottom row)
+            side = (25 + 4) * max(1, height // 29)
+            left, top = (width - side) // 2, (height - side) // 2
+            self.assertEqual(lit(image, (0, 0, left, height)), 0)
+            self.assertEqual(lit(image, (left + side, 0, width, height)), 0)
+            self.assertEqual(lit(image, (0, 0, width, top)), 0)
+            self.assertGreater(lit(image, (left, top, left + side, top + side)), side * side // 4)
+
+    def test_the_qr_encoder_follows_the_standard(self):
+        import qr
+        # (the example of the standard's tutorials: the error correction of a block of 16 data words, 10 words)
+        self.assertEqual(qr._remainder([32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17], 10), [196, 35, 39, 119, 235, 215, 231, 226, 93, 23])
+        # (the format information of level L with mask 4 - 110011000101111 - from the standard's table)
+        self.assertEqual(qr._format_bits(4), 0b110011000101111)
+        matrix = qr.encode('http://192.168.1.128')
+        self.assertEqual(len(matrix), 25, 'version 2')
+        finder = ['#######', '#.....#', '#.###.#', '#.###.#', '#.###.#', '#.....#', '#######']
+        for ox, oy in ((0, 0), (18, 0), (0, 18)):
+            self.assertEqual([''.join('#' if matrix[oy + y][ox + x] else '.' for x in range(7)) for y in range(7)], finder)
+        self.assertTrue(matrix[17][8], 'the dark module')
+        self.assertEqual([matrix[6][x] for x in range(8, 17)], [x % 2 == 0 for x in range(8, 17)], 'the timing pattern')
+        self.assertEqual(len(qr.encode('x' * 134)), 41, 'version 6')
+        with self.assertRaises(ValueError):
+            qr.encode('x' * 135)
+
+    def test_without_an_address_the_network_page_has_the_text(self):
+        self.assertIsNone(self.s.address_qr(''))
+        self.assertIsNone(self.s.address_qr('y'))
+        self.assertIsNone(self.s.address_qr('192.168.1'))
+        self.assertIsNone(self.s.address_qr(None))
+
     def test_the_network_page_has_the_status_bar_with_the_info_mark_and_three_lines(self):
-        info = {'view': 'info', 'ssid': 'Example', 'ip': '192.168.1.1', 'version': 'OLED 1', 'wifi': 2}
+        info = {'view': 'info', 'ssid': 'Example', 'ip': '', 'version': 'OLED 1', 'wifi': 2}
         image = self.s.render(info, 0)
         self.assertGreater(lit(image, (84, 0, 96, 9)), 8, 'the (i)')
         for row in ((0, 12, 128, 24), (0, 25, 128, 37), (0, 38, 128, 50)):
@@ -418,8 +454,9 @@ class ScreensTest(unittest.TestCase):
         self.assertEqual(lit(lan, (15, 0, 18, 9)), 0, 'the plug stays within the room of the aerial')
         self.assertEqual(lit(lan, (0, 0, 15, 9)), sum(row.count('#') for row in render.LAN))
         self.assertEqual(lit(self.s.render({**base, 'lan': True, 'wifi': -1}, 0), (0, 0, 15, 9)), lit(lan, (0, 0, 15, 9)), 'the bars do not matter')
-        info = self.s.render({'view': 'info', 'lan': True, 'ssid': 'Haus', 'ip': '192.168.1.9', 'version': 'OLED 1'}, 0)
-        self.assertNotEqual(info.tobytes(), self.s.render({'view': 'info', 'ssid': 'Haus', 'ip': '192.168.1.9', 'version': 'OLED 1'}, 0).tobytes())
+        # (the network page without an address - the box has no network - still has the status bar)
+        info = self.s.render({'view': 'info', 'lan': True, 'ssid': 'Haus', 'ip': '', 'version': 'OLED 1'}, 0)
+        self.assertNotEqual(info.tobytes(), self.s.render({'view': 'info', 'ssid': 'Haus', 'ip': '', 'version': 'OLED 1'}, 0).tobytes())
         for size in ((128, 32), (128, 64)):
             small = render.Screens(*size)
             for mode in ('full', 'mix', 'lite'):

@@ -4341,7 +4341,7 @@
  "15 Minuten": "15 minuten",
  "1 Stunde": "1 uur",
  "Adresse der Box zeigen": "Adres van de box tonen",
- "Zeigt zehn Sekunden lang WLAN-Name, Adresse und Version.": "Toont tien seconden lang de WLAN-naam, het adres en de versie.",
+ "Zeigt zehn Sekunden lang einen QR-Code mit der Adresse der Box und sonst nichts. Mit dem Handy scannen öffnet die Box.": "Toont tien seconden lang een QR-code met het adres van de box en verder niets. Scannen met de telefoon opent de box.",
  "Nächste Anzeige": "Volgende weergave",
  "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt.": "Wisselt tot de volgende keer opslaan tussen Volledig, Mix en Compact.",
  "Ohne DSI-Display": "Zonder DSI-display",

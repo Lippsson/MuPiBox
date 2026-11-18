@@ -4341,7 +4341,7 @@
  "15 Minuten": "15 minuuttia",
  "1 Stunde": "1 tunti",
  "Adresse der Box zeigen": "Näytä laatikon osoite",
- "Zeigt zehn Sekunden lang WLAN-Name, Adresse und Version.": "Näyttää WLAN-verkon nimen, osoitteen ja version kymmenen sekunnin ajan.",
+ "Zeigt zehn Sekunden lang einen QR-Code mit der Adresse der Box und sonst nichts. Mit dem Handy scannen öffnet die Box.": "Näyttää kymmenen sekunnin ajan QR-koodin laatikon osoitteella eikä muuta. Puhelimella skannattuna laatikko aukeaa.",
  "Nächste Anzeige": "Seuraava näkymä",
  "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt.": "Vaihtaa Täyden, Mixin ja Kompaktin välillä seuraavaan tallennukseen asti.",
  "Ohne DSI-Display": "Ilman DSI-näyttöä",

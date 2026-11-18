@@ -8,7 +8,7 @@
 #   detent, down = the volume down, next = the next track, previous = the previous track, off = nothing. Each knob has its own pins.
 #   (The pins are read when the service starts; the app restarts it when they change. What a turn does is read again while it runs.)
 # The first encoder's push button does what is chosen in the admin interface (rotary.button, read again when it changed); the other
-# encoders' buttons are chosen in their own entry (button: off, playpause, next, ffwd).
+# encoders' buttons are chosen in their own entry (button: off, playpause, next, ffwd, address - the address of the box as a QR code on the display).
 # With "track selection" chosen the first encoder's button works as a switch (with "next track" a press skips one track, as before): the first press
 # turns the knob into a track selector (every detent clockwise = next track, counter clockwise = previous track) for TRACK_MODE_S seconds - each
 # turn starts the time anew, so it lasts as long as the knob is being turned - and the second press (or the time running out) brings the volume back.
@@ -29,7 +29,8 @@ PLAYER = "http://localhost:5005"
 DEFAULT_PINS = (26, 24, 10)
 MAX_EXTRA = 4
 DIRECTIONS = ("off", "up", "down", "next", "previous")
-BUTTONS = ("off", "playpause", "next", "ffwd")
+BUTTONS = ("off", "playpause", "next", "ffwd", "address")
+BOX = "http://localhost:8200"
 
 
 def read_config():
@@ -108,6 +109,16 @@ def player(command):
     except Exception as error:
         print("player call %s failed: %s" % (command, error), flush=True)
         return None
+
+
+def show_address():
+    # the QR code with the address of the box on the OLED display (ten seconds; a route of the OLED extension that only the box itself may ask)
+    try:
+        request = urllib.request.Request("%s/api/ext/oled/address" % BOX, data=b"", method="POST")
+        with urllib.request.urlopen(request, timeout=3) as response:
+            response.read()
+    except Exception as error:
+        print("address not shown: %s" % error, flush=True)
 
 
 def rotary_config():
@@ -207,6 +218,8 @@ class Knob:
             player("next")
         elif action == "ffwd":
             player("seek+30")
+        elif action == "address":
+            show_address()
 
     def turned(self, direction):
         if self.track_mode():

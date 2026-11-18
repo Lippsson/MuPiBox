@@ -6,7 +6,7 @@
 //   what plays                          ->  GET <player>/local once in 0.5 s (once in 1.5 s while the display is off), and /state
 //                                           while Spotify plays, once in 20 s
 //   the status block of the page        ->  GET /state (the lines), POST /iicon (switch I2C on)
-//   the display itself                  ->  POST /info (the page with the address of the box), POST /mode (the next mode), POST /wake
+//   the display itself                  ->  POST /info (the QR code with the address of the box), POST /mode (the next mode), POST /wake
 //   the pictures                        ->  GET /images (the list on the page), POST /imageset (a picture the user chose), POST /imagereset;
 //                                           an update or the shutdown says itself in a file (scripts/mupibox/oled_picture.sh)
 //   without the DSI display             ->  the setting "headless": the flag mupibox.headless in the configuration of the box and the
@@ -481,18 +481,28 @@ exports.activate = (host) => {
     { session: true },
   )
 
-  // The page with the address of the box for ten seconds
+  // The QR code with the address of the box for ten seconds (nothing else on the display)
+  const showAddress = () => {
+    ui.infoUntil = clock() + logic.INFO_MS
+    ui.wake = ui.infoUntil
+    push(true)
+  }
   host.route(
     'post',
     '/info',
     (_req, res) => {
-      ui.infoUntil = clock() + logic.INFO_MS
-      ui.wake = ui.infoUntil
-      push(true)
-      res.json({ ok: true, message: 'Die Adresse der Box steht auf dem Display' })
+      showAddress()
+      res.json({ ok: true, message: 'Der QR-Code mit der Adresse der Box steht auf dem Display' })
     },
     { session: true },
   )
+  // The same for a button of the box (the buttons extension, a knob's button): not behind the login, but only from the box itself
+  host.route('post', '/address', (req, res) => {
+    const from = String(req.socket?.remoteAddress ?? '')
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(from) || req.headers['x-forwarded-for']) return res.status(403).json({ ok: false })
+    showAddress()
+    res.json({ ok: true })
+  })
 
   // The next mode (full, mix, lite) until the settings are saved again
   host.route(

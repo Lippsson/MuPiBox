@@ -4341,7 +4341,7 @@
  "15 Minuten": "15 minutter",
  "1 Stunde": "1 time",
  "Adresse der Box zeigen": "Vis adressen til boksen",
- "Zeigt zehn Sekunden lang WLAN-Name, Adresse und Version.": "Viser WLAN-navn, adresse og versjon i ti sekunder.",
+ "Zeigt zehn Sekunden lang einen QR-Code mit der Adresse der Box und sonst nichts. Mit dem Handy scannen öffnet die Box.": "Viser i ti sekunder en QR-kode med adressen til boksen og ingenting annet. Skanner du den med mobilen, åpnes boksen.",
  "Nächste Anzeige": "Neste visning",
  "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt.": "Bytter mellom Full, Mix og Kompakt til neste lagring.",
  "Ohne DSI-Display": "Uten DSI-skjerm",

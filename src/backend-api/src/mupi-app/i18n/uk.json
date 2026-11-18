@@ -4341,7 +4341,7 @@
  "15 Minuten": "15 хвилин",
  "1 Stunde": "1 година",
  "Adresse der Box zeigen": "Показати адресу скриньки",
- "Zeigt zehn Sekunden lang WLAN-Name, Adresse und Version.": "Показує десять секунд назву WLAN, адресу та версію.",
+ "Zeigt zehn Sekunden lang einen QR-Code mit der Adresse der Box und sonst nichts. Mit dem Handy scannen öffnet die Box.": "Показує десять секунд QR-код з адресою коробки й більше нічого. Якщо відсканувати його телефоном, коробка відкриється.",
  "Nächste Anzeige": "Наступний вигляд",
  "Wechselt bis zum nächsten Speichern zwischen Voll, Mix und Kompakt.": "Перемикає між Повним, Mix і Компактним до наступного збереження.",
  "Ohne DSI-Display": "Без DSI-дисплея",
