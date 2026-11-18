@@ -748,6 +748,8 @@ function navRow(target, title, subtitle, ic, badge = '') {
 }
 
 function renderSection(sec) {
+  // (items that are drawn in a card of an extension: here only for the handlers, see findItem)
+  if (sec.hidden) return ''
   const items = (sec.items || []).map(renderItem).join('')
   // (the page's save button under its cards, over both columns - not in the last card, as if it saved only that)
   if (sec.bar) return `<div class="btns save-bar wide">${items}</div>`
@@ -18129,6 +18131,9 @@ const GPIO_HEADER = { 2: 3, 3: 5, 4: 7, 5: 29, 6: 31, 7: 26, 8: 24, 9: 21, 10: 1
 const EXT_ADOPTABLE = { rotary: 'drehregler' }
 // (what the first card of such a page is called on the page of the extension: short, beside the extension's own card)
 const EXT_ADOPTED_TITLE = { drehregler: 'Drehregler' }
+// (a page of an extension that shows a page of the core in its own card - the heading's ui.adopt - shows only these items of it: the pins of
+// the knob; not its volume switch, its step or the function of its button)
+const EXT_ADOPT_ITEMS = { rotary: ['rotPinA', 'rotPinB', 'rotPinBtn'] }
 // The text of a table file the user chose: UTF-8 (with or without BOM), else Windows-1252 - what Excel writes for "CSV" on a
 // German Windows; read as UTF-8 its umlauts became replacement characters and the tags with them played nothing any more
 function decodeTable(buffer) {
@@ -18220,21 +18225,28 @@ function extPageController(entry, sub = 0) {
     const at = starts()
     return own.e.ui.items.slice(at[sub - 1] + 1, at[sub] ?? own.e.ui.items.length)
   }
-  // (a sub page can show pages of the core as well: its heading says which - the knob's pins on the page of the knob)
-  const subAdopt = () => {
-    const heading = sub && own.e?.ui ? own.e.ui.items[starts()[sub - 1]] : null
-    return Array.isArray(heading?.adopt) ? heading.adopt.map((a) => EXT_ADOPTABLE[a]).filter((id) => id && state.pages.has(id)) : []
-  }
-  const adopted = () => (sub ? subAdopt() : entry.adopt).map((id) => ({ page: state.pages.get(id), ctrl: CONTROLLERS[id] })).filter((a) => a.page && a.ctrl)
+  const adopted = () => (sub ? [] : entry.adopt).map((id) => ({ page: state.pages.get(id), ctrl: CONTROLLERS[id] })).filter((a) => a.page && a.ctrl)
   // (a page of cards that took over pages of the core: those come first - the rotary knob top left - and the cards of the
   // extension after them, in the two columns; else its cards would be below the pages of the core, or beside them in rows)
   const split = () => !!own.e?.enabled && adopted().length > 0 && slice().some((it) => it.type === 'heading' && it.card)
+  // (a sub page can show a part of a page of the core in its own card: its heading says which - the knob's pins on the page of the knob)
+  const merged = () => {
+    const heading = sub && own.e?.ui ? own.e.ui.items[starts()[sub - 1]] : null
+    return (Array.isArray(heading?.adopt) ? heading.adopt : [])
+      .map((a) => ({ keys: EXT_ADOPT_ITEMS[a], page: state.pages.get(EXT_ADOPTABLE[a]), ctrl: CONTROLLERS[EXT_ADOPTABLE[a]] }))
+      .filter((m) => m.keys && m.page && m.ctrl)
+  }
+  const mergedSections = () => merged().flatMap((m) => (m.ctrl.sections?.(m.page) ?? m.page.sections ?? []).map((sec) => ({ m, sec, items: (sec.items || []).filter((it) => m.keys.includes(it.key)) })).filter((x) => x.items.length))
+  const mergedHtml = () => {
+    const parts = mergedSections()
+    return parts.map((x) => `${x.items.map(renderItem).join('')}${x.sec.help ? `<p class="help">${esc(x.sec.help)}</p>` : ''}`).join('')
+  }
   return {
     async load() {
       const r = await api(`${API}/ext/${entry.id}/info`)
       if (!r.ok) throw new Error(`extension ${r.status}`)
       own.e = r.body
-      await Promise.all(adopted().map((a) => a.ctrl.load?.(a.page)))
+      await Promise.all([...adopted(), ...merged()].map((a) => a.ctrl.load?.(a.page)))
     },
     top() {
       const e = own.e
@@ -18258,7 +18270,7 @@ function extPageController(entry, sub = 0) {
       // so that the cards of the pages it took over stand beside it; else it would take both columns and they would all be below)
       return [
         `<section class="card${adopted().length ? '' : ' wide'} ext-page" id="ext-page-card"><h2>${esc(named ? named.label : (e.ui.heading ?? e.ui.title))}</h2><p class="help" style="margin:0">${esc(named ? (named.help ?? '') : (e.ui.help ?? ''))}</p>
-         ${e.enabled ? form : '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>'}
+         ${e.enabled ? form + mergedHtml() : '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>'}
          ${hasText ? '<div class="btns"><button class="btn primary" data-xsave>Speichern</button></div>' : ''}</section>`,
       ]
     },
@@ -18268,8 +18280,14 @@ function extPageController(entry, sub = 0) {
       return [form, hasText ? '<div class="btns wide"><button class="btn primary" data-xsave>Speichern</button></div>' : '']
     },
     // (the pages of the core that moved here: their cards under the extension's own, the first with the title of its page)
-    sections: () => adopted().flatMap((a) => (a.ctrl.sections?.(a.page) ?? a.page.sections ?? []).map((sec, i) => ({ ...sec, title: i === 0 ? (EXT_ADOPTED_TITLE[a.page.id] ?? (sec.title || a.page.title)) : sec.title || '' }))),
+    sections: () => [
+      ...adopted().flatMap((a) => (a.ctrl.sections?.(a.page) ?? a.page.sections ?? []).map((sec, i) => ({ ...sec, title: i === 0 ? (EXT_ADOPTED_TITLE[a.page.id] ?? (sec.title || a.page.title)) : sec.title || '' }))),
+      // (the part of a page of the core that is drawn in the card of the extension)
+      ...(own.e?.enabled && merged().length ? [{ hidden: true, items: mergedSections().flatMap((x) => x.items) }] : []),
+    ],
     change(key, v, page) {
+      const part = own.e?.enabled ? merged().find((m) => m.keys.includes(key)) : null
+      if (part) return part.ctrl.change?.(key, v, page)
       const owner = adopted().find((a) => (a.page.sections || []).some((sec) => (sec.items || []).some((it) => it.key === key)))
       return owner?.ctrl.change?.(key, v, page)
     },
@@ -18280,6 +18298,17 @@ function extPageController(entry, sub = 0) {
       // (the sub page of the tags has the player pinned at its bottom - not the page above, which lists the sub pages)
       if (card && sub && own.e?.id === 'nfc' && own.e.enabled && slice().some((it) => it.type === 'list' && it.list === `${NFC_ROUTE}/tags`)) mountMiniPlayer(root)
       for (const a of adopted()) a.ctrl.mount?.(root, a.page)
+      // (the knob chooses albums only while the service of the knob runs: switching it on here starts it)
+      if (card && sub && own.e?.enabled && merged().length) {
+        $('input[data-xk="rotary"]', card)?.addEventListener('change', async (ev) => {
+          if (!ev.target.checked || hw.data?.rotary?.active !== false) return
+          const r = await api(`${API}/rotary`, { method: 'POST', body: { active: true } })
+          if (r.ok) {
+            hw.data.rotary.active = true
+            toast('Drehregler an')
+          }
+        })
+      }
     },
   }
 }

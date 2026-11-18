@@ -33,7 +33,7 @@ If the [OLED display](oled.md) is connected, turning shows **in the information 
 
 ## Settings
 
-**Settings › NFC extension › Rotary knob**. Below the settings are the **connections of the rotary knob** (pins A, B and button, plus the step size and the function of the button), which are also under **Settings › Rotary knob**: you set them here or there, it is the same setting.
+**Settings › NFC extension › Rotary knob**. The same card has the **pins of the rotary knob** (A, B and button). They are the same pins as under **Settings › Rotary knob**: you set them here or there. There is nothing more to set for choosing albums: **one detent is one album**, and the **button confirms** the album the knob is on.
 
 | Setting | Effect |
 | --- | --- |

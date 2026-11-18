@@ -33,7 +33,7 @@ Ist das [OLED-Display](oled.md) angeschlossen, zeigt es beim Drehen **in den Inf
 
 ## Einstellungen
 
-**Einstellungen › NFC-Extension › Drehregler**. Unter den Einstellungen stehen die **Anschlüsse des Drehreglers** (die Pins A, B und Taster, dazu die Schrittweite und die Funktion des Tasters), die es auch unter **Einstellungen › Drehregler** gibt: Du stellst sie hier und dort an derselben Stelle ein.
+**Einstellungen › NFC-Extension › Drehregler**. In derselben Karte stehen die **Pins des Drehreglers** (A, B und Taster). Es sind dieselben Pins wie unter **Einstellungen › Drehregler**: Du stellst sie hier oder dort ein. Beim Wählen der Alben gibt es nichts weiter einzustellen: **eine Raste ist ein Album**, und der **Taster bestätigt** das Album, bei dem der Drehregler steht.
 
 | Einstellung | Wirkung |
 | --- | --- |
