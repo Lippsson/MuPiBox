@@ -553,7 +553,7 @@ describe('the NFC extension of this repository', () => {
     assert.strictEqual(nfc.hostApi, 12)
     assert.strictEqual(nfc.ui?.place, 'system')
     assert.strictEqual(nfc.name, 'NFC-Extension')
-    assert.deepStrictEqual(nfc.ui?.items.filter((i) => i.type === 'heading' && i.page).map((i) => i.label), ['NFC-Reader', 'Zugeordnete Tags', 'Sprachausgabe'], 'three sub pages')
+    assert.deepStrictEqual(nfc.ui?.items.filter((i) => i.type === 'heading' && i.page).map((i) => i.label), ['NFC-Reader', 'Zugeordnete Tags', 'Drehregler', 'Sprachausgabe'], 'four sub pages')
     assert.deepStrictEqual(nfc.resources, {}, 'no pin of its own: the user chooses BUSY and RST')
     assert.deepStrictEqual(nfc.system?.packages, ['python3-spidev', 'python3-lgpio'])
   })

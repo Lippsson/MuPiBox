@@ -423,6 +423,36 @@ class Screens:
         draw.rectangle((self.width - 4, 0, self.width - 1, int((self.height - 1) * left)), fill=1)
         return image
 
+    def select(self, state, now):
+        """What the rotary knob is on while it chooses an album, a folder or an episode: where it is (the artist or folder), its name and
+        its place in the list. On 128 x 64 below the status bar, with the bottom row of the player when something plays."""
+        image, draw = self._canvas()
+        pick = state.get('pick') or {}
+        title, artist = pick.get('title') or '', pick.get('artist') or ''
+        index, count = pick.get('index') or 0, pick.get('count') or 0
+        place = '< %d/%d >' % (index, count) if count else ''
+        if self.tall:
+            self.status_bar(draw, state)
+            line = 12
+            if artist:
+                self._marquee(draw, ('select', 0), artist, line, self.fonts.row, now)
+                line += 13
+            self._marquee(draw, ('select', 1), title, line, self.fonts.text, now)
+            line += 14
+            if place:
+                w = draw.textlength(place, font=self.fonts.row)
+                draw.text(((self.width - w) // 2, line), place, font=self.fonts.row, fill=1)
+            if state.get('title') or state.get('playing') or state.get('elapsed') is not None:
+                self.bottom_row(draw, state)
+            return image
+        self._marquee(draw, ('select', 1), title, 2, self.fonts.text, now)
+        if artist:
+            self._marquee(draw, ('select', 0), artist, 14, self.fonts.small, now, width=self.width - 50)
+        if place:
+            w = draw.textlength(place, font=self.fonts.small)
+            draw.text((self.width - w, 14), place, font=self.fonts.small, fill=1)
+        return image
+
     def play(self, state, now):
         """The picture of a medium that plays or is paused, in the chosen mode ('full', 'mix' or 'lite')."""
         mode = state.get('mode') or 'full'
@@ -515,7 +545,7 @@ class Screens:
         return image
 
     def render(self, state, now):
-        """The picture for the state the extension reported (`view`: boot, off, overlay, info, idle or play)."""
+        """The picture for the state the extension reported (`view`: boot, off, overlay, info, select, idle or play)."""
         view = state.get('view') or 'idle'
         self.scrolling = False
         self.scroll_mode = state.get('scroll') if state.get('scroll') in ('loop', 'once', 'off') else 'loop'
@@ -529,6 +559,8 @@ class Screens:
             return self.overlay(state)
         if view == 'info':
             return self.info(state, now)
+        if view == 'select':
+            return self.select(state, now)
         if view == 'play':
             return self.play(state, now)
         return self.idle(state, now)

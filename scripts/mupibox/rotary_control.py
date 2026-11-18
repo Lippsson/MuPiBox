@@ -8,6 +8,9 @@
 # detent clockwise = next track, counter clockwise = previous track) for TRACK_MODE_S seconds - each turn starts the
 # time anew, so it lasts as long as the knob is being turned - and the second press (or the time running out) brings
 # the volume back.
+# An extension can take the knob over for a while (the NFC extension: choosing among the albums of an artist cover). It says so in a file
+# (CAPTURE_FILE: the time, in ms since 1970, up to which it wants the knob, renewed while it does); each turn and each press then goes to
+# the extension first, and only what it does not take (it answers "handled": false) is done as described above.
 
 import json
 import os
@@ -21,6 +24,8 @@ import gpio_compat  # RPi.GPIO, or lgpio on a Raspberry Pi 5
 
 CONFIG = "/etc/mupibox/mupiboxconfig.json"
 PLAYER = "http://localhost:5005"
+CAPTURE_FILE = "/tmp/mupibox-rotary-capture"
+CAPTURE_URL = "http://127.0.0.1:8200/api/ext/nfc/rotary"
 DEFAULT_PINS = (26, 24, 10)
 
 
@@ -88,6 +93,27 @@ def player(command):
         return None
 
 
+def captured():
+    # an extension wants the knob: the file holds the time up to which (a file that is gone, old or damaged: nobody does)
+    try:
+        with open(CAPTURE_FILE) as file:
+            return float(file.read().strip()) / 1000.0 > time.time()
+    except (OSError, ValueError):
+        return False
+
+
+def capture(event):
+    # what the knob did, to the extension; True when it took it (the box does nothing more with it)
+    body = json.dumps({"button": True} if event == "button" else {"turn": event}).encode()
+    request = urllib.request.Request(CAPTURE_URL, body, {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=3) as response:
+            return json.loads(response.read()).get("handled") is True
+    except Exception as error:
+        print("rotary: the extension did not answer (%s)" % error, flush=True)
+        return False
+
+
 def rotary_config():
     # read again only when the file changed, so a change in the admin interface takes effect at once
     try:
@@ -152,6 +178,8 @@ def worker():
     global track_mode_until
     while True:
         event = events.get()
+        if captured() and capture(event):
+            continue
         if event == "button":
             button_pressed()
         elif track_mode():
@@ -183,7 +211,8 @@ def button_wanted():
     # The button's pin is taken once the button has a function (it can be chosen later - read once a second); with the
     # button off it stays free for others. A pin of SPI or I2C is never taken: the knob works without the button then.
     global button_ready, button_refused
-    if button_ready or button_refused or rotary_config().get("button", "off") == "off":
+    # (also while an extension has the knob: it chooses with the button, whatever the button does otherwise)
+    if button_ready or button_refused or (rotary_config().get("button", "off") == "off" and not captured()):
         return button_ready
     if PIN_BUTTON in kernel_pins():
         button_refused = True

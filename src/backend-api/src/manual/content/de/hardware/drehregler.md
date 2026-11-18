@@ -56,6 +56,10 @@ Die Titelwahl endet auch von selbst: **10 Sekunden** nach dem letzten Druck oder
 > [!TIP]
 > Das ist praktisch bei Alben mit vielen Titeln: Zum Hörspiel-Kapitel springen, ohne aufs Display zu schauen, und danach mit einem Druck wieder zur Lautstärke.
 
+### Alben wählen mit der NFC-Extension
+
+Nach dem Auflegen eines Tags auf einem **Artistcover** wählt der Drehregler für eine Weile **Alben**: Drehen geht durch die Alben, ein Druck auf den Taster spielt das gewählte (siehe [NFC: Drehregler](../erweiterungen/nfc-drehregler.md)). Der Taster braucht dafür einen eigenen Pin, seine Funktion darf **Aus** sein.
+
 ## Wenn er nicht reagiert
 
 - Ist der Schalter **Drehregler für die Lautstärke** eingeschaltet? Der Dienst startet nur dann.

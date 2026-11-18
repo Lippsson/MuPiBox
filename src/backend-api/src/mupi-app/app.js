@@ -3415,9 +3415,12 @@ function openLibGroup(g) {
              .join('')}</div>`
          : `<p class="help" style="margin:0">Keine Folgen auf der Box. Was der Bereich und die Schalter zulassen, bringt der nächste Sync.</p>`
      }
+     ${entries.length > 1 && !subsHere.length ? `<div class="btns">${nfcButtonHtml()}</div>` : ''}
      <div class="btns">${heardAllButton(heardKeys)}${groupBtn}<button class="btn" data-close>Schließen</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = close
+      // (a tag for the whole artist cover: it plays an album, the rotary knob chooses among the others)
+      wireNfc(sheet, close, nfcMediaOfCollection('entries', { title: g.artist, artist: g.artist, category: g.cat, cover: nfcGroupCover(g) }), () => openLibGroup(g))
       // (each tile with its own name - the display's name of it - when the group is several of them)
       void mountTileLimit(sheet, tileKeys, Object.fromEntries(tileKeys.map((k) => [k, tileNameOfItem(items.find((it) => tileKeyOfItem(it) === k)) || g.artist])))
       if (sub) mountSubControls(sheet, sub, close, libSubDone)
@@ -3996,9 +3999,11 @@ async function openLocalSheet(folder, parent = null) {
      ${parent ? '' : tileLimitField()}
      ${albums.length ? `<div class="section-label" style="margin:0">Alben</div><div class="rows">${albums.map((a, i) => `<button class="entry lib-row" data-a="${i}">${thumb(a.cover)}<span class="lbl"><b translate="no">${esc(a.title)}</b>${a.libraryIsContainer ? '<small>Ordner</small>' : ''}</span>${a.libraryIsContainer ? '' : heardTick(`lib:${a.libraryPath}`)}<span class="chev">${icon('chevron', 18)}</span></button>`).join('')}</div>` : ''}
      <div class="dl-card" id="dl-card" hidden></div>
+     ${albums.length > 1 ? `<div class="btns">${nfcButtonHtml()}</div>` : ''}
      <div class="btns">${heardAllButton(heardKeys)}<button class="btn danger" data-all>Ganzen Ordner löschen</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
     (sheet, close) => {
       for (const img of sheet.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
+      wireNfc(sheet, close, nfcMediaOfCollection('folder', { title: folder.title, path: folder.libraryPath, category: folder.category, cover: folder.cover }), () => openLocalSheet(folder, parent))
       const back = () => (parent ? openLocalSheet(parent) : close())
       sheet.querySelector('[data-close]').onclick = back
       sheet.querySelector('[data-back]')?.addEventListener('click', back)
@@ -4087,9 +4092,10 @@ async function openNasSheet(folder, parent = null) {
      ${parent ? '' : tileLimitField()}
      ${r.ok ? '' : `<p class="help" style="margin:0">Das NAS antwortet gerade nicht.</p>`}
      ${albums.length ? `<div class="section-label" style="margin:0">Alben</div><div class="rows">${albums.map((a, i) => `<button class="entry lib-row" data-a="${i}">${thumb(a.cover)}<span class="lbl"><b translate="no">${esc(a.title)}</b>${a.nasIsContainer ? '<small>Ordner</small>' : ''}</span>${a.nasIsContainer ? '' : heardTick(`nas:${a.nasPath}`)}<span class="chev">${icon('chevron', 18)}</span></button>`).join('')}</div>` : ''}
-     <div class="btns">${heardAllButton(heardKeys)}<button class="btn" data-admin>NAS-Verwaltung</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
+     <div class="btns">${heardAllButton(heardKeys)}${albums.length > 1 ? nfcButtonHtml() : ''}<button class="btn" data-admin>NAS-Verwaltung</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
     (sheet, close) => {
       for (const img of sheet.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
+      wireNfc(sheet, close, nfcMediaOfCollection('nas', { title: folder.title, path: folder.nasPath, category: folder.nasCategory ?? '', cover: folder.cover }), () => openNasSheet(folder, parent))
       wireHeard(sheet, heardKeys, () => openNasSheet(folder, parent))
       const back = () => (parent ? openNasSheet(parent) : close())
       sheet.querySelector('[data-close]').onclick = back
@@ -4278,6 +4284,13 @@ function nfcMediaOfEntry(item) {
   for (const k of ['artist', 'title', 'cover', 'artistcover', 'category']) if (item[`${k}_override`]) media[k] = item[`${k}_override`]
   return media
 }
+// An artist cover or a folder as what a tag is given: no album of its own - the extension looks up the albums (the first one plays until
+// the user chooses another in the list of the tag, the rotary knob steps through them). kind: 'entries' (the entries of the box by
+// artist and category), 'folder' (a folder of the SD card) or 'nas'.
+function nfcMediaOfCollection(kind, { title, artist = '', category = '', path = '', cover = '' }) {
+  return { browse: kind, browseTitle: title, browseArtist: artist, browseCategory: category, browsePath: path, browseCover: cover, title, cover, artistcover: cover, category }
+}
+const nfcGroupCover = (g) => String(ownCover(g.cover ?? '') || '')
 // the picture the tiles show for the medium (a podcast or a Spotify entry has none in its data: the app asks the service) - the tag
 // takes it along when it is assigned, so the list shows it too
 const nfcCover = (media) => String(coverOf(media) || '')
@@ -4493,6 +4506,28 @@ function fillTagRows(box, rows, redraw, tiles = false) {
     if (tiles) name.title = name.textContent
     const sub = document.createElement('small')
     sub.textContent = (Array.isArray(row.text) ? row.text : []).map((t) => tr(String(t))).join(' · ')
+    // a tag of an artist cover: the album it plays when it is laid on (the rotary knob chooses among the others)
+    let albums = null
+    if (row.select && Array.isArray(row.select.choices) && row.select.choices.length > 0 && typeof row.select.post === 'string') {
+      albums = document.createElement('select')
+      albums.className = 'input tag-album'
+      albums.title = tr(String(row.select.label ?? 'Album beim Auflegen'))
+      albums.setAttribute('aria-label', albums.title)
+      for (const choice of row.select.choices.slice(0, 200)) {
+        const option = document.createElement('option')
+        option.value = String(choice.value)
+        option.textContent = String(choice.label ?? '')
+        option.selected = option.value === String(row.select.value)
+        albums.append(option)
+      }
+      albums.onchange = async () => {
+        albums.disabled = true
+        const saved = await post(row.select.post, { id: row.id, value: albums.value })
+        toast(said(saved, saved.ok ? 'Album gewählt' : 'Hat nicht geklappt'), saved.ok ? 'ok' : 'info')
+        if (!saved.ok) redraw()
+        else albums.disabled = false
+      }
+    }
     const buttons = document.createElement('div')
     buttons.className = tiles ? 'tag-tile-btns' : 'ext-tag-btns'
     const add = (label, onclick, { danger = false, glyph = 'info', off = false } = {}) => {
@@ -4563,9 +4598,9 @@ function fillTagRows(box, rows, redraw, tiles = false) {
         { glyph, danger: !action.safe },
       )
     }
-    if (tiles) li.append(name, pic, sub, buttons)
+    if (tiles) li.append(name, pic, sub, ...(albums ? [albums] : []), buttons)
     else {
-      main.append(name, sub, buttons)
+      main.append(name, sub, ...(albums ? [albums] : []), buttons)
       li.append(pic, main)
     }
     box.append(li)

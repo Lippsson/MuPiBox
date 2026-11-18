@@ -48,6 +48,8 @@ A short picture appears when playback starts or pauses and when the volume chang
 
 ![The network page](oled-info.png)
 
+If the **rotary knob** chooses an album with the NFC extension ([NFC: Rotary knob](nfc-drehregler.md)), the information area shows the **name** the knob is on, with its place in the list. After the choice the normal picture comes back.
+
 ## Settings
 
 | Setting | Effect |

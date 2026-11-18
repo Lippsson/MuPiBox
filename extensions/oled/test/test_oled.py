@@ -33,6 +33,7 @@ def lit(image, box):
     return sum(1 for x in range(box[0], box[2]) for y in range(box[1], box[3]) if image.getpixel((x, y)))
 
 
+SELECT = {'view': 'select', 'playing': True, 'title': 'Das Geheimnis der Mumie', 'volume': 35, 'wifi': 3, 'pick': {'title': 'Das Geheimnis der Mumie und ein ganz langer Name', 'artist': 'Die drei ??? Kids', 'index': 2, 'count': 12}}
 PLAY = {'view': 'play', 'mode': 'full', 'playing': True, 'album': 'Die drei ??? Kids', 'artist': 'Ulf Blanck', 'title': 'Das Geheimnis der Mumie', 'track': 3, 'tracks': 12, 'elapsed': 75, 'duration': 300, 'volume': 35, 'wifi': 3}
 
 
@@ -275,10 +276,22 @@ class ScreensTest(unittest.TestCase):
     def test_every_screen_has_the_size_of_the_display(self):
         for height in (64, 32):
             screens = render.Screens(128, height)
-            for state in ({'view': 'boot'}, {'view': 'bye'}, {'view': 'off'}, {'view': 'idle'}, {'view': 'idle', 'clock': True, 'time': '07:45', 'date': 'Mo 16.11.'}, {'view': 'info', 'ssid': 'Haus', 'ip': '192.168.1.5', 'version': '5.1.0', 'infoLeft': 0.4}, PLAY, {**PLAY, 'mode': 'mix'}, {**PLAY, 'mode': 'lite'}, {**PLAY, 'playing': False}, {'view': 'play', 'title': 'Kinderradio', 'stream': True}, {'view': 'play', 'overlay': 'volume', 'volume': 50}):
+            for state in ({'view': 'boot'}, {'view': 'bye'}, {'view': 'off'}, {'view': 'idle'}, {'view': 'idle', 'clock': True, 'time': '07:45', 'date': 'Mo 16.11.'}, {'view': 'info', 'ssid': 'Haus', 'ip': '192.168.1.5', 'version': '5.1.0', 'infoLeft': 0.4}, PLAY, {**PLAY, 'mode': 'mix'}, {**PLAY, 'mode': 'lite'}, {**PLAY, 'playing': False}, {'view': 'play', 'title': 'Kinderradio', 'stream': True}, {'view': 'play', 'overlay': 'volume', 'volume': 50}, SELECT, {**SELECT, 'artist': ''}, {'view': 'select'}):
                 image = screens.render(state, 3.0)
                 self.assertEqual(image.size, (128, height))
                 self.assertEqual(image.mode, '1')
+
+    def test_the_choice_of_the_knob_shows_the_name_and_the_place_in_the_list(self):
+        for height in (64, 32):
+            screens = render.Screens(128, height)
+            image = screens.render(SELECT, 0)
+            self.assertGreater(lit(image, (0, 0, 128, height)), 100)
+            self.assertNotEqual(image.tobytes(), screens.render(PLAY, 0).tobytes(), 'not the picture of the player')
+            moved = screens.render({**SELECT, 'pick': {**SELECT['pick'], 'title': 'Anderes Album', 'index': 3}}, 0)
+            self.assertNotEqual(image.tobytes(), moved.tobytes())
+        # (a name that is too long for the line scrolls, as the lines of the player do)
+        self.s.render(SELECT, 0)
+        self.assertTrue(self.s.scrolling)
 
     def test_the_boot_and_power_off_pictures_are_not_empty(self):
         self.assertGreater(lit(self.s.render({'view': 'boot'}, 0), (0, 0, 128, 64)), 100)

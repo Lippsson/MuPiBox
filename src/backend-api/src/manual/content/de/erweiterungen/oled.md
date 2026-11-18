@@ -48,6 +48,8 @@ Ein kurzes Bild erscheint, wenn die Wiedergabe startet oder pausiert und wenn si
 
 ![Die Netzwerkseite](oled-info.png)
 
+Wählt der **Drehregler** mit der NFC-Extension ein Album ([NFC: Drehregler](nfc-drehregler.md)), steht in den Informationen der **Name**, bei dem er gerade steht, mit seinem Platz in der Liste. Nach der Wahl kommt die normale Anzeige zurück.
+
 ## Einstellungen
 
 | Einstellung | Wirkung |

@@ -198,7 +198,7 @@ function timeTexts(date, language = 'de') {
 
 /**
  * The state the driver draws. `now` in ms; `ui` is what the extension holds besides the player: { infoUntil, overlay: { kind, volume, until },
- * idleSince, wake, mode } and `net` { ssid, ip, wifi, lan, battery, output }.
+ * select: { title, artist, index, count, until }, idleSince, wake, mode } and `net` { ssid, ip, wifi, lan, battery, output }.
  */
 function buildState({ config, play, ui, net, date, now, version, language }) {
   const { time, date: dateText } = timeTexts(date, language)
@@ -229,6 +229,8 @@ function buildState({ config, play, ui, net, date, now, version, language }) {
   if (ui.infoUntil && now < ui.infoUntil) {
     return { ...base, view: 'info', ssid: net.lan ? '' : (net.ssid ?? ''), ip: net.ip ?? '', version: `OLED ${version}`, infoLeft: Math.max(0, (ui.infoUntil - now) / INFO_MS) }
   }
+  // (the rotary knob is choosing an album, a folder or an episode: its name where the information of the medium is, until the choice is made)
+  if (ui.select && now < ui.select.until) return { ...base, view: 'select', pick: { title: ui.select.title, artist: ui.select.artist, index: ui.select.index, count: ui.select.count } }
   if (ui.overlay && now < ui.overlay.until) return { ...base, view: 'overlay', overlay: ui.overlay.kind, volume: ui.overlay.volume ?? play.volume }
   if (play.player !== '' && play.playing) return { ...base, view: 'play' }
   // (nothing plays - a paused medium too, its still picture would burn in: after the time the user chose the display goes off, a
@@ -236,6 +238,20 @@ function buildState({ config, play, ui, net, date, now, version, language }) {
   if (config.sleepAfter > 0 && ui.idleSince && now - ui.idleSince >= config.sleepAfter * 60000 && !(ui.wake && now < ui.wake)) return { ...base, view: 'off' }
   const something = play.player !== '' && (play.title !== '' || play.artist !== '' || play.album !== '')
   return { ...base, view: something ? 'play' : 'idle' }
+}
+
+/**
+ * What another extension says the knob is on ({ title, artist, index, count, seconds } or { clear: true }) as the `ui.select` of buildState;
+ * null for no choice (cleared, or nothing that can be shown). The text is cut to a length a line can hold, the time to 5 minutes at most.
+ */
+function selectionOf(body, now) {
+  if (!body || typeof body !== 'object' || body.clear === true) return null
+  const text = (value, max) => (typeof value === 'string' ? value.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max) : '')
+  const title = text(body.title, 120)
+  const number = (value) => (Number.isFinite(Number(value)) ? Math.max(0, Math.min(9999, Math.trunc(Number(value)))) : 0)
+  if (title === '') return null
+  const seconds = Number(body.seconds) > 0 ? Math.min(300, Number(body.seconds)) : 20
+  return { title, artist: text(body.artist, 120), index: number(body.index), count: number(body.count), until: now + seconds * 1000 }
 }
 
 /** Does Spotify play, as the player's /local tells it (its own pause flag; `spotifySilent` while the box's Spotify device is quiet)? */
@@ -337,6 +353,7 @@ module.exports = {
   wiredLink,
   timeTexts,
   buildState,
+  selectionOf,
   i2cState,
   i2cIsOn,
   statusRows,

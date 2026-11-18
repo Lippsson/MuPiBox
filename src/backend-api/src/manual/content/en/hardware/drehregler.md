@@ -56,6 +56,10 @@ Track selection also ends by itself: **10 seconds** after the last press or the 
 > [!TIP]
 > This is handy for albums with many tracks: jump to the audiobook chapter without looking at the display, then with one press back to the volume.
 
+### Choosing albums with the NFC extension
+
+After a tag on an **artist cover** is laid on, the rotary knob chooses **albums** for a while: turning goes through the albums, a press on the button plays the chosen one (see [NFC: Rotary knob](../erweiterungen/nfc-drehregler.md)). The button needs a pin of its own for this; its function can be **Off**.
+
 ## If it does not react
 
 - Is the **Rotary knob for the volume** switch on? The service only starts then.

@@ -51,7 +51,7 @@ exports.activate = (host) => {
   let phase = { phase: 'starting', code: '' }
   let play = logic.readPlayback(null, null)
   let previous = null // the reading before this one, for the short pictures
-  const ui = { infoUntil: 0, overlay: null, idleSince: clock(), wake: 0, mode: null }
+  const ui = { infoUntil: 0, overlay: null, select: null, idleSince: clock(), wake: 0, mode: null }
   let net = { ssid: '', ip: '', wifi: -1, lan: false, at: 0 }
   let headlessNote = null // { value, tone }: why "headless" did not take effect, for the status block
   let busy = false
@@ -479,6 +479,22 @@ exports.activate = (host) => {
     },
     { session: true },
   )
+
+  // What the rotary knob is on while it chooses an album, a folder or an episode (the NFC extension sends it): { title, artist, index, count,
+  // seconds } shows it where the information of the medium is, { clear: true } brings the picture of the player back. Not behind the login,
+  // but only from the box itself.
+  host.route('post', '/select', (req, res) => {
+    const from = String(req.socket?.remoteAddress ?? '')
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(from) || req.headers['x-forwarded-for']) return res.status(403).json({ ok: false })
+    ui.select = logic.selectionOf(req.body, clock())
+    if (ui.select) {
+      // (a display that went off wakes for it)
+      ui.wake = ui.select.until
+      ui.idleSince = clock()
+    }
+    push(true)
+    res.json({ ok: true })
+  })
 
   // Wakes a display that went off for a while (nothing plays)
   host.route(

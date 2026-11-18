@@ -22,6 +22,7 @@ const { execFile } = require('node:child_process')
 const { readConfigs, driverScript, driverArgs, isUsb, statusRows, statusRowsAll, tagNumberText, spiState, spiRows, i2cState, i2cRows, i2cKeysOn, uartState, uartRows, uartConsoles, portIsOn } = require('./logic.js')
 const { createRunner, headerChipNumber, detect } = require('./runner.js')
 const tags = require('./tags.js')
+const rotary = require('./rotary.js')
 const voice = require('./voice.js')
 
 const RESUME_WITHIN_MS = 30 * 60 * 1000
@@ -44,6 +45,14 @@ const SEEN_SAVE_MS = 6 * 60 * 60 * 1000
 // the same error of the reader (not connected, a wire loose) is logged once, then again after this time at the earliest:
 // the driver is started again every 10 minutes and says it again each time
 const ERROR_LOG_MS = 6 * 60 * 60 * 1000
+// The rotary knob of the box (the core's service, scripts/mupibox/rotary_control.py) asks this file whether the extension wants it:
+// it holds the time (ms since 1970) up to which it does, renewed every few seconds, so that a server that went down lets go of the knob
+const ROTARY_FLAG_FILE = '/tmp/mupibox-rotary-capture'
+const ROTARY_FLAG_MS = 15000
+const ROTARY_SECONDS = 30
+// the albums of a collection are kept this long (the list of tags and the knob ask for them often), and no more are taken
+const ALBUMS_KEEP_MS = 60000
+const ALBUMS_MAX = 200
 
 exports.activate = (host) => {
   const log = host.log ?? console
@@ -310,6 +319,129 @@ exports.activate = (host) => {
     }
   }
 
+  // ---- collections and the rotary knob ---------------------------------------------------------------------------------------------
+  // A tag of an artist cover (or a folder) plays one of its albums; the knob steps through the others and a press plays the one it stands on.
+  // The albums are asked from the box's own API, as the app asks for them: [{ key, label, media }], the media being the album with the
+  // collection's keys - ready to be the tag's medium. Null when the list cannot be read (the box is busy, the NAS is away).
+  const albumsKept = new Map()
+  const apiJson = async (route) => {
+    try {
+      const response = await fetch(`${host.apiUrl}${route}`, { signal: AbortSignal.timeout(8000) })
+      return response.ok ? await response.json() : null
+    } catch {
+      return null
+    }
+  }
+  const byLabel = (a, b) => a.label.localeCompare(b.label, 'de', { numeric: true })
+  const listAlbums = async (collection) => {
+    const albums = []
+    const add = (raw, label) => {
+      const media = tags.inCollection(raw, collection)
+      if (media && albums.length < ALBUMS_MAX) albums.push({ key: tags.albumKey(media), label: String(label || tags.mediaLabel(media)).slice(0, 90), media })
+    }
+    if (collection.browse === 'entries') {
+      const items = await apiJson('/api/data')
+      if (!Array.isArray(items)) return null
+      for (const item of items) {
+        if (!item || typeof item !== 'object' || item.isResume === true || item.category === 'resume' || item.type === 'library') continue
+        // (what the app does: the names the parents gave a Smart-Sync entry win, a radio station is under "other")
+        const category = String(item.category_override ?? (item.category === 'radio' ? 'other' : (item.category ?? '')))
+        const title = String(item.title_override ?? item.title ?? item.artist_override ?? item.artist ?? '')
+        const artist = String(item.artist_override ?? item.artist ?? title)
+        if (artist !== collection.browseArtist || (collection.browseCategory && category !== collection.browseCategory)) continue
+        const media = { ...item }
+        for (const key of ['artist', 'title', 'cover', 'artistcover', 'category']) if (item[`${key}_override`]) media[key] = item[`${key}_override`]
+        add(media, title)
+      }
+      return albums.sort(byLabel)
+    }
+    const nas = collection.browse === 'nas'
+    // (a folder inside the folder - a series of albums - is looked into one level, its albums named "Series > Album")
+    const walk = async (folder, prefix, depth) => {
+      const children = await apiJson(`${nas ? '/api/nas/children' : '/api/library/children'}?path=${encodeURIComponent(folder)}`)
+      if (!Array.isArray(children)) return false
+      for (const child of children) {
+        if (!child || typeof child !== 'object' || child.ownFiles === true) continue
+        const address = String((nas ? child.nasPath : child.libraryPath) ?? '')
+        if (nas ? child.nasIsContainer : child.libraryIsContainer) {
+          if (depth < 2 && address) await walk(address, `${prefix}${child.title} \u203a `, depth + 1)
+        } else add(child, `${prefix}${child.title ?? ''}`)
+      }
+      return true
+    }
+    return (await walk(collection.browsePath, '', 1)) ? albums.sort(byLabel) : null
+  }
+  const albumsOf = async (collection, fresh = false) => {
+    const key = tags.collectionKey(collection)
+    const kept = albumsKept.get(key)
+    if (!fresh && kept && Date.now() - kept.at < ALBUMS_KEEP_MS) return kept.albums
+    const albums = await listAlbums(collection)
+    if (albums) {
+      albumsKept.set(key, { at: Date.now(), albums })
+      // (no more than a few collections are held)
+      for (const old of [...albumsKept.keys()].slice(0, Math.max(0, albumsKept.size - 20))) albumsKept.delete(old)
+    }
+    return albums ?? kept?.albums ?? null
+  }
+
+  // What the knob does: the state of rotary.js, the file that tells the core's service to hand the knob over, and the display
+  let knob = rotary.idle()
+  let flagUntil = 0
+  const flagFile = () => host.rotaryFlagFile ?? ROTARY_FLAG_FILE
+  const setFlag = (until) => {
+    flagUntil = until
+    try {
+      if (until > 0) fs.writeFileSync(flagFile(), String(until))
+      else fs.rmSync(flagFile(), { force: true })
+    } catch (error) {
+      log.warn(`[nfc] rotary: ${error?.message ?? error}`)
+    }
+  }
+  // (kept up to date while the knob is taken over; gone when its time is out)
+  const flagTimer = setInterval(() => {
+    if (flagUntil === 0) return
+    if (rotary.isActive(knob, Date.now())) setFlag(Date.now() + ROTARY_FLAG_MS)
+    else {
+      knob = rotary.idle()
+      setFlag(0)
+    }
+  }, 5000)
+  flagTimer.unref?.()
+  process.once('exit', () => fs.rmSync(flagFile(), { force: true }))
+  // (the display of the OLED extension, if it is there: what the knob stands on - or nothing, once the choice is made)
+  const showOnOled = (body) =>
+    fetch(`${host.apiUrl}/api/ext/oled/select`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(2000) }).catch(() => undefined)
+  // What the app sends for an assignment: an album, or an artist cover / folder (the first of its albums plays until the user chooses another)
+  const mediaOfRequest = async (raw) => {
+    const media = tags.sanitizeMedia(raw)
+    if (media) return media
+    const collection = tags.collectionOf(raw)
+    if (!collection) return null
+    return (await albumsOf(collection, true))?.[0]?.media ?? null
+  }
+  // The list of albums of a collection tag, to choose the one it plays when it is laid on: { label, value, choices, post } or null
+  const albumSelect = async (tag) => {
+    const collection = tags.collectionOf(tag.media)
+    if (!collection) return null
+    const albums = await albumsOf(collection)
+    if (!albums || albums.length === 0) return null
+    const current = tags.albumKey(tag.media)
+    const choices = albums.map((album) => ({ value: album.key, label: album.label }))
+    // (the album the tag plays is gone from the list - it left the box: it stays there as it is until another one is chosen)
+    if (!albums.some((album) => album.key === current)) choices.unshift({ value: current, label: String(tag.media.title ?? '').slice(0, 90) || tags.mediaLabel(tag.media) })
+    return { label: 'Album beim Auflegen', value: current, choices, post: '/api/ext/nfc/tagalbum' }
+  }
+  // A tag of a collection was laid on: the knob is for its albums now (when the settings allow it)
+  const rotaryBegin = async (tag, settings) => {
+    const collection = tags.collectionOf(tag.media)
+    if (!collection || settings.rotary === false) return
+    const albums = await albumsOf(collection)
+    if (!albums || albums.length < 2) return
+    const seconds = Number(settings.rotarySeconds) > 0 ? Number(settings.rotarySeconds) : ROTARY_SECONDS
+    knob = rotary.begin({ uid: tag.uid, albums, currentKey: tags.albumKey(tag.media), seconds, now: Date.now() })
+    setFlag(Date.now() + ROTARY_FLAG_MS)
+  }
+
   // (taking the tag off pauses or stops: a tag laid on only for a moment starts nothing - not for a USB reader, which never
   // says that a card went)
   const removeMatters = (settings, reader) => Boolean(reader) && !isUsb(reader.config.reader) && (settings.onRemove === 'pause' || settings.onRemove === 'stop')
@@ -490,6 +622,8 @@ exports.activate = (host) => {
     // (the tag that lay there while the driver started again: its medium plays already)
     if (again && !result.armedId) return
     if (result.kind !== 'unknown' && settings.playOnTag !== false) await start(result.tag, settings, reader)
+    // (a tag of an artist cover: the knob chooses among its albums for a while)
+    if (result.kind !== 'unknown') rotaryBegin(result.tag, settings).catch((error) => log.warn(`[nfc] rotary: ${error?.message ?? error}`))
     // (a tag without a medium: the box says so - not while the assignment of one waits for it, then it is being given its medium)
     else if (result.kind === 'unknown' && !result.armedId) await say('tagNew', settings)
     // (a battery message held back: a child is at the box now)
@@ -885,9 +1019,9 @@ exports.activate = (host) => {
   host.route(
     'post',
     '/arm',
-    (req, res) => {
+    async (req, res) => {
       const body = req.body && typeof req.body === 'object' ? req.body : {}
-      const media = tags.sanitizeMedia(body.media)
+      const media = await mediaOfRequest(body.media)
       if (!media) return res.status(400).json({ ok: false, error: 'not_startable', message: 'Dieses Medium lässt sich keinem Tag zuordnen' })
       if (readers.every((reader) => reader.view.phase === 'off' || reader.view.phase === 'error')) return res.status(409).json({ ok: false, error: 'no_reader', message: 'Der NFC-Leser ist nicht bereit' })
       const image = tags.sanitizeImage(body.image)
@@ -955,6 +1089,11 @@ exports.activate = (host) => {
     ],
   })
   const byRecent = (a, b) => b.assignedAt - a.assignedAt || b.lastSeen - a.lastSeen
+  // (a tag of an artist cover has the list of its albums in its row)
+  const rowWithAlbums = async (tag, page = false) => {
+    const select = await albumSelect(tag)
+    return select ? { ...tagRow(tag, page), select } : tagRow(tag, page)
+  }
 
   // The assignments as a file to keep (the page saves what this answers): { format, tags: [...] }
   host.route('get', '/tagexport', (_req, res) => res.json(tags.exportData(data)), { session: true })
@@ -983,8 +1122,9 @@ exports.activate = (host) => {
   host.route(
     'get',
     '/tags',
-    (_req, res) => {
-      res.json({ items: Object.values(data.tags).filter((tag) => tag.media).sort(byRecent).map((tag) => tagRow(tag, true)) })
+    async (_req, res) => {
+      const found = Object.values(data.tags).filter((tag) => tag.media).sort(byRecent)
+      res.json({ items: await Promise.all(found.map((tag) => rowWithAlbums(tag, true))) })
     },
     { session: true },
   )
@@ -993,11 +1133,12 @@ exports.activate = (host) => {
   host.route(
     'post',
     '/tagsfor',
-    (req, res) => {
-      const media = tags.sanitizeMedia(req.body?.media)
+    async (req, res) => {
+      const media = tags.sanitizeMedia(req.body?.media) ?? (tags.collectionOf(req.body?.media) ? req.body.media : null)
       if (!media) return res.json({ items: [] })
       const key = tags.mediumKey(media)
-      res.json({ items: Object.values(data.tags).filter((tag) => tag.media && tags.mediumKey(tag.media) === key).sort(byRecent).map((tag) => tagRow(tag)) })
+      const found = Object.values(data.tags).filter((tag) => tag.media && tags.mediumKey(tag.media) === key).sort(byRecent)
+      res.json({ items: await Promise.all(found.map((tag) => rowWithAlbums(tag))) })
     },
     { session: true },
   )
@@ -1038,11 +1179,11 @@ exports.activate = (host) => {
   host.route(
     'post',
     '/tagchange',
-    (req, res) => {
+    async (req, res) => {
       const body = req.body && typeof req.body === 'object' ? req.body : {}
       const uid = tags.normalizeUid(body.id)
       if (!uid || !data.tags[uid]?.media) return res.status(404).json({ ok: false, error: 'no_tag', message: 'Diesen Tag gibt es nicht mehr' })
-      const media = tags.sanitizeMedia(body.media)
+      const media = await mediaOfRequest(body.media)
       if (!media) return res.status(400).json({ ok: false, error: 'not_startable', message: 'Dieses Medium lässt sich keinem Tag zuordnen' })
       tags.giveToTag(data, uid, media, Date.now(), body.cover)
       saveTags()
@@ -1050,6 +1191,58 @@ exports.activate = (host) => {
     },
     { session: true },
   )
+
+  // The album a tag of an artist cover plays when it is laid on ({ id, value } - the value is the key of one of the albums in its row)
+  host.route(
+    'post',
+    '/tagalbum',
+    async (req, res) => {
+      const uid = tags.normalizeUid(req.body?.id)
+      const tag = uid ? data.tags[uid] : null
+      const collection = tag?.media ? tags.collectionOf(tag.media) : null
+      if (!tag || !collection) return res.status(404).json({ ok: false, error: 'no_tag', message: 'Diesen Tag gibt es nicht mehr' })
+      const album = (await albumsOf(collection, true))?.find((entry) => entry.key === String(req.body?.value ?? ''))
+      if (!album) return res.status(400).json({ ok: false, error: 'no_album', message: 'Dieses Album gibt es nicht mehr' })
+      tag.media = album.media
+      saveTags()
+      res.json({ ok: true, message: 'Album gewählt' })
+    },
+    { session: true },
+  )
+
+  // What the knob does while the extension has it (the core's rotary service asks for it with the file at ROTARY_FLAG_FILE and sends each
+  // detent and each press here): { turn: 1 | -1 } or { button: true } -> { handled } - false: the box does with it what it always does.
+  // Not behind the login (the service has none) but only from the box itself: not for a request that came through the web server.
+  host.route('post', '/rotary', async (req, res) => {
+    const from = String(req.socket?.remoteAddress ?? '')
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(from) || req.headers['x-forwarded-for']) return res.status(403).json({ handled: false })
+    const body = req.body && typeof req.body === 'object' ? req.body : {}
+    const now = Date.now()
+    if (body.turn === 1 || body.turn === -1) {
+      const result = rotary.turn(knob, body.turn, now)
+      if (!result) return res.json({ handled: false })
+      knob = result.state
+      const { album, index, count } = result.shown
+      const collection = tags.collectionOf(album.media)
+      showOnOled({ title: album.label, artist: String(collection?.browseTitle ?? ''), index: index + 1, count, seconds: Math.round(knob.windowMs / 1000) })
+      return res.json({ handled: true })
+    }
+    if (body.button === true) {
+      const uid = knob.uid
+      const result = rotary.press(knob, now)
+      if (!result) return res.json({ handled: false })
+      knob = result.state
+      setFlag(0)
+      showOnOled({ clear: true })
+      const tag = data.tags[uid]
+      if (tag) {
+        log.info(`[nfc] tag ${uid}: the knob chose ${result.album.label}`)
+        await start({ ...tag, media: result.album.media }, (await host.settings()) ?? {}, null, true)
+      }
+      return res.json({ handled: true })
+    }
+    res.json({ handled: false })
+  })
 
   // The medium of a tag starts as if the tag was laid on ({ id })
   host.route(

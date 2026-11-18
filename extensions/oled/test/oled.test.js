@@ -464,6 +464,46 @@ test('the info page and the next mode are routes of the page', async () => {
   assert.strictEqual((await answer('post /mode')).mode, 'full')
 })
 
+test('the rotary knob choosing an album: its name where the information is, until the choice is made or the time is out', () => {
+  const pick = logic.selectionOf({ title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, seconds: 20 }, 1000)
+  assert.deepStrictEqual(pick, { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, until: 21000 })
+  const playing = { play: { player: 'mplayer', playing: true, title: 'Michel', volume: 30 } }
+  const shown = state({ ...playing, ui: { select: pick, overlay: { kind: 'volume', volume: 40, until: 5000 } }, now: 2000 })
+  assert.deepStrictEqual([shown.view, shown.pick], ['select', { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3 }], 'before the volume picture, the status bar still has what plays')
+  assert.strictEqual(shown.title, 'Michel')
+  assert.strictEqual(state({ ...playing, ui: { select: pick }, now: 21000 }).view, 'play', 'the time is out: the player again')
+  assert.strictEqual(state({ ...playing, ui: { select: logic.selectionOf({ clear: true }, 1000) }, now: 2000 }).view, 'play', 'the choice was made')
+})
+
+test('what another extension says about the knob is cut to a size a line holds; nothing to show is no choice', () => {
+  assert.strictEqual(logic.selectionOf({ title: '  ' }, 0), null)
+  assert.strictEqual(logic.selectionOf(null, 0), null)
+  assert.strictEqual(logic.selectionOf({ title: 'x'.repeat(500), index: 'a', count: 99999, seconds: 9999 }, 0).title.length, 120)
+  const odd = logic.selectionOf({ title: 'AB', index: 'a', count: 99999, seconds: 9999 }, 0)
+  assert.deepStrictEqual([odd.title, odd.index, odd.count, odd.until], ['A B', 0, 9999, 300000])
+  assert.strictEqual(logic.selectionOf({ title: 'T' }, 0).until, 20000)
+})
+
+test('the select route: only from the box itself; it shows the name and { clear } takes it away', async () => {
+  const box = fakeHost({})
+  const ext = api.activate(box.host)
+  await settle()
+  await settle()
+  const answer = async (body, req = {}) => {
+    let out
+    const res = { json: (b) => (out = { status: 200, body: b }), status: (code) => ({ json: (b) => (out = { status: code, body: b }) }) }
+    await box.routes['post /select']({ body, headers: {}, socket: { remoteAddress: '127.0.0.1' }, ...req }, res)
+    return out
+  }
+  assert.strictEqual((await answer({ title: 'Pippi' }, { headers: { 'x-forwarded-for': '10.0.0.2' } })).status, 403)
+  assert.strictEqual((await answer({ title: 'Pippi' }, { socket: { remoteAddress: '192.168.1.9' } })).status, 403)
+  assert.strictEqual(ext.stateNow().view === 'select', false)
+  assert.strictEqual((await answer({ title: 'Pippi', artist: 'Astrid Lindgren', index: 1, count: 3 })).body.ok, true)
+  assert.deepStrictEqual([ext.stateNow().view, ext.stateNow().pick.title], ['select', 'Pippi'])
+  await answer({ clear: true })
+  assert.notStrictEqual(ext.stateNow().view, 'select')
+})
+
 test('without the DSI display: the flag of the box and DietPi\'s autostart are set, and brought back when the setting goes', async () => {
   const box = fakeHost({ headless: true })
   const ext = api.activate(box.host)
