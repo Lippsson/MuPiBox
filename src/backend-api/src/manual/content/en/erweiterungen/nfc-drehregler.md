@@ -39,7 +39,6 @@ If the [OLED display](oled.md) is connected, turning shows **in the information 
 
 | Setting | Effect |
 | --- | --- |
-| **Status** | whether the knob's driver runs ("Ready") and when you **last turned** and **pressed** it: that tells you at once whether it is wired right. If it shows an error, the note gives the reason |
 | **GPIO pin A (CLK)**, **GPIO pin B (DT)** | the two pins of the knob |
 | **GPIO pin (button)** | the pin of the button (switched to ground): a press plays the chosen album |
 | **Active after laying on (seconds)** | A slider from **0 to 120 seconds** (default 20): for this long after laying on, after each turn and after each choice, the knob chooses albums. **0** means **always active**: the knob chooses albums until you lay on another tag. |
@@ -53,7 +52,7 @@ The lists show **only free pins**: none that the box itself, the boot configurat
 
 ## If it does not work
 
-- The knob does nothing: look at **Status** whether it is "Ready" and whether **Last turn** shows a time when you turn. If it shows "None yet", the turn does not arrive: check the wiring (A and B not swapped, ground and pins right). Otherwise: the time after laying on is over (lay the tag on again), one of the three pins is missing, or the artist cover has only one album.
+- The knob does nothing: check the wiring (A and B not swapped, ground and pins right). Otherwise: the time after laying on is over (lay the tag on again), one of the three pins is missing, or the artist cover has only one album.
 - The button chooses nothing: you have to **turn** first.
 - You want a knob for volume or tracks as well: that is another one, under **Settings › Audio › Rotary knob and button**.
 - The drop-down list is missing in the tile: the box could not read the albums (the NAS is not reachable, the folder is gone). It comes back when the albums can be read.

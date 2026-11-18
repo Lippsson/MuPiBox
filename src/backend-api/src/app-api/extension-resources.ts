@@ -292,6 +292,8 @@ export function rotaryPins(config: Record<string, unknown> | undefined): RotaryP
   // (a pin that is not set is the shipped one; a wrong one or the same pin twice: all three are the shipped ones, never a half choice)
   return !Object.values(chosen).some(Number.isNaN) && new Set(set).size === set.length ? chosen : { ...ROTARY_DEFAULT_PINS }
 }
+/** The name of an encoder as the configuration has it: a short text, may be empty. */
+export const rotaryName = (v: unknown): string => (typeof v === 'string' ? v.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 30) : '')
 const rotaryPinList = (config: Record<string, unknown> | undefined): number[] => Object.values(rotaryPins(config)).filter((n) => n !== 0)
 // What a turn of a knob does: nothing, the volume up or down by its step, the next or the previous track
 export const ROTARY_DIRECTIONS = ['off', 'up', 'down', 'next', 'previous'] as const
@@ -316,6 +318,8 @@ export function rotaryButtonOn(config: Record<string, unknown> | undefined): boo
 export const ROTARY_EXTRA_MAX = 4
 export interface RotaryExtra {
   id: string
+  /** the name the user gave it (empty: the page calls it "Drehregler 2" ...) */
+  name: string
   /** what a turn to the right and to the left does */
   right: RotaryDirection
   left: RotaryDirection
@@ -347,6 +351,7 @@ export function rotaryExtras(config: Record<string, unknown> | undefined): Rotar
     const legacy = e.function === 'tracks' ? { right: 'next', left: 'previous' } : { right: 'up', left: 'down' }
     out.push({
       id: String(e.id),
+      name: rotaryName(e.name),
       right: direction(e.right) ?? (legacy.right as RotaryDirection),
       left: direction(e.left) ?? (legacy.left as RotaryDirection),
       a: pins[0],

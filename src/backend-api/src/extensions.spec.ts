@@ -620,7 +620,7 @@ describe('the NFC extension of this repository', () => {
     const items = nfc.ui?.items ?? []
     const heads = items.filter((i) => i.type === 'heading' && i.label === 'Leser')
     assert.deepStrictEqual(heads.map((h) => h.optional), [undefined, 'reader2On', 'reader3On'])
-    assert.deepStrictEqual(items.filter((i) => i.type === 'status').map((i) => i.state), ['/api/ext/nfc/spistate', '/api/ext/nfc/iicstate', '/api/ext/nfc/uartstate', '/api/ext/nfc/stateone', '/api/ext/nfc/statetwo', '/api/ext/nfc/statethree', '/api/ext/nfc/knobstate'], 'the card of the ports first (a block for each), then one status per reader, then the one of the knob')
+    assert.deepStrictEqual(items.filter((i) => i.type === 'status').map((i) => i.state), ['/api/ext/nfc/spistate', '/api/ext/nfc/iicstate', '/api/ext/nfc/uartstate', '/api/ext/nfc/stateone', '/api/ext/nfc/statetwo', '/api/ext/nfc/statethree'], 'the card of the ports first (a block for each), then one status per reader')
     const at = (h: unknown) => items.indexOf(h as never)
     assert.strictEqual(items[at(heads[1]) - 1].key, 'tech', 'no heading between the groups of the readers')
     assert.strictEqual(items[at(heads[0]) + 1].type, 'status', 'the status is the first line of its reader')

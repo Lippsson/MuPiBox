@@ -193,10 +193,10 @@ describe('extension resources: reading the box', () => {
 
   it('more rotary encoders: each has what a turn does and its pins (2-27 or 0, all different); what is wrong with an entry leaves it out', () => {
     const good = { id: 'k2', right: 'next', left: 'previous', pinA: 5, pinB: 6, pinButton: 13, button: 'playpause', step: 3 }
-    assert.deepEqual(rotaryExtras({ rotary: { extra: [good] } }), [{ id: 'k2', right: 'next', left: 'previous', a: 5, b: 6, button: 13, buttonFn: 'playpause', step: 3 }])
-    assert.deepEqual(rotaryExtras({ rotary: { extra: [{ ...good, pinA: '5', step: 99, button: 'tracks' }] } })[0], { id: 'k2', right: 'next', left: 'previous', a: 5, b: 6, button: 13, buttonFn: 'off', step: 5 })
+    assert.deepEqual(rotaryExtras({ rotary: { extra: [good] } }), [{ id: 'k2', name: '', right: 'next', left: 'previous', a: 5, b: 6, button: 13, buttonFn: 'playpause', step: 3 }])
+    assert.deepEqual(rotaryExtras({ rotary: { extra: [{ ...good, pinA: '5', step: 99, button: 'tracks' }] } })[0], { id: 'k2', name: '', right: 'next', left: 'previous', a: 5, b: 6, button: 13, buttonFn: 'off', step: 5 })
     // (no pins at all is fine - a knob just added; an entry of the first version had a function instead of right and left)
-    assert.deepEqual(rotaryExtras({ rotary: { extra: [{ id: 'k3', right: 'down', left: 'off', pinA: 0, pinB: 0, pinButton: 0 }] } }), [{ id: 'k3', right: 'down', left: 'off', a: 0, b: 0, button: 0, buttonFn: 'off', step: 5 }])
+    assert.deepEqual(rotaryExtras({ rotary: { extra: [{ id: 'k3', name: '  Küche ', right: 'down', left: 'off', pinA: 0, pinB: 0, pinButton: 0 }] } }), [{ id: 'k3', name: 'Küche', right: 'down', left: 'off', a: 0, b: 0, button: 0, buttonFn: 'off', step: 5 }])
     assert.deepEqual(rotaryExtras({ rotary: { extra: [{ id: 'k4', function: 'tracks', pinA: 5, pinB: 6, pinButton: 13 }] } }).map((k) => [k.right, k.left]), [['next', 'previous']])
     assert.deepEqual(rotaryExtras({ rotary: { extra: [{ id: 'k4', function: 'volume', pinA: 5, pinB: 6, pinButton: 13 }] } }).map((k) => [k.right, k.left]), [['up', 'down']])
     for (const bad of [{ ...good, pinB: 5 }, { ...good, pinA: 1 }, { ...good, pinButton: 28 }, { ...good, id: '../x' }, { ...good, pinB: undefined }, null, 'x']) {

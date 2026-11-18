@@ -104,22 +104,6 @@ function knobConfig(settings) {
   return a && b && button && new Set([a, b, button]).size === 3 ? { a, b, button } : null
 }
 
-/**
- * The lines of the status block of the album knob's page: how its driver is and when the knob was last turned or its button pressed (the time of
- * day; "Noch keine" - none yet - since the driver started). `knob` is knobConfig(settings), `view` { phase, message, turnAt, pressAt }.
- */
-function knobRows(knob, view) {
-  if (!knob) return [{ label: 'Drehregler', value: 'Aus', tone: 'warn' }, { label: 'Hinweis', value: 'Es sind nicht alle drei Pins gewählt', tone: 'warn' }]
-  if (view.phase === 'error') return [{ label: 'Drehregler', value: 'Nicht bereit', tone: 'error' }, { label: 'Hinweis', value: view.message || 'Unbekannter Fehler', tone: 'error' }]
-  if (view.phase !== 'ready') return [{ label: 'Drehregler', value: 'Wird gestartet …', tone: 'warn' }]
-  const at = (ms) => (ms ? new Date(ms).toLocaleTimeString('de-DE') : 'Noch keine')
-  return [
-    { label: 'Drehregler', value: 'Bereit', tone: 'ok' },
-    { label: 'Letzte Drehung', value: at(view.turnAt) },
-    { label: 'Letzter Druck', value: at(view.pressAt) },
-  ]
-}
-
 /** The command line of knob.py for the album knob (the program itself is added by the caller). */
 function knobArgs(knob, chip) {
   return ['--chip', String(chip), '--a', String(knob.a), '--b', String(knob.b), '--button', String(knob.button)]
@@ -372,4 +356,4 @@ const spiRows = (state) => portRows('spi', state)
 const i2cRows = (state) => portRows('iic', state)
 const uartRows = (state) => portRows('uart', state)
 
-module.exports = { spiState, spiRows, i2cState, i2cRows, i2cKeysOn, uartState, uartRows, uartConsoles, portIsOn, portRows, TECH_NAMES, READERS, SLOTS, isUsb, readConfig, readConfigs, readerName, statusRowsAll, driverScript, knobConfig, knobArgs, knobRows, driverArgs, uidText, tagNumberText, readEvent, problemText, statusRows, PROBLEMS }
+module.exports = { spiState, spiRows, i2cState, i2cRows, i2cKeysOn, uartState, uartRows, uartConsoles, portIsOn, portRows, TECH_NAMES, READERS, SLOTS, isUsb, readConfig, readConfigs, readerName, statusRowsAll, driverScript, knobConfig, knobArgs, driverArgs, uidText, tagNumberText, readEvent, problemText, statusRows, PROBLEMS }

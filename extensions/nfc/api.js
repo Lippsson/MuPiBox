@@ -19,7 +19,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFile } = require('node:child_process')
-const { readConfigs, driverScript, knobConfig, knobArgs, knobRows, driverArgs, isUsb, statusRows, statusRowsAll, tagNumberText, spiState, spiRows, i2cState, i2cRows, i2cKeysOn, uartState, uartRows, uartConsoles, portIsOn } = require('./logic.js')
+const { readConfigs, driverScript, knobConfig, knobArgs, driverArgs, isUsb, statusRows, statusRowsAll, tagNumberText, spiState, spiRows, i2cState, i2cRows, i2cKeysOn, uartState, uartRows, uartConsoles, portIsOn } = require('./logic.js')
 const { createRunner, headerChipNumber, detect } = require('./runner.js')
 const tags = require('./tags.js')
 const rotary = require('./rotary.js')
@@ -732,28 +732,18 @@ exports.activate = (host) => {
   let knobRunner = null
   let knobRunning = ''
   let knobError = ''
-  // (what the page shows of the driver: how it is, and when the knob was last turned or pressed - a way to see that it is wired right)
-  const knobView = { phase: '', message: '', turnAt: 0, pressAt: 0 }
   const onKnobEvent = (event) => {
     if (event.event === 'turn') {
-      knobView.turnAt = Date.now()
       knobTurned(event.direction)
     } else if (event.event === 'button') {
-      knobView.pressAt = Date.now()
       return knobPressed().catch((error) => log.warn(`[nfc] knob: ${error?.message ?? error}`))
-    } else if (event.event === 'starting') {
-      knobView.phase = 'starting'
     } else if (event.event === 'error') {
-      knobView.phase = 'error'
-      knobView.message = String(event.message ?? event.code ?? '').slice(0, 200)
       if (`${event.code}` !== knobError) {
         knobError = `${event.code}`
         log.warn(`[nfc] album knob: ${event.code}: ${event.message}`)
       }
     } else if (event.event === 'ready') {
       knobError = ''
-      knobView.phase = 'ready'
-      knobView.message = ''
     }
   }
   const apply = (settings) => {
@@ -768,7 +758,6 @@ exports.activate = (host) => {
           await knobRunner?.stop()
           knobRunner = null
           knobRunning = ''
-          Object.assign(knobView, { phase: '', message: '', turnAt: 0, pressAt: 0 })
           if (knobWanted) {
             knobRunning = knobCommand
             knobRunner = createRunner({
@@ -861,16 +850,6 @@ exports.activate = (host) => {
         process: first.runner ? first.runner.state() : null,
         history,
       })
-    },
-    { session: true },
-  )
-
-  // The album knob: the lines of the status on its page
-  host.route(
-    'get',
-    '/knobstate',
-    async (_req, res) => {
-      res.json({ rows: knobRows(knobConfig((await host.settings()) ?? {}), knobView) })
     },
     { session: true },
   )

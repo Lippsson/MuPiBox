@@ -8,7 +8,7 @@ import type { Router } from 'express'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { requireCsrf, requireSession } from './middleware'
 import { bootConfigPath } from './boot-paths'
-import { ROTARY_DIRECTIONS, ROTARY_EXTRA_BUTTONS, ROTARY_EXTRA_MAX, rotaryButtonOn, rotaryDirections, rotaryExtras, rotaryHeldPins, rotaryPins } from './extension-resources'
+import { ROTARY_DIRECTIONS, ROTARY_EXTRA_BUTTONS, ROTARY_EXTRA_MAX, rotaryButtonOn, rotaryDirections, rotaryExtras, rotaryHeldPins, rotaryName, rotaryPins } from './extension-resources'
 import { extensionGpio, takenForRotary } from './extensions'
 import { hdmiAudioWritten, onboardAudioWritten, reapplyOnboardAudio, setHdmiAudio, setOnboardAudio } from '../audio-output'
 
@@ -189,10 +189,11 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
         running: rotaryActive,
         pins: rotaryPinsOf(deps.getMupiboxConfig()),
         ...rotaryDirections(deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined),
+        name: rotaryName(rotary.name),
         step: int(rotary.step, 1, 10) ?? 5,
         button: BUTTON.includes(String(rotary.button)) ? rotary.button : 'off',
         // (more encoders: each sets the volume or skips tracks)
-        extra: rotaryExtras(deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined).map((k) => ({ id: k.id, right: k.right, left: k.left, pins: { a: k.a, b: k.b, button: k.button }, step: k.step, button: k.buttonFn })),
+        extra: rotaryExtras(deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined).map((k) => ({ id: k.id, name: k.name, right: k.right, left: k.left, pins: { a: k.a, b: k.b, button: k.button }, step: k.step, button: k.buttonFn })),
         extraMax: ROTARY_EXTRA_MAX,
       },
       mupihat: {
@@ -348,6 +349,10 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
     }
     const set = [pins.a, pins.b, pins.button].filter((pin) => pin !== 0)
     if (pinsGiven && new Set(set).size !== set.length) return void res.status(409).json({ error: 'gpio_twice' })
+    if (body.name !== undefined) {
+      if (typeof body.name !== 'string' || body.name.length > 60) return void res.status(400).json({ error: 'invalid name' })
+      values.name = rotaryName(body.name)
+    }
     for (const key of ['right', 'left'] as const) {
       if (body[key] !== undefined && !ROTARY_DIRECTIONS.some((d) => d === body[key])) return void res.status(400).json({ error: `invalid ${key}` })
       if (body[key] !== undefined) values[key] = body[key]
@@ -417,8 +422,8 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
 
   const extraNow = () => rotaryExtras(deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined)
   const configNow = () => deps.getMupiboxConfig() as unknown as Record<string, unknown> | undefined
-  type ExtraEntry = { id: string; right: string; left: string; pinA: number; pinB: number; pinButton: number; button: string; step: number }
-  const asEntry = (k: ReturnType<typeof extraNow>[number]): ExtraEntry => ({ id: k.id, right: k.right, left: k.left, pinA: k.a, pinB: k.b, pinButton: k.button, button: k.buttonFn, step: k.step })
+  type ExtraEntry = { id: string; name: string; right: string; left: string; pinA: number; pinB: number; pinButton: number; button: string; step: number }
+  const asEntry = (k: ReturnType<typeof extraNow>[number]): ExtraEntry => ({ id: k.id, name: k.name, right: k.right, left: k.left, pinA: k.a, pinB: k.b, pinButton: k.button, button: k.buttonFn, step: k.step })
 
   /**
    * POST /api/app/rotary-extra {id?, right?, left?, pinA?, pinB?, pinButton?, button?, step?} - another rotary encoder: what a turn to the right and
@@ -432,6 +437,8 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
     const current = body.id === undefined ? undefined : list.find((k) => k.id === body.id)
     if (body.id !== undefined && !current) return void res.status(404).json({ error: 'not_found' })
     if (!current && list.length >= ROTARY_EXTRA_MAX) return void res.status(409).json({ error: 'too_many' })
+    if (body.name !== undefined && (typeof body.name !== 'string' || body.name.length > 60)) return void res.status(400).json({ error: 'invalid name' })
+    const name = body.name === undefined ? (current?.name ?? '') : rotaryName(body.name)
     const direction = (key: 'right' | 'left', fallback: string): string | undefined => (body[key] === undefined ? (current?.[key] ?? fallback) : ROTARY_DIRECTIONS.find((d) => d === body[key]))
     const right = direction('right', 'up')
     const left = direction('left', 'down')
@@ -460,7 +467,7 @@ export function registerHardwareRoutes(router: Router, deps: HardwareDeps): void
       if (holders?.length && !own.includes(p)) return void res.status(409).json({ error: 'gpio_taken', pin: p, by: holders.join(', ') })
     }
     const id = current?.id ?? (Array.from({ length: ROTARY_EXTRA_MAX }, (_, i) => `k${i + 2}`).find((candidate) => !list.some((k) => k.id === candidate)) as string)
-    const entry: ExtraEntry = { id, right, left, pinA: pins.a, pinB: pins.b, pinButton: pins.button, button: buttonFn, step }
+    const entry: ExtraEntry = { id, name, right, left, pinA: pins.a, pinB: pins.b, pinButton: pins.button, button: buttonFn, step }
     // (in the order they were added: k2, k3 ...)
     const next = [...list.filter((k) => k.id !== id).map(asEntry), entry].sort((x, y) => x.id.localeCompare(y.id))
     await merge(deps, 'rotary', { extra: next })

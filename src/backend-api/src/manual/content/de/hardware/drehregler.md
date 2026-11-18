@@ -19,6 +19,7 @@ Die drei Pins sind die Vorgabe nach der Installation. Du kannst sie in den Einst
 
 | Einstellung | Wirkung |
 | --- | --- |
+| **Name** (oben in der Karte) | eine eigene Beschriftung für den Drehregler, zum Beispiel „Küche“; ohne Namen steht dort „Drehregler“ (der erste) oder „Drehregler 2“ usw. Wie bei den Tastern |
 | **Drehregler** | schaltet den Regler ein (nach der Installation ist er aus) |
 | **GPIO-Pin A (CLK)**, **GPIO-Pin B (DT)**, **GPIO-Pin Taster** | die Pins, an denen der Regler angeschlossen ist (siehe „Die Pins ändern“). Jeder Pin darf auch **Kein Pin** sein |
 | **Rechts herum drehen** (unter Pin A), **Links herum drehen** (unter Pin B) | was eine Raste in dieser Richtung tut: **Lauter**, **Leiser**, **Nächster Titel**, **Voriger Titel** oder **Aus**. Die Voreinstellung ist rechts lauter und links leiser |
@@ -67,7 +68,8 @@ Unter dem ersten Drehregler steht **Drehregler hinzufügen**. Jeder weitere Dreh
 | **Rechts herum drehen**, **Links herum drehen** | was eine Raste in dieser Richtung tut: **Lauter**, **Leiser**, **Nächster Titel**, **Voriger Titel** oder **Aus** (Voreinstellung: rechts lauter, links leiser) |
 | **Schritt pro Raste** | bei **Lauter** und **Leiser**: wie viel Prozent eine Raste ändert |
 | **Funktion des Tasters** | **Aus**, **Play/Pause**, **Nächster Titel** oder **Vorspulen** |
-| **Drehregler entfernen** | löscht ihn; seine Pins sind wieder frei |
+| **Name** (oben in der Karte) | die Beschriftung des Drehreglers |
+| Mülleimer-Symbol (rechts neben dem Namen) | entfernt den Drehregler; seine Pins sind wieder frei |
 
 So gibt es zum Beispiel einen Drehregler für die Lautstärke und einen zweiten nur für die Titel (rechts **Nächster Titel**, links **Voriger Titel**). Es sind bis zu **vier weitere** möglich, solange genug GPIO-Pins frei sind. Die Listen zeigen nur Pins, die nichts anderes nutzt, auch keinen anderen Drehregler. Die Pins ändern oder einen Drehregler entfernen gilt sofort: Die Box startet den Dienst neu.
 

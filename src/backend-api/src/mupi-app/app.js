@@ -756,7 +756,14 @@ function renderSection(sec) {
   const wide = sec.wide === true || (sec.items || []).some((i) => ['themegrid', 'bootgrid', 'log', 'json', 'checks'].includes(i.type))
   const onlyNav = (sec.items || []).length > 0 && sec.items.every((i) => i.type === 'nav')
   // sec.col: the column on the PC (1 left, 2 right; see balanceCols), sec.badge: a chip beside the title
-  const head = sec.title
+  // sec.nameKey: the head is a field for a name the user gives the card (its title is the placeholder, as with the buttons of the
+  // extension of buttons); sec.remove: [action, label] - a trash button beside the name instead of a button in the card
+  const trash = sec.remove
+    ? `<button type="button" class="ext-group-del" data-act="${esc(sec.remove[0])}" data-label="${esc(sec.remove[1])}" aria-label="Entfernen" title="Entfernen"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`
+    : ''
+  const head = sec.nameKey
+    ? `<div class="ext-group"><div class="ext-group-head"><input class="input ext-group-name" type="text" maxlength="30" data-key="${esc(sec.nameKey)}" value="${esc(state.values.get(sec.nameKey) ?? '')}" placeholder="${esc(sec.title)}" aria-label="Name" autocomplete="off" ${NO_PW_MANAGER}>${trash}</div></div>`
+    : sec.title
     ? sec.badge
       ? `<div class="card-head"><h2>${esc(sec.title)}</h2><span class="chip ${esc(sec.badge.kind ?? '')}">${esc(sec.badge.text)}</span></div>`
       : `<h2>${esc(sec.title)}</h2>`
@@ -9757,13 +9764,14 @@ const RK_PIN_PARTS = [
   ['btn', 'button', 'pinButton', 'GPIO-Pin Taster'],
 ]
 const rkKey = (id, part) => `rk_${id}_${part}`
-const rkParse = (key) => /^rk_([a-z0-9]+)_(right|left|a|b|btn|step|bfn)$/.exec(String(key))
+const rkParse = (key) => /^rk_([a-z0-9]+)_(name|right|left|a|b|btn|step|bfn)$/.exec(String(key))
 
 async function loadRotary() {
   await loadHardware()
   const r = hw.data.rotary
   state.values.set('rotary', r.active)
   state.values.set('rotStep', r.step)
+  state.values.set('rotName', r.name ?? '')
   state.values.set('rotRight', directionText(r.right, 'up'))
   state.values.set('rotLeft', directionText(r.left, 'down'))
   state.values.set('btnFn', BTN_FN.find(([, v]) => v === r.button)?.[0] ?? 'Aus')
@@ -9784,6 +9792,7 @@ async function loadRotary() {
   hw.rotaryExtra = r.extra ?? []
   hw.rotaryExtraMax = r.extraMax ?? 4
   for (const k of hw.rotaryExtra) {
+    state.values.set(rkKey(k.id, 'name'), k.name ?? '')
     state.values.set(rkKey(k.id, 'right'), directionText(k.right, 'up'))
     state.values.set(rkKey(k.id, 'left'), directionText(k.left, 'down'))
     for (const [part, name] of RK_PIN_PARTS) state.values.set(rkKey(k.id, part), rotaryPinText(k.pins[name]))
@@ -18402,7 +18411,7 @@ function extPageController(entry, sub = 0) {
       const part = own.e?.enabled ? merged().find((m) => m.keys.includes(key)) : null
       if (part) return part.ctrl.change?.(key, v, page)
       // (the fields a page of the core draws itself - the knobs it was told to add - are not in its schema: its own sections say)
-      const owner = adopted().find((a) => (a.ctrl.sections?.(a.page) ?? a.page.sections ?? []).some((sec) => (sec.items || []).some((it) => it.key === key)))
+      const owner = adopted().find((a) => (a.ctrl.sections?.(a.page) ?? a.page.sections ?? []).some((sec) => sec.nameKey === key || (sec.items || []).some((it) => it.key === key)))
       return owner?.ctrl.change?.(key, v, page)
     },
     mount(root, page) {
@@ -19649,6 +19658,9 @@ const CONTROLLERS = {
       }
       const extraSections = extras.map((k, i) => ({
         title: `${tr('Drehregler')} ${i + 2}`,
+        // (a name of its own in the head, as the buttons have, and the trash beside it - no button in the card)
+        nameKey: rkKey(k.id, 'name'),
+        remove: [`rkdel:${k.id}`, String(state.values.get(rkKey(k.id, 'name')) || `${tr('Drehregler')} ${i + 2}`)],
         help: tr('Dieser Drehregler tut, was du für jede Drehrichtung wählst. Zum Drehen braucht er Pin A und Pin B.'),
         items: [
           ...knobItems({
@@ -19661,7 +19673,6 @@ const CONTROLLERS = {
             stepItem: (key) => ({ type: 'slider', label: 'Schritt pro Raste', key, default: k.step, min: 1, max: 10, step: 1, unit: ' %' }),
             buttonItem: (pin) => ({ type: 'select', label: `Funktion des Tasters (GPIO ${pin})`, key: rkKey(k.id, 'bfn'), default: state.values.get(rkKey(k.id, 'bfn')), options: RK_BUTTONS.map(([label]) => label) }),
           }),
-          { type: 'buttons', buttons: [['Drehregler entfernen', 'danger', `rkdel:${k.id}`]] },
         ],
       }))
       const addSection = {
@@ -19671,6 +19682,9 @@ const CONTROLLERS = {
       }
       return [...withoutSave(page).map((sec) => ({
         ...sec,
+        // (the first knob can be named too: its head is the field - the title is its placeholder)
+        nameKey: 'rotName',
+        title: sec.title || 'Drehregler',
         help: [
           'Zur Wahl stehen nur Pins, die nichts anderes nutzt. „Kein Pin“ lässt einen Anschluss weg. Zum Drehen braucht der Drehregler Pin A und Pin B, für jede Drehrichtung wählst du, was passiert.',
           ...clash,
@@ -19717,7 +19731,8 @@ const CONTROLLERS = {
         const [, id, what] = extra
         const part = RK_PIN_PARTS.find(([name]) => name === what)
         const body = { id }
-        if (what === 'right' || what === 'left') body[what] = directionValue(v)
+        if (what === 'name') body.name = String(v ?? '').trim()
+        else if (what === 'right' || what === 'left') body[what] = directionValue(v)
         else if (part) body[part[2]] = rotaryPinNumber(v)
         else if (what === 'step') body.step = v
         else if (what === 'bfn') body.button = RK_BUTTONS.find(([l]) => l === v)?.[1]
@@ -19729,11 +19744,23 @@ const CONTROLLERS = {
           return toast(r.body?.error === 'gpio_twice' ? 'Dieser Pin gehört schon einem anderen Drehregler' : r.body?.error === 'gpio_taken' ? `GPIO ${r.body.pin} ist schon belegt: ${String(r.body.by ?? '').split(', ').map(extWho).join(', ')}` : 'Nicht gespeichert', 'info')
         }
         // (the function, a pin or the button given or taken away: the page shows the right fields and what the pins share)
-        if (what !== 'step') {
+        if (what === 'name') {
+          // (the cards of the page - "Auf dieser Seite" - are named by it)
+          state.values.set(key, body.name)
+          document.dispatchEvent(new Event('mupi-cards'))
+        } else if (what !== 'step') {
           await loadRotary()
           renderPage(currentPage(), false)
         }
         return toast(r.body?.running === false ? 'Gespeichert – der Drehregler startet gerade nicht' : 'Gespeichert', r.body?.running === false ? 'info' : 'ok')
+      }
+      if (key === 'rotName') {
+        const name = String(v ?? '').trim()
+        const r = await api(`${API}/rotary`, { method: 'POST', body: { name } })
+        if (!r.ok) return toast('Nicht gespeichert', 'info')
+        state.values.set('rotName', name)
+        document.dispatchEvent(new Event('mupi-cards'))
+        return toast('Gespeichert')
       }
       const pinItem = ROTARY_PIN_ITEMS.find(([k]) => k === key)
       const body = pinItem ? { [pinItem[2]]: rotaryPinNumber(v) } : key === 'rotary' ? { active: v } : key === 'rotStep' ? { step: v } : key === 'rotRight' ? { right: directionValue(v) } : key === 'rotLeft' ? { left: directionValue(v) } : key === 'btnFn' ? { button: BTN_FN.find(([l]) => l === v)?.[1] } : null

@@ -19,6 +19,7 @@ The three pins are the default after installation. You can change them in the se
 
 | Setting | Effect |
 | --- | --- |
+| **Name** (top of the card) | a label of your own for the knob, for example "Kitchen"; without a name it says "Rotary knob" (the first) or "Rotary knob 2" and so on. As with the buttons |
 | **Rotary knob** | switches the knob on (after installation it is off) |
 | **GPIO pin A (CLK)**, **GPIO pin B (DT)**, **GPIO pin (button)** | the pins the knob is connected to (see "Changing the pins"). Each pin may also be **No pin** |
 | **Turn clockwise** (under pin A), **Turn counterclockwise** (under pin B) | what a detent in that direction does: **Louder**, **Quieter**, **Next track**, **Previous track** or **Off**. The default is louder clockwise and quieter counterclockwise |
@@ -67,7 +68,8 @@ Below the first knob there is **Add rotary knob**. Each further knob has a card 
 | **Turn clockwise**, **Turn counterclockwise** | what a detent in that direction does: **Louder**, **Quieter**, **Next track**, **Previous track** or **Off** (default: louder clockwise, quieter counterclockwise) |
 | **Step per detent** | with **Louder** and **Quieter**: how many percent a detent changes |
 | **Function of the button** | **Off**, **Play/Pause**, **Next track** or **Fast-forward** |
-| **Remove knob** | deletes it; its pins are free again |
+| **Name** (top of the card) | the label of the knob |
+| Trash symbol (right of the name) | removes the knob; its pins are free again |
 
 So you can have, say, one knob for the volume and a second only for the tracks (clockwise **Next track**, counterclockwise **Previous track**). Up to **four more** are possible as long as enough GPIO pins are free. The lists show only pins nothing else uses, including no other knob. Changing the pins or removing a knob takes effect at once: the box restarts the service.
 
