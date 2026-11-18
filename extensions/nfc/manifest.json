@@ -1,7 +1,7 @@
 {
   "id": "nfc",
   "name": "NFC-Extension",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Bis zu drei NFC-Leser lesen Tags und Karten, auch gleichzeitig: der PN5180 (ISO 14443 A und ISO 15693), der RC522 und der PN532 (ISO 14443 A) oder ein USB-Leser, der die Kartennummer wie eine Tastatur tippt (auch ein USB-Barcodeleser). Jeder Tag kann ein Album, ein Hörspiel, einen Sender oder einen Podcast starten: In der Bibliothek das Medium öffnen, „NFC-Tag“ antippen und den Tag auflegen. Die Einstellungen stehen unter Einstellungen › NFC-Extension.",
   "hostApi": 12,
   "resources": {},
@@ -284,13 +284,8 @@
     "rotarySeconds": {
       "type": "number",
       "default": 20,
-      "options": [
-        10,
-        20,
-        30,
-        60,
-        120
-      ]
+      "min": 0,
+      "max": 120
     }
   },
   "system": {
@@ -855,7 +850,10 @@
         "type": "heading",
         "label": "Drehregler",
         "page": true,
-        "help": "Ein Tag auf einem Artistcover (in der Bibliothek den Artisten öffnen, „NFC-Tag“ antippen) spielt das Album, das du in der Liste „Zugeordnete Tags“ gewählt hast. Nach dem Auflegen wählt der Drehregler (KY-040) unter den Alben dieses Artisten: Drehen geht zum nächsten oder vorigen Album, ein Druck auf den Taster spielt es. Ein OLED-Display zeigt dabei den Namen, den der Drehregler gerade hat. Der Drehregler muss unter Einstellungen › Drehregler eingerichtet sein, sein Taster braucht einen eigenen Pin."
+        "help": "Ein Tag auf einem Artistcover (in der Bibliothek den Artisten öffnen, „NFC-Tag“ antippen) spielt das Album, das du in der Liste „Zugeordnete Tags“ gewählt hast. Nach dem Auflegen wählt der Drehregler (KY-040) unter den Alben dieses Artisten: Drehen geht zum nächsten oder vorigen Album, ein Druck auf den Taster spielt es. Ein OLED-Display zeigt dabei den Namen, den der Drehregler gerade hat. Die Anschlüsse des Drehreglers stehen darunter; sein Taster braucht einen eigenen Pin.",
+        "adopt": [
+          "rotary"
+        ]
       },
       {
         "key": "rotary",
@@ -864,31 +862,10 @@
       },
       {
         "key": "rotarySeconds",
-        "label": "Nach dem Auflegen aktiv für",
-        "choices": [
-          {
-            "value": 10,
-            "label": "10 Sekunden"
-          },
-          {
-            "value": 20,
-            "label": "20 Sekunden"
-          },
-          {
-            "value": 30,
-            "label": "30 Sekunden"
-          },
-          {
-            "value": 60,
-            "label": "1 Minute"
-          },
-          {
-            "value": 120,
-            "label": "2 Minuten"
-          }
-        ],
+        "label": "Nach dem Auflegen aktiv (Sekunden)",
         "dep": "rotary",
-        "help": "So lange nach dem Auflegen und nach jedem Drehen wählt der Drehregler Alben. Danach stellt er wieder die Lautstärke ein."
+        "help": "So lange nach dem Auflegen und nach jedem Drehen wählt der Drehregler Alben, danach stellt er wieder die Lautstärke ein. 0 heißt immer aktiv: bis du ein Album mit dem Taster wählst oder einen anderen Tag auflegst.",
+        "slider": true
       },
       {
         "type": "heading",

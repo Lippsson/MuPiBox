@@ -50,6 +50,18 @@ test('the time: every turn starts it anew, when it is over the knob is the box a
   assert.strictEqual(rotary.press(turned.state, 19000), null)
 })
 
+test('0 seconds: no time limit - the knob stays the knob of the albums until one is chosen', () => {
+  const start = rotary.begin({ uid: 'AA', albums: three, currentKey: 'a', seconds: 0, now: 0 })
+  const day = 24 * 3600 * 1000
+  assert.strictEqual(rotary.isActive(start, day), true)
+  const turned = rotary.turn(start, 1, day)
+  assert.strictEqual(turned.shown.album.key, 'b')
+  assert.strictEqual(rotary.isActive(turned.state, 3 * day), true, 'every turn keeps it without a limit')
+  const pressed = rotary.press(turned.state, 3 * day)
+  assert.strictEqual(pressed.album.key, 'b')
+  assert.strictEqual(rotary.isActive(pressed.state, 3 * day + 1), false, 'the choice ends it')
+})
+
 test('one album, or none: there is nothing to choose from', () => {
   assert.strictEqual(rotary.isActive(rotary.begin({ uid: 'AA', albums: [{ key: 'a' }], currentKey: 'a', seconds: 30, now: 0 }), 1), false)
   assert.strictEqual(rotary.isActive(rotary.idle(), 1), false)
@@ -176,6 +188,41 @@ test('an artist cover: assigned, laid on, the knob chooses an album, a press pla
     nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04A1B2C3' })
     await later(50)
     assert.strictEqual((await call(routes['get /pending'])).body.media.libraryPath, 'audiobook/Astrid Lindgren/Ronja')
+  } finally {
+    global.fetch = realFetch
+  }
+})
+
+test('0 seconds in the settings: the knob stays taken over, the display shows the name for the longest time, another tag ends it', async () => {
+  const realFetch = global.fetch
+  const oled = []
+  global.fetch = async (url, init) => {
+    const u = String(url)
+    if (u.startsWith('http://api.test/api/library/children')) return { ok: true, json: async () => children }
+    if (u.startsWith('http://api.test/api/ext/oled/select')) {
+      oled.push(JSON.parse(init.body))
+      return { ok: true, json: async () => ({ ok: true }) }
+    }
+    return { ok: true, json: async () => ({ currentPlayer: '', playing: false }) }
+  }
+  try {
+    const { host, routes, dataDir } = makeHost({ reader: 'none', onRemove: 'nothing', playOnTag: true, rotary: true, rotarySeconds: 0 })
+    const nfc = require('../api.js').activate(host)
+    await later(0)
+    nfc.feed({ event: 'ready', firmware: '4.0', product: '4.0' })
+    await call(routes['post /arm'], { body: { media: folder } })
+    nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04A1B2C3' })
+    await later()
+    assert.ok(Number(fs.readFileSync(path.join(dataDir, 'rotary-capture'), 'utf8')) > Date.now())
+    assert.deepStrictEqual((await call(routes['post /rotary'], { body: { turn: 1 } })).body, { handled: true })
+    assert.deepStrictEqual(oled.at(-1), { title: 'Pippi', artist: 'Astrid Lindgren', index: 2, count: 3, seconds: 300 })
+    // (another tag, no collection: the knob is the box's again and the display shows the player)
+    nfc.feed({ event: 'gone' })
+    nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04FFEEDD' })
+    await later(50)
+    assert.deepStrictEqual((await call(routes['post /rotary'], { body: { turn: 1 } })).body, { handled: false })
+    assert.strictEqual(fs.existsSync(path.join(dataDir, 'rotary-capture')), false)
+    assert.deepStrictEqual(oled.at(-1), { clear: true })
   } finally {
     global.fetch = realFetch
   }

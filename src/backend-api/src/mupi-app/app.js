@@ -18220,7 +18220,12 @@ function extPageController(entry, sub = 0) {
     const at = starts()
     return own.e.ui.items.slice(at[sub - 1] + 1, at[sub] ?? own.e.ui.items.length)
   }
-  const adopted = () => (sub ? [] : entry.adopt).map((id) => ({ page: state.pages.get(id), ctrl: CONTROLLERS[id] })).filter((a) => a.page && a.ctrl)
+  // (a sub page can show pages of the core as well: its heading says which - the knob's pins on the page of the knob)
+  const subAdopt = () => {
+    const heading = sub && own.e?.ui ? own.e.ui.items[starts()[sub - 1]] : null
+    return Array.isArray(heading?.adopt) ? heading.adopt.map((a) => EXT_ADOPTABLE[a]).filter((id) => id && state.pages.has(id)) : []
+  }
+  const adopted = () => (sub ? subAdopt() : entry.adopt).map((id) => ({ page: state.pages.get(id), ctrl: CONTROLLERS[id] })).filter((a) => a.page && a.ctrl)
   // (a page of cards that took over pages of the core: those come first - the rotary knob top left - and the cards of the
   // extension after them, in the two columns; else its cards would be below the pages of the core, or beside them in rows)
   const split = () => !!own.e?.enabled && adopted().length > 0 && slice().some((it) => it.type === 'heading' && it.card)

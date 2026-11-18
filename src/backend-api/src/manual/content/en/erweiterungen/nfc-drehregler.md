@@ -33,16 +33,16 @@ If the [OLED display](oled.md) is connected, turning shows **in the information 
 
 ## Settings
 
-**Settings › NFC extension › Rotary knob**:
+**Settings › NFC extension › Rotary knob**. Below the settings are the **connections of the rotary knob** (pins A, B and button, plus the step size and the function of the button), which are also under **Settings › Rotary knob**: you set them here or there, it is the same setting.
 
 | Setting | Effect |
 | --- | --- |
 | **Rotary knob chooses the album** | Off: the rotary knob only sets the volume, as before. |
-| **Active after laying on for** | 10 seconds to 2 minutes (default 20 seconds): for this long after laying on, and after each turn, the knob chooses albums. |
+| **Active after laying on (seconds)** | A slider from **0 to 120 seconds** (default 20): for this long after laying on, and after each turn, the knob chooses albums, then it sets the volume again. **0** means **always active**: the knob chooses albums until you choose one with the button or lay on another tag. The OLED display then shows the name for up to five minutes after the last turn. |
 
 ## What it takes
 
-- The **rotary knob** is set up under **Settings › Rotary knob** ([Rotary knob and button](../hardware/drehregler.md)).
+- The **rotary knob** is set up: its pins are on this page or under **Settings › Rotary knob** ([Rotary knob and button](../hardware/drehregler.md)).
 - Its **button** has a **pin of its own**. GPIO 10, the default, belongs to an NFC reader on the SPI connection: the button does nothing there. Choose another pin in the settings of the rotary knob. The function of the button can be **Off**; as long as the NFC extension has the knob, it uses it all the same.
 - The artist cover has **at least two** albums. With a single one there is nothing to choose.
 

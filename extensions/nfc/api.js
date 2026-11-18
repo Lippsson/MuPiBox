@@ -49,7 +49,9 @@ const ERROR_LOG_MS = 6 * 60 * 60 * 1000
 // it holds the time (ms since 1970) up to which it does, renewed every few seconds, so that a server that went down lets go of the knob
 const ROTARY_FLAG_FILE = '/tmp/mupibox-rotary-capture'
 const ROTARY_FLAG_MS = 15000
-const ROTARY_SECONDS = 30
+const ROTARY_SECONDS = 20
+// (the display shows the name this long at most when the knob has no time limit: it takes up to five minutes)
+const OLED_SELECT_MAX_S = 300
 // the albums of a collection are kept this long (the list of tags and the knob ask for them often), and no more are taken
 const ALBUMS_KEEP_MS = 60000
 const ALBUMS_MAX = 200
@@ -431,13 +433,21 @@ exports.activate = (host) => {
     if (!albums.some((album) => album.key === current)) choices.unshift({ value: current, label: String(tag.media.title ?? '').slice(0, 90) || tags.mediaLabel(tag.media) })
     return { label: 'Album beim Auflegen', value: current, choices, post: '/api/ext/nfc/tagalbum' }
   }
+  // The choice is over (another tag was laid on): the knob is the box's again and the display shows the player
+  const endChoice = () => {
+    knob = rotary.idle()
+    setFlag(0)
+    showOnOled({ clear: true })
+  }
   // A tag of a collection was laid on: the knob is for its albums now (when the settings allow it)
   const rotaryBegin = async (tag, settings) => {
     const collection = tags.collectionOf(tag.media)
     if (!collection || settings.rotary === false) return
     const albums = await albumsOf(collection)
     if (!albums || albums.length < 2) return
-    const seconds = Number(settings.rotarySeconds) > 0 ? Number(settings.rotarySeconds) : ROTARY_SECONDS
+    // (0 seconds: no limit - until a choice is made or another tag is laid on; not set at all: the default)
+    const asked = Number(settings.rotarySeconds)
+    const seconds = settings.rotarySeconds === undefined || !Number.isFinite(asked) ? ROTARY_SECONDS : Math.max(0, asked)
     knob = rotary.begin({ uid: tag.uid, albums, currentKey: tags.albumKey(tag.media), seconds, now: Date.now() })
     setFlag(Date.now() + ROTARY_FLAG_MS)
   }
@@ -623,6 +633,7 @@ exports.activate = (host) => {
     if (again && !result.armedId) return
     if (result.kind !== 'unknown' && settings.playOnTag !== false) await start(result.tag, settings, reader)
     // (a tag of an artist cover: the knob chooses among its albums for a while)
+    if (knob.uid && knob.uid !== result.tag.uid && !tags.collectionOf(result.tag.media)) endChoice()
     if (result.kind !== 'unknown') rotaryBegin(result.tag, settings).catch((error) => log.warn(`[nfc] rotary: ${error?.message ?? error}`))
     // (a tag without a medium: the box says so - not while the assignment of one waits for it, then it is being given its medium)
     else if (result.kind === 'unknown' && !result.armedId) await say('tagNew', settings)
@@ -1224,7 +1235,7 @@ exports.activate = (host) => {
       knob = result.state
       const { album, index, count } = result.shown
       const collection = tags.collectionOf(album.media)
-      showOnOled({ title: album.label, artist: String(collection?.browseTitle ?? ''), index: index + 1, count, seconds: Math.round(knob.windowMs / 1000) })
+      showOnOled({ title: album.label, artist: String(collection?.browseTitle ?? ''), index: index + 1, count, seconds: knob.windowMs > 0 ? Math.round(knob.windowMs / 1000) : OLED_SELECT_MAX_S })
       return res.json({ handled: true })
     }
     if (body.button === true) {

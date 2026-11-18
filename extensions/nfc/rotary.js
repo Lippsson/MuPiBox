@@ -5,7 +5,7 @@
 //   uid       the tag whose collection is being looked at ('' = no tag: the knob is not taken over)
 //   albums    [{ key, label, media }] in the order of the list
 //   index     the album the knob is on
-//   until     the time up to which the knob is taken over; every turn of the knob starts the time anew
+//   until     the time up to which the knob is taken over; every turn of the knob starts the time anew (Infinity: no limit - 0 seconds)
 //   selecting true once the knob was turned: only then does a press choose the album (before, it does what it always does)
 'use strict'
 
@@ -16,12 +16,13 @@ const idle = () => ({ uid: '', albums: [], index: 0, until: 0, windowMs: 0, sele
 const isActive = (state, now) => Boolean(state.uid) && state.albums.length > 1 && now < state.until
 
 /**
- * A tag of a collection was laid on: the knob is taken over for `seconds` and stands on the album the tag plays (`currentKey`, the
+ * A tag of a collection was laid on: the knob is taken over for `seconds` (0: until a choice is made) and stands on the album the tag plays (`currentKey`, the
  * albumKey of its medium - the first album if it is not in the list).
  */
 function begin({ uid, albums, currentKey, seconds, now }) {
   const found = albums.findIndex((album) => album.key === currentKey)
-  return { uid, albums, index: Math.max(0, found), until: now + seconds * 1000, windowMs: seconds * 1000, selecting: false }
+  const limit = seconds > 0 ? seconds * 1000 : 0
+  return { uid, albums, index: Math.max(0, found), until: limit ? now + limit : Infinity, windowMs: limit, selecting: false }
 }
 
 /**
@@ -32,7 +33,7 @@ function turn(state, direction, now) {
   if (!isActive(state, now)) return null
   const count = state.albums.length
   const index = (((state.index + (direction > 0 ? 1 : -1)) % count) + count) % count
-  const next = { ...state, index, until: now + state.windowMs, selecting: true }
+  const next = { ...state, index, until: state.windowMs > 0 ? now + state.windowMs : Infinity, selecting: true }
   return { state: next, shown: { album: next.albums[index], index, count } }
 }
 

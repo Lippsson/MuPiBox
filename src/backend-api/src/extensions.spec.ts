@@ -387,6 +387,17 @@ describe('GPIO pins the user chooses, and a page of its own (hostApi 5)', () => 
     assert.ok(checkManifest(manifest({}, { place: 'system', adopt: ['rotary', 'rotary'] }), files()))
     assert.ok(checkManifest(manifest({}, { place: 'system', adopt: 'rotary' }), files()))
   })
+
+  it('a sub page may show a page of the core: only on a heading that starts a page, only what the core lets go', () => {
+    const heading = (extra: Record<string, unknown>) => manifest({}, { place: 'system', items: [{ type: 'heading', label: 'Erste', page: true }, { type: 'heading', label: 'Drehregler', page: true, ...extra }] }, 12)
+    assert.strictEqual(checkManifest(heading({ adopt: ['rotary'] }), files()), null)
+    assert.strictEqual(checkManifest(heading({}), files()), null)
+    assert.ok(checkManifest(heading({ adopt: ['passwort'] }), files()), 'only what the core lets go')
+    assert.ok(checkManifest(heading({ adopt: ['rotary', 'rotary'] }), files()))
+    assert.ok(checkManifest(heading({ adopt: [] }), files()))
+    assert.ok(checkManifest(heading({ adopt: 'rotary' }), files()))
+    assert.ok(checkManifest(manifest({}, { place: 'system', items: [{ type: 'heading', label: 'Karte', card: true, adopt: ['rotary'] }] }, 12), files()), 'a card is no page')
+  })
 })
 
 describe('a status block (hostApi 6)', () => {
