@@ -34,3 +34,8 @@ tools/winamp-sandbox/.skin/
 tools/winamp-sandbox/.skins/
 tools/winamp-sandbox/.skin-code.cjs
 tools/winamp-preview/out/
+
+# virtual box (tools/virtual-box): its Python, its pictures, and what the backend keeps in development
+tools/virtual-box/.work/
+src/backend-api/config/*
+!src/backend-api/config/.gitkeep

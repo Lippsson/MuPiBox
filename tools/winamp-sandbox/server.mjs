@@ -20,6 +20,8 @@ const arg = (name, fallback) => {
   return i >= 0 ? process.argv[i + 1] : fallback
 }
 let THEME = arg('theme', 'winamp')
+// --player-only: just the pretend player on port 5005, no display and no box API (tools/virtual-box runs the real backend beside it)
+const PLAYER_ONLY = process.argv.includes('--player-only')
 let themeReloadAt = 0 // (the display polls /local and loads the theme again when this goes up)
 // the display options the sandbox keeps (the app's page Display, e.g. the clock in the header)
 const OPTIONS = { clockShow: true, clockStyle: 'digital', clockHours: 24 }
@@ -475,7 +477,8 @@ const inside = (base, rel) => {
   return f.startsWith(base) ? f : ''
 }
 
-createServer((req, res) => {
+if (!PLAYER_ONLY)
+  createServer((req, res) => {
   cors(req, res)
   if (req.method === 'OPTIONS') return res.writeHead(204).end()
   const url = new URL(req.url, 'http://localhost:8200')
