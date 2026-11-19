@@ -220,6 +220,11 @@ ANTENNA_BARS = (6, 8, 10, 12, 14)
 BATTERY = ('..##################', '..#................#', '###.##.##.##.##.##.#', '#.#.##.##.##.##.##.#', '#.#.##.##.##.##.##.#',
            '#.#.##.##.##.##.##.#', '###.##.##.##.##.##.#', '..#................#', '..##################')
 BATTERY_SEGMENT_X = (4, 7, 10, 13, 16)
+# (where the battery stands from the left of its two digits, the last column of the A beside the arrows of the repeat, and the gap between the
+# elements of the top row)
+BATTERY_X = 13
+REPEAT_MARK_END = 18
+STATUS_GAP = 5
 REPEAT = ('........#.....', '........##....', '..#########.#.', '........##..#.', '..#...#.#...#.', '.##..##.....#.', '..#.#########.', '..#..##.......', '..#...#.......')
 SHUFFLE = ('.........#...', '.........##..', '.####.######.', '....#.#..##..', '.....#...#...', '....#.#..##..', '.####.######.', '.........##..', '.........#...')
 # (nine pixels high, five wide, the battery's charge)
@@ -285,6 +290,12 @@ BLUETOOTH = ('..#....', '..##...', '#.#.#..', '.###...', '..#....', '.###...', '
 # (a monitor with a network plug at its left and the cable going down: the box is on the wired network)
 LAN = ('###############', '#####.........#', '#.#.#.........#', '#...#.........#', '#####.........#', '..#...........#', '..#############', '..#......#.....', '..#...#####....')
 SPEAKER = ('......#.', '.....##.', '..#####.', '.#..###.', '.#..###.', '.#..###.', '..#####.', '.....##.', '......#.')
+
+
+def extent(rows):
+    """The first and the last lit column of a picture given as lines of text."""
+    lit = [i for row in rows for i, ch in enumerate(row) if ch == '#']
+    return min(lit), max(lit)
 
 
 class Screens:
@@ -418,7 +429,7 @@ class Screens:
         """The two digits of the charge (x is the left of the digits) and the battery with five segments."""
         value = max(0, min(99, int(percent)))
         self._big_digits(draw, x, y, '%02d' % value, CHARGE_DIGITS)
-        bx = x + 13
+        bx = x + BATTERY_X
         self._art(draw, bx, y, BATTERY)
         segments = 0 if value < 5 else min(5, (value + 15) // 20)
         # (the picture has all five segments: the ones the charge does not reach are taken out again)
@@ -426,9 +437,10 @@ class Screens:
             draw.rectangle((bx + BATTERY_SEGMENT_X[i], y + 2, bx + BATTERY_SEGMENT_X[i] + 1, y + 6), fill=0)
 
     def _repeat(self, draw, x, y, kind):
-        """The two arrows and, to their right, an A (the whole list) or a 1 (this track)."""
+        """The two arrows and, to their right, an A when the whole list repeats (one track: the arrows alone)."""
         self._art(draw, x, y, REPEAT)
-        self._art(draw, x + 15, y + 1, DIGITS['1' if kind == 'track' else 'A'])
+        if kind != 'track':
+            self._art(draw, x + 15, y + 1, DIGITS['A'])
 
     def _shuffle(self, draw, x, y):
         self._art(draw, x, y, SHUFFLE)
@@ -441,17 +453,27 @@ class Screens:
     def status_bar(self, draw, state, info=False):
         """The top row of the 128 x 64 layout: wireless, battery (with a MuPiHAT), repeat, shuffle, the info mark while the
         network page is shown, and at the right the volume with the picture of where it plays."""
-        self._antenna(draw, 0, 0, state.get('wifi', -1), bool(state.get('lan')))
+        # (the elements stand in a row from the left, each 5 pixels after the one before - the ones that are not shown leave no gap)
+        x = 0
+        wifi, lan = state.get('wifi', -1), bool(state.get('lan'))
+        first, last = extent(LAN) if lan else extent(ANTENNA) if wifi < 0 else (0, ANTENNA_BARS[-1])
+        self._antenna(draw, x - first, 0, wifi, lan)
+        x += last - first + 1 + STATUS_GAP
         battery = state.get('battery')
         if isinstance(battery, (int, float)) and battery >= 0:
-            self._battery(draw, 17, 0, battery)
+            self._battery(draw, x, 0, battery)
+            x += BATTERY_X + extent(BATTERY)[1] + 1 + STATUS_GAP
         repeat = state.get('repeat')
         if repeat in ('all', 'track'):
-            self._repeat(draw, 51, 0, repeat)
+            first, last = extent(REPEAT)
+            self._repeat(draw, x - first, 0, repeat)
+            x += (REPEAT_MARK_END if repeat == 'all' else last) - first + 1 + STATUS_GAP
         if state.get('shuffle'):
-            self._shuffle(draw, 72, 0)
+            first, last = extent(SHUFFLE)
+            self._shuffle(draw, x - first, 0)
+            x += last - first + 1 + STATUS_GAP
         if info:
-            self._info_icon(draw, 88, 0)
+            self._info_icon(draw, x, 0)
         volume = state.get('volume')
         output = state.get('output')
         # (the speaker, as drawn, ends at the edge; the picture of the headphones or of Bluetooth is a bit wider or narrower)

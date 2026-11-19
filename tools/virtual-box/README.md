@@ -55,3 +55,5 @@ The OLED's action "Adresse der Box zeigen" has a button on the virtual box's pag
 
 For the player: `curl -X POST "http://localhost:8210/command?c=next"` (`pause`, `play`, `previous`, `stop`, `+5`, `-5`, `shuffleon`,
 `repeaton`, `musicsearch/library/album/music:Radio Hits` ...).
+
+Hinweis: Die Backend-Tests (`npm test` in `src/backend-api`) laufen im selben Ordner `src/backend-api/config` und schalten die Erweiterungen der virtuellen Box dabei ab („require is not defined“). Danach die virtuelle Box neu starten.

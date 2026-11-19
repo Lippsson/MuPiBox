@@ -1,7 +1,7 @@
 {
   "id": "oled",
   "name": "OLED-Display",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Ein kleines OLED-Display (SSD1306, SH1106 oder SSD1309 am I2C-Anschluss, 128 × 64 oder 128 × 32) zeigt, was die Box spielt: Titel, Interpret, Laufzeit, Titelnummer, Lautstärke, WLAN, Akku, Zufall und Wiederholen, Ausgang (Lautsprecher, Kopfhörer, Bluetooth) und die Uhrzeit. Dazu lässt sich die Box ganz ohne DSI-Display betreiben. Die Einstellungen stehen unter Einstellungen › OLED-Display.",
   "hostApi": 10,
   "resources": {},
@@ -197,7 +197,9 @@
       {
         "type": "heading",
         "label": "Anzeige",
-        "card": true
+        "card": true,
+        "help": "Oben in der Statusleiste der vollen Anzeige zeigt das Display, was die Box gerade hat: WLAN oder Netzwerkkabel, Akku, Wiederholen (mit A die ganze Liste, nur die Pfeile ein Titel), Zufall, auf der Netzwerkseite ein (i) und rechts die Lautstärke mit Lautsprecher, Kopfhörer oder Bluetooth. Das Bild zeigt alle Symbole.",
+        "image": "images/status-bar.svg"
       },
       {
         "key": "mode",
