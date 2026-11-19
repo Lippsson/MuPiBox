@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Virtuelle MuPiBox</title>
+<style>
+  body { font: 15px system-ui, sans-serif; background: #101014; color: #ddd; margin: 0; padding: 24px; max-width: 760px }
+  h1 { font-size: 20px; margin: 0 0 16px }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: #8a8fa0; margin: 24px 0 8px }
+  img { display: block; image-rendering: pixelated; width: 528px; max-width: 100%; border-radius: 6px; background: #000 }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px }
+  button { background: #2a2d3a; color: #eee; border: 1px solid #3b3f52; border-radius: 6px; padding: 7px 12px; cursor: pointer; font: inherit }
+  button:hover { background: #363a4d }
+  a { color: #7fb4ff }
+  .muted { color: #8a8fa0 }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #666; margin-right: 6px }
+  .ok { background: #4fb36b } .bad { background: #d94f4f }
+  code { background: #1c1e28; padding: 1px 5px; border-radius: 4px }
+</style>
+</head>
+<body>
+<h1>Virtuelle MuPiBox</h1>
+
+<h2>OLED-Display</h2>
+<img id="oled" src="/oled.png" alt="OLED-Display">
+<div class="muted" id="meta" style="margin-top:6px"></div>
+<div class="row">
+  <button data-post="/address">Adresse der Box zeigen (QR-Code)</button>
+  <a href="/oled.png" download="oled.png"><button>PNG speichern</button></a>
+</div>
+<p class="muted">Als Datei: <code>curl http://localhost:8210/oled.png -o oled.png</code></p>
+
+<h2>Player (ohne Ton)</h2>
+<div id="now" class="muted">–</div>
+<div class="row">
+  <button data-cmd="previous">⏮ Zurück</button>
+  <button data-cmd="pause">⏸ Pause</button>
+  <button data-cmd="play">▶ Play</button>
+  <button data-cmd="next">⏭ Weiter</button>
+  <button data-cmd="stop">⏹ Stopp</button>
+  <button data-cmd="-5">Leiser</button>
+  <button data-cmd="+5">Lauter</button>
+  <button data-cmd="shuffleon">Zufall an</button>
+  <button data-cmd="shuffleoff">Zufall aus</button>
+  <button data-cmd="repeaton">Wiederholen an</button>
+  <button data-cmd="repeatoff">Wiederholen aus</button>
+</div>
+<div class="row" id="albums"></div>
+
+<h2>Die Box</h2>
+<div class="row">
+  <a href="http://localhost:8200/app/" target="_blank"><button>App der Eltern öffnen</button></a>
+  <a href="http://localhost:8200/manual/" target="_blank"><button>Handbuch</button></a>
+</div>
+<p><span class="dot" id="d-backend"></span>Backend <span class="dot" id="d-player" style="margin-left:14px"></span>Player <span class="dot" id="d-oled" style="margin-left:14px"></span>OLED</p>
+
+<script>
+const $ = (id) => document.getElementById(id)
+const post = (url) => fetch(url, { method: 'POST' }).catch(() => {})
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button')
+  if (!b) return
+  if (b.dataset.post) post(b.dataset.post)
+  if (b.dataset.cmd) post('/command?c=' + encodeURIComponent(b.dataset.cmd))
+})
+fetch('/albums').then((r) => r.json()).then((list) => {
+  for (const a of list) {
+    const b = document.createElement('button')
+    b.textContent = a.name
+    b.onclick = () => post('/command?c=' + encodeURIComponent('musicsearch/library/album/' + a.category + ':' + a.name))
+    $('albums').appendChild(b)
+  }
+})
+setInterval(() => {
+  $('oled').src = '/oled.png?t=' + Date.now()
+}, 400)
+async function refresh() {
+  try {
+    const m = await (await fetch('/oled.json')).json()
+    $('meta').textContent = m.width ? (m.on ? 'an' : 'aus (Ruhezeit)') + ' · ' + m.width + ' × ' + m.height + ' · Kontrast ' + m.contrast : 'noch nichts gezeichnet'
+    const p = await (await fetch('/player')).json()
+    $('now').textContent = p.album ? [p.album, p.currentTrackname, p.currentTracknr + '/' + p.totalTracks, p.pause ? '(Pause)' : ''].filter(Boolean).join(' · ') : 'nichts spielt'
+    const s = await (await fetch('/status')).json()
+    $('d-backend').className = 'dot ' + (s.backend === 200 ? 'ok' : 'bad')
+    $('d-player').className = 'dot ' + (s.player === 200 ? 'ok' : 'bad')
+    $('d-oled').className = 'dot ' + (s.oled ? 'ok' : 'bad')
+  } catch {}
+}
+setInterval(refresh, 1500)
+refresh()
+</script>
+</body>
+</html>
