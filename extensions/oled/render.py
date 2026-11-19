@@ -242,6 +242,31 @@ VOLUME_DIGITS = {
     '-': ('.....', '.....', '.....', '.###.', '.....', '.....', '.....'),
 }
 BIG_ADVANCE = 6
+# (the text of the bottom row - time, track, volume - and of the network page: the chunky 5 x 7 pixels of the box's display, a step of 6;
+# copied pixel by pixel from photos of the real display. The slash goes one row below the line, the colon and the point are single dots)
+ROW_FONT = {
+    '0': ('.###.', '#...#', '#...#', '#.#.#', '#...#', '#...#', '.###.'),
+    '1': ('###..', '..#..', '..#..', '..#..', '..#..', '..#..', '#####'),
+    '2': ('.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####'),
+    '3': ('.###.', '#...#', '....#', '.###.', '....#', '#...#', '.###.'),
+    '4': ('...#.', '..##.', '.#.#.', '#..#.', '#####', '...#.', '...#.'),
+    '5': ('#####', '#....', '####.', '....#', '....#', '#...#', '.###.'),
+    '6': ('.###.', '#....', '#....', '####.', '#...#', '#...#', '.###.'),
+    '7': ('#####', '....#', '...#.', '..#..', '.#...', '.#...', '.#...'),
+    '8': ('.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.'),
+    '9': ('.###.', '#...#', '#...#', '.####', '....#', '....#', '.###.'),
+    'V': ('#...#', '#...#', '.#.#.', '.#.#.', '.#.#.', '..#..', '..#..'),
+    '/': ('....#', '...#.', '...#.', '..#..', '..#..', '.#...', '.#...', '#....'),
+    ':': ('.....', '.....', '..#..', '.....', '.....', '..#..', '.....'),
+    '.': ('.....', '.....', '.....', '.....', '.....', '.....', '.#...'),
+    '-': ('.....', '.....', '.....', '.###.', '.....', '.....', '.....'),
+    'P': ('####.', '#...#', '#...#', '####.', '#....', '#....', '#....'),
+    'A': ('.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'),
+    'U': ('#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'),
+    'S': ('.####', '#....', '#....', '.###.', '....#', '....#', '####.'),
+    'E': ('#####', '#....', '#....', '####.', '#....', '#....', '#####'),
+    'I': ('.###.', '..#..', '..#..', '..#..', '..#..', '..#..', '.###.'),
+}
 # (the bottom row of the Mix mode and of the 128 x 32 display: the V of the volume, and where the track and the volume end)
 VOLUME_V_X = 79
 TRACK_END = 73
@@ -349,6 +374,20 @@ class Screens:
             self._art(draw, x, y, font.get(ch, font['-']))
             x += BIG_ADVANCE
         return start
+
+    @staticmethod
+    def row_width(text):
+        """How wide a text of the row font is (its last pixel included)."""
+        return len(text) * BIG_ADVANCE - 1 if text else 0
+
+    def _row_text(self, draw, x, y, text, right=False):
+        """Text in the row font (see ROW_FONT) with its top at y; with `right` its last pixel is at x. Unknown characters are a dash."""
+        text = str(text)
+        if right:
+            x -= self.row_width(text) - 1
+        for ch in text:
+            self._art(draw, x, y, ROW_FONT.get(ch.upper(), ROW_FONT['-']))
+            x += BIG_ADVANCE
 
     def _antenna(self, draw, x, y, level, lan=False):
         """The wireless access: the aerial and, to its right, five bars of growing height (the bars that carry are full).
@@ -553,7 +592,11 @@ class Screens:
         if self.tall:
             self.status_bar(draw, state, info=True)
             for i, line in enumerate(lines):
-                self._marquee(draw, ('info', i), line, 12 + i * 13, self.fonts.row, now)
+                # (the address in the pixels of the row font, as the other numbers of the display)
+                if i == 1 and re.match(r'^IP:(\d{1,3}(\.\d{1,3}){3}|-)$', line):
+                    self._row_text(draw, 0, 12 + i * 13 + 1, line)
+                else:
+                    self._marquee(draw, ('info', i), line, 12 + i * 13, self.fonts.row, now)
             if state.get('title') or state.get('playing') or state.get('elapsed') is not None:
                 self.bottom_row(draw, state)
             return image
@@ -613,31 +656,28 @@ class Screens:
         elif state.get('stream'):
             draw.rectangle((0, 0, self.width - 1, 1), fill=1)
 
-    def _right_text(self, draw, text, right, y, font):
-        """A text that ends at `right`: the numbers of the bottom row (track, volume) stand under each other whatever their length."""
-        draw.text((right - draw.textlength(text, font=font), y), text, font=font, fill=1)
-
-    def _volume_cell(self, draw, state, y, font):
-        """The volume of the bottom row: the V at the left of its cell, the number ending 3 pixels before the line that closes the cell."""
+    def _volume_cell(self, draw, state, y):
+        """The volume of the bottom row: the V at the left of its cell, the number ending 3 pixels before the line that closes the cell
+        (`y` is the top of the pixel text)."""
         volume = state.get('volume')
-        draw.text((VOLUME_V_X, y), 'V', font=font, fill=1)
-        self._right_text(draw, '%d' % int(volume) if isinstance(volume, (int, float)) else '--', VOLUME_END, y, font)
+        self._row_text(draw, VOLUME_V_X, y, 'V')
+        self._row_text(draw, VOLUME_END, y, '%d' % int(volume) if isinstance(volume, (int, float)) else '--', right=True)
 
     def _status_bar(self, draw, state):
         """The row at the bottom: time, track, volume, wireless."""
         y = self.height - 11
         draw.line((0, y - 2, self.width, y - 2), fill=1)
-        font = self.fonts.small
         paused = not state.get('playing')
         left = 'PAUSE' if paused else clock_text(state.get('elapsed'))
-        draw.text((1, y), left, font=font, fill=1)
-        draw.line((40, y - 2, 40, self.height), fill=1)
+        y += 1
+        self._row_text(draw, 1, y, left)
+        draw.line((40, y - 3, 40, self.height), fill=1)
         track, tracks = state.get('track'), state.get('tracks')
         mid = '%s/%s' % (track, tracks) if track and tracks else (str(track) if track else '')
-        self._right_text(draw, mid[:5], TRACK_END, y, font)
-        draw.line((76, y - 2, 76, self.height), fill=1)
-        self._volume_cell(draw, state, y, font)
-        draw.line((106, y - 2, 106, self.height), fill=1)
+        self._row_text(draw, TRACK_END, y, mid[:5], right=True)
+        draw.line((76, y - 3, 76, self.height), fill=1)
+        self._volume_cell(draw, state, y)
+        draw.line((106, y - 3, 106, self.height), fill=1)
         self._wifi(draw, state.get('wifi', -1), 110, self.height - 2, bool(state.get('lan')))
 
     def _play_full(self, state, now):
@@ -675,7 +715,7 @@ class Screens:
         draw.text(((self.width - w) // 2, 8), text, font=font, fill=1)
         self._wifi(draw, state.get('wifi', -1), self.width - 18, self.height - 2, bool(state.get('lan')))
         if not state.get('playing'):
-            draw.text((1, self.height - 11), 'PAUSE', font=self.fonts.small, fill=1)
+            self._row_text(draw, 1, self.height - 10, 'PAUSE')
         return image
 
     def _play_compact(self, state, now):
@@ -688,8 +728,8 @@ class Screens:
         if sub and sub != title:
             self._marquee(draw, ('compact', 1), sub, 13, self.fonts.small, now)
         y = self.height - 9
-        draw.text((1, y), 'PAUSE' if not state.get('playing') else clock_text(state.get('elapsed')), font=self.fonts.small, fill=1)
-        self._volume_cell(draw, state, y, self.fonts.small)
+        self._row_text(draw, 1, y + 1, 'PAUSE' if not state.get('playing') else clock_text(state.get('elapsed')))
+        self._volume_cell(draw, state, y + 1)
         self._wifi(draw, state.get('wifi', -1), self.width - 18, self.height - 2, bool(state.get('lan')))
         return image
 

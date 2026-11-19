@@ -430,6 +430,29 @@ class ScreensTest(unittest.TestCase):
                 if height == 64:
                     self.assertIn(rightmost(image, 43, 75, top, height - 1), (71, 72, 73), 'the track ends before the line of its cell (%s/%s)' % (track, tracks))
 
+    def test_the_bottom_row_is_drawn_in_the_pixels_of_the_real_display(self):
+        # (V, 30 and 1/44 as photographed on the box: 5 x 7 pixels, a step of 6, the slash one row below the line)
+        def pixels(image, x, y, width, height):
+            return tuple(''.join('#' if image.getpixel((x + dx, y + dy)) else '.' for dx in range(width)) for dy in range(height))
+
+        state = {'view': 'play', 'mode': 'mix', 'title': 'T', 'playing': True, 'elapsed': 292, 'duration': 400, 'track': 1, 'tracks': 44, 'volume': 30, 'wifi': 4}
+        image = render.Screens(128, 64).render(state, 0)
+        top = 64 - 10
+        self.assertEqual(pixels(image, 79, top, 5, 7), ('#...#', '#...#', '.#.#.', '.#.#.', '.#.#.', '..#..', '..#..'), 'the V')
+        # (the volume: "3" and "0" with the dot in its middle, the last pixel at x 103)
+        three = ('.###.', '#...#', '....#', '.###.', '....#', '#...#', '.###.')
+        zero = ('.###.', '#...#', '#...#', '#.#.#', '#...#', '#...#', '.###.')
+        self.assertEqual(pixels(image, 93, top, 5, 7), three)
+        self.assertEqual(pixels(image, 99, top, 5, 7), zero)
+        # (the track: "1/44" ends at x 73 - the slash is the second character, and its eighth row is below the others)
+        self.assertEqual(pixels(image, 57, top, 5, 8)[7], '#....')
+        self.assertEqual(pixels(image, 57, top, 5, 8)[0], '....#')
+        self.assertEqual(pixels(image, 51, top, 5, 7)[6], '#####', 'the 1 stands on its base')
+        # (the time 4:52 from x 1: the 4, the colon of two single dots)
+        self.assertEqual(pixels(image, 1, top, 5, 7)[4], '#####')
+        self.assertEqual(pixels(image, 7, top, 5, 7), ('.....', '.....', '..#..', '.....', '.....', '..#..', '.....'))
+        self.assertTrue(all(len(rows) == 7 and all(len(r) == 5 for r in rows) for ch, rows in render.ROW_FONT.items() if ch != '/'))
+
     def test_without_an_address_the_network_page_has_the_text(self):
         self.assertIsNone(self.s.address_qr(''))
         self.assertIsNone(self.s.address_qr('y'))
