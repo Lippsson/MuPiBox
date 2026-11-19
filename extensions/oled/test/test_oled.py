@@ -453,6 +453,22 @@ class ScreensTest(unittest.TestCase):
         self.assertEqual(pixels(image, 7, top, 5, 7), ('.....', '.....', '..#..', '.....', '.....', '..#..', '.....'))
         self.assertTrue(all(len(rows) == 7 and all(len(r) == 5 for r in rows) for ch, rows in render.ROW_FONT.items() if ch != '/'))
 
+    def test_the_number_of_the_compact_mode_is_as_large_as_on_the_photo_of_the_display(self):
+        # (the digits are about 37 pixels high there and stand in the middle of the display; a long time still fits)
+        def rows_lit(image):
+            body = image.crop((0, 4, 128, 52))
+            return body.getbbox()
+
+        screens = render.Screens(128, 64)
+        state = {'view': 'play', 'mode': 'lite', 'title': 'T', 'playing': True, 'elapsed': 83, 'duration': 4000, 'track': 15, 'tracks': 44, 'volume': 30, 'wifi': 4}
+        box = rows_lit(screens.render(state, 0))
+        self.assertGreaterEqual(box[3] - box[1], 33)
+        self.assertLessEqual(abs((box[1] + box[3]) / 2 + 4 - 32), 3, 'in the middle of the display')
+        for elapsed in (83, 3725, 35999):
+            box = rows_lit(screens.render({**state, 'track': 0, 'tracks': 0, 'elapsed': elapsed}, 0))
+            self.assertGreaterEqual(box[0], 0)
+            self.assertLessEqual(box[2], 128, 'a time with hours fits the display')
+
     def test_without_an_address_the_network_page_has_the_text(self):
         self.assertIsNone(self.s.address_qr(''))
         self.assertIsNone(self.s.address_qr('y'))

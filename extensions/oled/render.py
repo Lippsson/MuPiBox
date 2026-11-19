@@ -57,6 +57,15 @@ class Fonts:
         self.big = _load(BOLD_CANDIDATES, 30)
         self.huge = _load(BOLD_CANDIDATES, 44)
         self.clock = _load(BOLD_CANDIDATES, 26)
+        # (the number of the compact mode: the digits are 37 pixels high and 30 apart there, as measured on the photo of the display - the largest
+        # that leaves the bar of the progress above and the wireless bars below free; a long text takes a smaller size that fits)
+        self._lite = {}
+
+    def lite(self, size):
+        """The bold font of the compact mode in that size (loaded once)."""
+        if size not in self._lite:
+            self._lite[size] = _load(BOLD_CANDIDATES, size)
+        return self._lite[size]
 
 
 def fit_picture(image, width, height):
@@ -708,11 +717,20 @@ class Screens:
         return image
 
     def _play_lite(self, state):
+        """The compact mode: the track number (or the time) as large as the display allows, in the middle of it."""
         image, draw = self._canvas()
         self._progress(draw, state)
         text, font = self._big_text(state)
-        w = draw.textlength(text, font=font)
-        draw.text(((self.width - w) // 2, 8), text, font=font, fill=1)
+        size = 50 if font is self.fonts.huge else 34
+        font = self.fonts.lite(size)
+        # (a text that is wider than the display - a time with hours - takes the next smaller size)
+        while size > 20 and draw.textlength(text, font=font) > self.width - 4:
+            size -= 2
+            font = self.fonts.lite(size)
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        x = round((self.width - draw.textlength(text, font=font)) / 2)
+        # (centred on the display by its digits, not by the line the font reserves above and below them)
+        draw.text((x, round(self.height / 2 - (top + bottom) / 2)), text, font=font, fill=1)
         self._wifi(draw, state.get('wifi', -1), self.width - 18, self.height - 2, bool(state.get('lan')))
         if not state.get('playing'):
             self._row_text(draw, 1, self.height - 10, 'PAUSE')
