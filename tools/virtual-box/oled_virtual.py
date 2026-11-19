@@ -167,6 +167,11 @@ def main(argv=None):
     except ImportError as error:
         real.emit(event='error', code='no_pil', message='Pillow is missing: %s' % error)
         return 1
+    # (the box draws with DejaVu Sans Mono from /usr/share/fonts; this PC has none, and another font would make another picture)
+    fonts = os.environ.get('MUPIBOX_VIRTUAL_FONTS')
+    if fonts:
+        render.FONT_CANDIDATES = (os.path.join(fonts, 'DejaVuSansMono.ttf'),) + tuple(render.FONT_CANDIDATES)
+        render.BOLD_CANDIDATES = (os.path.join(fonts, 'DejaVuSansMono-Bold.ttf'),) + tuple(render.BOLD_CANDIDATES)
     pictures = render.Pictures(args.images, args.custom, args.width, args.height)
     screens = render.Screens(args.width, args.height, pictures=pictures)
     panel = Panel(args.controller, args.width, args.height, args.contrast)

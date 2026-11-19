@@ -206,17 +206,17 @@
           {
             "value": "full",
             "label": "Voll",
-            "image": "images/mode-full.png"
+            "image": "images/mode-full.svg"
           },
           {
             "value": "mix",
             "label": "Mix",
-            "image": "images/mode-mix.png"
+            "image": "images/mode-mix.svg"
           },
           {
             "value": "lite",
             "label": "Kompakt",
-            "image": "images/mode-lite.png"
+            "image": "images/mode-lite.svg"
           }
         ]
       },

@@ -129,7 +129,7 @@ const restarting = new Set()
 
 const bin = pythonEnv()
 prepare()
-const env = { ...process.env, NODE_ENV: 'development', PATH: `${bin}${path.delimiter}${process.env.PATH}`, MUPIBOX_VIRTUAL_OUT: oledOut }
+const env = { ...process.env, NODE_ENV: 'development', PATH: `${bin}${path.delimiter}${process.env.PATH}`, MUPIBOX_VIRTUAL_OUT: oledOut, MUPIBOX_VIRTUAL_FONTS: path.join(here, 'fonts') }
 
 run('player', process.execPath, [path.join(root, 'tools/winamp-sandbox/server.mjs'), '--player-only'], { cwd: root, env })
 

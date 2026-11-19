@@ -43,6 +43,8 @@ exactly those of the box.
 - Every change in `extensions/` is copied over and the backend starts again (a few seconds).
 - Python: a virtual environment in `.work/venv` (with the system's Pillow); on Windows its `python.exe` is also there as `python3.exe`,
   because that is the name the extension starts.
+- `fonts/`: DejaVu Sans Mono, the font the box draws the OLED with (`/usr/share/fonts` on the Pi; license in `fonts/LICENSE-DejaVu.txt`). A PC has
+  none, and Pillow's own font would draw another picture - `oled_virtual.py` puts these first in `render.py`'s list of fonts.
 - `require-shim.mjs`: the server loads the extensions with `require()`, which a module under `tsx` does not have.
 
 ## Sending a button press

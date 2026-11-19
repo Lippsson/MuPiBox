@@ -413,16 +413,22 @@ class ScreensTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             qr.encode('x' * 135)
 
-    def test_the_volume_of_the_bottom_row_has_a_bold_v_and_ends_at_one_place(self):
-        # (the Mix mode and the 128 x 32 display: the V of two-pixel strokes, the number right-aligned so the ones stay under each other)
-        for width, height, y in ((128, 64, 64 - 11 + 2), (128, 32, 32 - 9 + 2)):
+    def test_the_track_and_the_volume_of_the_bottom_row_end_at_one_place(self):
+        # (the Mix mode and the 128 x 32 display: the V at the left of its cell, the numbers right-aligned so the ones stay under each other)
+        def rightmost(image, x0, x1, y0, y1):
+            columns = [x for x in range(x0, x1) if lit(image, (x, y0, x + 1, y1))]
+            return max(columns)
+
+        for width, height in ((128, 64), (128, 32)):
             screens = render.Screens(width, height)
-            for volume in (5, 55, 100):
-                state = {'view': 'play', 'mode': 'mix', 'title': 'T', 'playing': True, 'elapsed': 5, 'duration': 50, 'track': 1, 'tracks': 3, 'volume': volume, 'wifi': 3}
+            top = height - 11
+            for volume, track, tracks in ((5, 1, 7), (55, 12, 34), (100, 3, 9)):
+                state = {'view': 'play', 'mode': 'mix', 'title': 'T', 'playing': True, 'elapsed': 5, 'duration': 50, 'track': track, 'tracks': tracks, 'volume': volume, 'wifi': 4}
                 image = screens.render(state, 0)
-                self.assertGreater(lit(image, (79, y, 86, y + 7)), 14, 'the V')
-                columns = [x for x in range(86, 106) if lit(image, (x, y, x + 1, y + 7))]
-                self.assertEqual(max(columns), 103, 'the last digit ends at the same column (%s)' % volume)
+                self.assertGreater(lit(image, (79, top, 86, height)), 8, 'the V')
+                self.assertIn(rightmost(image, 87, 106, top, height - 1), (101, 102, 103), 'the volume ends before the line of its cell (%s)' % volume)
+                if height == 64:
+                    self.assertIn(rightmost(image, 43, 75, top, height - 1), (71, 72, 73), 'the track ends before the line of its cell (%s/%s)' % (track, tracks))
 
     def test_without_an_address_the_network_page_has_the_text(self):
         self.assertIsNone(self.s.address_qr(''))

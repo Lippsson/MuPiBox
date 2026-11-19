@@ -1414,7 +1414,7 @@ textarea[hidden] { display: none; }
 /* (a second choice beside a field - by how much, beside "louder") */
 /* a choice with a picture above each button (the display's modes) */
 .seg.seg-pics button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 6px 8px; min-height: 0; }
-.seg.seg-pics img { display: block; width: 100%; height: auto; border-radius: 6px; background: #000; image-rendering: pixelated; }
+.seg.seg-pics img { display: block; width: 100%; height: auto; border-radius: 6px; background: #000; }
 /* the help of a field as a tooltip: an "i" beside the label */
 .lbl:has(.ext-tip) > b { display: inline; }
 .ext-tip { position: relative; display: inline-block; margin-left: 6px; vertical-align: middle; }
