@@ -711,7 +711,7 @@ describe('the OLED extension of this repository', () => {
     assert.deepStrictEqual(oled.resources, {}, 'the I2C bus is shared: it holds no pin of its own')
     assert.deepStrictEqual(oled.system?.packages, ['python3-pil'])
     assert.deepStrictEqual(oled.ui?.items.filter((i) => i.type === 'status').map((i) => i.state), ['/api/ext/oled/state'])
-    assert.deepStrictEqual(oled.ui?.items.filter((i) => i.type === 'action').map((i) => i.post), ['/api/ext/oled/info', '/api/ext/oled/mode'])
+    assert.deepStrictEqual(oled.ui?.items.filter((i) => i.type === 'action').map((i) => i.post), ['/api/ext/oled/info'])
   })
   it('has a udev rule that opens the I2C bus for the group of the header pins - and nothing that runs a program', () => {
     const rule = readFileSync(path.join(extDir, 'oled', '99-mpx-oled.rules'), 'utf8')

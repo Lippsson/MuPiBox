@@ -9885,7 +9885,7 @@ const BTN_FN = [
   // (a press switches the knob for 10 s from the volume to the tracks: one track per detent)
   ['Titelwahl (Drücken schaltet um)', 'tracks'],
   ['Vorspulen', 'ffwd'],
-  ['Adresse der Box zeigen', 'address'],
+  ['IP-Adresse der Box als QR-Code anzeigen', 'address'],
 ]
 
 // The three pins of the rotary encoder: the setting, the name in the box's answer and in its configuration, what the field is called.
@@ -9919,7 +9919,7 @@ const RK_BUTTONS = [
   ['Play/Pause', 'playpause'],
   ['Nächster Titel', 'next'],
   ['Vorspulen', 'ffwd'],
-  ['Adresse der Box zeigen', 'address'],
+  ['IP-Adresse der Box als QR-Code anzeigen', 'address'],
 ]
 const RK_PIN_PARTS = [
   ['a', 'a', 'pinA', 'GPIO-Pin A (CLK)'],
@@ -17653,7 +17653,7 @@ function extFormHtml(e, fields, cards = false) {
         const pics = it.choices.some((c) => c.image)
         const face = (c) => (c.image ? `<img src="/api/ext-files/${esc(e.id)}/${esc(c.image)}" alt="" loading="lazy"><span>${esc(c.label)}</span>` : esc(c.label))
         const seg = `<div class="seg${pics ? ' seg-pics' : ''}" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${face(c)}</button>`).join('')}</div>`
-        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label>${it.extra ? `<div class="ext-with">${seg}${extra(it)}</div>` : seg}${help}</div>`
+        return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}${tip}</label>${it.extra ? `<div class="ext-with">${seg}${extra(it)}</div>` : seg}${help}</div>`
       }
       // (a number as a slider from min to max; its value stands in a box beside the label, where it can be typed as well)
       if (it.slider && type(it) === 'number' && Number.isFinite(e.settingRanges?.[it.key]?.min) && Number.isFinite(e.settingRanges?.[it.key]?.max)) {

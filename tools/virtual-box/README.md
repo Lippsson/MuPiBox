@@ -49,7 +49,7 @@ exactly those of the box.
 
 ## Sending a button press
 
-The OLED's action "Adresse der Box zeigen" has a button on the virtual box's page. The same call from the command line:
+The OLED extension's action "IP-Adresse der Box als QR-Code anzeigen" has a button on the virtual box's page. The same call from the command line:
 
     curl -X POST http://localhost:8210/address
 
