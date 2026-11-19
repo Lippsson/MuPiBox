@@ -182,6 +182,20 @@ describe('a picture above the button of a choice, and a help text as a tooltip',
     assert.ok(check(ui(two(), { tip: true })))
     assert.ok(check(ui(two(), { tip: 'yes', help: 'text' })))
   })
+  it('takes a card in the look of the box for the settings it needs, and refuses it otherwise', () => {
+    const cfg = { contrast: { type: 'number', default: 1, min: 1, max: 255 }, sleepAfter: { type: 'number', default: 0, options: [0, 5] }, nightDim: { type: 'boolean', default: false }, nightContrast: { type: 'number', default: 20, min: 1, max: 255 } }
+    const page = (core: unknown, extra: Record<string, unknown> = {}, remove: string[] = []) => {
+      const s: Record<string, unknown> = { ...cfg }
+      for (const k of remove) delete s[k]
+      return checkManifest({ ...base({ hostApi: 5, settings: s, ui: { title: 'T', items: [{ type: 'heading', label: 'H', card: true, core, ...extra }, { key: 'contrast', label: 'C' }] } }) }, files())
+    }
+    assert.strictEqual(page('brightness'), null)
+    assert.strictEqual(page('evening'), null)
+    assert.ok(page('sun'))
+    assert.ok(page('brightness', { card: undefined }))
+    assert.ok(page('brightness', {}, ['sleepAfter']))
+    assert.ok(page('evening', {}, ['nightDim']))
+  })
   it('is used by the OLED extension: a picture for each mode, which are in the package', () => {
     const extDir = path.join(process.cwd(), '..', '..', 'extensions', 'oled')
     const oled = JSON.parse(readFileSync(path.join(extDir, 'manifest.json'), 'utf8'))

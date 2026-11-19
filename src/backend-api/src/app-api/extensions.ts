@@ -50,6 +50,11 @@ const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/
 const FILE = /^[A-Za-z0-9_][A-Za-z0-9_./-]{0,100}$/
 // what a package may hold (a file of another kind is a reason to refuse it)
 const ALLOWED_FILES = /\.(js|mjs|json|svg|png|jpg|css|txt|md|rules|html)$/i
+// (the cards of the box's own look that a heading may ask for (core), and the settings each needs: key and type)
+const CORE_CARDS: Record<string, [string, string][]> = {
+  brightness: [['contrast', 'number'], ['sleepAfter', 'number']],
+  evening: [['nightDim', 'boolean'], ['nightContrast', 'number']],
+}
 // (the picture of a choice: a file of the extension, shown above the button - no folder up, and a kind a browser shows)
 const CHOICE_PICTURE = /^[A-Za-z0-9_][A-Za-z0-9_/-]{0,60}\.(png|jpg|svg)$/i
 // ... and what a package may hold beyond that: the unit files of its systemd services (never served to a browser)
@@ -79,7 +84,7 @@ export interface Manifest {
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
-  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; showIf?: { key: string; is: string[] }; hideIf?: { key: string; is: string[] }; live?: string; choices?: { value: string | number; label: string; image?: string }[]; tip?: boolean; type?: 'lookup' | 'order' | 'roster' | 'heading' | 'status' | 'action' | 'list'; state?: string; post?: string; confirm?: string; empty?: string; page?: boolean; card?: boolean; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean; slider?: boolean; adopt?: string[]; download?: string; upload?: string; file?: string; ext?: string; accept?: string; beside?: boolean; holder?: string }[] }
+  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; showIf?: { key: string; is: string[] }; hideIf?: { key: string; is: string[] }; live?: string; choices?: { value: string | number; label: string; image?: string }[]; tip?: boolean; core?: string; type?: 'lookup' | 'order' | 'roster' | 'heading' | 'status' | 'action' | 'list'; state?: string; post?: string; confirm?: string; empty?: string; page?: boolean; card?: boolean; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean; slider?: boolean; adopt?: string[]; download?: string; upload?: string; file?: string; ext?: string; accept?: string; beside?: boolean; holder?: string }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -600,6 +605,12 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
         if (item.adopt !== undefined && (item.page !== true || !Array.isArray(item.adopt) || item.adopt.length < 1 || item.adopt.some((a) => !ADOPTABLE.has(a)) || new Set(item.adopt).size !== item.adopt.length)) return `ui: bad adopt on a page: ${item.label}`
         // (a group of its own card on the page: the page shows each group of the page in a card of its own)
         if (item.card !== undefined && (item.card !== true || item.page !== undefined)) return `ui: card is true, on a heading that is no page: ${item.label}`
+        // (a card the box draws in its own look - sliders with the value in a pill, "Abends dunkler" - for the settings it names; a box that does not
+        // know it draws the fields of the group as usual)
+        if (item.core !== undefined) {
+          const need = CORE_CARDS[String(item.core)]
+          if (!need || item.card !== true || need.some(([key, kind]) => !Object.hasOwn(settings, key) || settings[key].type !== kind)) return `ui: bad core card: ${item.label}`
+        }
         continue
       }
       if (item.type === 'status') {

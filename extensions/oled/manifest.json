@@ -1,7 +1,7 @@
 {
   "id": "oled",
   "name": "OLED-Display",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "description": "Ein kleines OLED-Display (SSD1306, SH1106 oder SSD1309 am I2C-Anschluss, 128 × 64 oder 128 × 32) zeigt, was die Box spielt: Titel, Interpret, Laufzeit, Titelnummer, Lautstärke, WLAN, Akku, Zufall und Wiederholen, Ausgang (Lautsprecher, Kopfhörer, Bluetooth) und die Uhrzeit. Dazu lässt sich die Box ganz ohne DSI-Display betreiben. Die Einstellungen stehen unter Einstellungen › OLED-Display.",
   "hostApi": 10,
   "resources": {},
@@ -40,7 +40,7 @@
     "contrast": {
       "type": "number",
       "default": 127,
-      "min": 0,
+      "min": 1,
       "max": 255
     },
     "nightDim": {
@@ -280,9 +280,9 @@
       },
       {
         "type": "heading",
-        "label": "Helligkeit",
+        "label": "Helligkeit & Ausschalten",
         "card": true,
-        "help": "Wie hell das Display ist, ob es abends dunkler wird und wann es ausgeht."
+        "core": "brightness"
       },
       {
         "key": "contrast",
@@ -320,7 +320,7 @@
         "type": "heading",
         "label": "Abends dunkler",
         "card": true,
-        "help": "Wie hell das OLED-Display abends ist (von 1 bis 255 statt in Prozent wie beim Bildschirm)."
+        "core": "evening"
       },
       {
         "key": "nightDim",

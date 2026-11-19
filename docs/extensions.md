@@ -189,6 +189,11 @@ Die Nummer 5 (Taster) bringt im Manifest:
   **`image`** an einem Eintrag von `choices` – ein Bild der Erweiterung (`.png`, `.jpg` oder `.svg`, ein Pfad wie `images/mode-full.png`, kein
   `..`), das über dem Knopf steht (die OLED-Erweiterung zeigt so die Anzeige in jeder Betriebsart); und **`tip: true`** an einem Feld mit
   `help` – der Hilfetext steht dann nicht unter dem Feld, sondern als Tooltip an einem „i“ neben der Beschriftung (Schalter).
+  Eine Überschrift mit `card: true` und **`core`** (`"brightness"` oder `"evening"`) lässt die Webapp die Karte im Aussehen der Box zeichnen
+  – Regler mit dem Wert in einer Kapsel, „Abends dunkler“ mit Sonnenuntergang, Ort und Abdunkeln – statt der Felder der Gruppe, die dann nicht
+  gezeichnet werden (eine Box, die `core` nicht kennt, zeigt sie wie gewohnt). `brightness` braucht die Einstellungen `contrast` und `sleepAfter`
+  (Zahlen), `evening` die Einstellungen `nightDim` (Schalter) und `nightContrast` (Zahl). Das Zeitfenster des Abends (Sonnenuntergang oder
+  Uhrzeiten, Abdunkeln, Ruhezeiten) ist das des Displays und wird hier wie dort eingestellt.
   Eine Überschrift und die Felder bis zur nächsten sind eine Gruppe. Mit **`rename`** (eine `string`-Einstellung) gibt der Benutzer der Gruppe
   einen Namen: die Überschrift ist dann ein Textfeld, `label` steht als Platzhalter darin. Mit **`optional`** (eine `boolean`-Einstellung) ist
   die Gruppe erst da, wenn man sie hinzufügt: aufeinanderfolgende Gruppen mit demselben `label` sind eine Reihe, unter der rechts ein

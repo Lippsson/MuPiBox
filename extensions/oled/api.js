@@ -457,7 +457,8 @@ exports.activate = (host) => {
     async (_req, res) => {
       const rows = logic.statusRows({ config, driver: phase, i2c: i2cNow(), kiosk: { headless: flagNow(), running: await kioskRunning() } })
       if (headlessNote) rows.push({ label: 'DSI-Display', value: headlessNote.value, tone: headlessNote.tone })
-      res.json({ rows, mode: ui.mode ?? config.mode })
+      // (dimmed: the display is darker now because of the evening - the page says so in the card of the evening)
+      res.json({ rows, mode: ui.mode ?? config.mode, dimmed: config.nightDim && night.share > 0 })
     },
     { session: true },
   )
