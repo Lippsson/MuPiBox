@@ -17580,7 +17580,7 @@ function extFormHtml(e, fields, cards = false) {
       const k = esc(it.key)
       // (tip: the help is a tooltip beside the label - an "i" that shows the text on hover, focus and tap - not a line under the field)
       const help = it.help && !it.tip ? `<small class="help">${esc(it.help)}</small>` : ''
-      const tip = it.help && it.tip ? `<span class="ext-tip"><button type="button" class="ext-tip-btn" aria-label="${esc(it.help)}" title="${esc(it.help)}">i</button><span class="ext-tip-text" role="tooltip">${esc(it.help)}</span></span>` : ''
+      const tip = it.help && it.tip ? `<span class="ext-tip"><button type="button" class="ext-tip-btn" aria-label="${esc(it.help)}">i</button><span class="ext-tip-text" role="tooltip">${esc(it.help)}</span></span>` : ''
       if (it.type === 'heading') {
         // a line that starts a group of fields (button 1, button 2 ...): a name the user gives it (rename: the label stands there
         // while it has none), and a button that takes the group away again (optional)
