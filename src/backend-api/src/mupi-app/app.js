@@ -17755,7 +17755,7 @@ function extFormMount(sheet, e, fields, saved) {
       else input.checked = !input.checked
     }
   }
-  // (a slider with a box for its value: they follow each other; the value is saved with the rest, by the button)
+  // (a slider with a box for its value: they follow each other)
   for (const range of sheet.querySelectorAll('input[type="range"][data-xr]')) {
     const box = sheet.querySelector(`input[data-xk="${CSS.escape(range.dataset.xr)}"]`)
     if (!box) continue
@@ -17769,13 +17769,18 @@ function extFormMount(sheet, e, fields, saved) {
       range.value = String(Math.min(Number(range.max), Math.max(Number(range.min), Number(box.value))))
       fill()
     }
-    // (left with a value outside the range or none: it goes back into the range)
-    box.onchange = () => {
+    // (the value is saved as soon as the slider is let go or the box is left - like a switch, not with the button: the box then works with it
+    // at once. A value outside the range or none goes back into the range first)
+    const keep = async () => {
       const clamped = Math.min(Number(range.max), Math.max(Number(range.min), Math.round(Number(box.value) || Number(range.min))))
       box.value = String(clamped)
       range.value = box.value
       fill()
+      const ok = await save({ [range.dataset.xr]: clamped }, false)
+      if (ok) e.settings[range.dataset.xr] = clamped
     }
+    box.onchange = keep
+    range.onchange = keep
   }
   // (the name of a group: saved when the field is left or with Enter)
   for (const input of sheet.querySelectorAll('input[data-xname]')) {

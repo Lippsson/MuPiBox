@@ -1,7 +1,7 @@
 {
   "id": "oled",
   "name": "OLED-Display",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Ein kleines OLED-Display (SSD1306, SH1106 oder SSD1309 am I2C-Anschluss, 128 × 64 oder 128 × 32) zeigt, was die Box spielt: Titel, Interpret, Laufzeit, Titelnummer, Lautstärke, WLAN, Akku, Zufall und Wiederholen, Ausgang (Lautsprecher, Kopfhörer, Bluetooth) und die Uhrzeit. Dazu lässt sich die Box ganz ohne DSI-Display betreiben. Die Einstellungen stehen unter Einstellungen › OLED-Display.",
   "hostApi": 10,
   "resources": {},
@@ -290,18 +290,6 @@
         "help": "0 ist dunkel, 255 am hellsten."
       },
       {
-        "key": "nightDim",
-        "label": "Abends dunkler",
-        "help": "Das OLED-Display wird abends dunkler und morgens wieder normal hell. Die Zeiten kommen von „Abends dunkler“ in den Einstellungen des Displays: feste Uhrzeiten oder Sonnenuntergang bis Sonnenaufgang, das sanfte Abdunkeln und die Ruhezeiten."
-      },
-      {
-        "key": "nightContrast",
-        "label": "Helligkeit am Abend",
-        "help": "1 ist am dunkelsten, 255 am hellsten. Nie heller als die normale Helligkeit. Den Wert kannst du mit dem Regler einstellen oder oben in das Feld eintippen.",
-        "dep": "nightDim",
-        "slider": true
-      },
-      {
         "key": "sleepAfter",
         "label": "Display aus nach",
         "help": "Wenn nichts spielt oder die Wiedergabe pausiert, schaltet sich das Display nach dieser Zeit aus (das schont es). Ein Start, ein Tag oder ein Tipp auf „Adresse der Box zeigen“ weckt es.",
@@ -327,6 +315,24 @@
             "label": "1 Stunde"
           }
         ]
+      },
+      {
+        "type": "heading",
+        "label": "Abends dunkler",
+        "card": true,
+        "help": "Wie hell das OLED-Display abends ist (von 1 bis 255 statt in Prozent wie beim Bildschirm)."
+      },
+      {
+        "key": "nightDim",
+        "label": "Abends dunkler",
+        "help": "Das OLED-Display wird abends dunkler und morgens wieder normal hell. Die Zeiten kommen von „Abends dunkler“ in den Einstellungen des Displays: feste Uhrzeiten oder Sonnenuntergang bis Sonnenaufgang, das sanfte Abdunkeln und die Ruhezeiten."
+      },
+      {
+        "key": "nightContrast",
+        "label": "Helligkeit am Abend",
+        "help": "1 ist am dunkelsten, 255 am hellsten. Nie heller als die normale Helligkeit. Der Regler gilt sofort, die Zahl kannst du auch eintippen.",
+        "dep": "nightDim",
+        "slider": true
       },
       {
         "type": "heading",
