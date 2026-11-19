@@ -148,7 +148,15 @@ if (!flag('no-watch')) {
   const onChange = () => {
     clearTimeout(timer)
     timer = setTimeout(() => {
-      if (!syncExtensions()) return
+      // (a file that is gone for a moment - a switch of the git branch - must not end the virtual box)
+      let changed = false
+      try {
+        changed = syncExtensions()
+      } catch (error) {
+        say(`the extensions could not be copied now (${error.code ?? error.message}), waiting for the next change`)
+        return
+      }
+      if (!changed) return
       say('an extension changed: the backend starts again')
       const old = server
       restarting.add(old)
