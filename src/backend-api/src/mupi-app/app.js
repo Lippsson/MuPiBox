@@ -17589,9 +17589,7 @@ function extFormHtml(e, fields, cards = false) {
         const title = groups.filter((x) => x.series === g.series).length > 1 ? `${it.label} ${g.nr}` : it.label
         const name = it.rename ? `<input class="input ext-group-name" type="text" maxlength="30" data-xname="${esc(it.rename)}" value="${esc(e.settings?.[it.rename] ?? '')}" placeholder="${esc(title)}" aria-label="Name" autocomplete="off" ${NO_PW_MANAGER}>` : `<h3>${esc(title)}</h3>`
         const del = it.optional ? `<button type="button" class="ext-group-del" data-xdel="${index}" aria-label="Entfernen" title="Entfernen"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : ''
-        // (a picture of the extension under the heading: what the box can show, for the page to give an impression of it)
-        const pic = it.image ? `<img class="ext-heading-pic" src="/api/ext-files/${esc(e.id)}/${esc(it.image)}" alt="" loading="lazy">` : ''
-        return `<div class="ext-group" data-ext-dep="${esc(it.dep ?? '')}"><div class="ext-group-head">${name}${del}</div>${help}${pic}</div>`
+        return `<div class="ext-group" data-ext-dep="${esc(it.dep ?? '')}"><div class="ext-group-head">${name}${del}</div>${help}</div>`
       }
       if (type(it) === 'gpio') {
         // a GPIO pin: chosen from the pins of the box - the ones that are taken cannot be chosen (filled in by extFormMount).

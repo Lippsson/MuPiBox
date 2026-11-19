@@ -182,11 +182,6 @@ describe('a picture above the button of a choice, and a help text as a tooltip',
     assert.ok(check(ui(two(), { tip: true })))
     assert.ok(check(ui(two(), { tip: 'yes', help: 'text' })))
   })
-  it('takes a picture of the extension under a heading, and refuses a bad one', () => {
-    const page = (image: unknown) => checkManifest({ ...base({ hostApi: 5, settings, ui: { title: 'T', items: [{ type: 'heading', label: 'H', card: true, image }, { key: 'a', label: 'A', choices: two() }] } }) }, files())
-    assert.strictEqual(page('images/status-bar.svg'), null)
-    for (const bad of ['../x.svg', '/x.svg', 'x.exe', 42, '']) assert.ok(page(bad), String(bad))
-  })
   it('is used by the OLED extension: a picture for each mode, which are in the package', () => {
     const extDir = path.join(process.cwd(), '..', '..', 'extensions', 'oled')
     const oled = JSON.parse(readFileSync(path.join(extDir, 'manifest.json'), 'utf8'))

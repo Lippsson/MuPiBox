@@ -555,16 +555,16 @@ class ScreensTest(unittest.TestCase):
         self.assertEqual(grid(121, 0, 6, 9), speaker)
 
     def test_the_repeat_arrows_are_the_drawing_and_the_marker_follows(self):
-        repeat = ['........#.....', '........##....', '..#########.#.', '........##..#.', '..#...#.#...#.', '.##..##.....#.', '..#.#########.', '..#..##.......', '..#...#.......']
+        repeat = ['........#.....', '........##....', '..#########.#.', '........##..#.', '......#.#...#.', '.....##.....#.', '....#########.', '.....##.......', '......#.......']
         for kind in ('all', 'track'):
             image = self.s.render({**PLAY, 'repeat': kind, 'shuffle': False}, 0)
-            got = [''.join('#' if image.getpixel((19 + i, j)) else '.' for i in range(14)) for j in range(9)]
+            got = [''.join('#' if image.getpixel((18 + i, j)) else '.' for i in range(14)) for j in range(9)]
             self.assertEqual(got, repeat, kind)
         # (the A beside the arrows when the whole list repeats; one track repeats with the arrows alone - no 1)
         all_ = self.s.render({**PLAY, 'repeat': 'all', 'shuffle': False}, 0)
         one = self.s.render({**PLAY, 'repeat': 'track', 'shuffle': False}, 0)
-        self.assertGreater(lit(all_, (34, 0, 39, 9)), 5, 'the A')
-        self.assertEqual(lit(one, (34, 0, 39, 9)), 0, 'no 1')
+        self.assertGreater(lit(all_, (33, 0, 38, 9)), 5, 'the A')
+        self.assertEqual(lit(one, (33, 0, 38, 9)), 0, 'no 1')
 
     def test_the_bottom_row_counts_up_or_down(self):
         up = self.s.render({**PLAY, 'timeMode': 'up'}, 0)
