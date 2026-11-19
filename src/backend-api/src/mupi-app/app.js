@@ -17578,7 +17578,9 @@ function extFormHtml(e, fields, cards = false) {
   }
   const one = (it, index) => {
       const k = esc(it.key)
-      const help = it.help ? `<small class="help">${esc(it.help)}</small>` : ''
+      // (tip: the help is a tooltip beside the label - an "i" that shows the text on hover, focus and tap - not a line under the field)
+      const help = it.help && !it.tip ? `<small class="help">${esc(it.help)}</small>` : ''
+      const tip = it.help && it.tip ? `<span class="ext-tip"><button type="button" class="ext-tip-btn" aria-label="${esc(it.help)}" title="${esc(it.help)}">i</button><span class="ext-tip-text" role="tooltip">${esc(it.help)}</span></span>` : ''
       if (it.type === 'heading') {
         // a line that starts a group of fields (button 1, button 2 ...): a name the user gives it (rename: the label stands there
         // while it has none), and a button that takes the group away again (optional)
@@ -17612,7 +17614,7 @@ function extFormHtml(e, fields, cards = false) {
         return `<div class="field"><label>${esc(it.label)}</label><ul class="ext-roster" data-xroster="${index}" aria-live="polite"></ul><div class="row" style="gap:8px"><input class="input" type="text" maxlength="24" data-xradd="${index}" placeholder="Name" autocomplete="off" aria-label="${esc(it.label)}" ${NO_PW_MANAGER}><button type="button" class="btn" data-xraddgo="${index}">Anlegen</button></div>${it.addFrom ? `<div class="field ext-roster-from"><label for="xrfrom-${index}">Bibliothek</label><select class="input" id="xrfrom-${index}" data-xrfrom="${index}"><option value="">Leere Bibliothek</option></select></div>` : ''}<div data-xrtrash="${index}"></div>${help}</div>`
       }
       if (type(it) === 'boolean') {
-        return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
+        return `<div class="row" data-ext-dep="${esc(it.dep ?? '')}"><span class="lbl"><b>${esc(it.label)}</b>${tip}${help}</span><label class="switch"><input type="checkbox" data-xk="${k}" ${e.settings?.[it.key] ? 'checked' : ''} aria-label="${esc(it.label)}"><span></span></label></div>`
       }
       if (it.type === 'lookup') {
         // a search of the extension's own API part: a few words, then the places that fit to choose from
@@ -17637,7 +17639,10 @@ function extFormHtml(e, fields, cards = false) {
       }
       if (it.choices) {
         const now = e.settings?.[it.key]
-        const seg = `<div class="seg" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${esc(c.label)}</button>`).join('')}</div>`
+        // (a choice with a picture - the display in each of its modes: the picture stands above the button's name)
+        const pics = it.choices.some((c) => c.image)
+        const face = (c) => (c.image ? `<img src="/api/ext-files/${esc(e.id)}/${esc(c.image)}" alt="" loading="lazy"><span>${esc(c.label)}</span>` : esc(c.label))
+        const seg = `<div class="seg${pics ? ' seg-pics' : ''}" data-xseg="${k}">${it.choices.map((c) => `<button type="button" aria-pressed="${c.value === now}" data-v="${esc(c.value)}">${face(c)}</button>`).join('')}</div>`
         return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label>${esc(it.label)}</label>${it.extra ? `<div class="ext-with">${seg}${extra(it)}</div>` : seg}${help}</div>`
       }
       // (a number as a slider from min to max; its value stands in a box beside the label, where it can be typed as well)

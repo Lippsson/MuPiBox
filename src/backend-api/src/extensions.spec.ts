@@ -2,7 +2,7 @@
 // No box needed; the install itself (download, sudo) is tried on a box.
 import assert from 'node:assert'
 import { createHash } from 'node:crypto'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import { deflateRawSync } from 'node:zlib'
@@ -161,6 +161,35 @@ describe('settings with a choice', () => {
     assert.ok(bad({ a: { type: 'string', options: ['x', 'y'] } }, { title: 'T', items: [{ key: 'a', label: 'A', choices: [{ value: 'x', label: 'X' }] }] }))
     assert.ok(bad({ a: { type: 'string', options: ['x', 'y'] } }, { title: 'T', items: [{ key: 'a', label: 'A', choices: [{ value: 'x', label: 'X' }, { value: 'z', label: 'Z' }] }] }))
     assert.strictEqual(bad({ a: { type: 'string', options: ['x', 'y'] } }, { title: 'T', items: [{ key: 'a', label: 'A', choices: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }] }] }), null)
+  })
+})
+
+describe('a picture above the button of a choice, and a help text as a tooltip', () => {
+  const ui = (choices: unknown, extra: Record<string, unknown> = {}) => ({ title: 'T', items: [{ key: 'a', label: 'A', choices, ...extra }] })
+  const settings = { a: { type: 'string', options: ['x', 'y'], default: 'x' } }
+  const check = (u: unknown) => checkManifest({ ...base({ settings, ui: u }) }, files())
+  const two = (image?: unknown) => [{ value: 'x', label: 'X', ...(image === undefined ? {} : { image }) }, { value: 'y', label: 'Y' }]
+  it('takes a picture of the extension for a choice', () => {
+    assert.strictEqual(check(ui(two('images/mode-full.png'))), null)
+    assert.strictEqual(check(ui(two('pic.svg'))), null)
+  })
+  it('refuses a picture outside the extension, of another kind, or that is no text', () => {
+    for (const bad of ['../x.png', 'images/../x.png', '/etc/x.png', 'x.exe', 'x.html', 'images/', 42, ''])
+      assert.ok(check(ui(two(bad))), String(bad))
+  })
+  it('takes a tip on a field with a help text and no other', () => {
+    assert.strictEqual(check(ui(two(), { tip: true, help: 'text' })), null)
+    assert.ok(check(ui(two(), { tip: true })))
+    assert.ok(check(ui(two(), { tip: 'yes', help: 'text' })))
+  })
+  it('is used by the OLED extension: a picture for each mode, which are in the package', () => {
+    const extDir = path.join(process.cwd(), '..', '..', 'extensions', 'oled')
+    const oled = JSON.parse(readFileSync(path.join(extDir, 'manifest.json'), 'utf8'))
+    const mode = oled.ui.items.find((i: { key?: string }) => i.key === 'mode')
+    assert.deepStrictEqual(mode.choices.map((c: { value: string }) => c.value), ['full', 'mix', 'lite'])
+    for (const c of mode.choices) assert.ok(existsSync(path.join(extDir, c.image)), c.image)
+    assert.strictEqual(mode.help, undefined)
+    for (const key of ['volumeOverlay', 'playOverlay']) assert.strictEqual(oled.ui.items.find((i: { key?: string }) => i.key === key).tip, true)
   })
 })
 

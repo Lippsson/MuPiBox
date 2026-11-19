@@ -1,7 +1,7 @@
 {
   "id": "oled",
   "name": "OLED-Display",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Ein kleines OLED-Display (SSD1306, SH1106 oder SSD1309 am I2C-Anschluss, 128 × 64 oder 128 × 32) zeigt, was die Box spielt: Titel, Interpret, Laufzeit, Titelnummer, Lautstärke, WLAN, Akku, Zufall und Wiederholen, Ausgang (Lautsprecher, Kopfhörer, Bluetooth) und die Uhrzeit. Dazu lässt sich die Box ganz ohne DSI-Display betreiben. Die Einstellungen stehen unter Einstellungen › OLED-Display.",
   "hostApi": 10,
   "resources": {},
@@ -202,30 +202,34 @@
       {
         "key": "mode",
         "label": "Anzeige beim Spielen",
-        "help": "Voll zeigt oben die Statusleiste (WLAN, Akku, Wiederholen, Zufall, Lautstärke und Ausgang), darunter Titel, Interpret und Album und unten Zeit und Titelnummer. Mix zeigt die Titelnummer groß, Kompakt die Zeit groß. Auf dem 128 × 32-Display gibt es eine Anzeige.",
         "choices": [
           {
             "value": "full",
-            "label": "Voll"
+            "label": "Voll",
+            "image": "images/mode-full.png"
           },
           {
             "value": "mix",
-            "label": "Mix"
+            "label": "Mix",
+            "image": "images/mode-mix.png"
           },
           {
             "value": "lite",
-            "label": "Kompakt"
+            "label": "Kompakt",
+            "image": "images/mode-lite.png"
           }
         ]
       },
       {
         "key": "volumeOverlay",
         "label": "Lautstärke-Animation zeigen",
+        "tip": true,
         "help": "Beim Ändern der Lautstärke erscheint kurz ein eigenes Bild mit Lautsprecher und Balken. Ist die Option aus, bleibt die Anzeige, wie sie ist."
       },
       {
         "key": "playOverlay",
         "label": "Play/Pause-Animation zeigen",
+        "tip": true,
         "help": "Beim Starten und Anhalten der Wiedergabe erscheint kurz ein eigenes Bild mit Play oder Pause. Ist die Option aus, bleibt die Anzeige, wie sie ist."
       },
       {

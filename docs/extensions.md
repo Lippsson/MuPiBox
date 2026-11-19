@@ -185,6 +185,10 @@ Die Nummer 5 (Taster) bringt im Manifest:
   Ein Feld mit `choices` kann eine zweite Auswahl neben sich haben: **`extra`** = `{ key, label?, when, choices }` – `key` ist eine eigene
   Einstellung mit `options`, `choices` nennt jede davon, und die Auswahl (eine Liste rechts neben dem Feld) steht nur da, solange das Feld
   einen der Werte aus `when` hat (bei den Tastern: der Lautstärke-Schritt neben „Lauter“ und „Leiser“).
+  Zwei Angaben, die keine neuere Box brauchen (eine Box, die sie nicht kennt, zeigt gewöhnliche Knöpfe und den Hilfetext unter dem Feld):
+  **`image`** an einem Eintrag von `choices` – ein Bild der Erweiterung (`.png`, `.jpg` oder `.svg`, ein Pfad wie `images/mode-full.png`, kein
+  `..`), das über dem Knopf steht (die OLED-Erweiterung zeigt so die Anzeige in jeder Betriebsart); und **`tip: true`** an einem Feld mit
+  `help` – der Hilfetext steht dann nicht unter dem Feld, sondern als Tooltip an einem „i“ neben der Beschriftung (Schalter).
   Eine Überschrift und die Felder bis zur nächsten sind eine Gruppe. Mit **`rename`** (eine `string`-Einstellung) gibt der Benutzer der Gruppe
   einen Namen: die Überschrift ist dann ein Textfeld, `label` steht als Platzhalter darin. Mit **`optional`** (eine `boolean`-Einstellung) ist
   die Gruppe erst da, wenn man sie hinzufügt: aufeinanderfolgende Gruppen mit demselben `label` sind eine Reihe, unter der rechts ein

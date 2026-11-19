@@ -242,6 +242,9 @@ VOLUME_DIGITS = {
     '-': ('.....', '.....', '.....', '.###.', '.....', '.....', '.....'),
 }
 BIG_ADVANCE = 6
+# (the V in front of the volume in the bottom row of the Mix mode and on the 128 x 32 display: seven pixels high like the digits, strokes of
+# two pixels - the letter of the font was thin and hard to tell from the digits)
+VOLUME_V = ('##...##', '##...##', '.##.##.', '.##.##.', '..###..', '..###..', '...#...')
 HEADPHONES = ('..#####..', '.#.....#.', '#.......#', '#.......#', '#.......#', '##.....##', '###...###', '###...###', '##.....##')
 BLUETOOTH = ('..#....', '..##...', '#.#.#..', '.###...', '..#....', '.###...', '#.#.#..', '..##...', '..#....')
 # (a monitor with a network plug at its left and the cable going down: the box is on the wired network)
@@ -609,6 +612,13 @@ class Screens:
         elif state.get('stream'):
             draw.rectangle((0, 0, self.width - 1, 1), fill=1)
 
+    def _volume_cell(self, draw, state, x, right, y):
+        """The volume of the bottom row: a bold V at x and the number, with its last digit at `right` (so the ones stay under each other)."""
+        y += 2  # (the letters of the font start a little below their line's top)
+        self._art(draw, x, y, VOLUME_V)
+        volume = state.get('volume')
+        self._big_digits(draw, right, y, '%d' % int(volume) if isinstance(volume, (int, float)) else '--', VOLUME_DIGITS, right=True)
+
     def _status_bar(self, draw, state):
         """The row at the bottom: time, track, volume, wireless."""
         y = self.height - 11
@@ -622,8 +632,7 @@ class Screens:
         mid = '%s/%s' % (track, tracks) if track and tracks else (str(track) if track else '')
         draw.text((43, y), mid[:5], font=font, fill=1)
         draw.line((76, y - 2, 76, self.height), fill=1)
-        volume = state.get('volume')
-        draw.text((79, y), 'V%s' % (int(volume) if isinstance(volume, (int, float)) else '--'), font=font, fill=1)
+        self._volume_cell(draw, state, 79, 103, y)
         draw.line((106, y - 2, 106, self.height), fill=1)
         self._wifi(draw, state.get('wifi', -1), 110, self.height - 2, bool(state.get('lan')))
 
@@ -676,8 +685,7 @@ class Screens:
             self._marquee(draw, ('compact', 1), sub, 13, self.fonts.small, now)
         y = self.height - 9
         draw.text((1, y), 'PAUSE' if not state.get('playing') else clock_text(state.get('elapsed')), font=self.fonts.small, fill=1)
-        volume = state.get('volume')
-        draw.text((60, y), 'V%s' % (int(volume) if isinstance(volume, (int, float)) else '--'), font=self.fonts.small, fill=1)
+        self._volume_cell(draw, state, 79, 103, y)
         self._wifi(draw, state.get('wifi', -1), self.width - 18, self.height - 2, bool(state.get('lan')))
         return image
 
