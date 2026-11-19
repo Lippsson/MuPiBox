@@ -508,7 +508,7 @@ class ScreensTest(unittest.TestCase):
         def gaps(image):
             columns = [x for x in range(0, 100) if lit(image, (x, 0, x + 1, 9))]
             runs = [b - a - 1 for a, b in zip(columns, columns[1:]) if b - a > 1]
-            return [r for r in runs if r > 2]  # (smaller gaps are inside one element)
+            return [r for r in runs if r > 3]  # (smaller gaps are inside one element)
 
         for state in ({'battery': 80, 'repeat': 'all', 'shuffle': True}, {'battery': 80, 'repeat': 'track'}, {'repeat': 'all', 'shuffle': True}, {'shuffle': True}, {'battery': 5, 'shuffle': True}):
             for lan in (False, True):
@@ -560,11 +560,30 @@ class ScreensTest(unittest.TestCase):
             image = self.s.render({**PLAY, 'repeat': kind, 'shuffle': False}, 0)
             got = [''.join('#' if image.getpixel((18 + i, j)) else '.' for i in range(14)) for j in range(9)]
             self.assertEqual(got, repeat, kind)
-        # (the A beside the arrows when the whole list repeats; one track repeats with the arrows alone - no 1)
+        # (the A beside the arrows when the whole list repeats, a 1 when one track does - the arrows themselves have no stroke like a 1)
         all_ = self.s.render({**PLAY, 'repeat': 'all', 'shuffle': False}, 0)
         one = self.s.render({**PLAY, 'repeat': 'track', 'shuffle': False}, 0)
-        self.assertGreater(lit(all_, (33, 0, 38, 9)), 5, 'the A')
-        self.assertEqual(lit(one, (33, 0, 38, 9)), 0, 'no 1')
+        mark = lambda image: [''.join('#' if image.getpixel((33 + i, 1 + j)) else '.' for i in range(4)) for j in range(7)]
+        self.assertEqual(mark(all_), list(render.DIGITS['A']), 'the A')
+        self.assertEqual(mark(one), list(render.DIGITS['1']), 'the 1')
+
+    def test_the_time_of_every_mode_counts_up_or_down(self):
+        # ("Zeit zeigen": the Mix mode, the compact mode and the 128 x 32 display count down as well - not only the full mode)
+        self.assertEqual(render.shown_time({'elapsed': 83, 'duration': 190, 'timeMode': 'up'}), '1:23')
+        self.assertEqual(render.shown_time({'elapsed': 83, 'duration': 190, 'timeMode': 'down'}), '-1:47')
+        self.assertEqual(render.shown_time({'elapsed': 83, 'duration': None, 'timeMode': 'down'}), '1:23', 'a stream counts up')
+        self.assertEqual(render.shown_time({'elapsed': 100, 'duration': 7000, 'timeMode': 'down'}), '-1:55:00')
+        self.assertEqual(render.shown_time({'elapsed': 100, 'duration': 7000, 'timeMode': 'down'}, short=True), '-1:55')
+        for size in ((128, 64), (128, 32)):
+            screens = render.Screens(*size)
+            for mode in ('mix', 'lite', 'full'):
+                state = {**PLAY, 'mode': mode, 'tracks': 1, 'track': 1, 'elapsed': 83, 'duration': 190}
+                up = screens.render({**state, 'timeMode': 'up'}, 0)
+                down = screens.render({**state, 'timeMode': 'down'}, 0)
+                self.assertNotEqual(up.tobytes(), down.tobytes(), (size, mode))
+        # (a time with hours and a minus in the narrow cell of the Mix mode still ends before its line)
+        long = render.Screens(128, 64).render({**PLAY, 'mode': 'mix', 'elapsed': 100, 'duration': 7000, 'timeMode': 'down'}, 0)
+        self.assertEqual(lit(long, (38, 53, 40, 64)), 0)
 
     def test_the_bottom_row_counts_up_or_down(self):
         up = self.s.render({**PLAY, 'timeMode': 'up'}, 0)

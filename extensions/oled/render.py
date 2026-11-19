@@ -165,6 +165,20 @@ def clock_text(seconds):
     return '%d:%02d:%02d' % (h, m, s) if h else '%d:%02d' % (m, s)
 
 
+def shown_time(state, short=False):
+    """The time of the player the way the user chose ("Zeit zeigen"): up from the start, or - with `timeMode` 'down' - a minus and what is left
+    (a stream has no end to count down to: it counts up). `short` leaves out the seconds of a time with hours."""
+    elapsed, duration = state.get('elapsed'), state.get('duration')
+    if state.get('timeMode') == 'down' and isinstance(elapsed, (int, float)) and isinstance(duration, (int, float)) and duration > 0:
+        seconds, sign = max(0, duration - elapsed), '-'
+    else:
+        seconds, sign = elapsed, ''
+    text = clock_text(seconds)
+    if short and text.count(':') == 2:
+        text = text.rsplit(':', 1)[0]
+    return sign + text
+
+
 def fit(text, font, draw, width):
     """The text cut to the width with '…' at its end (for a line that does not scroll)."""
     if draw.textlength(text, font=font) <= width:
@@ -438,10 +452,9 @@ class Screens:
             draw.rectangle((bx + BATTERY_SEGMENT_X[i], y + 2, bx + BATTERY_SEGMENT_X[i] + 1, y + 6), fill=0)
 
     def _repeat(self, draw, x, y, kind):
-        """The two arrows and, to their right, an A when the whole list repeats (one track: the arrows alone)."""
+        """The two arrows and, to their right, an A (the whole list) or a 1 (this track)."""
         self._art(draw, x, y, REPEAT)
-        if kind != 'track':
-            self._art(draw, x + 15, y + 1, DIGITS['A'])
+        self._art(draw, x + 15, y + 1, DIGITS['1' if kind == 'track' else 'A'])
 
     def _shuffle(self, draw, x, y):
         self._art(draw, x, y, SHUFFLE)
@@ -468,7 +481,7 @@ class Screens:
         if repeat in ('all', 'track'):
             first, last = extent(REPEAT)
             self._repeat(draw, x - first, 0, repeat)
-            x += (REPEAT_MARK_END if repeat == 'all' else last) - first + 1 + STATUS_GAP
+            x += REPEAT_MARK_END - first + 1 + STATUS_GAP
         if state.get('shuffle'):
             first, last = extent(SHUFFLE)
             self._shuffle(draw, x - first, 0)
@@ -492,11 +505,7 @@ class Screens:
         else:
             draw.rectangle((0, y + 2, 1, y + 8), fill=1)
             draw.rectangle((4, y + 2, 5, y + 8), fill=1)
-        elapsed, duration = state.get('elapsed'), state.get('duration')
-        if state.get('timeMode') == 'down' and isinstance(elapsed, (int, float)) and isinstance(duration, (int, float)) and duration > 0:
-            text = '-' + clock_text(max(0, duration - elapsed))
-        else:
-            text = clock_text(elapsed)
+        text = shown_time(state)
         draw.text((9, y), text, font=font, fill=1)
         track, tracks = state.get('track'), state.get('tracks')
         if track and tracks:
@@ -700,7 +709,10 @@ class Screens:
         y = self.height - 11
         draw.line((0, y - 2, self.width, y - 2), fill=1)
         paused = not state.get('playing')
-        left = 'PAUSE' if paused else clock_text(state.get('elapsed'))
+        left = 'PAUSE' if paused else shown_time(state)
+        # (the cell is 38 pixels wide: a time with hours and a minus has no room for its seconds)
+        if self.row_width(left) > 38:
+            left = shown_time(state, short=True)
         y += 1
         self._row_text(draw, 1, y, left)
         draw.line((40, y - 3, 40, self.height), fill=1)
@@ -728,7 +740,7 @@ class Screens:
         track, tracks = state.get('track'), state.get('tracks')
         if track and tracks and tracks > 1:
             return str(track), self.fonts.huge
-        return clock_text(state.get('elapsed')), self.fonts.big
+        return shown_time(state), self.fonts.big
 
     def _play_mix(self, state):
         image, draw = self._canvas()
@@ -769,7 +781,7 @@ class Screens:
         if sub and sub != title:
             self._marquee(draw, ('compact', 1), sub, 13, self.fonts.small, now)
         y = self.height - 9
-        self._row_text(draw, 1, y + 1, 'PAUSE' if not state.get('playing') else clock_text(state.get('elapsed')))
+        self._row_text(draw, 1, y + 1, 'PAUSE' if not state.get('playing') else shown_time(state))
         self._volume_cell(draw, state, y + 1)
         self._wifi(draw, state.get('wifi', -1), self.width - 18, self.height - 2, bool(state.get('lan')))
         return image
