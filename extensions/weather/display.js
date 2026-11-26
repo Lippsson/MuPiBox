@@ -172,7 +172,7 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
 // Two displays one above the other on a dial, as the wind direction has them: the first over the knob with its text above it, the second
 // under the knob with its text below it (sizes and places as parts of the dial). They are drawn into a picture that the dial takes as its
 // background layer (`customLayer`), so that the pointer moves over them.
-const DISPLAY = { width: 0.305, height: 0.12, tops: [0.32, 0.57], textY: [0.285, 0.705] }
+const DISPLAY = { width: 0.305, height: 0.12, tops: [0.32, 0.57], textY: [0.285, 0.725] }
 const LAYER_PART = 0.831775 // how much of the dial the library gives a background layer (centred)
 
 export function displaysLayer(ss, size, displays, lcdColor, textColor) {
