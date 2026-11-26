@@ -4743,5 +4743,13 @@
  "Play/Pause halten für den zweiten Satz": "Maintenir lecture/pause pour le deuxième jeu",
  "1 Sekunde": "1 seconde",
  "2 Sekunden": "2 secondes",
- "3 Sekunden": "3 secondes"
+ "3 Sekunden": "3 secondes",
+ "Taste": "Bouton",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.": "Un bouton sur une broche GPIO libre (vers GND) bascule directement vers {}. Cela fonctionne toujours sans PIN, même si un PIN est défini sur l’écran, et aussi avec « Seulement dans l’app ».",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Le bouton est actif tant que « Plusieurs utilisateurs » est activé.",
+ "Taste gespeichert": "Bouton enregistré",
+ "Taste entfernt": "Bouton supprimé",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Un autre utilisateur a déjà cette broche.",
+ "GPIO {} nutzt schon: {}": "GPIO {} est déjà utilisé par : {}",
+ "MuPiBox (Taste von {})": "MuPiBox (bouton de {})"
 }

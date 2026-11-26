@@ -41,7 +41,13 @@ Das geht auch vom **Sperrbild** aus. Die Spielzeit gilt ja je Kind: Hat ein Gesc
 
 ## PIN
 
-Jeder Benutzer kann eine **PIN** aus vier Ziffern bekommen (**PIN** in seiner Zeile). Das Display fragt sie, bevor es **zu diesem Benutzer** wechselt. So kommt ein Kind nicht an die Bibliothek eines Erwachsenen oder an die Spielzeit eines Geschwisters. Nach fünf falschen Versuchen nimmt das Display eine Minute lang keine PIN an. Die App, Telegram, Home Assistant und MQTT fragen keine PIN.
+Jeder Benutzer kann eine **PIN** aus vier Ziffern bekommen (**PIN** in seiner Zeile). Das Display fragt sie, bevor es **zu diesem Benutzer** wechselt. So kommt ein Kind nicht an die Bibliothek eines Erwachsenen oder an die Spielzeit eines Geschwisters. Nach fünf falschen Versuchen nimmt das Display eine Minute lang keine PIN an. Die App, Telegram, Home Assistant und MQTT fragen keine PIN, ebenso wenig die [Taste eines Benutzers](#taste-fuer-einen-benutzer).
+
+## Taste für einen Benutzer
+
+Jeder Benutzer kann eine **Taste** an der Box bekommen: einen Taster an einem **freien GPIO-Pin**, der gegen **GND** schaltet. Ein Druck darauf wechselt sofort zu diesem Benutzer. In seiner Zeile wählst du unter **Taste** den Pin; **Kein Pin** nimmt die Taste wieder weg. Die Liste bietet nur Pins an, die nichts anderes belegt (die Box, eine Erweiterung, ein Drehregler, ein anderer Benutzer) und sagt bei den übrigen, wer sie hält.
+
+Die Taste ist **unabhängig von der PIN am Display**: Sie wechselt immer ohne PIN, ob für den Benutzer am Display eine PIN eingestellt ist oder nicht, und auch bei **Nur in der App**. Ein Taster an der Box ist wie die App oder MQTT: Wer ihn drücken kann, steht an der Box. Jeder Benutzer kann mit oder ohne Taste und mit oder ohne PIN eingerichtet werden, beides unabhängig voneinander. Die Tasten gelten, solange **Mehrere Benutzer** an ist; danach sind ihre Pins wieder frei. Der Taster verbindet den Pin mit GND, den Pull-up bringt der Pin selbst mit (siehe [GPIO-Belegung](../anhang/gpio.md)).
 
 ## Ein anderes Kind bearbeiten, ohne zu wechseln
 

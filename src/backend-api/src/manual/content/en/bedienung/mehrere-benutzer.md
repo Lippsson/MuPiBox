@@ -41,7 +41,13 @@ This works from the **lock screen** too. Play time belongs to each child, so a b
 
 ## PIN
 
-Every user can get a four-digit **PIN** (**PIN** in their row). The display asks for it before it switches **to that user**. That way a child cannot get to an adult's library or a sibling's play time. After five wrong tries the display takes no PIN for a minute. The app, Telegram, Home Assistant and MQTT ask for no PIN.
+Every user can get a four-digit **PIN** (**PIN** in their row). The display asks for it before it switches **to that user**. That way a child cannot get to an adult's library or a sibling's play time. After five wrong tries the display takes no PIN for a minute. The app, Telegram, Home Assistant and MQTT ask for no PIN, and neither does a [user’s button](#a-button-for-a-user).
+
+## A button for a user
+
+Every user can get a **button** on the box: a push button on a **free GPIO pin** that connects to **GND**. Pressing it switches to that user at once. In their row you pick the pin under **Button**; **No pin** takes the button away again. The list offers only pins that nothing else holds (the box, an extension, a rotary encoder, another user) and says who holds the others.
+
+The button is **independent of the PIN at the display**: it always switches without a PIN, whether a PIN is set at the display for that user or not, and also with **Only in the app**. A button on the box is like the app or MQTT: whoever can press it is standing at the box. Every user can be set up with or without a button and with or without a PIN, each independently of the other. The buttons work as long as **Several users** is on; after that their pins are free again. The button connects the pin to GND; the pin brings its own pull-up (see [GPIO assignment](../anhang/gpio.md)).
 
 ## Editing another child without switching
 

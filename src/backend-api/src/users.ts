@@ -85,6 +85,9 @@ export interface User {
   color: string
   /** the PIN asked at the display before switching to this user (B5): a hash, never the digits */
   pin?: string
+  /** A button of its own at the box (BCM pin 2-27, to GND): pressing it switches to this user - at once, whatever the
+   *  display's PIN and the display's way of switching (user-buttons.ts). None: no such button. */
+  gpio?: number
 }
 export interface UsersFile {
   version: number
@@ -101,6 +104,9 @@ export interface UserConfigPart {
   sections: Record<string, unknown>
   photos: Record<string, unknown>
 }
+
+/** A pin of the header a user's button may be on (BCM 2-27) */
+export const isUserGpio = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 2 && v <= 27
 
 const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T))
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
@@ -210,7 +216,8 @@ export class UserFiles {
       const name = cleanName(o.name)
       if (typeof o.id !== 'string' || !ID.test(o.id) || !name || users.some((x) => x.id === o.id)) continue
       const color = typeof o.color === 'string' && (USER_COLORS as readonly string[]).includes(o.color) ? o.color : USER_COLORS[0]
-      users.push({ id: o.id, name, color, ...(typeof o.pin === 'string' && o.pin ? { pin: o.pin } : {}) })
+      const gpio = typeof o.gpio === 'number' && isUserGpio(o.gpio) && !users.some((x) => x.gpio === o.gpio) ? o.gpio : undefined
+      users.push({ id: o.id, name, color, ...(typeof o.pin === 'string' && o.pin ? { pin: o.pin } : {}), ...(gpio ? { gpio } : {}) })
     }
     if (users.length === 0) users.push({ id: MAIN_ID, name: 'Standard', color: USER_COLORS[0] })
     const current = typeof raw.current === 'string' && users.some((u) => u.id === raw.current) ? raw.current : users[0].id
@@ -692,7 +699,7 @@ export interface SwitchHooks {
 
 export class UserSwitchError extends Error {
   constructor(
-    readonly code: 'busy' | 'unknown_user' | 'disabled' | 'failed' | 'mode' | 'pin' | 'pin_locked',
+    readonly code: 'busy' | 'unknown_user' | 'disabled' | 'failed' | 'mode' | 'pin' | 'pin_locked' | 'gpio_twice',
     message: string,
   ) {
     super(message)
@@ -870,6 +877,29 @@ export class Users {
       else throw new UserSwitchError('failed', 'pin')
       this.files.write(f)
     })
+  }
+
+  /** Give a user a button of his own (a BCM pin 2-27) or take it away (null, 0, ''). Each pin belongs to one user. That
+   *  nothing else on the box holds the pin is for the caller to check (the route does: it knows the extensions). */
+  setGpio(id: string, pin: unknown): Promise<void> {
+    return this.serial(async () => {
+      this.notDuringRestore()
+      const f = this.files.read()
+      const u = f.users.find((x) => x.id === id)
+      if (!u) throw new UserSwitchError('unknown_user', 'no such user')
+      if (pin === null || pin === 0 || pin === '') delete u.gpio
+      else if (isUserGpio(pin)) {
+        if (f.users.some((x) => x.id !== id && x.gpio === pin)) throw new UserSwitchError('gpio_twice', String(pin))
+        u.gpio = pin
+      } else throw new UserSwitchError('failed', 'gpio')
+      this.files.write(f)
+    })
+  }
+
+  /** The pins of the users' buttons - while several users are switched on (else the pins are free) */
+  gpioPins(): { pin: number; id: string; name: string }[] {
+    const f = this.files.read()
+    return f.enabled ? f.users.filter((u) => u.gpio).map((u) => ({ pin: u.gpio as number, id: u.id, name: u.name })) : []
   }
 
   private async switchNow(id: string, evenWhenOff: boolean): Promise<UsersFile> {
