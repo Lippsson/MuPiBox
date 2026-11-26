@@ -11,13 +11,13 @@ Tillägget **Väder** visar vädret på en ort som **mätare** på displayen: te
 
 ## Inställningar
 
-Inställningarna finns på en egen sida, **Väder**, under **Inställningar**, i fyra kort: **Väderserver och ort**, **Uppdatering**, **Enheter** och **Mätarnas utseende**.
+Inställningarna finns på en egen sida, **Väder**, under **Inställningar**, i fyra kort: **Väderserver och ort**, **Uppdatering** (bara en visning), **Enheter** och **Mätarnas utseende**.
 
 | Inställning | Verkan |
 | --- | --- |
 | **Väderserver** | **Open-Meteo** levererar mätvärden för de senaste 24 timmarna och vindbyar. Hos **MET Norway (yr.no)** är det värden från vädermodellen; regnet är där prognosen för de närmaste 24 timmarna |
 | **Ort** | sök på namnet och tryck på en träff |
-| **Uppdatera var …** och **Enhet** | hur ofta den öppna väderbilden hämtar nya värden, i sekunder eller minuter (minst var 10:e sekund, standard var 10:e minut) |
+| **Uppdatering** | ingen inställning, bara en visning: när boxen senast fick nya värden och när väderservern levererar nästa |
 | **Temperatur** | °C eller °F |
 | **Regn** | mm eller tum |
 | **Lufttryck** | hPa, inHg, mb eller kPa |
@@ -25,8 +25,16 @@ Inställningarna finns på en egen sida, **Väder**, under **Inställningar**, i
 | **Mätarnas ordning** | ta tag i en mätare vid handtaget och flytta den till en annan plats |
 | **Ram**, **Bakgrund**, **Visarform**, **Visarfärg**, **Knopp** och **Knoppfärg** | [mätarnas utseende](#maetarnas-utseende) |
 
-> [!NOTE]
-> Väderservrarna levererar nya värden bara ungefär varje timme, och boxen frågar dem högst en gång i minuten. Ett mycket kort intervall gör alltså inte visningen noggrannare.
+## När det finns nya värden
+
+Väderservrarna ger nya värden bara med fasta mellanrum, därför går uppdateringen inte att ställa in. Boxen frågar först igen när servern utlovar ett nytt svar:
+
+| Väderserver | Nya värden | Visad tid |
+| --- | --- | --- |
+| **MET Norway (yr.no)** | ungefär var 30:e minut. Värdena är timvärden från modellen; boxen räknar om dem till den aktuella minuten, så visarna rör sig också mellan hela timmarna | ortens tid, inte boxens |
+| **Open-Meteo** | var 15:e minut, efter hel kvart | ortens tid |
+
+Längst ned i väderbilden står **Senaste uppdatering** och **Nästa**, och på inställningssidan i kortet **Uppdatering**. Den öppna bilden frågar boxen varje minut; mätarna ritas bara om när ett värde har ändrats.
 
 Båda väderservrarna är gratis och kräver ingen inloggning. Boxen frågar dem med koordinaterna för den valda orten.
 

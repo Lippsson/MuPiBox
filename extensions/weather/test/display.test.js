@@ -57,17 +57,9 @@ test('copes with missing values', async () => {
   assert.deepEqual(dials.find((d) => d.id === 'wind').areas, [])
 })
 
-test('the refresh interval: seconds or minutes as set, 10 seconds at the least, a day at the most, 10 minutes by default', async () => {
-  const { intervalMs } = await load()
-  assert.equal(intervalMs({}), 600000)
-  assert.equal(intervalMs(undefined), 600000)
-  assert.equal(intervalMs({ refreshEvery: 30, refreshUnit: 'seconds' }), 30000)
-  assert.equal(intervalMs({ refreshEvery: 5, refreshUnit: 'minutes' }), 300000)
-  assert.equal(intervalMs({ refreshEvery: 2 }), 120000)
-  assert.equal(intervalMs({ refreshEvery: 1, refreshUnit: 'seconds' }), 10000)
-  assert.equal(intervalMs({ refreshEvery: 999, refreshUnit: 'minutes' }), 59940000)
-  assert.equal(intervalMs({ refreshEvery: 99999, refreshUnit: 'minutes' }), 86400000)
-  assert.equal(intervalMs({ refreshEvery: 'x', refreshUnit: 'seconds' }), 600000)
+test('the open page asks the box every minute', async () => {
+  const { REFRESH_MS } = await load()
+  assert.equal(REFRESH_MS, 60000)
 })
 
 test('the units come from the settings; an unknown one is the default', async () => {

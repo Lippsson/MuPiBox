@@ -4771,5 +4771,15 @@
  "Wetterserver und Ort": "Διακομιστής καιρού και τοποθεσία",
  "Aktualisierung": "Ενημέρωση",
  "Einheiten": "Μονάδες",
- "Aussehen der Uhren": "Εμφάνιση των οργάνων"
+ "Aussehen der Uhren": "Εμφάνιση των οργάνων",
+ "Wetterdaten": "Δεδομένα καιρού",
+ "Die Wetterserver liefern nur in festen Abständen neue Werte: MET Norway etwa alle 30 Minuten (stündliche Modellwerte, die die Box auf die aktuelle Minute umrechnet), Open-Meteo alle 15 Minuten. Die Box fragt deshalb erst wieder, wenn eine neue Antwort fällig ist, und der Abstand lässt sich nicht einstellen.": "Οι διακομιστές καιρού δίνουν νέες τιμές μόνο σε σταθερά διαστήματα: το MET Norway περίπου κάθε 30 λεπτά (ωριαίες τιμές μοντέλου, που το box μετατρέπει στο τρέχον λεπτό), το Open-Meteo κάθε 15 λεπτά. Γι’ αυτό το box ρωτά ξανά μόνο όταν είναι έτοιμη νέα απάντηση, και το διάστημα δεν ρυθμίζεται.",
+ "Letzte Aktualisierung": "Τελευταία ενημέρωση",
+ "Nächste Aktualisierung": "Επόμενη ενημέρωση",
+ "Neue Werte": "Νέες τιμές",
+ "Etwa alle 30 Minuten": "Περίπου κάθε 30 λεπτά",
+ "Alle 15 Minuten": "Κάθε 15 λεπτά",
+ "Kein Ort gewählt": "Δεν έχει επιλεγεί τοποθεσία",
+ "Keine Antwort": "Καμία απάντηση",
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Όταν έχει επιλεγεί τοποθεσία, η οθόνη δείχνει πάνω την καρτέλα «Καιρός». Ένα άγγιγμα την ανοίγει με τα όργανα μέτρησης. Το box φέρνει τις τιμές από το διαδίκτυο μόλις ο διακομιστής καιρού έχει νέες."
 }

@@ -1,16 +1,14 @@
 // The weather, display part: a "Wetter" tab after the categories (when a place is chosen in the app) that opens a full-screen page with
 // measuring dials - temperature, humidity, wind speed, wind direction, pressure and rain. The dials are the SteelSeries gauges
 // (steelseries.js, BSD-2, see LICENSE-steelseries.md), which come with the extension, so the display draws them without the internet;
-// the values come from the API part (api.js) as often as the app says (every ten minutes unless set otherwise).
+// the values come from the API part (api.js), which the page asks every minute.
 
-const UNIT_MS = { seconds: 1000, minutes: 60 * 1000 }
-
-/** How often the open page asks for new values (every N seconds or minutes, as set): from 10 seconds to a day, 10 minutes when nothing is set. */
-export function intervalMs(settings) {
-  const every = Number(settings?.refreshEvery)
-  const ms = Number.isFinite(every) && every > 0 ? every * (UNIT_MS[settings?.refreshUnit] ?? UNIT_MS.minutes) : 10 * UNIT_MS.minutes
-  return Math.min(Math.max(Math.round(ms), 10 * 1000), 24 * 60 * 60 * 1000)
-}
+/**
+ * How often the open page asks the box: every minute. The weather servers give new answers in steps of their own (MET Norway about
+ * every half hour, Open-Meteo every quarter of an hour); the box keeps the answer until then and counts the values of MET Norway over
+ * to the minute, so a question a minute costs the weather server nothing.
+ */
+export const REFRESH_MS = 60 * 1000
 
 /** The first of the steps that holds the value, else the last: a scale that fits what the dial shows. */
 export function pickMax(value, steps) {
@@ -248,6 +246,7 @@ export function activate(api) {
         const shown = new Map()
         let lastSize = 0
         let lastKey = ''
+        let lastValues = '' // the values the dials show, as text
         let total = 6 // how many dials there are (set when they are drawn)
 
         // (the dials side by side as large as the page allows: not higher than the page lets room for a line of text under the
@@ -398,9 +397,15 @@ export function activate(api) {
             foot.textContent = data ? 'Der Wetterserver antwortet nicht – letzte Werte' : 'Der Wetterserver antwortet nicht.'
             return
           }
+          // (asked every minute, the dials are drawn again only when a value has changed)
+          const { timeText, lastText, nextText, stale, ...values } = answer
+          const sig = JSON.stringify(values)
+          const changed = sig !== lastValues
+          lastValues = sig
           data = answer
-          draw(true)
-          foot.textContent = [answer.place, `Stand ${answer.timeText}`, PROVIDERS[answer.provider], answer.stale ? 'Server antwortet nicht – letzte Werte' : ''].filter(Boolean).join('  ·  ')
+          if (changed) draw(true)
+          // (the place is in the title already: here when the values came and when the server has new ones)
+          foot.textContent = [answer.lastText ? `Letzte Aktualisierung ${answer.lastText}` : '', answer.nextText ? `Nächste ${answer.nextText}` : '', PROVIDERS[answer.provider], answer.stale ? 'Server antwortet nicht – letzte Werte' : ''].filter(Boolean).join('  ·  ')
         }
 
         let resizeTimer = null
@@ -426,7 +431,7 @@ export function activate(api) {
             foot.textContent = 'Die Anzeigen konnten nicht geladen werden.'
           },
         )
-        const timer = setInterval(() => void refresh(), intervalMs(settings))
+        const timer = setInterval(() => void refresh(), REFRESH_MS)
         return () => {
           closed = true
           clearInterval(timer)

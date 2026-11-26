@@ -1,9 +1,9 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
-  "hostApi": 5,
+  "hostApi": 6,
   "resources": {},
   "api": "api.js",
   "display": "display.js",
@@ -31,20 +31,6 @@
       "type": "number",
       "min": -180,
       "max": 180
-    },
-    "refreshEvery": {
-      "type": "number",
-      "default": 10,
-      "min": 1,
-      "max": 999
-    },
-    "refreshUnit": {
-      "type": "string",
-      "default": "minutes",
-      "options": [
-        "seconds",
-        "minutes"
-      ]
     },
     "tempUnit": {
       "type": "string",
@@ -191,7 +177,7 @@
     "title": "Wetter",
     "heading": "Wetter",
     "place": "system",
-    "help": "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet und aktualisiert sie alle zehn Minuten.",
+    "help": "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.",
     "items": [
       {
         "type": "heading",
@@ -226,23 +212,10 @@
         "card": true
       },
       {
-        "key": "refreshEvery",
-        "label": "Aktualisieren alle …",
-        "help": "Wie oft die geöffnete Wetteranzeige neue Werte holt (Zahl eintragen, dann Speichern; mindestens alle 10 Sekunden). Die Wetterserver liefern neue Werte nur etwa stündlich, die Box fragt sie höchstens einmal pro Minute ab."
-      },
-      {
-        "key": "refreshUnit",
-        "label": "Einheit",
-        "choices": [
-          {
-            "value": "seconds",
-            "label": "Sekunden"
-          },
-          {
-            "value": "minutes",
-            "label": "Minuten"
-          }
-        ]
+        "type": "status",
+        "label": "Wetterdaten",
+        "state": "/api/ext/weather/state",
+        "help": "Die Wetterserver liefern nur in festen Abständen neue Werte: MET Norway etwa alle 30 Minuten (stündliche Modellwerte, die die Box auf die aktuelle Minute umrechnet), Open-Meteo alle 15 Minuten. Die Box fragt deshalb erst wieder, wenn eine neue Antwort fällig ist, und der Abstand lässt sich nicht einstellen."
       },
       {
         "type": "heading",

@@ -4771,5 +4771,15 @@
  "Wetterserver und Ort": "Servidor del tiempo y lugar",
  "Aktualisierung": "Actualización",
  "Einheiten": "Unidades",
- "Aussehen der Uhren": "Aspecto de los relojes"
+ "Aussehen der Uhren": "Aspecto de los relojes",
+ "Wetterdaten": "Datos del tiempo",
+ "Die Wetterserver liefern nur in festen Abständen neue Werte: MET Norway etwa alle 30 Minuten (stündliche Modellwerte, die die Box auf die aktuelle Minute umrechnet), Open-Meteo alle 15 Minuten. Die Box fragt deshalb erst wieder, wenn eine neue Antwort fällig ist, und der Abstand lässt sich nicht einstellen.": "Los servidores del tiempo solo dan valores nuevos a intervalos fijos: MET Norway cada 30 minutos aproximadamente (valores horarios del modelo que la caja convierte al minuto actual), Open-Meteo cada 15 minutos. Por eso la caja solo vuelve a preguntar cuando toca una respuesta nueva, y el intervalo no se puede ajustar.",
+ "Letzte Aktualisierung": "Última actualización",
+ "Nächste Aktualisierung": "Próxima actualización",
+ "Neue Werte": "Valores nuevos",
+ "Etwa alle 30 Minuten": "Aproximadamente cada 30 minutos",
+ "Alle 15 Minuten": "Cada 15 minutos",
+ "Kein Ort gewählt": "Ningún lugar elegido",
+ "Keine Antwort": "Sin respuesta",
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Cuando hay un lugar elegido, la pantalla muestra arriba la pestaña «Tiempo». Un toque la abre con los relojes de medición. La caja obtiene los valores de internet en cuanto el servidor del tiempo tiene nuevos."
 }

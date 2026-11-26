@@ -11,13 +11,13 @@ Ist ein Ort gewählt, zeigt das Display oben den Reiter **Wetter**. Ein Tipp dar
 
 ## Einstellungen
 
-Die Einstellungen stehen auf einer eigenen Seite **Wetter** unter **Einstellungen**, in vier Karten: **Wetterserver und Ort**, **Aktualisierung**, **Einheiten** und **Aussehen der Uhren**.
+Die Einstellungen stehen auf einer eigenen Seite **Wetter** unter **Einstellungen**, in vier Karten: **Wetterserver und Ort**, **Aktualisierung** (nur zur Anzeige), **Einheiten** und **Aussehen der Uhren**.
 
 | Einstellung | Wirkung |
 | --- | --- |
 | **Wetterserver** | **Open-Meteo** liefert Messwerte der letzten 24 Stunden und Böen. Bei **MET Norway (yr.no)** sind es Werte des Wettermodells; der Regen ist dort die Vorhersage für die nächsten 24 Stunden |
 | **Ort** | nach dem Namen suchen und einen Treffer antippen |
-| **Aktualisieren alle …** und **Einheit** | wie oft die geöffnete Wetteranzeige neue Werte holt, in Sekunden oder Minuten (mindestens alle 10 Sekunden, Standard alle 10 Minuten) |
+| **Aktualisierung** | keine Einstellung, nur die Anzeige: wann die Box zuletzt neue Werte bekommen hat und wann der Wetterserver die nächsten liefert |
 | **Temperatur** | °C oder °F |
 | **Regen** | mm oder Zoll |
 | **Luftdruck** | hPa, inHg, mb oder kPa |
@@ -25,8 +25,16 @@ Die Einstellungen stehen auf einer eigenen Seite **Wetter** unter **Einstellunge
 | **Reihenfolge der Uhren** | fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle |
 | **Rahmen**, **Hintergrund**, **Zeigerform**, **Zeigerfarbe**, **Knopf** und **Knopffarbe** | das [Aussehen der Uhren](#aussehen-der-uhren) |
 
-> [!NOTE]
-> Die Wetterserver liefern neue Werte nur etwa stündlich, und die Box fragt sie höchstens einmal pro Minute ab. Ein sehr kurzer Abstand macht die Anzeige also nicht genauer.
+## Wann es neue Werte gibt
+
+Die Wetterserver liefern nur in festen Abständen neue Werte, deshalb lässt sich die Aktualisierung nicht einstellen. Die Box fragt erst wieder, wenn der Server eine neue Antwort in Aussicht stellt:
+
+| Wetterserver | Neue Werte | Zeit auf der Anzeige |
+| --- | --- | --- |
+| **MET Norway (yr.no)** | etwa alle 30 Minuten. Die Werte sind stündliche Modellwerte; die Box rechnet sie auf die aktuelle Minute um, sodass sich die Zeiger auch zwischen den vollen Stunden bewegen | die Zeit des Ortes, nicht die der Box |
+| **Open-Meteo** | alle 15 Minuten, nach der vollen Viertelstunde | die Zeit des Ortes |
+
+Unten auf der Wetteranzeige stehen **Letzte Aktualisierung** und **Nächste**, auf der Einstellungsseite in der Karte **Aktualisierung**. Die geöffnete Anzeige fragt die Box jede Minute; die Uhren werden nur neu gezeichnet, wenn sich ein Wert geändert hat.
 
 Beide Wetterserver sind kostenlos und brauchen keine Anmeldung. Die Box fragt sie mit den Koordinaten des gewählten Ortes.
 

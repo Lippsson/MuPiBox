@@ -1,25 +1,43 @@
 // The weather, API part: fetches the values of the chosen place from the chosen weather server and gives the display one plain answer
 // (the same fields from either server), and searches places by name. Both servers are free and need no key.
-//   GET /api/ext/weather/data           -> { configured, provider, place, timeText, temperature, humidity, windSpeed, windGust, windDir,
+//   GET /api/ext/weather/data           -> { configured, provider, place, timeText, lastText, nextText, rhythm, temperature, humidity, windSpeed, windGust, windDir,
 //                                            windDirAvg, pressure, rain24, rainKind, tempMin, tempMax, humMin, humMax, pressMin,
 //                                            pressMax, trend: { temp, hum, press } (-1, 0, 1) }
 //   GET /api/ext/weather/places?q=name  -> [{ label, values: { placeName, lat, lon } }]
 
-// (what the box keeps of an answer at least: a display that asks every few seconds does not become a request to the weather server each time)
+// (the weather servers give new values in steps of their own - MET Norway says when in its `Expires` header, Open-Meteo has a value
+// every 15 minutes - so the box asks again only when a new answer is due, and then at most once a minute while it is not there yet)
 const MIN_CACHE_MS = 60 * 1000
-const UNIT_MS = { seconds: 1000, minutes: 60 * 1000 }
-
-/** How often the user lets the display ask (every N seconds or minutes): from 10 seconds to a day, 10 minutes when nothing is set. */
-function intervalMs(s) {
-  const every = Number(s?.refreshEvery)
-  const ms = Number.isFinite(every) && every > 0 ? every * (UNIT_MS[s?.refreshUnit] ?? UNIT_MS.minutes) : 10 * UNIT_MS.minutes
-  return Math.min(Math.max(Math.round(ms), 10 * 1000), 24 * 60 * 60 * 1000)
-}
+const QUARTER_HOUR_MS = 15 * 60 * 1000
+const HALF_HOUR_MS = 30 * 60 * 1000
 const TIMEOUT_MS = 15000
 // (met.no asks every program to name itself: https://api.met.no/doc/TermsOfService)
 const USER_AGENT = 'MuPiBox-weather-extension/1.0 github.com/Lippsson/MuPiBox'
 
 const round = (value, digits = 1) => (Number.isFinite(value) ? Math.round(value * 10 ** digits) / 10 ** digits : null)
+
+/** A value between two others (`f` from 0 to 1); the one that is there when the other is missing. */
+function lerp(a, b, f) {
+  if (Number.isFinite(a) && Number.isFinite(b)) return a + (b - a) * f
+  return Number.isFinite(a) ? a : b
+}
+
+/** The same for a direction in degrees: the short way round (350° and 10° meet at 0°). */
+function lerpDir(a, b, f) {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return Number.isFinite(a) ? a : b
+  const turn = ((((b - a) % 360) + 540) % 360) - 180
+  return (a + turn * f + 360) % 360
+}
+
+/** The time of day of a moment in the time zone of the place ("HH:MM"); the box's own zone when the place's is not known. */
+function clock(ms, timeZone) {
+  const options = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }
+  try {
+    return new Intl.DateTimeFormat('de-DE', timeZone ? { ...options, timeZone } : options).format(ms)
+  } catch {
+    return new Intl.DateTimeFormat('de-DE', options).format(ms)
+  }
+}
 
 /** The mean of directions in degrees (359° and 1° give 0°, not 180°); null for none. */
 function circularMean(degrees) {
@@ -75,27 +93,39 @@ function parseOpenMeteo(body) {
   }
 }
 
-/** MET Norway: the model's values for now; the rain is the forecast of the next 24 hours (there are no values of the hours before). */
-function parseMetNo(body) {
+/**
+ * MET Norway: the model's values (one set per hour), counted over to the minute `now` between the hour before and the hour after
+ * it; the rain is the forecast of the next 24 hours (there are no values of the hours before).
+ */
+function parseMetNo(body, now = Date.now()) {
   const series = body?.properties?.timeseries
-  const first = Array.isArray(series) ? series[0] : null
-  const d = first?.data?.instant?.details
-  if (!d || !Number.isFinite(d.air_temperature)) throw new Error('no current values')
-  const day = series.slice(0, 24)
+  if (!Array.isArray(series) || !series[0]?.data?.instant?.details || !Number.isFinite(series[0].data.instant.details.air_temperature)) throw new Error('no current values')
+  // (the last hour that has begun, and the fraction of the way to the next one)
+  let i = 0
+  while (i + 1 < series.length && Date.parse(series[i + 1].time) <= now) i++
+  const j = Math.min(i + 1, series.length - 1)
+  const span = Date.parse(series[j].time) - Date.parse(series[i].time)
+  const f = i === j || !(span > 0) ? 0 : Math.min(1, Math.max(0, (now - Date.parse(series[i].time)) / span))
+  const at = (index, key) => series[index]?.data?.instant?.details?.[key]
+  const mix = (key) => lerp(at(i, key), at(j, key), f)
+  const day = series.slice(i, i + 24)
   const temps = day.map((e) => e?.data?.instant?.details?.air_temperature).filter((v) => Number.isFinite(v))
   const dirs = day.slice(0, 3).map((e) => e?.data?.instant?.details?.wind_from_direction)
-  const at = (hour, key) => series[hour]?.data?.instant?.details?.[key]
   const all = (key) => day.map((e) => e?.data?.instant?.details?.[key])
   const kmh = (ms) => (Number.isFinite(ms) ? ms * 3.6 : NaN)
+  const temperature = mix('air_temperature')
+  const humidity = mix('relative_humidity')
+  const pressure = mix('air_pressure_at_sea_level')
+  const windDir = lerpDir(at(i, 'wind_from_direction'), at(j, 'wind_from_direction'), f)
   return {
-    timeText: new Date(first.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
-    temperature: round(d.air_temperature),
-    humidity: round(d.relative_humidity, 0),
-    windSpeed: round(kmh(d.wind_speed)),
-    windGust: round(kmh(d.wind_speed_of_gust)),
-    windDir: round(d.wind_from_direction, 0),
-    windDirAvg: circularMean(dirs) ?? round(d.wind_from_direction, 0),
-    pressure: round(d.air_pressure_at_sea_level),
+    timeText: new Date(now).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+    temperature: round(temperature),
+    humidity: round(humidity, 0),
+    windSpeed: round(kmh(mix('wind_speed'))),
+    windGust: round(kmh(mix('wind_speed_of_gust'))),
+    windDir: round(windDir, 0),
+    windDirAvg: circularMean(dirs) ?? round(windDir, 0),
+    pressure: round(pressure),
     rain24: round(day.reduce((sum, e) => sum + (Number(e?.data?.next_1_hours?.details?.precipitation_amount) || 0), 0)),
     rainKind: 'forecast',
     tempMin: minOf(temps),
@@ -105,7 +135,7 @@ function parseMetNo(body) {
     pressMin: minOf(all('air_pressure_at_sea_level')),
     pressMax: maxOf(all('air_pressure_at_sea_level')),
     // (the model has no hours before: the trend is where the next three hours go)
-    trend: { temp: trendOf(at(3, 'air_temperature'), d.air_temperature, 1), hum: trendOf(at(3, 'relative_humidity'), d.relative_humidity, 5), press: trendOf(at(3, 'air_pressure_at_sea_level'), d.air_pressure_at_sea_level, 1) },
+    trend: { temp: trendOf(at(i + 3, 'air_temperature'), temperature, 1), hum: trendOf(at(i + 3, 'relative_humidity'), humidity, 5), press: trendOf(at(i + 3, 'air_pressure_at_sea_level'), pressure, 1) },
   }
 }
 
@@ -115,49 +145,97 @@ function placeOf(r) {
   return { label: `${label} (${round(r.latitude, 2)}, ${round(r.longitude, 2)})`, values: { placeName: label, lat: round(r.latitude, 4), lon: round(r.longitude, 4) } }
 }
 
-async function getJson(url, headers = {}) {
+/** The answer of a weather server with what it says about itself: `{ body, modified, expires }` (moments in ms, NaN when not said). */
+async function getJsonMeta(url, headers = {}) {
   const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json', ...headers }, signal: AbortSignal.timeout(TIMEOUT_MS) })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return response.json()
+  return { body: await response.json(), modified: Date.parse(response.headers.get('last-modified') ?? ''), expires: Date.parse(response.headers.get('expires') ?? '') }
 }
 
+async function getJson(url, headers = {}) {
+  return (await getJsonMeta(url, headers)).body
+}
+
+// (the time zone of a place, for the times of MET Norway: Open-Meteo says it with any answer. Kept for as long as the box runs.)
+const zones = new Map()
+async function timeZoneOf(lat, lon) {
+  const key = `${lat}:${lon}`
+  if (zones.has(key)) return zones.get(key)
+  try {
+    const body = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m&timezone=auto`)
+    if (typeof body?.timezone === 'string') {
+      zones.set(key, body.timezone)
+      return body.timezone
+    }
+  } catch {
+    // (not known now: the times are shown in the box's own zone and the place is asked again next time)
+  }
+  return null
+}
+
+// What a source gives: `{ build(now) -> the values of the minute, last, next, zone, rhythm }` - `last` and `next` are the moments of the last
+// answer of the server and of the next one that is due (ms); `rhythm` is how often the server gives one: "quarter" or "half".
 const SOURCES = {
-  openmeteo: async (lat, lon) =>
-    parseOpenMeteo(
-      await getJson(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,relative_humidity_2m,pressure_msl,precipitation,wind_direction_10m&past_hours=24&forecast_hours=1&wind_speed_unit=kmh&timezone=auto`,
-      ),
-    ),
-  metno: async (lat, lon) => parseMetNo(await getJson(`https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`)),
+  openmeteo: async (lat, lon) => {
+    const { body } = await getJsonMeta(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,relative_humidity_2m,pressure_msl,precipitation,wind_direction_10m&past_hours=24&forecast_hours=1&wind_speed_unit=kmh&timezone=auto`,
+    )
+    const data = parseOpenMeteo(body)
+    // (the values are those of a quarter of an hour: `current.time` is local time, `utc_offset_seconds` the offset)
+    const step = Number(body.current?.interval) > 0 ? Number(body.current.interval) * 1000 : QUARTER_HOUR_MS
+    const last = Date.parse(`${body.current.time}Z`) - (Number(body.utc_offset_seconds) || 0) * 1000
+    return { build: () => data, last: Number.isFinite(last) ? last : Date.now(), next: (Number.isFinite(last) ? last : Date.now()) + step, zone: body.timezone, rhythm: 'quarter' }
+  },
+  metno: async (lat, lon) => {
+    const [{ body, modified, expires }, zone] = await Promise.all([
+      getJsonMeta(`https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`),
+      timeZoneOf(lat, lon),
+    ])
+    parseMetNo(body) // (an answer without values is an error now, not at the first look)
+    const now = Date.now()
+    return {
+      build: (at) => parseMetNo(body, at),
+      last: Number.isFinite(modified) && modified <= now ? modified : now,
+      // (the server says when it will have a new answer; the box does not ask before)
+      next: Number.isFinite(expires) && expires > now ? expires : now + HALF_HOUR_MS,
+      zone,
+      rhythm: 'half',
+    }
+  },
 }
 
 exports.activate = (host) => {
-  const cache = new Map() // provider:lat:lon -> { at, data, pending }
+  const cache = new Map() // provider:lat:lon -> { at (the last try), src, pending }
 
-  async function current(provider, lat, lon, ttl) {
+  async function current(provider, lat, lon) {
     const key = `${provider}:${lat}:${lon}`
     const entry = cache.get(key)
-    if (entry?.data && Date.now() - entry.at < ttl) return entry.data
+    const now = Date.now()
+    // (the last answer holds until the server has a new one; when it is due and not there yet, one try a minute)
+    if (entry?.src && (now < entry.src.next || now - entry.at < MIN_CACHE_MS)) return entry.src
     // (several displays or a quick second tap: one request)
     if (entry?.pending) return entry.pending
     const pending = SOURCES[provider](lat, lon).then(
-      (data) => {
-        cache.set(key, { at: Date.now(), data })
-        return data
+      (src) => {
+        cache.set(key, { at: Date.now(), src })
+        return src
       },
       (error) => {
         // (the server does not answer: the last values are better than none)
-        if (entry?.data) {
-          cache.set(key, { at: entry.at, data: entry.data })
-          return { ...entry.data, stale: true }
+        if (entry?.src) {
+          cache.set(key, { at: Date.now(), src: entry.src })
+          return { ...entry.src, stale: true }
         }
         cache.delete(key)
         throw error
       },
     )
-    cache.set(key, { at: entry?.at ?? 0, data: entry?.data, pending })
+    cache.set(key, { at: entry?.at ?? 0, src: entry?.src, pending })
     return pending
   }
+
+  /** The texts about the times of an answer: when it came, and when the next one is due (not before now). */
+  const timesOf = (src, now) => ({ lastText: clock(src.last, src.zone), nextText: clock(Math.max(src.next, now), src.zone), rhythm: src.rhythm })
 
   host.route('get', '/data', async (_req, res) => {
     const s = await host.settings()
@@ -167,12 +245,34 @@ exports.activate = (host) => {
       return
     }
     try {
-      const data = await current(provider, s.lat, s.lon, Math.max(intervalMs(s), MIN_CACHE_MS))
-      res.set('Cache-Control', 'no-store').json({ configured: true, provider, place: s.placeName || '', ...data })
+      const src = await current(provider, s.lat, s.lon)
+      const now = Date.now()
+      const times = timesOf(src, now)
+      res.set('Cache-Control', 'no-store').json({ configured: true, provider, place: s.placeName || '', stale: src.stale, ...src.build(now), timeText: times.lastText, ...times })
     } catch (error) {
       host.log.warn(`[Extension weather] ${provider}: ${error}`)
       res.status(502).set('Cache-Control', 'no-store').json({ configured: true, error: 'no answer from the weather server' })
     }
+  })
+
+  // The lines of the settings page: how the server delivers and when (the status block of the page asks for them)
+  host.route('get', '/state', async (_req, res) => {
+    const s = await host.settings()
+    const provider = s.provider === 'metno' ? 'metno' : 'openmeteo'
+    res.set('Cache-Control', 'no-store')
+    if (!Number.isFinite(s.lat) || !Number.isFinite(s.lon)) {
+      res.json({ rows: [{ label: 'Ort', value: 'Kein Ort gewählt', tone: 'warn' }] })
+      return
+    }
+    const rows = [{ label: 'Neue Werte', value: provider === 'metno' ? 'Etwa alle 30 Minuten' : 'Alle 15 Minuten' }]
+    try {
+      const times = timesOf(await current(provider, s.lat, s.lon), Date.now())
+      rows.push({ label: 'Letzte Aktualisierung', value: times.lastText, tone: 'ok' }, { label: 'Nächste Aktualisierung', value: times.nextText })
+    } catch (error) {
+      host.log.warn(`[Extension weather] ${provider}: ${error}`)
+      rows.push({ label: 'Wetterserver', value: 'Keine Antwort', tone: 'warn' })
+    }
+    res.json({ rows })
   })
 
   host.route('get', '/places', async (req, res) => {
@@ -191,4 +291,4 @@ exports.activate = (host) => {
   })
 }
 
-exports._test = { parseOpenMeteo, parseMetNo, circularMean, placeOf, trendOf, intervalMs }
+exports._test = { parseOpenMeteo, parseMetNo, circularMean, placeOf, trendOf, lerp, lerpDir, clock, SOURCES }

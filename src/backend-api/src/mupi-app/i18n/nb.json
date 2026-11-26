@@ -4771,5 +4771,15 @@
  "Wetterserver und Ort": "Værserver og sted",
  "Aktualisierung": "Oppdatering",
  "Einheiten": "Enheter",
- "Aussehen der Uhren": "Utseendet til måleurene"
+ "Aussehen der Uhren": "Utseendet til måleurene",
+ "Wetterdaten": "Værdata",
+ "Die Wetterserver liefern nur in festen Abständen neue Werte: MET Norway etwa alle 30 Minuten (stündliche Modellwerte, die die Box auf die aktuelle Minute umrechnet), Open-Meteo alle 15 Minuten. Die Box fragt deshalb erst wieder, wenn eine neue Antwort fällig ist, und der Abstand lässt sich nicht einstellen.": "Værserverne gir bare nye verdier med faste mellomrom: MET Norway omtrent hvert 30. minutt (timeverdier fra modellen som boksen regner om til det aktuelle minuttet), Open-Meteo hvert 15. minutt. Boksen spør derfor først igjen når et nytt svar er klart, og mellomrommet kan ikke stilles inn.",
+ "Letzte Aktualisierung": "Siste oppdatering",
+ "Nächste Aktualisierung": "Neste oppdatering",
+ "Neue Werte": "Nye verdier",
+ "Etwa alle 30 Minuten": "Omtrent hvert 30. minutt",
+ "Alle 15 Minuten": "Hvert 15. minutt",
+ "Kein Ort gewählt": "Ikke noe sted valgt",
+ "Keine Antwort": "Ikke noe svar",
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Når et sted er valgt, viser displayet fanen «Vær» øverst. Et trykk åpner måleurene. Boksen henter verdiene på internett så snart værserveren har nye."
 }

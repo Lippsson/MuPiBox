@@ -4771,5 +4771,15 @@
  "Wetterserver und Ort": "Weerserver en plaats",
  "Aktualisierung": "Verversen",
  "Einheiten": "Eenheden",
- "Aussehen der Uhren": "Uiterlijk van de meters"
+ "Aussehen der Uhren": "Uiterlijk van de meters",
+ "Wetterdaten": "Weergegevens",
+ "Die Wetterserver liefern nur in festen Abständen neue Werte: MET Norway etwa alle 30 Minuten (stündliche Modellwerte, die die Box auf die aktuelle Minute umrechnet), Open-Meteo alle 15 Minuten. Die Box fragt deshalb erst wieder, wenn eine neue Antwort fällig ist, und der Abstand lässt sich nicht einstellen.": "De weerservers geven alleen met vaste tussenpozen nieuwe waarden: MET Norway ongeveer elke 30 minuten (uurwaarden van het model die de box naar de huidige minuut omrekent), Open-Meteo elke 15 minuten. De box vraagt daarom pas opnieuw als er een nieuw antwoord verwacht wordt, en de tussentijd is niet in te stellen.",
+ "Letzte Aktualisierung": "Laatste update",
+ "Nächste Aktualisierung": "Volgende update",
+ "Neue Werte": "Nieuwe waarden",
+ "Etwa alle 30 Minuten": "Ongeveer elke 30 minuten",
+ "Alle 15 Minuten": "Elke 15 minuten",
+ "Kein Ort gewählt": "Geen plaats gekozen",
+ "Keine Antwort": "Geen antwoord",
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Is er een plaats gekozen, dan toont het display bovenaan het tabblad “Weer”. Een tik erop opent de meters. De box haalt de waarden van internet zodra de weerserver nieuwe heeft."
 }

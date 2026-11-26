@@ -4771,5 +4771,15 @@
  "Wetterserver und Ort": "Hava durumu sunucusu ve yer",
  "Aktualisierung": "Yenileme",
  "Einheiten": "Birimler",
- "Aussehen der Uhren": "Saatlerin görünümü"
+ "Aussehen der Uhren": "Saatlerin görünümü",
+ "Wetterdaten": "Hava durumu verileri",
+ "Die Wetterserver liefern nur in festen Abständen neue Werte: MET Norway etwa alle 30 Minuten (stündliche Modellwerte, die die Box auf die aktuelle Minute umrechnet), Open-Meteo alle 15 Minuten. Die Box fragt deshalb erst wieder, wenn eine neue Antwort fällig ist, und der Abstand lässt sich nicht einstellen.": "Hava durumu sunucuları yeni değerleri yalnızca belirli aralıklarla verir: MET Norway yaklaşık 30 dakikada bir (kutunun geçerli dakikaya çevirdiği saatlik model değerleri), Open-Meteo 15 dakikada bir. Bu yüzden kutu, yeni bir yanıt beklendiğinde yeniden sorar ve aralık ayarlanamaz.",
+ "Letzte Aktualisierung": "Son güncelleme",
+ "Nächste Aktualisierung": "Sonraki güncelleme",
+ "Neue Werte": "Yeni değerler",
+ "Etwa alle 30 Minuten": "Yaklaşık 30 dakikada bir",
+ "Alle 15 Minuten": "15 dakikada bir",
+ "Kein Ort gewählt": "Yer seçilmedi",
+ "Keine Antwort": "Yanıt yok",
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Bir yer seçildiğinde ekran üstte “Hava durumu” sekmesini gösterir. Dokunmak ölçü saatlerini açar. Kutu, hava durumu sunucusunda yeni değerler olur olmaz bunları internetten alır."
 }
