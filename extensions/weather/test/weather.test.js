@@ -32,9 +32,9 @@ test('reads an answer of Open-Meteo', () => {
   assert.equal(r.windSpeed, 5.6)
   assert.equal(r.windGust, 12.2)
   assert.equal(r.pressure, 1012.4)
-  // (the hour after 01:xx is not counted)
-  assert.equal(r.rain24, 0.8)
-  assert.equal(r.rainKind, 'past')
+  // (the hour after 01:xx is not counted in the last 24 hours, it is the first of the next ones)
+  assert.equal(r.rainPast24, 0.8)
+  assert.equal(r.rainNext24, 3)
   assert.equal(r.tempMin, -11.6)
   assert.equal(r.tempMax, -10)
   assert.equal(r.windDirAvg, 7)
@@ -63,8 +63,9 @@ test('reads an answer of MET Norway (m/s become km/h, the rain is the forecast)'
   assert.equal(r.windSpeed, 18)
   assert.equal(r.windGust, 36)
   assert.equal(r.windDir, 270)
-  assert.equal(r.rain24, 0.8)
-  assert.equal(r.rainKind, 'forecast')
+  assert.equal(r.rainNext24, 0.8)
+  assert.equal(r.rainPast24, null)
+  assert.equal(_test.parseMetNo({ properties: { timeseries: [entry(0, 4, 0.5)] } }, 0, 7.25).rainPast24, 7.3)
   assert.equal(r.tempMin, 2)
   assert.equal(r.tempMax, 4)
 })
@@ -126,7 +127,7 @@ test('asks the weather server again only when its answer has run out, and answer
   t.mock.method(Date, 'now', () => clockNow)
   let met = 0
   t.mock.method(globalThis, 'fetch', async (url) => {
-    if (String(url).includes('open-meteo')) return new Response(JSON.stringify({ timezone: 'Europe/Stockholm' }), { status: 200 })
+    if (String(url).includes('open-meteo')) return new Response(JSON.stringify({ timezone: 'Europe/Stockholm', current: { time: '2026-11-07T10:00' }, hourly: { time: ['2026-11-07T10:00'], precipitation: [0] } }), { status: 200 })
     met++
     const headers = { 'Last-Modified': new Date(clockNow).toUTCString(), Expires: new Date(clockNow + 30 * 60 * 1000).toUTCString() }
     return new Response(JSON.stringify(body), { status: 200, headers })
@@ -175,4 +176,59 @@ test('Open-Meteo: the values come in quarters of an hour', async (t) => {
   assert.equal(src.zone, 'Europe/Stockholm')
   assert.equal(src.rhythm, 'quarter')
   assert.equal(_test.clock(src.last, src.zone), '11:15')
+})
+
+test('MET Norway has no past: the rain of the last 24 hours and the time zone come from Open-Meteo, and the answer still works without it', async (t) => {
+  const entry = (hour, temp) => ({
+    time: `2026-11-07T${String(hour).padStart(2, '0')}:00:00Z`,
+    data: { instant: { details: { air_temperature: temp, relative_humidity: 80, wind_speed: 5, wind_speed_of_gust: 10, wind_from_direction: 270, air_pressure_at_sea_level: 1000 } }, next_1_hours: { details: { precipitation_amount: 0.5 } } },
+  })
+  const met = { properties: { timeseries: [entry(10, 4), entry(11, 2)] } }
+  const openMeteo = { timezone: 'Europe/Stockholm', current: { time: '2026-11-07T11:00' }, hourly: { time: ['2026-11-07T09:00', '2026-11-07T10:00', '2026-11-07T11:00', '2026-11-07T12:00'], precipitation: [1, 0.5, 0.25, 9] } }
+  let openMeteoUp = true
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (!String(url).includes('open-meteo')) return new Response(JSON.stringify(met), { status: 200 })
+    if (!openMeteoUp) throw new Error('down')
+    return new Response(JSON.stringify(openMeteo), { status: 200 })
+  })
+  let src = await _test.SOURCES.metno(58.2, 14.6)
+  let r = src.build(Date.parse('2026-11-07T10:00:00Z'))
+  // (the hour after "now" is not part of the past)
+  assert.equal(r.rainPast24, 1.8)
+  assert.equal(r.rainNext24, 1)
+  assert.equal(src.zone, 'Europe/Stockholm')
+  openMeteoUp = false
+  src = await _test.SOURCES.metno(58.2, 14.6)
+  r = src.build(Date.parse('2026-11-07T10:00:00Z'))
+  assert.equal(r.rainPast24, null)
+  assert.equal(r.rainNext24, 1)
+  // (the zone is kept from the time before)
+  assert.equal(src.zone, 'Europe/Stockholm')
+})
+
+test('when Open-Meteo did not answer, the zone and the past rain are asked again in two minutes, the weather server is not', async (t) => {
+  const entry = (hour, temp) => ({ time: `2026-11-07T${String(hour).padStart(2, '0')}:00:00Z`, data: { instant: { details: { air_temperature: temp } }, next_1_hours: { details: { precipitation_amount: 0 } } } })
+  const met = { properties: { timeseries: [entry(10, 4), entry(11, 2)] } }
+  let clockNow = Date.parse('2026-11-07T10:00:00Z')
+  t.mock.method(Date, 'now', () => clockNow)
+  let metCalls = 0
+  let openMeteoCalls = 0
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (String(url).includes('open-meteo')) {
+      openMeteoCalls++
+      throw new Error('down')
+    }
+    metCalls++
+    return new Response(JSON.stringify(met), { status: 200, headers: { Expires: new Date(clockNow + 30 * 60 * 1000).toUTCString() } })
+  })
+  const routes = {}
+  require('../api.js').activate({ route: (_m, path, handler) => (routes[path] = handler), settings: async () => ({ provider: 'metno', lat: 1, lon: 2 }), log: { warn() {} } })
+  const ask = () => routes['/data']({}, { set() { return this }, status() { return this }, json() {} })
+  await ask()
+  clockNow += 30 * 1000
+  await ask()
+  assert.deepEqual([metCalls, openMeteoCalls], [1, 1])
+  clockNow += 2 * 60 * 1000
+  await ask()
+  assert.deepEqual([metCalls, openMeteoCalls], [1, 2])
 })

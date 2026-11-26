@@ -126,8 +126,10 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
   const windSpeed = wind(data.windSpeed)
   const windGust = wind(data.windGust)
   const windMax = pickMax(Math.max(windSpeed || 0, windGust || 0), U.wind.steps)
-  const rain24 = rain(data.rain24)
-  const rainMax = pickMax(rain24 || 0, U.rain.steps)
+  // (the rain of the last and of the next 24 hours: both are shown, in two displays; the pointer shows the last 24 hours when they are known)
+  const rainPast = rain(data.rainPast24)
+  const rainNext = rain(data.rainNext24)
+  const rainMax = pickMax(Math.max(rainPast || 0, rainNext || 0), U.rain.steps)
   // (a low and a high pressure are the red ends of the scale)
   const warn = 'rgba(225,30,0,0.55)'
   const pLow = press(975)
@@ -150,7 +152,12 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
     { id: 'dir', kind: 'direction', title: 'Windrichtung', latest: data.windDir, average: data.windDirAvg, caption: 'legend' },
     { id: 'baro', kind: 'radial', title: 'Luftdruck', unit: U.press.label, min: p.min, max: p.max, value: pressure, decimals: U.press.decimals, scaleDecimals: U.press.scaleDecimals ?? 0, sections: [], areas: [{ start: p.min, stop: pLow, color: warn }, { start: pHigh, stop: p.max, color: warn }], minMeasured: press(data.pressMin), maxMeasured: press(data.pressMax), trend: data.trend?.press ?? 0, caption: '' },
     {
-      id: 'rain', kind: 'radial', title: 'Regenmenge', unit: `${U.rain.label} / ${data.rainKind === 'forecast' ? 'nächste 24 h' : '24 h'}`, min: 0, max: rainMax, value: rain24, decimals: U.rain.decimals, scaleDecimals: U.rain.scaleDecimals ?? 0,
+      id: 'rain', kind: 'radial', title: 'Regenmenge', unit: U.rain.label, min: 0, max: rainMax, value: Number.isFinite(rainPast) ? rainPast : rainNext, decimals: U.rain.decimals, scaleDecimals: U.rain.scaleDecimals ?? 0,
+      // (two displays instead of the one of the dial, as the wind direction has: the text above each of them and the value in it)
+      lcds: [
+        { title: 'last 24h', text: fmt(rainPast, U.rain.decimals) },
+        { title: 'next 24h', text: fmt(rainNext, U.rain.decimals) },
+      ],
       sections: [
         { start: 0, stop: rainMax * 0.5, color: 'rgb(0,170,60)' },
         { start: rainMax * 0.5, stop: rainMax * 0.8, color: WARM },
@@ -159,6 +166,25 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
       areas: [], trend: null, caption: '',
     },
   ]
+}
+
+// Two displays side by side on a dial, each with its text above the value (as the wind direction has two); sizes as parts of the dial.
+const DISPLAY = { width: 0.24, height: 0.13, gap: 0.02, top: 0.66 }
+
+export function addDisplays(ss, stage, size, displays, lcdColor, textColor) {
+  displays.forEach((display, n) => {
+    const x = size * (0.5 - DISPLAY.gap / 2 - DISPLAY.width + n * (DISPLAY.width + DISPLAY.gap))
+    const canvas = document.createElement('canvas')
+    canvas.style.cssText = `position:absolute;left:${Math.round(x)}px;top:${Math.round(size * DISPLAY.top)}px`
+    stage.append(canvas)
+    const lcd = new ss.DisplaySingle(canvas, { width: Math.round(size * DISPLAY.width), height: Math.round(size * DISPLAY.height), lcdColor, unitStringVisible: false, headerStringVisible: false, valuesNumeric: false })
+    lcd.setValue(display.text)
+    // (the text over the display, in the colour of the other texts of the dial)
+    const label = document.createElement('div')
+    label.textContent = display.title
+    label.style.cssText = `position:absolute;left:${Math.round(x)}px;width:${Math.round(size * DISPLAY.width)}px;top:${Math.round(size * (DISPLAY.top - 0.055))}px;text-align:center;font:${Math.max(9, Math.round(size * 0.04))}px/1 sans-serif;color:${textColor};white-space:nowrap`
+    stage.append(label)
+  })
 }
 
 const GAP = 24 // between two dials
@@ -278,9 +304,13 @@ export function activate(api) {
             const cell = document.createElement('div')
             cell.style.cssText = 'flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;scroll-snap-align:start'
             const canvas = document.createElement('canvas')
+            // (the displays of a dial that has more than one lie on the dial: a box of the size of the dial to put them in)
+            const stage = document.createElement('div')
+            stage.style.cssText = `position:relative;width:${size}px;height:${size}px`
+            stage.append(canvas)
             const caption = document.createElement('div')
             caption.style.cssText = 'height:26px;display:flex;align-items:center;gap:14px;font:500 15px/1 var(--ion-font-family,inherit);opacity:.85;white-space:nowrap'
-            cell.append(canvas, caption)
+            cell.append(stage, caption)
             row.append(cell)
             const designs = designsOf(ss, settings)
             const look = {
@@ -336,6 +366,8 @@ export function activate(api) {
               // (a scale in inHg or inch has labels like 29.5, not 30)
               fractionalScaleDecimals: dial.scaleDecimals ?? 0,
               ...(dial.scaleDecimals ? { labelNumberFormat: ss.LabelNumberFormat.FRACTIONAL } : {}),
+              // (a dial with displays of its own - the rain - has not the one of the library)
+              lcdVisible: !dial.lcds,
               section: dial.sections,
               area: dial.areas,
               thresholdVisible: false,
@@ -344,6 +376,7 @@ export function activate(api) {
               // (the arrows are always there, as on the club's page: the one of the trend lights up, steady included)
               trendVisible: Number.isFinite(dial.trend),
             })
+            if (dial.lcds) addDisplays(ss, stage, size, dial.lcds, look.lcdColor, look.backgroundColor.labelColor.getRgbaColor())
             if (Number.isFinite(dial.minMeasured)) gauge.setMinMeasuredValue(clamp(dial.minMeasured, dial.min, dial.max))
             if (Number.isFinite(dial.maxMeasured)) gauge.setMaxMeasuredValue(clamp(dial.maxMeasured, dial.min, dial.max))
             if (Number.isFinite(dial.trend)) gauge.setTrend(ss.TrendState[trendName(dial.trend)])

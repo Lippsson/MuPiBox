@@ -25,6 +25,10 @@ The settings are on a page of their own, **Weather**, under **Settings**, in fou
 | **Order of the dials** | take a dial by its handle and move it to another place |
 | **Frame**, **Background**, **Pointer shape**, **Pointer colour**, **Knob** and **Knob colour** | the [look of the dials](#look-of-the-dials) |
 
+## The rain dial
+
+The rain dial shows two values in two displays, like the wind direction: **last 24h** (what fell in the last 24 hours) and **next 24h** (what is forecast for the next 24 hours). The pointer shows the last 24 hours, and the scale is wide enough for the larger of the two. **MET Norway** has only the forecast; the box then takes the last 24 hours from **Open-Meteo**. If that cannot be reached, a dash stands there and the pointer shows the next 24 hours.
+
 ## When there are new values
 
 The weather servers give new values only at fixed intervals, so the refresh cannot be set. The box asks again only when the server promises a new answer:

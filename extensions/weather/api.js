@@ -1,7 +1,7 @@
 // The weather, API part: fetches the values of the chosen place from the chosen weather server and gives the display one plain answer
 // (the same fields from either server), and searches places by name. Both servers are free and need no key.
 //   GET /api/ext/weather/data           -> { configured, provider, place, timeText, lastText, nextText, rhythm, temperature, humidity, windSpeed, windGust, windDir,
-//                                            windDirAvg, pressure, rain24, rainKind, tempMin, tempMax, humMin, humMax, pressMin,
+//                                            windDirAvg, pressure, rainPast24, rainNext24 (the rain of the last and of the next 24 hours; null when not known), tempMin, tempMax, humMin, humMax, pressMin,
 //                                            pressMax, trend: { temp, hum, press } (-1, 0, 1) }
 //   GET /api/ext/weather/places?q=name  -> [{ label, values: { placeName, lat, lon } }]
 
@@ -81,8 +81,9 @@ function parseOpenMeteo(body) {
     windDir: round(c.wind_direction_10m, 0),
     windDirAvg: circularMean(past.slice(-3).map((i) => h.wind_direction_10m?.[i])) ?? round(c.wind_direction_10m, 0),
     pressure: round(c.pressure_msl),
-    rain24: round(past.slice(-24).reduce((sum, i) => sum + (Number(h.precipitation?.[i]) || 0), 0)),
-    rainKind: 'past',
+    rainPast24: round(past.slice(-24).reduce((sum, i) => sum + (Number(h.precipitation?.[i]) || 0), 0)),
+    // (the hours after the current one, as far as the answer has them: the forecast of the next 24 hours)
+    rainNext24: round(times.map((t, i) => i).filter((i) => !past.includes(i)).slice(0, 24).reduce((sum, i) => sum + (Number(h.precipitation?.[i]) || 0), 0)),
     tempMin: minOf(temps),
     tempMax: maxOf(temps),
     humMin: minOf(hums),
@@ -97,7 +98,7 @@ function parseOpenMeteo(body) {
  * MET Norway: the model's values (one set per hour), counted over to the minute `now` between the hour before and the hour after
  * it; the rain is the forecast of the next 24 hours (there are no values of the hours before).
  */
-function parseMetNo(body, now = Date.now()) {
+function parseMetNo(body, now = Date.now(), rainPast24 = null) {
   const series = body?.properties?.timeseries
   if (!Array.isArray(series) || !series[0]?.data?.instant?.details || !Number.isFinite(series[0].data.instant.details.air_temperature)) throw new Error('no current values')
   // (the last hour that has begun, and the fraction of the way to the next one)
@@ -126,8 +127,9 @@ function parseMetNo(body, now = Date.now()) {
     windDir: round(windDir, 0),
     windDirAvg: circularMean(dirs) ?? round(windDir, 0),
     pressure: round(pressure),
-    rain24: round(day.reduce((sum, e) => sum + (Number(e?.data?.next_1_hours?.details?.precipitation_amount) || 0), 0)),
-    rainKind: 'forecast',
+    // (what fell in the last 24 hours is not in this answer: the caller gives it when it has it)
+    rainPast24: round(rainPast24),
+    rainNext24: round(day.reduce((sum, e) => sum + (Number(e?.data?.next_1_hours?.details?.precipitation_amount) || 0), 0)),
     tempMin: minOf(temps),
     tempMax: maxOf(temps),
     humMin: minOf(all('relative_humidity')),
@@ -156,21 +158,22 @@ async function getJson(url, headers = {}) {
   return (await getJsonMeta(url, headers)).body
 }
 
-// (the time zone of a place, for the times of MET Norway: Open-Meteo says it with any answer. Kept for as long as the box runs.)
+// What MET Norway does not say, from Open-Meteo: the time zone of the place and the rain of the last 24 hours (MET Norway has only the
+// forecast). The zone is kept for as long as the box runs; when Open-Meteo does not answer, the times are shown in the box's own zone and
+// the rain of the last 24 hours is not shown.
 const zones = new Map()
-async function timeZoneOf(lat, lon) {
+async function extrasOf(lat, lon) {
   const key = `${lat}:${lon}`
-  if (zones.has(key)) return zones.get(key)
   try {
-    const body = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m&timezone=auto`)
-    if (typeof body?.timezone === 'string') {
-      zones.set(key, body.timezone)
-      return body.timezone
-    }
+    const body = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m&hourly=precipitation&past_hours=24&forecast_hours=1&timezone=auto`)
+    if (typeof body?.timezone === 'string') zones.set(key, body.timezone)
+    const times = Array.isArray(body?.hourly?.time) ? body.hourly.time : []
+    const upTo = String(body?.current?.time ?? '').slice(0, 13)
+    const sums = times.map((t, i) => (String(t).slice(0, 13) <= upTo ? Number(body.hourly.precipitation?.[i]) : NaN)).filter((v) => Number.isFinite(v))
+    return { zone: zones.get(key) ?? null, rainPast24: sums.length > 0 ? sums.slice(-24).reduce((sum, v) => sum + v, 0) : null }
   } catch {
-    // (not known now: the times are shown in the box's own zone and the place is asked again next time)
+    return { zone: zones.get(key) ?? null, rainPast24: null }
   }
-  return null
 }
 
 // What a source gives: `{ build(now) -> the values of the minute, last, next, zone, rhythm }` - `last` and `next` are the moments of the last
@@ -178,7 +181,7 @@ async function timeZoneOf(lat, lon) {
 const SOURCES = {
   openmeteo: async (lat, lon) => {
     const { body } = await getJsonMeta(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,relative_humidity_2m,pressure_msl,precipitation,wind_direction_10m&past_hours=24&forecast_hours=1&wind_speed_unit=kmh&timezone=auto`,
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,relative_humidity_2m,pressure_msl,precipitation,wind_direction_10m&past_hours=24&forecast_hours=25&wind_speed_unit=kmh&timezone=auto`,
     )
     const data = parseOpenMeteo(body)
     // (the values are those of a quarter of an hour: `current.time` is local time, `utc_offset_seconds` the offset)
@@ -187,20 +190,32 @@ const SOURCES = {
     return { build: () => data, last: Number.isFinite(last) ? last : Date.now(), next: (Number.isFinite(last) ? last : Date.now()) + step, zone: body.timezone, rhythm: 'quarter' }
   },
   metno: async (lat, lon) => {
-    const [{ body, modified, expires }, zone] = await Promise.all([
+    const [{ body, modified, expires }, extras] = await Promise.all([
       getJsonMeta(`https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`),
-      timeZoneOf(lat, lon),
+      extrasOf(lat, lon),
     ])
     parseMetNo(body) // (an answer without values is an error now, not at the first look)
     const now = Date.now()
-    return {
-      build: (at) => parseMetNo(body, at),
+    const complete = () => Boolean(src.zone) && src.rainPast24 !== null
+    const src = {
+      build: (at) => parseMetNo(body, at, src.rainPast24),
       last: Number.isFinite(modified) && modified <= now ? modified : now,
       // (the server says when it will have a new answer; the box does not ask before)
       next: Number.isFinite(expires) && expires > now ? expires : now + HALF_HOUR_MS,
-      zone,
+      zone: extras.zone,
+      rainPast24: extras.rainPast24,
       rhythm: 'half',
+      // (Open-Meteo did not answer: the zone and the rain of the last 24 hours are asked again soon - not the weather server)
+      retryAt: undefined,
+      retry: async () => {
+        const again = await extrasOf(lat, lon)
+        src.zone = again.zone ?? src.zone
+        src.rainPast24 = again.rainPast24 ?? src.rainPast24
+        src.retryAt = complete() ? undefined : Date.now() + 2 * MIN_CACHE_MS
+      },
     }
+    src.retryAt = complete() ? undefined : now + 2 * MIN_CACHE_MS
+    return src
   },
 }
 
@@ -212,7 +227,14 @@ exports.activate = (host) => {
     const entry = cache.get(key)
     const now = Date.now()
     // (the last answer holds until the server has a new one; when it is due and not there yet, one try a minute)
-    if (entry?.src && (now < entry.src.next || now - entry.at < MIN_CACHE_MS)) return entry.src
+    if (entry?.src && (now < entry.src.next || now - entry.at < MIN_CACHE_MS)) {
+      // (a part that was missing is asked for again, once, without a new question to the weather server)
+      if (entry.src.retry && now >= entry.src.retryAt && !entry.src.retrying) {
+        entry.src.retrying = true
+        await entry.src.retry().finally(() => (entry.src.retrying = false))
+      }
+      return entry.src
+    }
     // (several displays or a quick second tap: one request)
     if (entry?.pending) return entry.pending
     const pending = SOURCES[provider](lat, lon).then(

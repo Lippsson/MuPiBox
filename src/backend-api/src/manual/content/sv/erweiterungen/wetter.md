@@ -25,6 +25,10 @@ Inställningarna finns på en egen sida, **Väder**, under **Inställningar**, i
 | **Mätarnas ordning** | ta tag i en mätare vid handtaget och flytta den till en annan plats |
 | **Ram**, **Bakgrund**, **Visarform**, **Visarfärg**, **Knopp** och **Knoppfärg** | [mätarnas utseende](#maetarnas-utseende) |
 
+## Regnmätaren
+
+Regnmätaren visar två värden i två displayer, som vindriktningen: **last 24h** (vad som har fallit de senaste 24 timmarna) och **next 24h** (vad som är prognosticerat för de närmaste 24 timmarna). Visaren visar de senaste 24 timmarna, och skalan räcker för det större av de två värdena. **MET Norway** har bara prognosen; boxen hämtar då de senaste 24 timmarna från **Open-Meteo**. Går det inte att nå står det ett streck där, och visaren visar de närmaste 24 timmarna.
+
 ## När det finns nya värden
 
 Väderservrarna ger nya värden bara med fasta mellanrum, därför går uppdateringen inte att ställa in. Boxen frågar först igen när servern utlovar ett nytt svar:
