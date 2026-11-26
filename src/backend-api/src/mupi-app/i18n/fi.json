@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "15 minuutin välein",
  "Kein Ort gewählt": "Paikkaa ei ole valittu",
  "Keine Antwort": "Ei vastausta",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Kun paikka on valittu, näyttö näyttää ylhäällä välilehden ”Sää”. Napautus avaa mittarit. Laatikko hakee arvot internetistä heti, kun sääpalvelimella on uusia."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Kun paikka on valittu, näyttö näyttää ylhäällä välilehden ”Sää”. Napautus avaa mittarit. Laatikko hakee arvot internetistä heti, kun sääpalvelimella on uusia.",
+ "Änderungen übernehmen": "Ota muutokset käyttöön",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Mittarien ulkoasun ja järjestyksen muutokset tulevat voimaan vasta, kun otat ne käyttöön. Silloin näyttö latautuu uudelleen ja avaa ”Sää” uudelleen.",
+ "Das Display lädt neu": "Näyttö latautuu uudelleen",
+ "Das Display ist nicht erreichbar": "Näyttöön ei saada yhteyttä"
 }

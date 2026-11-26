@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "Co 15 minut",
  "Kein Ort gewählt": "Nie wybrano miejsca",
  "Keine Antwort": "Brak odpowiedzi",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Gdy miejsce jest wybrane, wyświetlacz pokazuje u góry kartę „Pogoda”. Dotknięcie otwiera zegary pomiarowe. Skrzynka pobiera wartości z internetu, gdy tylko serwer pogody ma nowe."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Gdy miejsce jest wybrane, wyświetlacz pokazuje u góry kartę „Pogoda”. Dotknięcie otwiera zegary pomiarowe. Skrzynka pobiera wartości z internetu, gdy tylko serwer pogody ma nowe.",
+ "Änderungen übernehmen": "Zastosuj zmiany",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Zmiany wyglądu i kolejności zegarów obowiązują dopiero po ich zastosowaniu. Wyświetlacz wczyta się wtedy ponownie i znów otworzy „Pogodę”.",
+ "Das Display lädt neu": "Wyświetlacz wczytuje się ponownie",
+ "Das Display ist nicht erreichbar": "Wyświetlacz jest nieosiągalny"
 }

@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "Κάθε 15 λεπτά",
  "Kein Ort gewählt": "Δεν έχει επιλεγεί τοποθεσία",
  "Keine Antwort": "Καμία απάντηση",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Όταν έχει επιλεγεί τοποθεσία, η οθόνη δείχνει πάνω την καρτέλα «Καιρός». Ένα άγγιγμα την ανοίγει με τα όργανα μέτρησης. Το box φέρνει τις τιμές από το διαδίκτυο μόλις ο διακομιστής καιρού έχει νέες."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Όταν έχει επιλεγεί τοποθεσία, η οθόνη δείχνει πάνω την καρτέλα «Καιρός». Ένα άγγιγμα την ανοίγει με τα όργανα μέτρησης. Το box φέρνει τις τιμές από το διαδίκτυο μόλις ο διακομιστής καιρού έχει νέες.",
+ "Änderungen übernehmen": "Εφαρμογή αλλαγών",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Οι αλλαγές στην εμφάνιση και τη σειρά των οργάνων ισχύουν μόνο όταν τις εφαρμόσεις. Τότε η οθόνη φορτώνει ξανά και ανοίγει πάλι το «Καιρός».",
+ "Das Display lädt neu": "Η οθόνη φορτώνει ξανά",
+ "Das Display ist nicht erreichbar": "Η οθόνη δεν είναι προσβάσιμη"
 }

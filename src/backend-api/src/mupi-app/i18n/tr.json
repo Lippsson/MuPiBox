@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "15 dakikada bir",
  "Kein Ort gewählt": "Yer seçilmedi",
  "Keine Antwort": "Yanıt yok",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Bir yer seçildiğinde ekran üstte “Hava durumu” sekmesini gösterir. Dokunmak ölçü saatlerini açar. Kutu, hava durumu sunucusunda yeni değerler olur olmaz bunları internetten alır."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Bir yer seçildiğinde ekran üstte “Hava durumu” sekmesini gösterir. Dokunmak ölçü saatlerini açar. Kutu, hava durumu sunucusunda yeni değerler olur olmaz bunları internetten alır.",
+ "Änderungen übernehmen": "Değişiklikleri uygula",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Saatlerin görünümü ve sırasındaki değişiklikler yalnızca uyguladığınızda geçerli olur. Ekran bunun üzerine yeniden yüklenir ve “Hava durumu”nu yeniden açar.",
+ "Das Display lädt neu": "Ekran yeniden yükleniyor",
+ "Das Display ist nicht erreichbar": "Ekrana ulaşılamıyor"
 }

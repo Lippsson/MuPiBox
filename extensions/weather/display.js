@@ -246,7 +246,19 @@ export function activate(api) {
       document.head.append(script)
     }))
 
+  // (the page is loaded again when settings change - and by "Änderungen übernehmen": it opens again if it was open, or if the box says so)
+  const OPEN_KEY = 'mupibox.weather.open'
+  const remember = (on) => {
+    try {
+      if (on) sessionStorage.setItem(OPEN_KEY, '1')
+      else sessionStorage.removeItem(OPEN_KEY)
+    } catch {
+      // (no storage: the page does not open again by itself)
+    }
+  }
+
   function open() {
+    remember(true)
     api.overlay.open({
       title: settings?.placeName ? `Wetter – ${settings.placeName}` : 'Wetter',
       // (the dials use the whole height; the back arrow floats in the corner, where the round dial leaves room)
@@ -467,6 +479,7 @@ export function activate(api) {
         const timer = setInterval(() => void refresh(), REFRESH_MS)
         return () => {
           closed = true
+          remember(false)
           clearInterval(timer)
           clearTimeout(resizeTimer)
           observer?.disconnect()
@@ -477,4 +490,17 @@ export function activate(api) {
   }
 
   api.tabs.set({ id: 'weather', src: api.url('icon.svg'), visible: configured, onSelect: open })
+
+  if (configured) {
+    let wasOpen = false
+    try {
+      wasOpen = sessionStorage.getItem(OPEN_KEY) === '1'
+    } catch {
+      // (see above)
+    }
+    // (asked in any case: the answer is used up by the question, so that it holds for one start of the page only)
+    void Promise.resolve(api.fetchApi('/reopen')).then((answer) => {
+      if (wasOpen || answer?.open) open()
+    })
+  }
 }

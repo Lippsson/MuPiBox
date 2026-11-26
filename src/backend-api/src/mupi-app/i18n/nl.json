@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "Elke 15 minuten",
  "Kein Ort gewählt": "Geen plaats gekozen",
  "Keine Antwort": "Geen antwoord",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Is er een plaats gekozen, dan toont het display bovenaan het tabblad “Weer”. Een tik erop opent de meters. De box haalt de waarden van internet zodra de weerserver nieuwe heeft."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Is er een plaats gekozen, dan toont het display bovenaan het tabblad “Weer”. Een tik erop opent de meters. De box haalt de waarden van internet zodra de weerserver nieuwe heeft.",
+ "Änderungen übernehmen": "Wijzigingen toepassen",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "De wijzigingen in uiterlijk en volgorde van de meters gelden pas als je ze toepast. Het display laadt dan opnieuw en opent “Weer” weer.",
+ "Das Display lädt neu": "Het display laadt opnieuw",
+ "Das Display ist nicht erreichbar": "Het display is niet bereikbaar"
 }

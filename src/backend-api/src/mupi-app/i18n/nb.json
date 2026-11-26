@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "Hvert 15. minutt",
  "Kein Ort gewählt": "Ikke noe sted valgt",
  "Keine Antwort": "Ikke noe svar",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Når et sted er valgt, viser displayet fanen «Vær» øverst. Et trykk åpner måleurene. Boksen henter verdiene på internett så snart værserveren har nye."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Når et sted er valgt, viser displayet fanen «Vær» øverst. Et trykk åpner måleurene. Boksen henter verdiene på internett så snart værserveren har nye.",
+ "Änderungen übernehmen": "Bruk endringer",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Endringene i utseende og rekkefølge på måleurene gjelder først når du bruker dem. Da lastes displayet på nytt og åpner «Vær» igjen.",
+ "Das Display lädt neu": "Displayet lastes på nytt",
+ "Das Display ist nicht erreichbar": "Displayet kan ikke nås"
 }

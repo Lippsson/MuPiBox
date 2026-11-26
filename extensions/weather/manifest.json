@@ -1,9 +1,9 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
-  "hostApi": 6,
+  "hostApi": 19,
   "resources": {},
   "api": "api.js",
   "display": "display.js",
@@ -71,7 +71,8 @@
     "order": {
       "type": "string",
       "default": "temp,hum,wind,dir,baro,rain",
-      "pattern": "^[a-z]{2,10}(,[a-z]{2,10}){0,11}$"
+      "pattern": "^[a-z]{2,10}(,[a-z]{2,10}){0,11}$",
+      "quiet": true
     },
     "frameDesign": {
       "type": "string",
@@ -88,7 +89,8 @@
         "tilted_gray",
         "tilted_black",
         "glossy_metal"
-      ]
+      ],
+      "quiet": true
     },
     "backgroundColor": {
       "type": "string",
@@ -112,7 +114,8 @@
         "brushed_metal",
         "brushed_stainless",
         "turned"
-      ]
+      ],
+      "quiet": true
     },
     "pointerType": {
       "type": "string",
@@ -134,7 +137,8 @@
         "type14",
         "type15",
         "type16"
-      ]
+      ],
+      "quiet": true
     },
     "pointerColor": {
       "type": "string",
@@ -153,7 +157,8 @@
         "raith",
         "jug_green",
         "green_lcd"
-      ]
+      ],
+      "quiet": true
     },
     "knobType": {
       "type": "string",
@@ -161,7 +166,8 @@
       "options": [
         "standard_knob",
         "metal_knob"
-      ]
+      ],
+      "quiet": true
     },
     "knobStyle": {
       "type": "string",
@@ -170,7 +176,8 @@
         "black",
         "brass",
         "silver"
-      ]
+      ],
+      "quiet": true
     }
   },
   "ui": {
@@ -620,6 +627,12 @@
             "label": "Regenmenge"
           }
         ]
+      },
+      {
+        "type": "action",
+        "label": "Änderungen übernehmen",
+        "post": "/api/ext/weather/apply",
+        "help": "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“."
       }
     ]
   }

@@ -44,7 +44,7 @@ Both weather servers are free and need no account. The box asks them with the co
 
 ## Look of the dials
 
-The dials are drawn by the **SteelSeries** library, and the names of the frames and backgrounds are those of its developers. With no choice made, the dials look as they always did: frame **Metal**, background **Beige**, pointer shape **1**, pointer colour **Red**, knob **Metal** in **Silver**. You choose in the card **Look of the dials**, and the change applies the next time you open the weather view.
+The dials are drawn by the **SteelSeries** library, and the names of the frames and backgrounds are those of its developers. With no choice made, the dials look as they always did: frame **Metal**, background **Beige**, pointer shape **1**, pointer colour **Red**, knob **Metal** in **Silver**. You choose in the card **Look of the dials**. You can change several settings one after the other without the display rebuilding itself each time: only **Apply changes** makes it load again and open the weather view again. The change applies the next time you open the weather view.
 
 **Frame:** Black Metal, Metal, Shiny Metal, Brass, Steel, Chrome, Gold, Anthracite, Tilted Gray, Tilted Black and Glossy Metal.
 

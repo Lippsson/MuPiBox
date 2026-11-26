@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "Кожні 15 хвилин",
  "Kein Ort gewählt": "Місце не вибрано",
  "Keine Antwort": "Немає відповіді",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Якщо місце вибрано, на дисплеї вгорі з’являється вкладка «Погода». Дотик відкриває вимірювальні прилади. Бокс отримує значення з інтернету, щойно в сервера погоди з’являються нові."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Якщо місце вибрано, на дисплеї вгорі з’являється вкладка «Погода». Дотик відкриває вимірювальні прилади. Бокс отримує значення з інтернету, щойно в сервера погоди з’являються нові.",
+ "Änderungen übernehmen": "Застосувати зміни",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Зміни вигляду та порядку приладів діють лише після застосування. Тоді дисплей перезавантажується і знову відкриває «Погоду».",
+ "Das Display lädt neu": "Дисплей перезавантажується",
+ "Das Display ist nicht erreichbar": "Дисплей недоступний"
 }

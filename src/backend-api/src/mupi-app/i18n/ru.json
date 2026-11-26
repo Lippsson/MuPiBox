@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "Каждые 15 минут",
  "Kein Ort gewählt": "Место не выбрано",
  "Keine Antwort": "Нет ответа",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Если место выбрано, на дисплее вверху появляется вкладка «Погода». Нажатие открывает измерительные приборы. Бокс получает значения из интернета, как только у сервера погоды появляются новые."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Если место выбрано, на дисплее вверху появляется вкладка «Погода». Нажатие открывает измерительные приборы. Бокс получает значения из интернета, как только у сервера погоды появляются новые.",
+ "Änderungen übernehmen": "Применить изменения",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Изменения внешнего вида и порядка приборов вступают в силу только после применения. Затем дисплей перезагружается и снова открывает «Погоду».",
+ "Das Display lädt neu": "Дисплей перезагружается",
+ "Das Display ist nicht erreichbar": "Дисплей недоступен"
 }

@@ -44,7 +44,7 @@ Båda väderservrarna är gratis och kräver ingen inloggning. Boxen frågar dem
 
 ## Mätarnas utseende
 
-Mätarna ritas av biblioteket **SteelSeries**, och namnen på ramar och bakgrunder är utvecklarnas egna. Utan val ser mätarna ut som förut: ram **Metal**, bakgrund **Beige**, visarform **1**, visarfärg **Röd**, knopp **Metall** i **Silver**. Du väljer i kortet **Mätarnas utseende**, och ändringen gäller nästa gång du öppnar väderbilden.
+Mätarna ritas av biblioteket **SteelSeries**, och namnen på ramar och bakgrunder är utvecklarnas egna. Utan val ser mätarna ut som förut: ram **Metal**, bakgrund **Beige**, visarform **1**, visarfärg **Röd**, knopp **Metall** i **Silver**. Du väljer i kortet **Mätarnas utseende**. Du kan ändra flera inställningar efter varandra utan att displayen byggs om varje gång: först med **Verkställ ändringar** laddas den om och öppnar väderbilden igen. Ändringen gäller nästa gång du öppnar väderbilden.
 
 **Ram:** Black Metal, Metal, Shiny Metal, Brass, Steel, Chrome, Gold, Anthracite, Tilted Gray, Tilted Black och Glossy Metal.
 

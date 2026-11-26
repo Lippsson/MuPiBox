@@ -4733,5 +4733,9 @@
  "Alle 15 Minuten",
  "Kein Ort gewählt",
  "Keine Antwort",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.",
+ "Änderungen übernehmen",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.",
+ "Das Display lädt neu",
+ "Das Display ist nicht erreichbar"
 ]

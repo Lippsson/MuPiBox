@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "Cada 15 minutos",
  "Kein Ort gewählt": "Ningún lugar elegido",
  "Keine Antwort": "Sin respuesta",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Cuando hay un lugar elegido, la pantalla muestra arriba la pestaña «Tiempo». Un toque la abre con los relojes de medición. La caja obtiene los valores de internet en cuanto el servidor del tiempo tiene nuevos."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Cuando hay un lugar elegido, la pantalla muestra arriba la pestaña «Tiempo». Un toque la abre con los relojes de medición. La caja obtiene los valores de internet en cuanto el servidor del tiempo tiene nuevos.",
+ "Änderungen übernehmen": "Aplicar cambios",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Los cambios en el aspecto y el orden de los relojes solo valen cuando los aplicas. Entonces la pantalla se recarga y vuelve a abrir «Tiempo».",
+ "Das Display lädt neu": "La pantalla se está recargando",
+ "Das Display ist nicht erreichbar": "No se puede acceder a la pantalla"
 }

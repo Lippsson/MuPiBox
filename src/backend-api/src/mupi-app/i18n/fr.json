@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "Toutes les 15 minutes",
  "Kein Ort gewählt": "Aucun lieu choisi",
  "Keine Antwort": "Pas de réponse",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Quand un lieu est choisi, l’écran affiche en haut l’onglet « Météo ». Un appui l’ouvre avec les cadrans de mesure. La box va chercher les valeurs sur internet dès que le serveur météo en a de nouvelles."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Quand un lieu est choisi, l’écran affiche en haut l’onglet « Météo ». Un appui l’ouvre avec les cadrans de mesure. La box va chercher les valeurs sur internet dès que le serveur météo en a de nouvelles.",
+ "Änderungen übernehmen": "Appliquer les modifications",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Les modifications de l’aspect et de l’ordre des cadrans ne s’appliquent que lorsque vous les appliquez. L’écran se recharge alors et rouvre « Météo ».",
+ "Das Display lädt neu": "L’écran se recharge",
+ "Das Display ist nicht erreichbar": "L’écran est inaccessible"
 }

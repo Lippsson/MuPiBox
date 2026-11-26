@@ -4889,5 +4889,9 @@
  "Alle 15 Minuten": "Every 15 minutes",
  "Kein Ort gewählt": "No place chosen",
  "Keine Antwort": "No answer",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Once a place is chosen, the display shows the tab “Weather” at the top. A tap on it opens the dials. The box fetches the values from the internet as soon as the weather server has new ones."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Once a place is chosen, the display shows the tab “Weather” at the top. A tap on it opens the dials. The box fetches the values from the internet as soon as the weather server has new ones.",
+ "Änderungen übernehmen": "Apply changes",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "The changes to the look and the order of the dials apply only when you apply them. The display then loads again and opens “Weather” again.",
+ "Das Display lädt neu": "The display is loading again",
+ "Das Display ist nicht erreichbar": "The display cannot be reached"
 }

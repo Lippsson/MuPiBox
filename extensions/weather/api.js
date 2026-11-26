@@ -277,6 +277,25 @@ exports.activate = (host) => {
     }
   })
 
+  // The button "Änderungen übernehmen" of the settings page: the settings of the look are saved without a reload of the display (they are
+  // `quiet`), so that several can be changed one after the other; this loads the display's page again - and the display opens the
+  // weather page again when it has loaded (it asks /reopen for that).
+  let reopenUntil = 0
+  host.route('post', '/apply', async (_req, res) => {
+    reopenUntil = Date.now() + 2 * 60 * 1000
+    try {
+      const answer = await fetch('http://127.0.0.1:5005/display/reload-page', { method: 'POST', signal: AbortSignal.timeout(5000) })
+      res.json(answer.ok ? { ok: true, message: 'Das Display lädt neu' } : { ok: false, message: 'Das Display ist nicht erreichbar' })
+    } catch {
+      res.json({ ok: false, message: 'Das Display ist nicht erreichbar' })
+    }
+  })
+  host.route('get', '/reopen', (_req, res) => {
+    const open = Date.now() < reopenUntil
+    reopenUntil = 0
+    res.set('Cache-Control', 'no-store').json({ open })
+  })
+
   // The lines of the settings page: how the server delivers and when (the status block of the page asks for them)
   host.route('get', '/state', async (_req, res) => {
     const s = await host.settings()

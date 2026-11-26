@@ -4781,5 +4781,9 @@
  "Alle 15 Minuten": "Každých 15 minut",
  "Kein Ort gewählt": "Není vybráno žádné místo",
  "Keine Antwort": "Žádná odpověď",
- "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Je-li vybráno místo, zobrazí displej nahoře záložku „Počasí“. Klepnutím na ni se otevřou měřicí hodiny. Box stahuje hodnoty z internetu, jakmile je server počasí má nové."
+ "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.": "Je-li vybráno místo, zobrazí displej nahoře záložku „Počasí“. Klepnutím na ni se otevřou měřicí hodiny. Box stahuje hodnoty z internetu, jakmile je server počasí má nové.",
+ "Änderungen übernehmen": "Použít změny",
+ "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“.": "Změny vzhledu a pořadí hodin platí, až když je použiješ. Displej se pak znovu načte a znovu otevře „Počasí“.",
+ "Das Display lädt neu": "Displej se znovu načítá",
+ "Das Display ist nicht erreichbar": "Displej není dostupný"
 }

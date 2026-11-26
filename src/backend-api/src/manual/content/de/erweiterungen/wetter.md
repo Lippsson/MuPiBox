@@ -44,7 +44,7 @@ Beide Wetterserver sind kostenlos und brauchen keine Anmeldung. Die Box fragt si
 
 ## Aussehen der Uhren
 
-Die Uhren zeichnet die Bibliothek **SteelSeries**, und die Namen der Rahmen und Hintergründe sind die ihrer Entwickler. Ohne Auswahl sehen die Uhren aus wie bisher: Rahmen **Metal**, Hintergrund **Beige**, Zeigerform **1**, Zeigerfarbe **Rot**, Knopf **Metall** in **Silber**. Gewählt wird in der Karte **Aussehen der Uhren**, die Änderung gilt, sobald du die Wetteranzeige das nächste Mal öffnest.
+Die Uhren zeichnet die Bibliothek **SteelSeries**, und die Namen der Rahmen und Hintergründe sind die ihrer Entwickler. Ohne Auswahl sehen die Uhren aus wie bisher: Rahmen **Metal**, Hintergrund **Beige**, Zeigerform **1**, Zeigerfarbe **Rot**, Knopf **Metall** in **Silber**. Gewählt wird in der Karte **Aussehen der Uhren**. Du kannst mehrere Einstellungen nacheinander ändern, ohne dass sich das Display jedes Mal neu aufbaut: Erst mit **Änderungen übernehmen** lädt es neu und öffnet wieder die Wetteranzeige. Die Änderung gilt, sobald du die Wetteranzeige das nächste Mal öffnest.
 
 **Rahmen:** Black Metal, Metal, Shiny Metal, Brass, Steel, Chrome, Gold, Anthracite, Tilted Gray, Tilted Black und Glossy Metal.
 
