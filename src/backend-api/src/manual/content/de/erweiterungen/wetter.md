@@ -5,11 +5,13 @@ Die Erweiterung **Wetter** zeigt das Wetter eines Ortes als **Messuhren** auf de
 ## Einrichten
 
 1. Installiere die Erweiterung unter **Einstellungen › System › Erweiterungen** ([Installieren und verwalten](installieren.md)).
-2. Öffne die Details ihrer Karte und suche unter **Ort** nach dem Namen deines Ortes. Tippe einen Treffer an.
+2. Öffne unter **Einstellungen** die Seite **Wetter** und suche unter **Ort** nach dem Namen deines Ortes. Tippe einen Treffer an.
 
 Ist ein Ort gewählt, zeigt das Display oben den Reiter **Wetter**. Ein Tipp darauf öffnet die Messuhren: immer zwei nebeneinander, mit Wischen kommst du zu den nächsten. Der Zurück-Knopf in der Titelleiste schließt sie wieder.
 
 ## Einstellungen
+
+Die Einstellungen stehen auf einer eigenen Seite **Wetter** unter **Einstellungen**, in vier Karten: **Wetterserver und Ort**, **Aktualisierung**, **Einheiten** und **Aussehen der Uhren**.
 
 | Einstellung | Wirkung |
 | --- | --- |
@@ -21,11 +23,36 @@ Ist ein Ort gewählt, zeigt das Display oben den Reiter **Wetter**. Ein Tipp dar
 | **Luftdruck** | hPa, inHg, mb oder kPa |
 | **Windstärke** | km/h, m/s, mph oder Knoten |
 | **Reihenfolge der Uhren** | fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle |
+| **Rahmen**, **Hintergrund**, **Zeigerform**, **Zeigerfarbe**, **Knopf** und **Knopffarbe** | das [Aussehen der Uhren](#aussehen-der-uhren) |
 
 > [!NOTE]
 > Die Wetterserver liefern neue Werte nur etwa stündlich, und die Box fragt sie höchstens einmal pro Minute ab. Ein sehr kurzer Abstand macht die Anzeige also nicht genauer.
 
 Beide Wetterserver sind kostenlos und brauchen keine Anmeldung. Die Box fragt sie mit den Koordinaten des gewählten Ortes.
+
+## Aussehen der Uhren
+
+Die Uhren zeichnet die Bibliothek **SteelSeries**, und die Namen der Rahmen und Hintergründe sind die ihrer Entwickler. Ohne Auswahl sehen die Uhren aus wie bisher: Rahmen **Metal**, Hintergrund **Beige**, Zeigerform **1**, Zeigerfarbe **Rot**, Knopf **Metall** in **Silber**. Gewählt wird in der Karte **Aussehen der Uhren**, die Änderung gilt, sobald du die Wetteranzeige das nächste Mal öffnest.
+
+**Rahmen:** Black Metal, Metal, Shiny Metal, Brass, Steel, Chrome, Gold, Anthracite, Tilted Gray, Tilted Black und Glossy Metal.
+
+![Die 11 Rahmen](weather-frames.png)
+
+**Hintergrund:** Dark Gray, Satin Gray, Light Gray, White, Black, Beige, Brown, Red, Green, Blue, Anthracite, Mud, Punched Sheet, Carbon, Stainless, Brushed Metal, Brushed Stainless und Turned.
+
+![Die 18 Hintergründe](weather-backgrounds.png)
+
+**Zeigerform:** 16 Formen, von **1** bis **16**. Sie gilt für die runden Uhren; die Windrichtung behält ihre zwei Zeiger, einen roten für den aktuellen Wert und einen blauen für den Mittelwert.
+
+![Die 16 Zeigerformen](weather-pointers.png)
+
+**Zeigerfarbe:** Rot, Grün, Blau, Orange, Gelb, Cyan, Magenta, Weiß, Grau, Schwarz, Raith, Jug Green und Green LCD.
+
+![Die 13 Zeigerfarben](weather-colours.png)
+
+**Knopf** und **Knopffarbe:** der Knopf in der Mitte der Uhr, **Standard** oder **Metall**, in **Schwarz**, **Messing** oder **Silber**.
+
+![Die Knöpfe](weather-knobs.png)
 
 ## Wenn kein Wetter erscheint
 

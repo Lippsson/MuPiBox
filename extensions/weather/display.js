@@ -184,6 +184,28 @@ export function viewFor(width, height, total = 6) {
 
 const PROVIDERS = { openmeteo: 'Open-Meteo', metno: 'MET Norway' }
 
+// How the dials look (the settings name the library's own designs in lower case: "shiny_metal" is `FrameDesign.SHINY_METAL`).
+// A value the library does not know - an old setting, a newer library - gives the design the dials always had.
+export const LOOK_DEFAULTS = {
+  frameDesign: ['FrameDesign', 'METAL'],
+  backgroundColor: ['BackgroundColor', 'BEIGE'],
+  pointerType: ['PointerType', 'TYPE1'],
+  pointerColor: ['ColorDef', 'RED'],
+  knobType: ['KnobType', 'METAL_KNOB'],
+  knobStyle: ['KnobStyle', 'SILVER'],
+}
+
+/** The designs of the dials from the settings, as the library's values: `{ frameDesign, backgroundColor, pointerType, pointerColor, knobType, knobStyle }`. */
+export function designsOf(ss, settings) {
+  const designs = {}
+  for (const [key, [group, fallback]] of Object.entries(LOOK_DEFAULTS)) {
+    const wanted = typeof settings?.[key] === 'string' ? settings[key].toUpperCase() : ''
+    const table = ss[group] ?? {}
+    designs[key] = Object.hasOwn(table, wanted) ? table[wanted] : table[fallback]
+  }
+  return designs
+}
+
 export function activate(api) {
   const settings = api.settings()
   const configured = Number.isFinite(settings?.lat) && Number.isFinite(settings?.lon)
@@ -261,21 +283,21 @@ export function activate(api) {
             caption.style.cssText = 'height:26px;display:flex;align-items:center;gap:14px;font:500 15px/1 var(--ion-font-family,inherit);opacity:.85;white-space:nowrap'
             cell.append(canvas, caption)
             row.append(cell)
+            const designs = designsOf(ss, settings)
             const look = {
               size,
-              frameDesign: ss.FrameDesign.METAL,
-              backgroundColor: ss.BackgroundColor.BEIGE,
+              frameDesign: designs.frameDesign,
+              backgroundColor: designs.backgroundColor,
               lcdColor: ss.LcdColor.STANDARD,
-              pointerColor: ss.ColorDef.RED,
               foregroundType: ss.ForegroundType.TYPE1,
-              knobType: ss.KnobType.METAL_KNOB,
-              knobStyle: ss.KnobStyle.SILVER,
+              knobType: designs.knobType,
+              knobStyle: designs.knobStyle,
               ledVisible: false,
               // (seconds of a swing over the whole scale: 5 as on the club's page, the library's own 2.5 is too quick)
               fullScaleDeflectionTime: 5,
             }
             if (dial.kind === 'direction') {
-              const gauge = new ss.WindDirection(canvas, { ...look, lcdTitleStrings: ['Aktuell', 'Mittelwert'], pointSymbols: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'], pointerColorAverage: ss.ColorDef.BLUE })
+              const gauge = new ss.WindDirection(canvas, { ...look, lcdTitleStrings: ['Aktuell', 'Mittelwert'], pointSymbols: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'], pointerColor: ss.ColorDef.RED, pointerColorAverage: ss.ColorDef.BLUE })
               const latest = Number.isFinite(dial.latest) ? dial.latest : 0
               const average = Number.isFinite(dial.average) ? dial.average : 0
               if (moving) {
@@ -304,6 +326,8 @@ export function activate(api) {
             }
             const gauge = new ss.Radial(canvas, {
               ...look,
+              pointerType: designs.pointerType,
+              pointerColor: designs.pointerColor,
               gaugeType: ss.GaugeType.TYPE4,
               minValue: dial.min,
               maxValue: dial.max,
