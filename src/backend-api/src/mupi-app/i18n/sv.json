@@ -4743,5 +4743,13 @@
  "Play/Pause halten für den zweiten Satz": "Håll spela/paus nedtryckt för den andra uppsättningen",
  "1 Sekunde": "1 sekund",
  "2 Sekunden": "2 sekunder",
- "3 Sekunden": "3 sekunder"
+ "3 Sekunden": "3 sekunder",
+ "Taste": "Knapp",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.": "En knapp på en ledig GPIO-pin (mot GND) byter direkt till {}. Det går alltid utan PIN, även om en PIN är inställd på skärmen, och även vid ”Bara i appen”.",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Knappen gäller så länge ”Flera användare” är på.",
+ "Taste gespeichert": "Knapp sparad",
+ "Taste entfernt": "Knapp borttagen",
+ "Diesen Pin hat schon ein anderer Benutzer.": "En annan användare har redan den här pinnen.",
+ "GPIO {} nutzt schon: {}": "GPIO {} används redan av: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (knapp för {})"
 }

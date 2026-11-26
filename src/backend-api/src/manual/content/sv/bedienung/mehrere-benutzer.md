@@ -41,7 +41,13 @@ Det går även från **spärrbilden**. Speltiden gäller ju per barn: har ett sy
 
 ## PIN
 
-Varje användare kan få en **PIN** på fyra siffror (**PIN** på hens rad). Displayen frågar efter den innan den byter **till den här användaren**. Så kommer inget barn åt en vuxens bibliotek eller ett syskons speltid. Efter fem felaktiga försök tar displayen inte emot någon PIN på en minut. Appen, Telegram, Home Assistant och MQTT frågar inte efter någon PIN.
+Varje användare kan få en **PIN** på fyra siffror (**PIN** på hens rad). Displayen frågar efter den innan den byter **till den här användaren**. Så kommer inget barn åt en vuxens bibliotek eller ett syskons speltid. Efter fem felaktiga försök tar displayen inte emot någon PIN på en minut. Appen, Telegram, Home Assistant och MQTT frågar inte efter någon PIN, och inte heller [en användares knapp](#en-knapp-foer-en-anvaendare).
+
+## En knapp för en användare
+
+Varje användare kan få en **knapp** på boxen: en tryckknapp på ett **ledigt GPIO-stift** som kopplas mot **GND**. Ett tryck på den byter genast till den användaren. På hens rad väljer du stiftet under **Knapp**; **Ingen pin** tar bort knappen igen. Listan erbjuder bara stift som inget annat använder (boxen, ett tillägg, en vridratt, en annan användare) och säger vem som håller de övriga.
+
+Knappen är **oberoende av PIN på skärmen**: den byter alltid utan PIN, vare sig en PIN är inställd på skärmen för användaren eller inte, och även vid **Bara i appen**. En knapp på boxen är som appen eller MQTT: den som kan trycka på den står vid boxen. Varje användare kan ställas in med eller utan knapp och med eller utan PIN, vart och ett oberoende av det andra. Knapparna gäller så länge **Flera användare** är på; därefter är deras stift lediga igen. Knappen kopplar stiftet mot GND, stiftet har själv sin pull-up (se [GPIO-belägging](../anhang/gpio.md)).
 
 ## Redigera ett annat barn utan att byta
 

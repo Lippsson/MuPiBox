@@ -4743,5 +4743,13 @@
  "Play/Pause halten für den zweiten Satz": "Tieni premuto riproduci/pausa per il secondo set",
  "1 Sekunde": "1 secondo",
  "2 Sekunden": "2 secondi",
- "3 Sekunden": "3 secondi"
+ "3 Sekunden": "3 secondi",
+ "Taste": "Pulsante",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.": "Un pulsante su un pin GPIO libero (verso GND) passa direttamente a {}. Funziona sempre senza PIN, anche se sul display è impostato un PIN, e anche con «Solo nell’app».",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Il pulsante vale finché «Più utenti» è attivo.",
+ "Taste gespeichert": "Pulsante salvato",
+ "Taste entfernt": "Pulsante rimosso",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Un altro utente ha già questo pin.",
+ "GPIO {} nutzt schon: {}": "GPIO {} è già usato da: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (pulsante di {})"
 }

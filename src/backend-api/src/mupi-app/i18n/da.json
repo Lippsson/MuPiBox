@@ -4743,5 +4743,13 @@
  "Play/Pause halten für den zweiten Satz": "Hold afspil/pause nede for det andet sæt",
  "1 Sekunde": "1 sekund",
  "2 Sekunden": "2 sekunder",
- "3 Sekunden": "3 sekunder"
+ "3 Sekunden": "3 sekunder",
+ "Taste": "Knap",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.": "En knap på en ledig GPIO-pin (mod GND) skifter direkte til {}. Det virker altid uden PIN, også selv om der er sat en PIN på displayet, og også ved »Kun i appen«.",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Knappen gælder, så længe »Flere brugere« er slået til.",
+ "Taste gespeichert": "Knap gemt",
+ "Taste entfernt": "Knap fjernet",
+ "Diesen Pin hat schon ein anderer Benutzer.": "En anden bruger har allerede denne pin.",
+ "GPIO {} nutzt schon: {}": "GPIO {} bruges allerede af: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (knap for {})"
 }

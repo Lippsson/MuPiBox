@@ -4743,5 +4743,13 @@
  "Play/Pause halten für den zweiten Satz": "Κρατήστε πατημένο το αναπαραγωγή/παύση για το δεύτερο σετ",
  "1 Sekunde": "1 δευτερόλεπτο",
  "2 Sekunden": "2 δευτερόλεπτα",
- "3 Sekunden": "3 δευτερόλεπτα"
+ "3 Sekunden": "3 δευτερόλεπτα",
+ "Taste": "Κουμπί",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.": "Ένα κουμπί σε μια ελεύθερη ακίδα GPIO (προς GND) αλλάζει απευθείας στον χρήστη {}. Λειτουργεί πάντα χωρίς PIN, ακόμη και αν έχει οριστεί PIN στην οθόνη, καθώς και με την επιλογή «Μόνο στην εφαρμογή».",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Το κουμπί ισχύει όσο είναι ενεργό το «Πολλοί χρήστες».",
+ "Taste gespeichert": "Το κουμπί αποθηκεύτηκε",
+ "Taste entfernt": "Το κουμπί αφαιρέθηκε",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Αυτή την ακίδα την έχει ήδη άλλος χρήστης.",
+ "GPIO {} nutzt schon: {}": "Το GPIO {} χρησιμοποιείται ήδη από: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (κουμπί του χρήστη {})"
 }
