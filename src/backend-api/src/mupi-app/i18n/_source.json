@@ -4705,5 +4705,19 @@
  "MuPiBox (Taste von {})",
  "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.",
  "Am Display zuerst die PIN abfragen",
- "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort."
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.",
+ "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet.",
+ "Rahmen",
+ "Hintergrund",
+ "Zeigerform",
+ "Gilt für die runden Uhren. Die Windrichtung behält ihre zwei Zeiger.",
+ "Zeigerfarbe",
+ "Knopf",
+ "Knopffarbe",
+ "Messing",
+ "Silber",
+ "Schwarz",
+ "Grau",
+ "Cyan",
+ "Magenta"
 ]

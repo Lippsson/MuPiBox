@@ -4753,5 +4753,19 @@
  "MuPiBox (Taste von {})": "MuPiBox (przycisk użytkownika {})",
  "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Przycisk na wolnym pinie GPIO (do GND) przełącza na {}. Działa to także przy opcji „Tylko w aplikacji”.",
  "Am Display zuerst die PIN abfragen": "Najpierw zapytaj o PIN na wyświetlaczu",
- "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Wyświetlacz pokazuje wtedy klawiaturę numeryczną dla {}, a przełączenie działa dopiero z właściwym PIN-em. Bez ustawionego PIN-u przycisk przełącza od razu."
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Wyświetlacz pokazuje wtedy klawiaturę numeryczną dla {}, a przełączenie działa dopiero z właściwym PIN-em. Bez ustawionego PIN-u przycisk przełącza od razu.",
+ "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet.": "Wygląd zegarów pomiarowych. Nazwy ramek i teł pochodzą z biblioteki SteelSeries, która rysuje zegary.",
+ "Rahmen": "Ramka",
+ "Hintergrund": "Tło",
+ "Zeigerform": "Kształt wskazówki",
+ "Gilt für die runden Uhren. Die Windrichtung behält ihre zwei Zeiger.": "Dotyczy okrągłych zegarów. Kierunek wiatru zachowuje swoje dwie wskazówki.",
+ "Zeigerfarbe": "Kolor wskazówki",
+ "Knopf": "Gałka",
+ "Knopffarbe": "Kolor gałki",
+ "Messing": "Mosiądz",
+ "Silber": "Srebrny",
+ "Schwarz": "Czarny",
+ "Grau": "Szary",
+ "Cyan": "Cyjan",
+ "Magenta": "Magenta"
 }

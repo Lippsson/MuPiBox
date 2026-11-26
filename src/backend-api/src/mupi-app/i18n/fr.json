@@ -4753,5 +4753,19 @@
  "MuPiBox (Taste von {})": "MuPiBox (bouton de {})",
  "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Un bouton sur une broche GPIO libre (vers GND) bascule vers {}. Cela fonctionne aussi avec « Seulement dans l’app ».",
  "Am Display zuerst die PIN abfragen": "Demander d’abord le PIN sur l’écran",
- "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "L’écran affiche alors le pavé numérique de {}, et le changement ne réussit qu’avec le bon PIN. Sans PIN défini, le bouton bascule tout de suite."
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "L’écran affiche alors le pavé numérique de {}, et le changement ne réussit qu’avec le bon PIN. Sans PIN défini, le bouton bascule tout de suite.",
+ "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet.": "L’aspect des cadrans. Les noms des cadres et des fonds viennent de la bibliothèque SteelSeries, qui dessine les cadrans.",
+ "Rahmen": "Cadre",
+ "Hintergrund": "Fond",
+ "Zeigerform": "Forme de l’aiguille",
+ "Gilt für die runden Uhren. Die Windrichtung behält ihre zwei Zeiger.": "Vaut pour les cadrans ronds. La direction du vent garde ses deux aiguilles.",
+ "Zeigerfarbe": "Couleur de l’aiguille",
+ "Knopf": "Bouton",
+ "Knopffarbe": "Couleur du bouton",
+ "Messing": "Laiton",
+ "Silber": "Argent",
+ "Schwarz": "Noir",
+ "Grau": "Gris",
+ "Cyan": "Cyan",
+ "Magenta": "Magenta"
 }

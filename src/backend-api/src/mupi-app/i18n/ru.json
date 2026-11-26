@@ -4753,5 +4753,19 @@
  "MuPiBox (Taste von {})": "MuPiBox (кнопка пользователя {})",
  "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Кнопка на свободном пине GPIO (на GND) переключает на {}. Это работает и в режиме «Только в приложении».",
  "Am Display zuerst die PIN abfragen": "Сначала запрашивать PIN на дисплее",
- "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Тогда дисплей покажет цифровую панель для {}, и переключение удастся только с верным PIN. Если PIN не задан, кнопка переключает сразу."
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Тогда дисплей покажет цифровую панель для {}, и переключение удастся только с верным PIN. Если PIN не задан, кнопка переключает сразу.",
+ "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet.": "Внешний вид приборов. Названия рамок и фонов взяты из библиотеки SteelSeries, которая рисует приборы.",
+ "Rahmen": "Рамка",
+ "Hintergrund": "Фон",
+ "Zeigerform": "Форма стрелки",
+ "Gilt für die runden Uhren. Die Windrichtung behält ihre zwei Zeiger.": "Относится к круглым приборам. У направления ветра остаются две его стрелки.",
+ "Zeigerfarbe": "Цвет стрелки",
+ "Knopf": "Ось",
+ "Knopffarbe": "Цвет оси",
+ "Messing": "Латунь",
+ "Silber": "Серебро",
+ "Schwarz": "Чёрный",
+ "Grau": "Серый",
+ "Cyan": "Голубой",
+ "Magenta": "Пурпурный"
 }

@@ -157,3 +157,37 @@ test('the row shows two dials on a narrow page and as many as fit on a wide one,
   // a very small page keeps its least size
   assert.equal(viewFor(100, 100, 6).size, 120)
 })
+
+test('the look of the dials comes from the settings, and an unknown value gives the old design', async () => {
+  const { designsOf } = await load()
+  const ss = {
+    FrameDesign: { METAL: 'f-metal', SHINY_METAL: 'f-shiny' },
+    BackgroundColor: { BEIGE: 'b-beige', CARBON: 'b-carbon' },
+    PointerType: { TYPE1: 'p1', TYPE9: 'p9' },
+    ColorDef: { RED: 'c-red', JUG_GREEN: 'c-jug' },
+    KnobType: { METAL_KNOB: 'k-metal', STANDARD_KNOB: 'k-std' },
+    KnobStyle: { SILVER: 's-silver', BRASS: 's-brass' },
+  }
+  assert.deepEqual(designsOf(ss, {}), { frameDesign: 'f-metal', backgroundColor: 'b-beige', pointerType: 'p1', pointerColor: 'c-red', knobType: 'k-metal', knobStyle: 's-silver' })
+  assert.deepEqual(
+    designsOf(ss, { frameDesign: 'shiny_metal', backgroundColor: 'carbon', pointerType: 'type9', pointerColor: 'jug_green', knobType: 'standard_knob', knobStyle: 'brass' }),
+    { frameDesign: 'f-shiny', backgroundColor: 'b-carbon', pointerType: 'p9', pointerColor: 'c-jug', knobType: 'k-std', knobStyle: 's-brass' },
+  )
+  // (a name from the prototype chain is not a design)
+  assert.equal(designsOf(ss, { frameDesign: 'constructor' }).frameDesign, 'f-metal')
+})
+
+test('every look setting of the manifest names designs the library has', () => {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'))
+  const source = fs.readFileSync(path.join(__dirname, '..', 'steelseries.js'), 'utf8')
+  const groups = { frameDesign: 'FrameDesign', backgroundColor: 'BackgroundColor', pointerType: 'PointerType', pointerColor: 'ColorDef', knobType: 'KnobType', knobStyle: 'KnobStyle' }
+  for (const [key, group] of Object.entries(groups)) {
+    const spec = manifest.settings[key]
+    assert.ok(spec.options.includes(spec.default), key)
+    for (const option of spec.options) assert.ok(source.includes(option.toUpperCase()), `${group}.${option}`)
+    const item = manifest.ui.items.find((i) => i.key === key)
+    assert.deepEqual(item.choices.map((c) => c.value), spec.options, key)
+  }
+})

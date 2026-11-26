@@ -4753,5 +4753,19 @@
  "MuPiBox (Taste von {})": "MuPiBox (botão de {})",
  "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Um botão num pino GPIO livre (para GND) muda para {}. Funciona também com «Só na app».",
  "Am Display zuerst die PIN abfragen": "Pedir primeiro o PIN no ecrã",
- "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "O ecrã mostra então o teclado numérico de {}, e a mudança só funciona com o PIN certo. Sem um PIN definido, o botão muda de imediato."
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "O ecrã mostra então o teclado numérico de {}, e a mudança só funciona com o PIN certo. Sem um PIN definido, o botão muda de imediato.",
+ "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet.": "O aspeto dos mostradores. Os nomes das molduras e dos fundos vêm da biblioteca SteelSeries, que desenha os mostradores.",
+ "Rahmen": "Moldura",
+ "Hintergrund": "Fundo",
+ "Zeigerform": "Forma do ponteiro",
+ "Gilt für die runden Uhren. Die Windrichtung behält ihre zwei Zeiger.": "Vale para os mostradores redondos. A direção do vento mantém os seus dois ponteiros.",
+ "Zeigerfarbe": "Cor do ponteiro",
+ "Knopf": "Botão",
+ "Knopffarbe": "Cor do botão",
+ "Messing": "Latão",
+ "Silber": "Prata",
+ "Schwarz": "Preto",
+ "Grau": "Cinzento",
+ "Cyan": "Ciano",
+ "Magenta": "Magenta"
 }

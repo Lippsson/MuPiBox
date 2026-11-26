@@ -4753,5 +4753,19 @@
  "MuPiBox (Taste von {})": "MuPiBox (käyttäjän {} painike)",
  "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Vapaaseen GPIO-pinniin (GND:tä vasten) kytketty painike vaihtaa käyttäjään {}. Se toimii myös asetuksella ”Vain sovelluksessa”.",
  "Am Display zuerst die PIN abfragen": "Kysy PIN ensin näytöllä",
- "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Näyttö näyttää silloin käyttäjän {} numeronäppäimistön, ja vaihto onnistuu vasta oikealla PIN-koodilla. Ilman asetettua PIN-koodia painike vaihtaa heti."
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Näyttö näyttää silloin käyttäjän {} numeronäppäimistön, ja vaihto onnistuu vasta oikealla PIN-koodilla. Ilman asetettua PIN-koodia painike vaihtaa heti.",
+ "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet.": "Mittarien ulkoasu. Kehysten ja taustojen nimet tulevat SteelSeries-kirjastosta, joka piirtää mittarit.",
+ "Rahmen": "Kehys",
+ "Hintergrund": "Tausta",
+ "Zeigerform": "Osoittimen muoto",
+ "Gilt für die runden Uhren. Die Windrichtung behält ihre zwei Zeiger.": "Koskee pyöreitä mittareita. Tuulen suunta pitää kaksi osoitintaan.",
+ "Zeigerfarbe": "Osoittimen väri",
+ "Knopf": "Nuppi",
+ "Knopffarbe": "Nupin väri",
+ "Messing": "Messinki",
+ "Silber": "Hopea",
+ "Schwarz": "Musta",
+ "Grau": "Harmaa",
+ "Cyan": "Syaani",
+ "Magenta": "Magenta"
 }

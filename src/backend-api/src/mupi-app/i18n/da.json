@@ -4753,5 +4753,19 @@
  "MuPiBox (Taste von {})": "MuPiBox (knap for {})",
  "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "En knap på en ledig GPIO-pin (mod GND) skifter til {}. Det virker også ved »Kun i appen«.",
  "Am Display zuerst die PIN abfragen": "Spørg først efter PIN på displayet",
- "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Displayet viser så tastaturet til {}, og skiftet lykkes først med den rigtige PIN. Uden en indstillet PIN skifter knappen med det samme."
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Displayet viser så tastaturet til {}, og skiftet lykkes først med den rigtige PIN. Uden en indstillet PIN skifter knappen med det samme.",
+ "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet.": "Måleurenes udseende. Navnene på rammer og baggrunde stammer fra SteelSeries-biblioteket, som tegner urene.",
+ "Rahmen": "Ramme",
+ "Hintergrund": "Baggrund",
+ "Zeigerform": "Viserform",
+ "Gilt für die runden Uhren. Die Windrichtung behält ihre zwei Zeiger.": "Gælder de runde ure. Vindretningen beholder sine to visere.",
+ "Zeigerfarbe": "Viserfarve",
+ "Knopf": "Knap",
+ "Knopffarbe": "Knapfarve",
+ "Messing": "Messing",
+ "Silber": "Sølv",
+ "Schwarz": "Sort",
+ "Grau": "Grå",
+ "Cyan": "Cyan",
+ "Magenta": "Magenta"
 }

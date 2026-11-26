@@ -4753,5 +4753,19 @@
  "MuPiBox (Taste von {})": "MuPiBox (botón de {})",
  "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Un botón en un pin GPIO libre (a GND) cambia a {}. Funciona también con «Solo en la app».",
  "Am Display zuerst die PIN abfragen": "Pedir primero el PIN en la pantalla",
- "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "La pantalla muestra entonces el teclado numérico de {}, y el cambio solo funciona con el PIN correcto. Sin un PIN configurado, el botón cambia de inmediato."
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "La pantalla muestra entonces el teclado numérico de {}, y el cambio solo funciona con el PIN correcto. Sin un PIN configurado, el botón cambia de inmediato.",
+ "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet.": "El aspecto de los relojes de medición. Los nombres de los marcos y fondos proceden de la biblioteca SteelSeries, que dibuja los relojes.",
+ "Rahmen": "Marco",
+ "Hintergrund": "Fondo",
+ "Zeigerform": "Forma de la aguja",
+ "Gilt für die runden Uhren. Die Windrichtung behält ihre zwei Zeiger.": "Vale para los relojes redondos. La dirección del viento conserva sus dos agujas.",
+ "Zeigerfarbe": "Color de la aguja",
+ "Knopf": "Botón",
+ "Knopffarbe": "Color del botón",
+ "Messing": "Latón",
+ "Silber": "Plata",
+ "Schwarz": "Negro",
+ "Grau": "Gris",
+ "Cyan": "Cian",
+ "Magenta": "Magenta"
 }
