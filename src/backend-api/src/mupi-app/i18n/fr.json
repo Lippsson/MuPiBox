@@ -4767,5 +4767,9 @@
  "Schwarz": "Noir",
  "Grau": "Gris",
  "Cyan": "Cyan",
- "Magenta": "Magenta"
+ "Magenta": "Magenta",
+ "Wetterserver und Ort": "Serveur météo et lieu",
+ "Aktualisierung": "Actualisation",
+ "Einheiten": "Unités",
+ "Aussehen der Uhren": "Aspect des cadrans"
 }

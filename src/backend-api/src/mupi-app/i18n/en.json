@@ -4875,5 +4875,9 @@
  "Schwarz": "Black",
  "Grau": "Gray",
  "Cyan": "Cyan",
- "Magenta": "Magenta"
+ "Magenta": "Magenta",
+ "Wetterserver und Ort": "Weather server and place",
+ "Aktualisierung": "Refresh",
+ "Einheiten": "Units",
+ "Aussehen der Uhren": "Look of the dials"
 }

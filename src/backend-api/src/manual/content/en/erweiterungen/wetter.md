@@ -5,11 +5,13 @@ The extension **Weather** shows the weather of a place as **dials** on the displ
 ## Setting it up
 
 1. Install the extension under **Settings › System › Extensions** ([Installing and managing](installieren.md)).
-2. Open the details of its card and search for the name of your place under **Place**. Tap a result.
+2. Under **Settings**, open the page **Weather** and search for the name of your place under **Place**. Tap a result.
 
 Once a place is chosen, the display shows the tab **Weather** at the top. A tap on it opens the dials: always two side by side, and a swipe brings the next ones. The back button in the title bar closes them again.
 
 ## Settings
+
+The settings are on a page of their own, **Weather**, under **Settings**, in four cards: **Weather server and place**, **Refresh**, **Units** and **Look of the dials**.
 
 | Setting | Effect |
 | --- | --- |
@@ -30,7 +32,7 @@ Both weather servers are free and need no account. The box asks them with the co
 
 ## Look of the dials
 
-The dials are drawn by the **SteelSeries** library, and the names of the frames and backgrounds are those of its developers. With no choice made, the dials look as they always did: frame **Metal**, background **Beige**, pointer shape **1**, pointer colour **Red**, knob **Metal** in **Silver**. You choose in the details of the card, and the change applies the next time you open the weather view.
+The dials are drawn by the **SteelSeries** library, and the names of the frames and backgrounds are those of its developers. With no choice made, the dials look as they always did: frame **Metal**, background **Beige**, pointer shape **1**, pointer colour **Red**, knob **Metal** in **Silver**. You choose in the card **Look of the dials**, and the change applies the next time you open the weather view.
 
 **Frame:** Black Metal, Metal, Shiny Metal, Brass, Steel, Chrome, Gold, Anthracite, Tilted Gray, Tilted Black and Glossy Metal.
 

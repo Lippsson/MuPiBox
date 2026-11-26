@@ -5,11 +5,13 @@ Tillägget **Väder** visar vädret på en ort som **mätare** på displayen: te
 ## Ställa in
 
 1. Installera tillägget under **Inställningar › System › Tillägg** ([Installera och hantera](installieren.md)).
-2. Öppna detaljerna på dess kort och sök under **Ort** efter namnet på din ort. Tryck på en träff.
+2. Öppna sidan **Väder** under **Inställningar** och sök under **Ort** efter namnet på din ort. Tryck på en träff.
 
 Är en ort vald visar displayen fliken **Väder** överst. Ett tryck på den öppnar mätarna: alltid två bredvid varandra, och med svepning kommer du till nästa. Tillbaka-knappen i titellisten stänger dem igen.
 
 ## Inställningar
+
+Inställningarna finns på en egen sida, **Väder**, under **Inställningar**, i fyra kort: **Väderserver och ort**, **Uppdatering**, **Enheter** och **Mätarnas utseende**.
 
 | Inställning | Verkan |
 | --- | --- |
@@ -30,7 +32,7 @@ Båda väderservrarna är gratis och kräver ingen inloggning. Boxen frågar dem
 
 ## Mätarnas utseende
 
-Mätarna ritas av biblioteket **SteelSeries**, och namnen på ramar och bakgrunder är utvecklarnas egna. Utan val ser mätarna ut som förut: ram **Metal**, bakgrund **Beige**, visarform **1**, visarfärg **Röd**, knopp **Metall** i **Silver**. Du väljer i detaljerna på kortet, och ändringen gäller nästa gång du öppnar väderbilden.
+Mätarna ritas av biblioteket **SteelSeries**, och namnen på ramar och bakgrunder är utvecklarnas egna. Utan val ser mätarna ut som förut: ram **Metal**, bakgrund **Beige**, visarform **1**, visarfärg **Röd**, knopp **Metall** i **Silver**. Du väljer i kortet **Mätarnas utseende**, och ändringen gäller nästa gång du öppnar väderbilden.
 
 **Ram:** Black Metal, Metal, Shiny Metal, Brass, Steel, Chrome, Gold, Anthracite, Tilted Gray, Tilted Black och Glossy Metal.
 

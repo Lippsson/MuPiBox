@@ -4767,5 +4767,9 @@
  "Schwarz": "Musta",
  "Grau": "Harmaa",
  "Cyan": "Syaani",
- "Magenta": "Magenta"
+ "Magenta": "Magenta",
+ "Wetterserver und Ort": "Sääpalvelin ja paikka",
+ "Aktualisierung": "Päivitys",
+ "Einheiten": "Yksiköt",
+ "Aussehen der Uhren": "Mittarien ulkoasu"
 }

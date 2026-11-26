@@ -4767,5 +4767,9 @@
  "Schwarz": "Černá",
  "Grau": "Šedá",
  "Cyan": "Azurová",
- "Magenta": "Purpurová"
+ "Magenta": "Purpurová",
+ "Wetterserver und Ort": "Server počasí a místo",
+ "Aktualisierung": "Aktualizace",
+ "Einheiten": "Jednotky",
+ "Aussehen der Uhren": "Vzhled hodin"
 }

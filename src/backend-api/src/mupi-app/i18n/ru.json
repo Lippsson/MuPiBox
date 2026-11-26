@@ -4767,5 +4767,9 @@
  "Schwarz": "Чёрный",
  "Grau": "Серый",
  "Cyan": "Голубой",
- "Magenta": "Пурпурный"
+ "Magenta": "Пурпурный",
+ "Wetterserver und Ort": "Сервер погоды и место",
+ "Aktualisierung": "Обновление",
+ "Einheiten": "Единицы",
+ "Aussehen der Uhren": "Внешний вид приборов"
 }

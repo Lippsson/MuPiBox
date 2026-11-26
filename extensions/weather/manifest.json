@@ -1,9 +1,9 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
-  "hostApi": 3,
+  "hostApi": 5,
   "resources": {},
   "api": "api.js",
   "display": "display.js",
@@ -189,8 +189,15 @@
   },
   "ui": {
     "title": "Wetter",
+    "heading": "Wetter",
+    "place": "system",
     "help": "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet und aktualisiert sie alle zehn Minuten.",
     "items": [
+      {
+        "type": "heading",
+        "label": "Wetterserver und Ort",
+        "card": true
+      },
       {
         "key": "provider",
         "label": "Wetterserver",
@@ -214,6 +221,11 @@
         "help": "Nach dem Namen suchen und einen Treffer antippen."
       },
       {
+        "type": "heading",
+        "label": "Aktualisierung",
+        "card": true
+      },
+      {
         "key": "refreshEvery",
         "label": "Aktualisieren alle …",
         "help": "Wie oft die geöffnete Wetteranzeige neue Werte holt (Zahl eintragen, dann Speichern; mindestens alle 10 Sekunden). Die Wetterserver liefern neue Werte nur etwa stündlich, die Box fragt sie höchstens einmal pro Minute ab."
@@ -231,6 +243,11 @@
             "label": "Minuten"
           }
         ]
+      },
+      {
+        "type": "heading",
+        "label": "Einheiten",
+        "card": true
       },
       {
         "key": "tempUnit",
@@ -305,9 +322,14 @@
         ]
       },
       {
+        "type": "heading",
+        "label": "Aussehen der Uhren",
+        "card": true,
+        "help": "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet."
+      },
+      {
         "key": "frameDesign",
         "label": "Rahmen",
-        "help": "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet.",
         "choices": [
           {
             "value": "black_metal",
