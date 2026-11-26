@@ -19294,16 +19294,18 @@ async function userGpioSheet(u) {
   const pins = [...new Set([u.gpio, ...free])].filter((pin) => Number.isInteger(pin) && GPIO_HEADER[pin] && !others.has(pin)).sort((x, y) => x - y)
   const options = [rotaryPinText(0), ...pins.map(rotaryPinText)]
   openSheet(
-    `<h2>${esc(tr('Taste'))}</h2><p class="help" style="margin:0">${esc(tr(`Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu ${un(u.name)}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.`))}</p>
+    `<h2>${esc(tr('Taste'))}</h2><p class="help" style="margin:0">${esc(tr(`Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu ${un(u.name)}. Das geht auch bei „Nur in der App“.`))}</p>
      <div class="field"><label for="user-gpio">${esc(tr('GPIO-Pin Taster'))}</label><select class="input" id="user-gpio">${options.map((o) => `<option${o === rotaryPinText(u.gpio ?? 0) ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>
      <small>${esc(tr('Die Taste gilt, solange „Mehrere Benutzer“ an ist.'))}</small></div>
+     <div class="row"><span class="lbl"><b>Am Display zuerst die PIN abfragen</b><small>${esc(tr(`Das Display zeigt dann das Zahlenfeld für ${un(u.name)}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.`))}</small></span><label class="switch"><input type="checkbox" id="user-gpio-ask" ${u.gpioAsk ? 'checked' : ''} aria-label="${esc(tr('Am Display zuerst die PIN abfragen'))}"><span></span></label></div>
      <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Speichern</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = close
       sheet.querySelector('[data-ok]').onclick = async () => {
         const pin = rotaryPinNumber(sheet.querySelector('#user-gpio').value)
-        if (pin === (u.gpio ?? 0)) return close()
-        if (await userAction('gpio', { id: u.id, pin }, pin ? 'Taste gespeichert' : 'Taste entfernt')) close()
+        const ask = sheet.querySelector('#user-gpio-ask').checked
+        if (pin === (u.gpio ?? 0) && ask === (u.gpioAsk === true)) return close()
+        if (await userAction('gpio', { id: u.id, pin, ask }, pin ? 'Taste gespeichert' : 'Taste entfernt')) close()
       }
     },
   )
@@ -19342,9 +19344,9 @@ function usersSections() {
       const active = u.id === s.current
       // (name, its library and "aktiv" in one line with the dot; switching at its end; what can be changed below, under
       // the name)
-      return `<div class="entry user-row${active ? ' is-active' : ''}">${userDot(u.color, 28)}<span class="lbl"><b><span translate="no">${esc(u.name)}</span>${active ? `<span class="chip ok">${esc(tr('aktiv'))}</span>` : ''}</b><small>${esc(u.count === 1 ? tr('Ein Eintrag in der Bibliothek') : tr(`${u.count} Einträge in der Bibliothek`))}${u.pin ? ` · ${esc(tr('mit PIN'))}` : ''}${u.gpio ? ` · ${esc(tr('Taste'))} GPIO ${u.gpio}` : ''}</small></span>
+      return `<div class="entry user-row${active ? ' is-active' : ''}">${userDot(u.color, 28)}<span class="lbl"><b><span translate="no">${esc(u.name)}</span>${active ? `<span class="chip ok">${esc(tr('aktiv'))}</span>` : ''}</b><small>${esc(u.count === 1 ? tr('Ein Eintrag in der Bibliothek') : tr(`${u.count} Einträge in der Bibliothek`))}${u.pin ? ` · ${esc(tr('mit PIN'))}` : ''}${u.gpio ? ` · ${esc(tr('Taste'))} GPIO ${u.gpio}${u.gpioAsk && u.pin ? ` ${esc(tr('mit PIN'))}` : ''}` : ''}</small></span>
         ${active ? '' : `<button class="btn sm primary" data-user-switch="${esc(u.id)}">Wechseln</button>`}
-        <span class="user-acts"><button class="btn sm" data-user-rename="${esc(u.id)}">${icon('edit', 16)}Umbenennen</button><button class="btn sm" data-user-color="${esc(u.id)}">${userDot(u.color, 14)}Farbe</button><button class="btn sm" data-user-pin="${esc(u.id)}">${icon('lock', 16)}PIN</button><button class="btn sm" data-user-gpio="${esc(u.id)}">${icon('chip', 16)}${esc(tr('Taste'))}</button>
+        <span class="user-acts"><button class="btn sm" data-user-rename="${esc(u.id)}">${icon('edit', 16)}Umbenennen</button><button class="btn sm" data-user-color="${esc(u.id)}">${userDot(u.color, 14)}Farbe</button><button class="btn sm" data-user-pin="${esc(u.id)}">${icon('lock', 16)}PIN</button><button class="btn sm" data-user-gpio="${esc(u.id)}">${icon('buttons', 16)}${esc(tr('Taste'))}</button>
         ${active ? '' : `<button class="btn sm danger" data-user-remove="${esc(u.id)}">${icon('trash', 16)}Entfernen</button>`}</span></div>`
     })
     .join('')

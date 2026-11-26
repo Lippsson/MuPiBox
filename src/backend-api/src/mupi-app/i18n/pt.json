@@ -4745,11 +4745,13 @@
  "2 Sekunden": "2 segundos",
  "3 Sekunden": "3 segundos",
  "Taste": "Botão",
- "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.": "Um botão num pino GPIO livre (para GND) muda diretamente para {}. Funciona sempre sem PIN, mesmo que haja um PIN definido no ecrã, e também com «Só na app».",
  "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "O botão funciona enquanto «Vários utilizadores» estiver ativado.",
  "Taste gespeichert": "Botão guardado",
  "Taste entfernt": "Botão removido",
  "Diesen Pin hat schon ein anderer Benutzer.": "Outro utilizador já tem este pino.",
  "GPIO {} nutzt schon: {}": "GPIO {} já é usado por: {}",
- "MuPiBox (Taste von {})": "MuPiBox (botão de {})"
+ "MuPiBox (Taste von {})": "MuPiBox (botão de {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Um botão num pino GPIO livre (para GND) muda para {}. Funciona também com «Só na app».",
+ "Am Display zuerst die PIN abfragen": "Pedir primeiro o PIN no ecrã",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "O ecrã mostra então o teclado numérico de {}, e a mudança só funciona com o PIN certo. Sem um PIN definido, o botão muda de imediato."
 }

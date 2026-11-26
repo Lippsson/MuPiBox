@@ -16,15 +16,20 @@ class FakeProc extends EventEmitter {
   }
 }
 
-function setup(pins: { pin: number; id: string; name: string }[]) {
+type Pin = { pin: number; id: string; name: string; ask?: boolean }
+
+function setup(pins: Pin[]) {
   const procs: { args: string[]; proc: FakeProc }[] = []
   const switched: string[] = []
+  const asked: string[] = []
   const messages: string[] = []
   let clock = 1000
-  const state = { pins, fail: false }
+  const state = { pins, fail: false, current: 'main' }
   const buttons = createUserButtons({
     users: {
-      gpioPins: () => state.pins,
+      gpioPins: () => state.pins.map((p) => ({ ...p, ask: p.ask === true })),
+      state: () => ({ current: state.current }) as never,
+      askPinAtDisplay: (id: string) => void asked.push(id),
       switchTo: async (id: string) => {
         switched.push(id)
         if (state.fail) throw new Error('busy')
@@ -41,7 +46,7 @@ function setup(pins: { pin: number; id: string; name: string }[]) {
     now: () => clock,
   })
   const line = (n: number, text: string) => procs[n].proc.stdout.emit('data', Buffer.from(`${text}\n`))
-  return { buttons, procs, switched, messages, state, advance: (ms: number) => (clock += ms), line }
+  return { buttons, procs, switched, asked, messages, state, advance: (ms: number) => (clock += ms), line }
 }
 
 describe('what gpiomon says', () => {
@@ -76,6 +81,26 @@ describe('the buttons of the users', () => {
     t.line(0, '5 falling')
     assert.deepEqual(t.switched, ['tom'])
     assert.deepEqual(t.buttons.state().pins, [17, 22])
+  })
+
+  it('ask the PIN at the display instead of switching when the user chose that - except for the one who is in place', async () => {
+    const t = setup([
+      { pin: 17, id: 'leni', name: 'Leni', ask: true },
+      { pin: 22, id: 'tom', name: 'Tom' },
+    ])
+    await t.buttons.sync()
+    t.line(0, '17 falling')
+    assert.deepEqual(t.asked, ['leni'])
+    assert.deepEqual(t.switched, [])
+    // (the other button of the box switches at once)
+    t.line(0, '22 falling')
+    assert.deepEqual(t.switched, ['tom'])
+    // (his own button while he is there: nothing to ask, nothing to switch to - the switch itself does nothing)
+    t.state.current = 'leni'
+    t.advance(1000)
+    t.line(0, '17 falling')
+    assert.deepEqual(t.asked, ['leni'])
+    assert.deepEqual(t.switched, ['tom', 'leni'])
   })
 
   it('count a bounce or a finger that stays as one press', async () => {
@@ -127,7 +152,7 @@ describe('the buttons of the users', () => {
 
   it('say so when gpiomon is not installed', async () => {
     const buttons = createUserButtons({
-      users: { gpioPins: () => [{ pin: 17, id: 'leni', name: 'Leni' }], switchTo: async () => ({}) as never },
+      users: { gpioPins: () => [{ pin: 17, id: 'leni', name: 'Leni', ask: false }], switchTo: async () => ({}) as never, askPinAtDisplay: () => undefined, state: () => ({}) as never },
       log: { info: () => undefined, warn: () => undefined },
       runFn: async () => ({ ok: false, out: '' }),
     })

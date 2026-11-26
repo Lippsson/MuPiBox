@@ -4745,11 +4745,13 @@
  "2 Sekunden": "2 sekunder",
  "3 Sekunden": "3 sekunder",
  "Taste": "Knap",
- "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.": "En knap på en ledig GPIO-pin (mod GND) skifter direkte til {}. Det virker altid uden PIN, også selv om der er sat en PIN på displayet, og også ved »Kun i appen«.",
  "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Knappen gælder, så længe »Flere brugere« er slået til.",
  "Taste gespeichert": "Knap gemt",
  "Taste entfernt": "Knap fjernet",
  "Diesen Pin hat schon ein anderer Benutzer.": "En anden bruger har allerede denne pin.",
  "GPIO {} nutzt schon: {}": "GPIO {} bruges allerede af: {}",
- "MuPiBox (Taste von {})": "MuPiBox (knap for {})"
+ "MuPiBox (Taste von {})": "MuPiBox (knap for {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "En knap på en ledig GPIO-pin (mod GND) skifter til {}. Det virker også ved »Kun i appen«.",
+ "Am Display zuerst die PIN abfragen": "Spørg først efter PIN på displayet",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Displayet viser så tastaturet til {}, og skiftet lykkes først med den rigtige PIN. Uden en indstillet PIN skifter knappen med det samme."
 }

@@ -5,7 +5,9 @@ import type { Users } from './users'
  * The buttons of the users (5.1, "Mehrere Benutzer"): every user may have a button of his own at the box - a pin of the header
  * (BCM 2-27) with a button to GND. Pressing it switches to that user, at once: no PIN is asked (whatever the user's PIN at the
  * display), and the display's way of switching ("only in the app" too) does not matter - the button is on the box, as the box's
- * own tools (MQTT) are. Only while several users are switched on.
+ * own tools (MQTT) are. A user may choose that his button asks his PIN at the display first (User.gpioAsk, with a PIN of his
+ * own): the button then only has the display show the pad for him, and the PIN is checked as for any switch at the display.
+ * Only while several users are switched on.
  *
  * The levels of the pins are read with gpiomon (libgpiod, the package gpiod - on every MuPiBox), as the extension "Buttons & GPIO
  * Input" reads its pins. The pins hold their own pull-up; a falling edge is a press.
@@ -63,7 +65,7 @@ const runCommand: Run = (cmd, args) =>
   })
 
 export interface UserButtonsOptions {
-  users: Pick<Users, 'gpioPins' | 'switchTo'>
+  users: Pick<Users, 'gpioPins' | 'switchTo' | 'askPinAtDisplay' | 'state'>
   log?: Pick<Console, 'info' | 'warn'>
   spawnFn?: (cmd: string, args: string[]) => ChildProcess
   runFn?: Run
@@ -103,6 +105,11 @@ export function createUserButtons(options: UserButtonsOptions) {
     lastPress.set(pin, at)
     const who = users.gpioPins().find((u) => u.pin === pin)
     if (!who) return
+    if (who.ask && users.state().current !== who.id) {
+      log.info(`[users] button on GPIO ${pin}: the display asks the PIN of ${who.name}`)
+      users.askPinAtDisplay(who.id)
+      return
+    }
     log.info(`[users] button on GPIO ${pin}: switching to ${who.name}`)
     users.switchTo(who.id).catch((err: Error) => log.warn(`[users] button on GPIO ${pin}: ${err.message}`))
   }

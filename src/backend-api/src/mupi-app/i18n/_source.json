@@ -4697,11 +4697,13 @@
  "2 Sekunden",
  "3 Sekunden",
  "Taste",
- "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.",
  "Die Taste gilt, solange „Mehrere Benutzer“ an ist.",
  "Taste gespeichert",
  "Taste entfernt",
  "Diesen Pin hat schon ein anderer Benutzer.",
  "GPIO {} nutzt schon: {}",
- "MuPiBox (Taste von {})"
+ "MuPiBox (Taste von {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.",
+ "Am Display zuerst die PIN abfragen",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort."
 ]
