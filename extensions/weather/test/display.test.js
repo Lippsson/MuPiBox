@@ -49,6 +49,7 @@ test('the rain dial has two displays: the last and the next 24 hours, the pointe
   const { dialsFor } = await load()
   const rain = dialsFor({ ...data, rainPast24: 6.4, rainNext24: 12.3 }).find((d) => d.id === 'rain')
   assert.deepEqual(rain.lcds, [{ title: 'last 24h', text: '6,4' }, { title: 'next 24h', text: '12,3' }])
+  assert.equal(rain.caption, 'Regenmenge in mm')
   assert.equal(rain.value, 6.4)
   // (the scale holds the larger of the two)
   assert.equal(rain.max, 25)

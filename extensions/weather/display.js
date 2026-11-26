@@ -158,33 +158,43 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
         { title: 'last 24h', text: fmt(rainPast, U.rain.decimals) },
         { title: 'next 24h', text: fmt(rainNext, U.rain.decimals) },
       ],
+      caption: `Regenmenge in ${U.rain.label}`,
       sections: [
         { start: 0, stop: rainMax * 0.5, color: 'rgb(0,170,60)' },
         { start: rainMax * 0.5, stop: rainMax * 0.8, color: WARM },
         { start: rainMax * 0.8, stop: rainMax, color: RED },
       ],
-      areas: [], trend: null, caption: '',
+      areas: [], trend: null,
     },
   ]
 }
 
-// Two displays side by side on a dial, each with its text above the value (as the wind direction has two); sizes as parts of the dial.
-const DISPLAY = { width: 0.24, height: 0.13, gap: 0.02, top: 0.66 }
+// Two displays one above the other on a dial, as the wind direction has them: the first over the knob with its text above it, the second
+// under the knob with its text below it (sizes and places as parts of the dial). They are drawn into a picture that the dial takes as its
+// background layer (`customLayer`), so that the pointer moves over them.
+const DISPLAY = { width: 0.305, height: 0.12, tops: [0.32, 0.57], textY: [0.285, 0.705] }
+const LAYER_PART = 0.831775 // how much of the dial the library gives a background layer (centred)
 
-export function addDisplays(ss, stage, size, displays, lcdColor, textColor) {
-  displays.forEach((display, n) => {
-    const x = size * (0.5 - DISPLAY.gap / 2 - DISPLAY.width + n * (DISPLAY.width + DISPLAY.gap))
-    const canvas = document.createElement('canvas')
-    canvas.style.cssText = `position:absolute;left:${Math.round(x)}px;top:${Math.round(size * DISPLAY.top)}px`
-    stage.append(canvas)
-    const lcd = new ss.DisplaySingle(canvas, { width: Math.round(size * DISPLAY.width), height: Math.round(size * DISPLAY.height), lcdColor, unitStringVisible: false, headerStringVisible: false, valuesNumeric: false })
-    lcd.setValue(display.text)
-    // (the text over the display, in the colour of the other texts of the dial)
-    const label = document.createElement('div')
-    label.textContent = display.title
-    label.style.cssText = `position:absolute;left:${Math.round(x)}px;width:${Math.round(size * DISPLAY.width)}px;top:${Math.round(size * (DISPLAY.top - 0.055))}px;text-align:center;font:${Math.max(9, Math.round(size * 0.04))}px/1 sans-serif;color:${textColor};white-space:nowrap`
-    stage.append(label)
+export function displaysLayer(ss, size, displays, lcdColor, textColor) {
+  const side = Math.round(size * LAYER_PART)
+  const offset = (size - side) / 2
+  const layer = document.createElement('canvas')
+  layer.width = side
+  layer.height = side
+  const ctx = layer.getContext('2d')
+  ctx.fillStyle = textColor
+  ctx.font = `${Math.round(size * 0.04)}px sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  displays.slice(0, 2).forEach((display, n) => {
+    const w = Math.round(size * DISPLAY.width)
+    const h = Math.round(size * DISPLAY.height)
+    const lcd = document.createElement('canvas')
+    new ss.DisplaySingle(lcd, { width: w, height: h, lcdColor, unitStringVisible: false, headerStringVisible: false, valuesNumeric: false }).setValue(display.text)
+    ctx.drawImage(lcd, Math.round((size - w) / 2 - offset), Math.round(size * DISPLAY.tops[n] - offset))
+    ctx.fillText(display.title, size / 2 - offset, size * DISPLAY.textY[n] - offset, w)
   })
+  return layer
 }
 
 const GAP = 24 // between two dials
@@ -316,13 +326,9 @@ export function activate(api) {
             const cell = document.createElement('div')
             cell.style.cssText = 'flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;scroll-snap-align:start'
             const canvas = document.createElement('canvas')
-            // (the displays of a dial that has more than one lie on the dial: a box of the size of the dial to put them in)
-            const stage = document.createElement('div')
-            stage.style.cssText = `position:relative;width:${size}px;height:${size}px`
-            stage.append(canvas)
             const caption = document.createElement('div')
             caption.style.cssText = 'height:26px;display:flex;align-items:center;gap:14px;font:500 15px/1 var(--ion-font-family,inherit);opacity:.85;white-space:nowrap'
-            cell.append(stage, caption)
+            cell.append(canvas, caption)
             row.append(cell)
             const designs = designsOf(ss, settings)
             const look = {
@@ -372,8 +378,10 @@ export function activate(api) {
               gaugeType: ss.GaugeType.TYPE4,
               minValue: dial.min,
               maxValue: dial.max,
-              titleString: dial.title,
-              unitString: dial.unit,
+              // (a dial with displays of its own - the rain - has its title and unit under it, and the displays in its background)
+              titleString: dial.lcds ? '' : dial.title,
+              unitString: dial.lcds ? '' : dial.unit,
+              ...(dial.lcds ? { customLayer: displaysLayer(ss, size, dial.lcds, look.lcdColor, designs.backgroundColor.labelColor.getRgbaColor()) } : {}),
               lcdDecimals: dial.decimals,
               // (a scale in inHg or inch has labels like 29.5, not 30)
               fractionalScaleDecimals: dial.scaleDecimals ?? 0,
@@ -388,7 +396,6 @@ export function activate(api) {
               // (the arrows are always there, as on the club's page: the one of the trend lights up, steady included)
               trendVisible: Number.isFinite(dial.trend),
             })
-            if (dial.lcds) addDisplays(ss, stage, size, dial.lcds, look.lcdColor, look.backgroundColor.labelColor.getRgbaColor())
             if (Number.isFinite(dial.minMeasured)) gauge.setMinMeasuredValue(clamp(dial.minMeasured, dial.min, dial.max))
             if (Number.isFinite(dial.maxMeasured)) gauge.setMaxMeasuredValue(clamp(dial.maxMeasured, dial.min, dial.max))
             if (Number.isFinite(dial.trend)) gauge.setTrend(ss.TrendState[trendName(dial.trend)])
