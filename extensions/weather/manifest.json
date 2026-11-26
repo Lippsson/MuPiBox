@@ -1,9 +1,9 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.7.0",
+  "version": "1.10.2",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
-  "hostApi": 5,
+  "hostApi": 19,
   "resources": {},
   "api": "api.js",
   "display": "display.js",
@@ -31,20 +31,6 @@
       "type": "number",
       "min": -180,
       "max": 180
-    },
-    "refreshEvery": {
-      "type": "number",
-      "default": 10,
-      "min": 1,
-      "max": 999
-    },
-    "refreshUnit": {
-      "type": "string",
-      "default": "minutes",
-      "options": [
-        "seconds",
-        "minutes"
-      ]
     },
     "tempUnit": {
       "type": "string",
@@ -85,7 +71,8 @@
     "order": {
       "type": "string",
       "default": "temp,hum,wind,dir,baro,rain",
-      "pattern": "^[a-z]{2,10}(,[a-z]{2,10}){0,11}$"
+      "pattern": "^[a-z]{2,10}(,[a-z]{2,10}){0,11}$",
+      "quiet": true
     },
     "frameDesign": {
       "type": "string",
@@ -102,7 +89,8 @@
         "tilted_gray",
         "tilted_black",
         "glossy_metal"
-      ]
+      ],
+      "quiet": true
     },
     "backgroundColor": {
       "type": "string",
@@ -126,7 +114,8 @@
         "brushed_metal",
         "brushed_stainless",
         "turned"
-      ]
+      ],
+      "quiet": true
     },
     "pointerType": {
       "type": "string",
@@ -148,7 +137,8 @@
         "type14",
         "type15",
         "type16"
-      ]
+      ],
+      "quiet": true
     },
     "pointerColor": {
       "type": "string",
@@ -167,7 +157,8 @@
         "raith",
         "jug_green",
         "green_lcd"
-      ]
+      ],
+      "quiet": true
     },
     "knobType": {
       "type": "string",
@@ -175,7 +166,8 @@
       "options": [
         "standard_knob",
         "metal_knob"
-      ]
+      ],
+      "quiet": true
     },
     "knobStyle": {
       "type": "string",
@@ -184,14 +176,15 @@
         "black",
         "brass",
         "silver"
-      ]
+      ],
+      "quiet": true
     }
   },
   "ui": {
     "title": "Wetter",
     "heading": "Wetter",
     "place": "system",
-    "help": "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet und aktualisiert sie alle zehn Minuten.",
+    "help": "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.",
     "items": [
       {
         "type": "heading",
@@ -226,23 +219,10 @@
         "card": true
       },
       {
-        "key": "refreshEvery",
-        "label": "Aktualisieren alle …",
-        "help": "Wie oft die geöffnete Wetteranzeige neue Werte holt (Zahl eintragen, dann Speichern; mindestens alle 10 Sekunden). Die Wetterserver liefern neue Werte nur etwa stündlich, die Box fragt sie höchstens einmal pro Minute ab."
-      },
-      {
-        "key": "refreshUnit",
-        "label": "Einheit",
-        "choices": [
-          {
-            "value": "seconds",
-            "label": "Sekunden"
-          },
-          {
-            "value": "minutes",
-            "label": "Minuten"
-          }
-        ]
+        "type": "status",
+        "label": "Wetterdaten",
+        "state": "/api/ext/weather/state",
+        "help": "Die Wetterserver liefern nur in festen Abständen neue Werte: MET Norway etwa alle 30 Minuten (stündliche Modellwerte, die die Box auf die aktuelle Minute umrechnet), Open-Meteo alle 15 Minuten. Die Box fragt deshalb erst wieder, wenn eine neue Antwort fällig ist, und der Abstand lässt sich nicht einstellen."
       },
       {
         "type": "heading",
@@ -647,6 +627,12 @@
             "label": "Regenmenge"
           }
         ]
+      },
+      {
+        "type": "action",
+        "label": "Änderungen übernehmen",
+        "post": "/api/ext/weather/apply",
+        "help": "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“."
       }
     ]
   }

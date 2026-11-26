@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const load = () => import('../display.js')
 
-const data = { configured: true, provider: 'openmeteo', temperature: 3.3, humidity: 84, windSpeed: 8.3, windGust: 15.5, windDir: 95, windDirAvg: 69, pressure: 1027.2, rain24: 0, rainKind: 'past', tempMin: 0.1, tempMax: 9.4, humMin: 60, humMax: 90, pressMin: 1025, pressMax: 1028, trend: { temp: 1, hum: 0, press: -1 } }
+const data = { configured: true, provider: 'openmeteo', temperature: 3.3, humidity: 84, windSpeed: 8.3, windGust: 15.5, windDir: 95, windDirAvg: 69, pressure: 1027.2, rainPast24: 0, rainNext24: 3.2, tempMin: 0.1, tempMax: 9.4, humMin: 60, humMax: 90, pressMin: 1025, pressMax: 1028, trend: { temp: 1, hum: 0, press: -1 } }
 
 test('the scales hold the value, wider in steps of ten when needed', async () => {
   const { temperatureScale, pressureScale, pickMax } = await load()
@@ -42,12 +42,21 @@ test('makes the six dials: no dew point, no rain rate', async () => {
   assert.deepEqual(dials.map((d) => Number.isFinite(d.trend)), [true, true, false, false, true, false])
   assert.equal(dials.find((d) => d.id === 'hum').trend, 0)
   assert.equal(dials.find((d) => d.id === 'dir').average, 69)
-  assert.match(dials.find((d) => d.id === 'rain').unit, /24 h/)
+  assert.equal(dials.find((d) => d.id === 'rain').unit, 'mm')
 })
 
-test('says that the rain of MET Norway is a forecast', async () => {
+test('the rain dial has two displays: the last and the next 24 hours, the pointer shows the last ones', async () => {
   const { dialsFor } = await load()
-  assert.match(dialsFor({ ...data, rainKind: 'forecast' }).find((d) => d.id === 'rain').unit, /nächste 24 h/)
+  const rain = dialsFor({ ...data, rainPast24: 6.4, rainNext24: 12.3 }).find((d) => d.id === 'rain')
+  assert.deepEqual(rain.lcds, [{ title: 'last 24h', text: '6,4' }, { title: 'next 24h', text: '12,3' }])
+  assert.equal(rain.caption, 'Regenmenge in mm')
+  assert.equal(rain.value, 6.4)
+  // (the scale holds the larger of the two)
+  assert.equal(rain.max, 25)
+  // (the last 24 hours are not known - MET Norway without Open-Meteo: a dash, and the pointer shows the next ones)
+  const unknown = dialsFor({ ...data, rainPast24: null, rainNext24: 3.2 }).find((d) => d.id === 'rain')
+  assert.deepEqual(unknown.lcds.map((l) => l.text), ['–', '3,2'])
+  assert.equal(unknown.value, 3.2)
 })
 
 test('copes with missing values', async () => {
@@ -57,17 +66,9 @@ test('copes with missing values', async () => {
   assert.deepEqual(dials.find((d) => d.id === 'wind').areas, [])
 })
 
-test('the refresh interval: seconds or minutes as set, 10 seconds at the least, a day at the most, 10 minutes by default', async () => {
-  const { intervalMs } = await load()
-  assert.equal(intervalMs({}), 600000)
-  assert.equal(intervalMs(undefined), 600000)
-  assert.equal(intervalMs({ refreshEvery: 30, refreshUnit: 'seconds' }), 30000)
-  assert.equal(intervalMs({ refreshEvery: 5, refreshUnit: 'minutes' }), 300000)
-  assert.equal(intervalMs({ refreshEvery: 2 }), 120000)
-  assert.equal(intervalMs({ refreshEvery: 1, refreshUnit: 'seconds' }), 10000)
-  assert.equal(intervalMs({ refreshEvery: 999, refreshUnit: 'minutes' }), 59940000)
-  assert.equal(intervalMs({ refreshEvery: 99999, refreshUnit: 'minutes' }), 86400000)
-  assert.equal(intervalMs({ refreshEvery: 'x', refreshUnit: 'seconds' }), 600000)
+test('the open page asks the box every minute', async () => {
+  const { REFRESH_MS } = await load()
+  assert.equal(REFRESH_MS, 60000)
 })
 
 test('the units come from the settings; an unknown one is the default', async () => {
@@ -95,7 +96,7 @@ test('counts the values over to the chosen units and fits the scales', async () 
   assert.ok(Math.abs(by('wind').value - 5.16) < 0.01)
   assert.equal(by('wind').max, 20)
   assert.match(by('wind').caption, /9,6 mph/)
-  assert.match(by('rain').unit, /^inch \/ 24 h$/)
+  assert.equal(by('rain').unit, 'inch')
   assert.equal(by('rain').max, 0.5)
 })
 
