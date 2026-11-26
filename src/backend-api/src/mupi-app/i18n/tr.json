@@ -4745,11 +4745,13 @@
  "2 Sekunden": "2 saniye",
  "3 Sekunden": "3 saniye",
  "Taste": "Düğme",
- "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.": "Boş bir GPIO pinindeki (GND’ye) düğme doğrudan {} kullanıcısına geçer. Bu her zaman PIN olmadan çalışır; ekranda bir PIN ayarlı olsa bile ve “Yalnızca uygulamada” seçiliyken de.",
  "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Düğme, “Birden çok kullanıcı” açık olduğu sürece geçerlidir.",
  "Taste gespeichert": "Düğme kaydedildi",
  "Taste entfernt": "Düğme kaldırıldı",
  "Diesen Pin hat schon ein anderer Benutzer.": "Bu pini başka bir kullanıcı zaten kullanıyor.",
  "GPIO {} nutzt schon: {}": "GPIO {} zaten şu tarafından kullanılıyor: {}",
- "MuPiBox (Taste von {})": "MuPiBox (kullanıcı {} düğmesi)"
+ "MuPiBox (Taste von {})": "MuPiBox (kullanıcı {} düğmesi)",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Boş bir GPIO pinindeki (GND’ye) düğme {} kullanıcısına geçer. Bu “Yalnızca uygulamada” seçiliyken de çalışır.",
+ "Am Display zuerst die PIN abfragen": "Önce ekranda PIN sor",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Ekran bu durumda {} için sayı tuş takımını gösterir ve geçiş yalnızca doğru PIN ile olur. PIN ayarlanmamışsa düğme hemen geçiş yapar."
 }

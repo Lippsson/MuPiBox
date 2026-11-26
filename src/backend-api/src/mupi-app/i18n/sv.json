@@ -4745,11 +4745,13 @@
  "2 Sekunden": "2 sekunder",
  "3 Sekunden": "3 sekunder",
  "Taste": "Knapp",
- "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt direkt zu {}. Das geht immer ohne PIN, auch wenn am Display eine PIN eingestellt ist, und auch bei „Nur in der App“.": "En knapp på en ledig GPIO-pin (mot GND) byter direkt till {}. Det går alltid utan PIN, även om en PIN är inställd på skärmen, och även vid ”Bara i appen”.",
  "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Knappen gäller så länge ”Flera användare” är på.",
  "Taste gespeichert": "Knapp sparad",
  "Taste entfernt": "Knapp borttagen",
  "Diesen Pin hat schon ein anderer Benutzer.": "En annan användare har redan den här pinnen.",
  "GPIO {} nutzt schon: {}": "GPIO {} används redan av: {}",
- "MuPiBox (Taste von {})": "MuPiBox (knapp för {})"
+ "MuPiBox (Taste von {})": "MuPiBox (knapp för {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "En knapp på en ledig GPIO-pin (mot GND) byter till {}. Det går också vid ”Bara i appen”.",
+ "Am Display zuerst die PIN abfragen": "Fråga efter PIN på skärmen först",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Skärmen visar då sifferpanelen för {}, och bytet lyckas först med rätt PIN. Utan inställd PIN byter knappen genast."
 }

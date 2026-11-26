@@ -17,9 +17,12 @@ import { copyPerUser } from './extensions'
  *   POST /api/app/users/switch-mode  { mode }          free | hold | app
  *   POST /api/app/users/pin          { id, pin }       4 digits, '' takes it away (the display asks it before switching to him)
  *   GET  /api/app/users/gpio         the pins of the header with who holds them (a user's own button pin is free for him)
- *   POST /api/app/users/gpio         { id, pin }       a button of his own at the box (BCM 2-27), 0 takes it away: pressing it
- *                                    switches to him - no PIN, whatever the display's way of switching (user-buttons.ts)
- *   GET  /api/users/state            the display: switched on, who is in place, the users (no names of the trash)
+ *   POST /api/app/users/gpio         { id, pin?, ask? }  a button of his own at the box (BCM 2-27), 0 takes it away: pressing it
+ *                                    switches to him whatever the display's way of switching (user-buttons.ts) - at once, or
+ *                                    with ask (and a PIN of his own) after his PIN at the display
+ *   GET  /api/users/state            the display: switched on, who is in place, the users (no names of the trash), whether a
+ *                                    button asks for a PIN (then the display asks the next route every second or two)
+ *   GET  /api/users/ask              the display: the user whose button asked for his PIN at the display { id, at, ageMs }, else {}
  *   POST /api/users/switch           the display (only on the box itself): { id, pin? } - not with "only in the app";
  *                                    403 pin { left } wrong PIN, 429 pin_locked { seconds } after 5 wrong
  *   POST /api/users/select           the box's tools (MQTT; only on the box itself): { id } or { name } - no PIN
@@ -55,7 +58,7 @@ export function registerUserRoutes(
       switchMode: f.switchMode,
       max: MAX_USERS,
       colors: USER_COLORS,
-      users: f.users.map((u) => ({ id: u.id, name: u.name, color: u.color, pin: Boolean(u.pin), gpio: u.gpio ?? 0, count: users.files.libraryCount(u.id, f.current) })),
+      users: f.users.map((u) => ({ id: u.id, name: u.name, color: u.color, pin: Boolean(u.pin), gpio: u.gpio ?? 0, gpioAsk: u.gpioAsk === true, count: users.files.libraryCount(u.id, f.current) })),
       trash: users.files.trashList().map((t) => ({ key: t.key, name: t.name, color: t.color, deletedAt: t.deletedAt })),
     }
   }
@@ -99,8 +102,9 @@ export function registerUserRoutes(
   router.post('/users/gpio', guard.session, guard.csrf, async (req, res) => {
     const b = (req.body as Record<string, unknown> | undefined) ?? {}
     try {
-      const pin = b.pin === 0 || b.pin === null || b.pin === '' ? 0 : b.pin
-      if (pin !== 0) {
+      const pin = b.pin === undefined ? undefined : b.pin === 0 || b.pin === null || b.pin === '' ? 0 : b.pin
+      if (pin === undefined && b.ask === undefined) throw new UserSwitchError('failed', 'gpio')
+      if (pin !== undefined && pin !== 0) {
         if (!isUserGpio(pin)) throw new UserSwitchError('failed', 'gpio')
         // (what the user has himself is no one else's: a pin he had before that something holds now is not asked again)
         const had = users.state().users.find((u) => u.id === str(b.id))?.gpio
@@ -110,7 +114,8 @@ export function registerUserRoutes(
           return
         }
       }
-      await users.setGpio(str(b.id), pin)
+      if (pin !== undefined) await users.setGpio(str(b.id), pin)
+      if (b.ask !== undefined) await users.setGpioAsk(str(b.id), b.ask)
       gpio.changed()
       res.json({ ok: true, ...list() })
     } catch (err) {
@@ -126,8 +131,15 @@ export function registerUserRoutes(
       current: f.current,
       switchMode: f.switchMode,
       users: f.enabled ? f.users.map((u) => ({ id: u.id, name: u.name, color: u.color, pin: Boolean(u.pin) })) : [],
+      // (a button that asks the PIN at the display: the display then asks /api/users/ask often, else it does not)
+      ask: f.enabled && f.users.some((u) => u.gpio && u.gpioAsk && u.pin),
     }
   }
+  app.get('/api/users/ask', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    const a = users.pendingAsk()
+    res.json(a ? { id: a.id, at: a.at, ageMs: Date.now() - a.at } : {})
+  })
   app.get('/api/users/state', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     res.json(displayState())
