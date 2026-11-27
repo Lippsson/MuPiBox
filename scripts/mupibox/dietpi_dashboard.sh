@@ -82,6 +82,8 @@ case "${1:-}" in
 		;;
 	off)
 		systemctl disable --now "${UNIT}" >/dev/null 2>&1
+		# (a unit that failed stays listed as failed until this)
+		systemctl reset-failed "${UNIT}" >/dev/null 2>&1
 		exit 0
 		;;
 	status)
