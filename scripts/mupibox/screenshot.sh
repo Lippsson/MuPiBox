@@ -24,6 +24,29 @@ export DISPLAY=:0 XAUTHORITY=/home/dietpi/.Xauthority
 TMP="${OUT%.png}.tmp-$$.png"
 trap 'rm -f "${TMP}"' EXIT
 
+# The Cog kiosk (mupibox.browser = "cog": labwc, no X server): grim takes the picture. The compositor belongs to the
+# kiosk's user (root on a box whose DietPi login is root, see restart_kiosk.sh) and its socket is in that user's runtime
+# directory, which only that user can enter: everything that talks to it runs as that user, through sudo where it is not
+# this one. grim writes to its standard output, so the file is ours (a file made by root in /tmp could not be renamed).
+if pgrep -x labwc >/dev/null 2>&1; then
+	KUSER=$(ps -o user= -C labwc 2>/dev/null | head -n 1 | tr -d ' ')
+	[ -n "${KUSER}" ] || exit 1
+	RUNDIR="/run/user/$(id -u "${KUSER}")"
+	as_kiosk() {
+		if [ "$(id -un)" = "${KUSER}" ]; then "$@"; else sudo -n -u "${KUSER}" "$@"; fi
+	}
+	SOCK=$(as_kiosk sh -c "ls -d '${RUNDIR}'/wayland-[0-9]* 2>/dev/null | head -n 1")
+	[ -n "${SOCK}" ] || exit 1
+	WL="XDG_RUNTIME_DIR=${RUNDIR} WAYLAND_DISPLAY=$(basename "${SOCK}")"
+	# (no output switched on: the display is off - a picture would be black or fail)
+	case "$(as_kiosk env ${WL} wlr-randr --json 2>/dev/null | jq -r 'any(.[]; .enabled)' 2>/dev/null)" in
+		false) exit 3 ;;
+	esac
+	as_kiosk env ${WL} timeout 8 grim -t png - > "${TMP}" 2>/dev/null && [ -s "${TMP}" ] || exit 1
+	mv -f "${TMP}" "${OUT}" || exit 1
+	exit 0
+fi
+
 case "$(timeout 3 xset q 2>/dev/null | grep -m 1 'Monitor is')" in
 	*"Monitor is On"* | "") ;;
 	*) exit 3 ;;

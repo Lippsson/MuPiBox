@@ -10,7 +10,7 @@ Cog is a browser without a user interface, built on WPE WebKit for kiosks and em
 a few hundred MB less memory, no X server, a faster start. Cost: everything around the display was written for Chromium
 in X (below), and **Spotify cannot move**.
 
-## Spotify stays in Chromium
+## Spotify stays in Chromium (not tested: it needs a Premium account, which nobody here has)
 
 The display's page is the box's Spotify player: `src/frontend-box/src/app/spotify-player.service.ts` loads the Web
 Playback SDK (`sdk.scdn.co/spotify-player.js`), which needs Widevine DRM (`libwidevinecdm0`, see `autosetup.sh`). WPE WebKit
@@ -31,6 +31,7 @@ page, not Chromium as a whole. Measure it before going on.
 | `scripts/mupibox/kiosk_labwc.sh` (new) | the compositor: writes labwc's config at every start (Cog window without frame, full screen; touch screen mapped to the output, calibration matrix "none"), then `labwc -S kiosk_cog.sh` |
 | `scripts/mupibox/kiosk_cog.sh` (new) | the client labwc runs: turns the output as the app's rotation says (`wlr-randr`), scale from the turned display size (same formula as the Chromium kiosk), boot-screen colour, waits for the backend, Cog with `--webprocess-failure=restart` |
 | `scripts/chromium-autostart.sh` | reads `mupibox.browser`; `"cog"`: no Chromium-window watchdog, starts `kiosk_labwc.sh` instead of `startx` |
+| `scripts/mupibox/screenshot.sh` | with labwc running: `grim` instead of `scrot` (X path unchanged) |
 | `scripts/mupibox/restart_kiosk.sh` | `"cog"`: kills labwc, cog and Xorg (not the Spotify Chromium) and starts the autostart again |
 | `scripts/mupibox/spotify_browser.sh` | `wanted` is true when `browser` is `"cog"` |
 | `scripts/mupibox/install_cog.sh` (new) | `apt install cog cage` (Debian 13: cog 0.18.4, WPE WebKit 2.48). labwc, wlr-randr and grim are needed too (see below), enables the Spotify service |
@@ -55,7 +56,7 @@ want a compositor with the wlroots protocols (output management, screencopy) - l
 
 | Function | Today (X) | Wayland |
 |---|---|---|
-| Screenshot (app, Telegram, MQTT) | `screenshot.sh` with `scrot` | `grim` (needs screencopy) |
+| Screenshot (app, Telegram, MQTT) | `screenshot.sh` with `scrot` | **done:** `grim`, run as the kiosk's user (its socket is in that user's runtime dir), 0.4 s; checked on the Pi 5 |
 | Display off / on (DPMS) | `xset` in `get_monitor.sh` and others | `wlr-randr --off/--on` |
 | Rotation, mirroring, size of a KMS panel | `xrandr`, `display_rotation.sh`, `/etc/X11/mupibox-reflect` | `wlr-randr --transform`, `--scale` |
 | "The display shows the start page" | `wait_display_ready.sh` (`xwininfo` title) | e.g. the page reports itself to the backend once |
