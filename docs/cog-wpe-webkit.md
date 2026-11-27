@@ -1,7 +1,7 @@
 # Cog / WPE WebKit instead of Chromium (branch `cog-wpe-webkit`)
 
-Status: **first step, not tested on a box.** The display can be started in Cog; the Chromium kiosk is still the default and
-untouched. Switch: `mupibox.browser` in `/etc/mupibox/mupiboxconfig.json` - `"chromium"` (default, also when the key is
+Status: **runs on the Pi 5 (Waveshare 8.8" DSI, 480 x 1920): the page shows, rotation and touch are right.** Spotify, screenshot and
+display power do not work yet. The Chromium kiosk is still the default and untouched. Switch: `mupibox.browser` in `/etc/mupibox/mupiboxconfig.json` - `"chromium"` (default, also when the key is
 missing) or `"cog"`.
 
 ## Why, and what it costs
@@ -28,16 +28,30 @@ page, not Chromium as a whole. Measure it before going on.
 
 | File | Change |
 |---|---|
-| `scripts/mupibox/kiosk_cog.sh` (new) | Cog in cage: boot-screen colour as the background, scale from the display size (same formula as the Chromium kiosk), waits for the backend, `--webprocess-failure=restart` |
-| `scripts/chromium-autostart.sh` | reads `mupibox.browser`; `"cog"`: no Chromium-window watchdog, starts `cage -d -- kiosk_cog.sh` instead of `startx` |
-| `scripts/mupibox/restart_kiosk.sh` | `"cog"`: kills cage and cog (not the Spotify Chromium) and starts the autostart again |
+| `scripts/mupibox/kiosk_labwc.sh` (new) | the compositor: writes labwc's config at every start (Cog window without frame, full screen; touch screen mapped to the output, calibration matrix "none"), then `labwc -S kiosk_cog.sh` |
+| `scripts/mupibox/kiosk_cog.sh` (new) | the client labwc runs: turns the output as the app's rotation says (`wlr-randr`), scale from the turned display size (same formula as the Chromium kiosk), boot-screen colour, waits for the backend, Cog with `--webprocess-failure=restart` |
+| `scripts/chromium-autostart.sh` | reads `mupibox.browser`; `"cog"`: no Chromium-window watchdog, starts `kiosk_labwc.sh` instead of `startx` |
+| `scripts/mupibox/restart_kiosk.sh` | `"cog"`: kills labwc, cog and Xorg (not the Spotify Chromium) and starts the autostart again |
 | `scripts/mupibox/spotify_browser.sh` | `wanted` is true when `browser` is `"cog"` |
-| `scripts/mupibox/install_cog.sh` (new) | `apt install cog cage` (Debian 13: cog 0.18.4, cage 0.2.0, WPE WebKit 2.48), enables the Spotify service |
+| `scripts/mupibox/install_cog.sh` (new) | `apt install cog cage` (Debian 13: cog 0.18.4, WPE WebKit 2.48). labwc, wlr-randr and grim are needed too (see below), enables the Spotify service |
+
+## What the Pi 5 test showed
+
+- **cage is not enough.** It has no output management, so no rotation. The compositor is **labwc** (Raspberry Pi OS's own)
+  with `wlr-randr` (rotate, scale, power) and `grim` (screenshot): `apt install labwc wlr-randr grim`.
+- **Rotation:** the app's setting for X (`Option "Rotate" "right"` in `/etc/X11/xorg.conf.d/90-mupibox-rotate.conf`) is read;
+  X's "right" is 90 degrees clockwise = Wayland transform **270** (Wayland's 90 is counter-clockwise).
+- **Touch: no matrix.** `display_rotation.sh` gives the touch screen a calibration matrix by a udev rule
+  (`LIBINPUT_CALIBRATION_MATRIX`), which libinput hands to every program - labwc included. labwc turns the touch with the
+  output's rotation itself: both together turned it twice. Setting the matrix to `1 0 0 0 1 0` for the touch screens in
+  labwc's config fixes it. (Raw values of the panel, native 480 x 1920: top left of the turned picture = x 411, y 58.)
+- **Memory:** cage/labwc + Cog + WPE processes about 430 MB in total (RSS), against about 1.4 GB for Chromium's processes
+  (sums, shared memory counted twice) - without the Spotify Chromium that has to be added.
 
 ## What still talks X11 (not done)
 
 These work only with the Chromium kiosk. With Cog they fail or do nothing; each needs a Wayland counterpart, most of them
-want a compositor with the wlroots protocols (output management, screencopy) - cage has neither, **labwc** has both:
+want a compositor with the wlroots protocols (output management, screencopy) - labwc has both (installed above):
 
 | Function | Today (X) | Wayland |
 |---|---|---|
@@ -64,7 +78,7 @@ want a compositor with the wlroots protocols (output management, screencopy) - c
 
 ```sh
 # as root on the box
-bash /usr/local/bin/mupibox/install_cog.sh
+bash /usr/local/bin/mupibox/install_cog.sh   # cog, cage, labwc, wlr-randr, grim
 jq '.mupibox.browser = "cog"' /etc/mupibox/mupiboxconfig.json > /tmp/c.json && cp /tmp/c.json /etc/mupibox/mupiboxconfig.json
 reboot
 ```
@@ -77,6 +91,5 @@ weather gauges look and move the same.
 ## Open questions
 
 - Cog's `--scale` (page zoom) against Chromium's device scale factor: same layout? (`kiosk_cog.sh` assumes yes.)
-- Does cage on the Pi's KMS drivers (vc4, Waveshare/EDATEC DSI panels) rotate and scale the output correctly? Probably
-  not without labwc and `wlr-randr`.
+- Other displays (the Touch Display 2, EDATEC, HDMI): rotation and touch need the same check as the Waveshare 8.8".
 - Is the platform plug-in chosen by Cog on its own under cage (`COG_PLATFORM_NAME` is not set)?

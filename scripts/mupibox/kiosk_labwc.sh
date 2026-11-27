@@ -7,8 +7,8 @@
 #
 # Its configuration is written at every start (the touch screen's name and the output depend on the display):
 #   - the Cog window without a frame, full screen
-#   - the touch screen mapped to the display's output - the touch is turned with the picture (under X: libinput's
-#     calibration matrix, display_rotation.sh)
+#   - the touch screen mapped to the display's output; labwc turns its coordinates with the output's rotation itself, so
+#     libinput's calibration matrix is set to "none" (see below)
 
 DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export XDG_RUNTIME_DIR="${DIR}"
@@ -26,8 +26,16 @@ for c in /sys/class/drm/card*-DSI-*/status /sys/class/drm/card*-HDMI-*/status; d
 	fi
 done
 
+# The touch is not turned here. For X, display_rotation.sh gives the touch screen a calibration matrix by a udev rule
+# (LIBINPUT_CALIBRATION_MATRIX, which libinput hands to every program, labwc too); labwc turns the touch with the
+# output's rotation on its own, so the two together turned it twice (measured on the Waveshare 8.8" DSI panel, 480 x 1920:
+# the taps landed in the wrong places). The matrix is therefore set to "none" for the touch screens: the compositor's
+# rotation (kiosk_cog.sh) is the only one.
+MATRIX="1 0 0 0 1 0"
+
 # the touch screens (input devices with the "direct" property)
 TOUCH=""
+LIBINPUT=""
 if [ -n "${OUTPUT}" ]; then
 	NAMES=$(awk '
 		/^N: Name=/ { name = $0; sub(/^N: Name="/, "", name); sub(/"$/, "", name) }
@@ -38,6 +46,10 @@ if [ -n "${OUTPUT}" ]; then
 '
 	for n in ${NAMES}; do
 		TOUCH="${TOUCH}	<touch deviceName=\"${n}\" mapToOutput=\"${OUTPUT}\" mouseEmulation=\"no\"/>
+"
+		[ -n "${MATRIX}" ] && LIBINPUT="${LIBINPUT}		<device category=\"${n}\">
+			<calibrationMatrix>${MATRIX}</calibrationMatrix>
+		</device>
 "
 	done
 	IFS=$OLDIFS
@@ -52,7 +64,9 @@ cat > "${CONF}/rc.xml" <<EOF
 			<action name="ToggleFullscreen"/>
 		</windowRule>
 	</windowRules>
-${TOUCH}</labwc_config>
+${TOUCH}	<libinput>
+${LIBINPUT}	</libinput>
+</labwc_config>
 EOF
 # (no menu, no keys of its own: nothing but the page)
 : > "${CONF}/menu.xml"
