@@ -6,7 +6,8 @@
 # signs a parent of the app in with a one-time ticket - so it is reached from the app only. Off by default.
 #
 #   dietpi_dashboard.sh setup   its config.toml written (inner port, password hash, secret) - the password made once
-#   dietpi_dashboard.sh on      setup, then the service on (also after a restart)
+#   dietpi_dashboard.sh supported  exit 0 when it can run here (4 KB memory pages), 1 on a Raspberry Pi 5 (16 KB)
+#   dietpi_dashboard.sh on      setup, then the service on (also after a restart); exit 3 where it is not supported
 #   dietpi_dashboard.sh off     the service off
 #   dietpi_dashboard.sh status  active / inactive
 #   dietpi_dashboard.sh token   signs in with the password and prints the dashboard's token and the fingerprint it is
@@ -24,6 +25,10 @@ PORT=5253
 UNIT=dietpi-dashboard.service
 
 hex32() { head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+
+# The release (v0.6.2, 2023) is a static program made for 4 KB memory pages. The Raspberry Pi 5's kernel uses 16 KB
+# pages: there it ends with a segmentation fault at once, whatever its config says - so it is not offered there.
+supported() { [ "$(getconf PAGESIZE 2>/dev/null || echo 4096)" -le 4096 ]; }
 
 setup() {
 	[ -x "${DIR}/dietpi-dashboard" ] || { echo "dietpi-dashboard is not installed" >&2; return 1; }
@@ -65,7 +70,12 @@ case "${1:-}" in
 	setup)
 		setup
 		;;
+	supported)
+		supported
+		exit $?
+		;;
 	on)
+		supported || { echo "the DietPi-Dashboard does not run on this kernel (16 KB memory pages)" >&2; exit 3; }
 		setup || exit 1
 		systemctl enable "${UNIT}" >/dev/null 2>&1
 		systemctl restart "${UNIT}"
@@ -93,7 +103,7 @@ case "${1:-}" in
 		cat /etc/lighttpd/server.pem
 		;;
 	*)
-		echo "usage: $0 setup|on|off|status|token|pem" >&2
+		echo "usage: $0 setup|supported|on|off|status|token|pem" >&2
 		exit 2
 		;;
 esac

@@ -56,6 +56,22 @@ function run(args: string[], timeoutMs = 30000): Promise<{ ok: boolean; stdout: 
   })
 }
 
+// The release (v0.6.2, 2023) is a static program made for 4 KB memory pages. The Raspberry Pi 5's kernel uses 16 KB
+// pages: there it ends with a segmentation fault at once. So the dashboard is not offered where the page size is
+// larger (dietpi_dashboard.sh refuses "on" there as well). Asked once; if the page size cannot be read it stays offered.
+let supportedCache: boolean | undefined
+function isSupported(): Promise<boolean> {
+  if (supportedCache !== undefined) return Promise.resolve(supportedCache)
+  return new Promise((resolve) => {
+    execFile('getconf', ['PAGESIZE'], { timeout: 5000 }, (err, stdout) => {
+      const size = Number.parseInt(String(stdout ?? '').trim(), 10)
+      if (err || !Number.isFinite(size)) return resolve(true)
+      supportedCache = size <= 4096
+      resolve(supportedCache)
+    })
+  })
+}
+
 const log = (text: string) => console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] dietpi-dashboard: ${text}`)
 const enabledIn = (deps: DashboardDeps) => ((deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.dietpiDashboard ?? false) === true
 const httpsOnly = () => ((depsRef?.getMupiboxConfig() as { tls?: { httpsOnly?: unknown } } | undefined)?.tls?.httpsOnly ?? false) === true
@@ -235,25 +251,35 @@ export function startDietpiDashboard(deps: DashboardDeps): void {
   depsRef = deps
   // (the config may not be read yet this early: asked again every 2 s, for a minute at most)
   let tries = 0
-  const check = () => {
-    if (deps.getMupiboxConfig() === undefined && ++tries < 30) return void setTimeout(check, 2000).unref()
-    if (enabledIn(deps)) startProxy()
+  const check = async (): Promise<void> => {
+    if (deps.getMupiboxConfig() === undefined && ++tries < 30) return void setTimeout(() => void check(), 2000).unref()
+    if (!enabledIn(deps)) return
+    if (await isSupported()) return startProxy()
+    // (switched on before this was known, e.g. on a Raspberry Pi 5: switched off again, so the service stops failing)
+    await run(['off'], 30000)
+    await deps.updateMupiboxConfig((cfg) => {
+      cfg.mupibox = { ...((cfg.mupibox as Record<string, unknown>) ?? {}), dietpiDashboard: false }
+    })
+    log('not supported on this kernel (16 KB memory pages): switched off')
   }
-  check()
+  check().catch((err) => log(`start check failed: ${String(err)}`))
 }
 
 export function registerDietpiDashboardRoutes(router: Router, deps: DashboardDeps): void {
   depsRef = deps
   /** GET /api/app/dietpi-dashboard - switched on, running */
   router.get('/dietpi-dashboard', requireSession, async (_req, res) => {
+    // (supported false: the app does not show the switch at all)
+    if (!(await isSupported())) return void res.json({ supported: false, enabled: false, active: false })
     const status = (await run(['status'], 10000)).stdout.trim()
-    res.json({ enabled: enabledIn(deps), active: status === 'active' })
+    res.json({ supported: true, enabled: enabledIn(deps), active: status === 'active' })
   })
 
   /** POST /api/app/dietpi-dashboard {on} - the dashboard on (behind the app) or off */
   router.post('/dietpi-dashboard', requireSession, requireCsrf, async (req, res) => {
     const on = (req.body as { on?: unknown } | undefined)?.on
     if (typeof on !== 'boolean') return void res.status(400).json({ error: 'invalid on' })
+    if (on && !(await isSupported())) return void res.status(409).json({ ok: false, error: 'unsupported' })
     const r = await run([on ? 'on' : 'off'], 60000)
     if (!r.ok) return void res.status(500).json({ ok: false, error: 'switch_failed' })
     await deps.updateMupiboxConfig((cfg) => {
@@ -269,8 +295,8 @@ export function registerDietpiDashboardRoutes(router: Router, deps: DashboardDep
   })
 
   /** POST /api/app/dietpi-dashboard/ticket - a one-time ticket for http(s)://<box>:5252/mupibox-open (60 s) */
-  router.post('/dietpi-dashboard/ticket', requireSession, requireCsrf, (_req, res) => {
-    if (!enabledIn(deps)) return void res.status(409).json({ error: 'dashboard_off' })
+  router.post('/dietpi-dashboard/ticket', requireSession, requireCsrf, async (_req, res) => {
+    if (!enabledIn(deps) || !(await isSupported())) return void res.status(409).json({ error: 'dashboard_off' })
     const now = Date.now()
     for (const [t, until] of tickets) if (until < now) tickets.delete(t)
     const ticket = randomBytes(32).toString('hex')

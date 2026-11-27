@@ -99,6 +99,7 @@
 </ul>
 <ul id='ulnews' class='ulnews'>
 <li id='linews' class='linews'>The three pins of the rotary encoder are chosen in the app; it runs on a Raspberry Pi 5, as do the fan and the power LED. Its button takes its pin only when it has a function and never an SPI or I2C pin, so GPIO 10 stays free for an NFC reader.</li>
+<li id='linews' class='linews'>The DietPi-Dashboard (System › Experten) is no longer offered on a Raspberry Pi 5: its program is built for 4 KB memory pages and crashed at once on the Pi 5's kernel (16 KB), leaving a failed service behind. A box that had it switched on turns it off at the next start.
 </ul>
 <b>WiFi</b>
 </ul>

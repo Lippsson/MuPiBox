@@ -12960,9 +12960,14 @@ function expertsTop() {
     // (beside the host name: both short)
     // (the DietPi-Dashboard has a terminal with root rights: off by default, and switched on reached from here only -
     // a one-time ticket signs in, see backend-api app-api/dietpi-dashboard.ts)
-    `<section class="card"><h2>Weitere Werkzeuge</h2>
+    // (not offered where the dashboard cannot run: a Raspberry Pi 5 with its 16 KB memory pages - the server says so)
+    ...(adm.dash?.supported === false
+      ? []
+      : [
+          `<section class="card"><h2>Weitere Werkzeuge</h2>
       <div class="row"><span class="lbl"><b>DietPi-Dashboard erlauben</b><small>Systemverwaltung von DietPi mit einem Terminal mit Root-Rechten. Erreichbar nur über diese App, nicht direkt im Netz.</small></span><label class="switch"><input type="checkbox" id="ex-dash" ${adm.dash?.enabled ? 'checked' : ''} aria-label="DietPi-Dashboard erlauben"><span></span></label></div>
       <div class="navlist">${adm.dash?.enabled ? navRow('ext:dietpi', 'DietPi-Dashboard', adm.dash.active ? 'öffnet sich in einem neuen Fenster' : 'startet gerade …', 'ext') : ''}</div></section>`,
+        ]),
     `<section class="card wide"><h2>Konfiguration direkt bearbeiten</h2>
       <div class="note warn">${icon('info', 18)}<span>Fehler hier können die Box lahmlegen. Nur ändern, was du kennst – vorher ein Backup ziehen.</span></div>
       <div class="field"><label for="ex-file">Datei</label><select class="input" id="ex-file">${adm.json.keys.map((k) => `<option value="${k}"${k === adm.json.key ? ' selected' : ''}>${esc(JSON_LABEL[k] ?? k)}</option>`).join('')}</select></div>
@@ -12977,7 +12982,8 @@ function expertsTop() {
 }
 
 function mountExperts(root, page) {
-  $('#ex-dash', root).onchange = async (e) => {
+  const dashSwitch = $('#ex-dash', root)
+  if (dashSwitch) dashSwitch.onchange = async (e) => {
     const on = e.target.checked
     e.target.disabled = true
     const r = await api(`${API}/dietpi-dashboard`, { method: 'POST', body: { on } })
