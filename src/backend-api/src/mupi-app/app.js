@@ -12336,7 +12336,8 @@ function healthRow(c) {
     temperature: 'Temperatur',
     power: 'Stromversorgung',
     sdcard: 'SD-Karte',
-    memory: 'Arbeitsspeicher',
+    // (MemAvailable: what programs can still get, the cache that can be given up included - not MemFree)
+    memory: 'Arbeitsspeicher verfügbar',
     services: 'Dienste der Box',
     internet: 'Internet',
     nas: 'NAS',
@@ -12349,7 +12350,7 @@ function healthRow(c) {
     temperature: v,
     power: 'Keine Unterspannung',
     sdcard: 'Keine Fehler',
-    memory: `${v} frei`,
+    memory: v,
     services: 'Alle laufen',
     internet: 'Verbunden',
     nas: `Erreichbar (${v})`,
