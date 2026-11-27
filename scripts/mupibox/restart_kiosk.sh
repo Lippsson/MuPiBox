@@ -5,6 +5,9 @@
 # another user, X could not take the console ("Cannot open virtual console 1", seen on a Raspberry Pi 5 that logs in as
 # root while the app restarts as dietpi): the display stayed dark. So it is restarted as that user. (Not always as root:
 # Chromium does not start as root without giving up its sandbox.)
+# mupibox.browser = "cog": the kiosk is Cog in cage (no X server, kiosk_cog.sh); the Spotify page is a Chromium of its own
+# (mupi_spotify_browser.service) that keeps running through a kiosk restart.
+BROWSER=$(/usr/bin/jq -r '.mupibox.browser // empty' /etc/mupibox/mupiboxconfig.json 2>/dev/null)
 # A box without the DSI display (mupibox.headless: Einstellungen > Display > Ohne DSI-Display) has no X server: no kiosk to
 # restart - but the page without a screen that keeps Spotify there, when it is switched on (mupi_spotify_browser.service).
 # (switched on but the box not restarted yet: the kiosk still runs and is restarted as before)
@@ -25,12 +28,20 @@ fi
 # (the page without a screen for Spotify, when the box ran without the DSI display until now and the switch was turned off
 # before the restart: no X server runs, and a kiosk cannot be started from here - it stays until the restart; with an X
 # server it is stopped, the kiosk uses the same profile)
-if systemctl is-active --quiet mupi_spotify_browser.service 2>/dev/null; then
+if [ "${BROWSER}" != "cog" ] && systemctl is-active --quiet mupi_spotify_browser.service 2>/dev/null; then
 	if ! pidof Xorg >/dev/null 2>&1; then
 		echo "Ohne DSI-Display bis zum Neustart: Spotify-Browser bleibt"
 		exit 0
 	fi
 	sudo -n systemctl stop mupi_spotify_browser.service
+fi
+if [ "${BROWSER}" = "cog" ]; then
+	# (cage ends with its client; the Spotify Chromium is left alone - it is not the kiosk)
+	sudo killall cage cog 2>/dev/null
+	sleep 2
+	/var/lib/dietpi/dietpi-software/installed/./chromium-autostart.sh >/dev/null 2>/dev/null &
+	echo "Cog-Kiosk restartet"
+	exit 0
 fi
 sudo killall -r chromium
 sleep 2

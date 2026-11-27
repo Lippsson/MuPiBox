@@ -10,6 +10,9 @@
 
 CONFIG="/etc/mupibox/mupiboxconfig.json"
 wanted() {
+	# With the kiosk in Cog (mupibox.browser = "cog": WPE WebKit has no Widevine) this Chromium is the box's Spotify player,
+	# beside the kiosk and not instead of it - there is no X server then either, and no profile of the kiosk to share.
+	[ "$(/usr/bin/jq -r '.mupibox.browser // empty' ${CONFIG} 2>/dev/null)" = "cog" ] && return 0
 	[ "$(/usr/bin/jq -r '.mupibox.headless // false' ${CONFIG} 2>/dev/null)" = "true" ] || return 1
 	[ "$(/usr/bin/jq -r '.mupibox.headlessSpotify // false' ${CONFIG} 2>/dev/null)" = "true" ] || return 1
 	! pidof Xorg >/dev/null 2>&1
