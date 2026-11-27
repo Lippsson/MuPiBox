@@ -48,7 +48,7 @@ test('makes the six dials: no dew point, no rain rate', async () => {
 test('the rain dial has two displays: the last and the next 24 hours, the pointer shows the last ones', async () => {
   const { dialsFor } = await load()
   const rain = dialsFor({ ...data, rainPast24: 6.4, rainNext24: 12.3 }).find((d) => d.id === 'rain')
-  assert.deepEqual(rain.lcds, [{ title: 'last 24h', text: '6,4' }, { title: 'next 24h', text: '12,3' }])
+  assert.deepEqual(rain.lcds, [{ title: 'letzte 24 h', text: '6,4' }, { title: 'nächste 24 h', text: '12,3' }])
   assert.equal(rain.caption, 'Regenmenge in mm')
   assert.equal(rain.value, 6.4)
   // (the scale holds the larger of the two)
@@ -191,4 +191,37 @@ test('every look setting of the manifest names designs the library has', () => {
     const item = manifest.ui.items.find((i) => i.key === key)
     assert.deepEqual(item.choices.map((c) => c.value), spec.options, key)
   }
+})
+
+test('every text of the page is in the language of the box: all languages have all texts, the dials follow the language', async () => {
+  const { TEXTS, textsFor, fill } = await import('../texts.js')
+  const { dialsFor } = await load()
+  const base = Object.keys(TEXTS.en).sort()
+  assert.equal(Object.keys(TEXTS).length, 17)
+  for (const [lang, t] of Object.entries(TEXTS)) {
+    assert.deepEqual(Object.keys(t).sort(), base, lang)
+    assert.equal(t.compass.length, 8, lang)
+    for (const [key, text] of Object.entries(t)) {
+      if (typeof text === 'string') assert.ok(text.length > 0, `${lang}.${key}`)
+    }
+    // (a text that fills a place in has it in every language)
+    for (const key of ['rainIn', 'gust', 'noPlace', 'lastUpdate', 'nextUpdate']) {
+      assert.deepEqual(TEXTS.en[key].match(/\{\w+\}/g).sort(), t[key].match(/\{\w+\}/g).sort(), `${lang}.${key}`)
+    }
+  }
+  assert.equal(textsFor('fr-FR'), TEXTS.fr)
+  assert.equal(textsFor('DE'), TEXTS.de)
+  // (an unknown language or none: English)
+  assert.equal(textsFor('xx'), TEXTS.en)
+  assert.equal(textsFor(undefined), TEXTS.en)
+  assert.equal(fill('{a} in {b}', { a: 1 }), '1 in {b}')
+
+  const dials = dialsFor({ ...data, rainPast24: 6.4, rainNext24: 12.3 }, undefined, TEXTS.en)
+  assert.deepEqual(dials.map((d) => d.title), ['Temperature', 'Humidity', 'Wind speed', 'Wind direction', 'Air pressure', 'Rainfall'])
+  const rain = dials.find((d) => d.id === 'rain')
+  // (English writes the decimal point)
+  assert.deepEqual(rain.lcds, [{ title: 'last 24h', text: '6.4' }, { title: 'next 24h', text: '12.3' }])
+  assert.equal(rain.caption, 'Rainfall in mm')
+  assert.equal(dials.find((d) => d.id === 'wind').caption, 'Gusts up to 15.5 km/h')
+  assert.equal(dialsFor(data, undefined, TEXTS.fr).find((d) => d.id === 'wind').caption, 'Rafales jusqu’à 15,5 km/h')
 })

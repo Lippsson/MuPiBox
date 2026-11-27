@@ -29,6 +29,10 @@ The settings are on a page of their own, **Weather**, under **Settings**, in fou
 
 The rain dial shows two values in two displays, like the wind direction: **last 24h** (what fell in the last 24 hours) and **next 24h** (what is forecast for the next 24 hours). The pointer shows the last 24 hours, and the scale is wide enough for the larger of the two. **MET Norway** has only the forecast; the box then takes the last 24 hours from **Open-Meteo**. If that cannot be reached, a dash stands there and the pointer shows the next 24 hours.
 
+## Language
+
+All texts of the weather view on the display (the names of the dials, the compass points, “last 24h” and “next 24h”, the line at the bottom) are in the language of the box, the one you set for the box. When the language changes, it applies the next time the weather view is opened.
+
 ## When there are new values
 
 The weather servers give new values only at fixed intervals, so the refresh cannot be set. The box asks again only when the server promises a new answer:

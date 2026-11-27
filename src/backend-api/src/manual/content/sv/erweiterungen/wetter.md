@@ -29,6 +29,10 @@ Inställningarna finns på en egen sida, **Väder**, under **Inställningar**, i
 
 Regnmätaren visar två värden i två displayer, som vindriktningen: **last 24h** (vad som har fallit de senaste 24 timmarna) och **next 24h** (vad som är prognosticerat för de närmaste 24 timmarna). Visaren visar de senaste 24 timmarna, och skalan räcker för det större av de två värdena. **MET Norway** har bara prognosen; boxen hämtar då de senaste 24 timmarna från **Open-Meteo**. Går det inte att nå står det ett streck där, och visaren visar de närmaste 24 timmarna.
 
+## Språk
+
+Alla texter i väderbilden på displayen (mätarnas namn, väderstrecken, ”senaste 24 h” och ”nästa 24 h”, raden längst ned) står på boxens språk, det du har ställt in för boxen. Ändras språket gäller det nästa gång väderbilden öppnas.
+
 ## När det finns nya värden
 
 Väderservrarna ger nya värden bara med fasta mellanrum, därför går uppdateringen inte att ställa in. Boxen frågar först igen när servern utlovar ett nytt svar:

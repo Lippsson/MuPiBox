@@ -29,6 +29,10 @@ Die Einstellungen stehen auf einer eigenen Seite **Wetter** unter **Einstellunge
 
 Die Regenuhr zeigt zwei Werte in zwei Anzeigen, wie die Windrichtung: **last 24h** (was in den letzten 24 Stunden gefallen ist) und **next 24h** (was für die nächsten 24 Stunden vorhergesagt ist). Der Zeiger zeigt die letzten 24 Stunden, die Skala reicht für den größeren der beiden Werte. Bei **MET Norway** gibt es nur die Vorhersage; die letzten 24 Stunden holt die Box dann von **Open-Meteo**. Ist das nicht erreichbar, steht dort ein Strich und der Zeiger zeigt die nächsten 24 Stunden.
 
+## Sprache
+
+Alle Texte der Wetteranzeige am Display (Namen der Uhren, Himmelsrichtungen, „letzte 24 h“ und „nächste 24 h“, die Zeile unten) stehen in der Sprache der Box, also der Sprache, die du für die Box eingestellt hast. Ändert sich die Sprache, gilt sie beim nächsten Öffnen der Wetteranzeige.
+
 ## Wann es neue Werte gibt
 
 Die Wetterserver liefern nur in festen Abständen neue Werte, deshalb lässt sich die Aktualisierung nicht einstellen. Die Box fragt erst wieder, wenn der Server eine neue Antwort in Aussicht stellt:

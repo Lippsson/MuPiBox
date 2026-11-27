@@ -3,6 +3,8 @@
 // (steelseries.js, BSD-2, see LICENSE-steelseries.md), which come with the extension, so the display draws them without the internet;
 // the values come from the API part (api.js), which the page asks every minute.
 
+import { TEXTS, textsFor, fill } from './texts.js'
+
 /**
  * How often the open page asks the box: every minute. The weather servers give new answers in steps of their own (MET Norway about
  * every half hour, Open-Meteo every quarter of an hour); the box keeps the answer until then and counts the values of MET Norway over
@@ -92,7 +94,7 @@ export function temperatureSections(min, max, unit = 'c') {
 
 const range = (low, high, min, max) => (Number.isFinite(low) && Number.isFinite(high) && high >= low ? [{ start: clamp(low, min, max), stop: clamp(high, min, max), color: RANGE }] : [])
 
-const fmt = (value, digits = 1) => (Number.isFinite(value) ? value.toFixed(digits).replace('.', ',') : '–')
+const fmt = (value, digits = 1, decimal = ',') => (Number.isFinite(value) ? value.toFixed(digits).replace('.', decimal) : '–')
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 const trendName = (n) => (n > 0 ? 'UP' : n < 0 ? 'DOWN' : 'STEADY')
 
@@ -104,7 +106,7 @@ export function orderDials(dials, order) {
   return [...first, ...dials.filter((d) => !first.includes(d))]
 }
 
-export function dialsFor(data, units = UNIT_DEFAULTS) {
+export function dialsFor(data, units = UNIT_DEFAULTS, tx = TEXTS.de) {
   const U = {
     temp: UNITS.temp[units.temp] ?? UNITS.temp.c,
     rain: UNITS.rain[units.rain] ?? UNITS.rain.mm,
@@ -135,9 +137,9 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
   const pLow = press(975)
   const pHigh = press(1045)
   return [
-    { id: 'temp', kind: 'radial', title: 'Temperatur', unit: U.temp.label, min: t.min, max: t.max, value: temperature, decimals: U.temp.decimals, sections: temperatureSections(t.min, t.max, tUnit), areas: range(temp(data.tempMin), temp(data.tempMax), t.min, t.max), minMeasured: temp(data.tempMin), maxMeasured: temp(data.tempMax), trend: data.trend?.temp ?? 0, caption: '' },
+    { id: 'temp', kind: 'radial', title: tx.temp, unit: U.temp.label, min: t.min, max: t.max, value: temperature, decimals: U.temp.decimals, sections: temperatureSections(t.min, t.max, tUnit), areas: range(temp(data.tempMin), temp(data.tempMax), t.min, t.max), minMeasured: temp(data.tempMin), maxMeasured: temp(data.tempMax), trend: data.trend?.temp ?? 0, caption: '' },
     {
-      id: 'hum', kind: 'radial', title: 'Luftfeuchte', unit: '%', min: 0, max: 100, value: data.humidity, decimals: 1,
+      id: 'hum', kind: 'radial', title: tx.hum, unit: '%', min: 0, max: 100, value: data.humidity, decimals: 1,
       sections: [
         { start: 0, stop: 20, color: WARM },
         { start: 20, stop: 30, color: FRESH },
@@ -148,17 +150,17 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
       areas: range(data.humMin, data.humMax, 0, 100), minMeasured: data.humMin, maxMeasured: data.humMax, trend: data.trend?.hum ?? 0, caption: '',
     },
     // (the red band: from the wind to the gust)
-    { id: 'wind', kind: 'radial', title: 'Windstärke', unit: U.wind.label, min: 0, max: windMax, value: windSpeed, decimals: U.wind.decimals, sections: [], areas: range(windSpeed, windGust, 0, windMax), trend: null, caption: Number.isFinite(windGust) ? `Böen bis ${fmt(windGust, U.wind.decimals)} ${U.wind.label}` : '' },
-    { id: 'dir', kind: 'direction', title: 'Windrichtung', latest: data.windDir, average: data.windDirAvg, caption: 'legend' },
-    { id: 'baro', kind: 'radial', title: 'Luftdruck', unit: U.press.label, min: p.min, max: p.max, value: pressure, decimals: U.press.decimals, scaleDecimals: U.press.scaleDecimals ?? 0, sections: [], areas: [{ start: p.min, stop: pLow, color: warn }, { start: pHigh, stop: p.max, color: warn }], minMeasured: press(data.pressMin), maxMeasured: press(data.pressMax), trend: data.trend?.press ?? 0, caption: '' },
+    { id: 'wind', kind: 'radial', title: tx.wind, unit: U.wind.label, min: 0, max: windMax, value: windSpeed, decimals: U.wind.decimals, sections: [], areas: range(windSpeed, windGust, 0, windMax), trend: null, caption: Number.isFinite(windGust) ? fill(tx.gust, { v: fmt(windGust, U.wind.decimals, tx.decimal), u: U.wind.label }) : '' },
+    { id: 'dir', kind: 'direction', title: tx.dir, latest: data.windDir, average: data.windDirAvg, caption: 'legend' },
+    { id: 'baro', kind: 'radial', title: tx.baro, unit: U.press.label, min: p.min, max: p.max, value: pressure, decimals: U.press.decimals, scaleDecimals: U.press.scaleDecimals ?? 0, sections: [], areas: [{ start: p.min, stop: pLow, color: warn }, { start: pHigh, stop: p.max, color: warn }], minMeasured: press(data.pressMin), maxMeasured: press(data.pressMax), trend: data.trend?.press ?? 0, caption: '' },
     {
-      id: 'rain', kind: 'radial', title: 'Regenmenge', unit: U.rain.label, min: 0, max: rainMax, value: Number.isFinite(rainPast) ? rainPast : rainNext, decimals: U.rain.decimals, scaleDecimals: U.rain.scaleDecimals ?? 0,
+      id: 'rain', kind: 'radial', title: tx.rain, unit: U.rain.label, min: 0, max: rainMax, value: Number.isFinite(rainPast) ? rainPast : rainNext, decimals: U.rain.decimals, scaleDecimals: U.rain.scaleDecimals ?? 0,
       // (two displays instead of the one of the dial, as the wind direction has: the text above each of them and the value in it)
       lcds: [
-        { title: 'last 24h', text: fmt(rainPast, U.rain.decimals) },
-        { title: 'next 24h', text: fmt(rainNext, U.rain.decimals) },
+        { title: tx.last24, text: fmt(rainPast, U.rain.decimals, tx.decimal) },
+        { title: tx.next24, text: fmt(rainNext, U.rain.decimals, tx.decimal) },
       ],
-      caption: `Regenmenge in ${U.rain.label}`,
+      caption: fill(tx.rainIn, { u: U.rain.label }),
       sections: [
         { start: 0, stop: rainMax * 0.5, color: 'rgb(0,170,60)' },
         { start: rainMax * 0.5, stop: rainMax * 0.8, color: WARM },
@@ -267,10 +269,23 @@ export function activate(api) {
     }
   }
 
-  function open() {
+  // (the texts in the language of the box: asked when the page opens, so a change of the language shows at once)
+  let tx = TEXTS.en
+  async function loadLanguage() {
+    try {
+      const response = await fetch(`${api.apiUrl}/config`)
+      const config = response.ok ? await response.json() : null
+      tx = textsFor(config?.displayLanguage)
+    } catch {
+      // (the last language stays)
+    }
+  }
+
+  async function open() {
+    await loadLanguage()
     remember(true)
     api.overlay.open({
-      title: settings?.placeName ? `Wetter – ${settings.placeName}` : 'Wetter',
+      title: settings?.placeName ? `${tx.title} – ${settings.placeName}` : tx.title,
       // (the dials use the whole height; the back arrow floats in the corner, where the round dial leaves room)
       flush: true,
       mount(content) {
@@ -283,7 +298,7 @@ export function activate(api) {
         row.style.cssText = `flex:1;min-height:0;display:flex;align-items:center;gap:${GAP}px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;touch-action:pan-x;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent;cursor:grab`
         const foot = document.createElement('div')
         foot.style.cssText = 'flex:none;height:30px;display:flex;align-items:center;justify-content:center;font:500 15px/1 var(--ion-font-family,inherit);opacity:.75;padding:0 16px;text-align:center'
-        foot.textContent = 'Lade …'
+        foot.textContent = tx.loading
         box.append(row, foot)
         content.append(box)
 
@@ -305,7 +320,7 @@ export function activate(api) {
         // page changes its size (a dial has a fixed size; the pointers stand at once).
         const draw = (moving) => {
           if (!ss || !data) return
-          const dials = orderDials(dialsFor(data, unitsOf(settings)), settings?.order)
+          const dials = orderDials(dialsFor(data, unitsOf(settings), tx), settings?.order)
           total = dials.length
           const { n, size } = view()
           // (the dials shown stay when the row is drawn again: the number of the dial on the left)
@@ -344,7 +359,7 @@ export function activate(api) {
               fullScaleDeflectionTime: 5,
             }
             if (dial.kind === 'direction') {
-              const gauge = new ss.WindDirection(canvas, { ...look, lcdTitleStrings: ['Aktuell', 'Mittelwert'], pointSymbols: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'], pointerColor: ss.ColorDef.RED, pointerColorAverage: ss.ColorDef.BLUE })
+              const gauge = new ss.WindDirection(canvas, { ...look, lcdTitleStrings: [tx.latest, tx.average], pointSymbols: tx.compass, pointerColor: ss.ColorDef.RED, pointerColorAverage: ss.ColorDef.BLUE })
               const latest = Number.isFinite(dial.latest) ? dial.latest : 0
               const average = Number.isFinite(dial.average) ? dial.average : 0
               if (moving) {
@@ -361,7 +376,7 @@ export function activate(api) {
               }
               shown.set(dial.id, { latest, average })
               // (the colours of the two pointers)
-              for (const [text, color] of [['Aktuell', 'rgb(225,30,40)'], ['Mittelwert', 'rgb(0,150,220)']]) {
+              for (const [text, color] of [[tx.latest, 'rgb(225,30,40)'], [tx.average, 'rgb(0,150,220)']]) {
                 const item = document.createElement('span')
                 item.style.cssText = 'display:inline-flex;align-items:center;gap:6px'
                 const bar = document.createElement('span')
@@ -438,15 +453,15 @@ export function activate(api) {
           const answer = await api.fetchApi('/data')
           if (closed) return
           if (!answer) {
-            foot.textContent = data ? 'Keine Verbindung zum Wetterserver – letzte Werte' : 'Keine Verbindung zur Box oder zum Wetterserver.'
+            foot.textContent = data ? `${tx.noServer} – ${tx.lastValues}` : tx.noConn
             return
           }
           if (answer.configured === false) {
-            foot.textContent = 'Kein Ort gewählt. In der Webapp unter Erweiterungen › Wetter einen Ort suchen.'
+            foot.textContent = fill(tx.noPlace, { s: tx.settings, w: tx.title })
             return
           }
           if (answer.error) {
-            foot.textContent = data ? 'Der Wetterserver antwortet nicht – letzte Werte' : 'Der Wetterserver antwortet nicht.'
+            foot.textContent = data ? `${tx.noAnswer} – ${tx.lastValues}` : `${tx.noAnswer}.`
             return
           }
           // (asked every minute, the dials are drawn again only when a value has changed)
@@ -457,7 +472,7 @@ export function activate(api) {
           data = answer
           if (changed) draw(true)
           // (the place is in the title already: here when the values came and when the server has new ones)
-          foot.textContent = [answer.lastText ? `Letzte Aktualisierung ${answer.lastText}` : '', answer.nextText ? `Nächste ${answer.nextText}` : '', PROVIDERS[answer.provider], answer.stale ? 'Server antwortet nicht – letzte Werte' : ''].filter(Boolean).join('  ·  ')
+          foot.textContent = [answer.lastText ? fill(tx.lastUpdate, { t: answer.lastText }) : '', answer.nextText ? fill(tx.nextUpdate, { t: answer.nextText }) : '', PROVIDERS[answer.provider], answer.stale ? `${tx.noAnswer} – ${tx.lastValues}` : ''].filter(Boolean).join('  ·  ')
         }
 
         let resizeTimer = null
@@ -480,7 +495,7 @@ export function activate(api) {
             void refresh()
           },
           () => {
-            foot.textContent = 'Die Anzeigen konnten nicht geladen werden.'
+            foot.textContent = tx.loadFail
           },
         )
         const timer = setInterval(() => void refresh(), REFRESH_MS)
