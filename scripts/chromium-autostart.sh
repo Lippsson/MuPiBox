@@ -17,8 +17,8 @@
 # the first only, it saw no window on a Debian 12 box, took that for a failed start and restarted the kiosk three times,
 # every 160 s, although the start page was open (log: "window: none"). Without xwininfo (package x11-utils) it cannot
 # see any window at all - it then stays off.
-# The display's browser (mupibox.browser): "chromium" (default) or "cog" - Cog (WPE WebKit) in the Wayland kiosk compositor
-# cage instead of Chromium in X, see docs/cog-wpe-webkit.md. There is no Chromium window to watch then (and no X server).
+# The display's browser (mupibox.browser): "chromium" (default) or "cog" - Cog (WPE WebKit) in the Wayland compositor
+# labwc instead of Chromium in X, see docs/cog-wpe-webkit.md. There is no Chromium window to watch then (and no X server).
 BROWSER=$(/usr/bin/jq -r '.mupibox.browser // empty' /etc/mupibox/mupiboxconfig.json 2>/dev/null)
 if [ "${BROWSER}" != "cog" ]; then
 (
@@ -165,9 +165,9 @@ STARTX='xinit'
 # as it is (the boot screen) instead of painting it black first. vt1: the console the boot screen is on - on tty2 the
 # switch to it showed the empty console for 2-3 s until X was ready.
 if [ "${BROWSER}" = "cog" ]; then
-	# Cog in cage, no X server (the page's size and scale: kiosk_cog.sh). The Spotify player, which needs Widevine, is
-	# Chromium without a screen then (mupi_spotify_browser.service).
-	exec cage -d -- /usr/local/bin/mupibox/kiosk_cog.sh "http://localhost:8200" &
+	# Cog in labwc, no X server (kiosk_labwc.sh: the compositor, kiosk_cog.sh: turn the display, scale, Cog). The Spotify
+	# player, which needs Widevine, is Chromium without a screen then (mupi_spotify_browser.service).
+	exec /usr/local/bin/mupibox/kiosk_labwc.sh "http://localhost:8200" &
 else
 	exec "$STARTX" /usr/local/bin/mupibox/kiosk_start.sh "$FP_CHROMIUM" $CHROMIUM_OPTS --homepage "http://localhost:8200" -- -nocursor -background none vt1 -keeptty &
 fi

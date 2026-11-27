@@ -36,8 +36,9 @@ if [ "${BROWSER}" != "cog" ] && systemctl is-active --quiet mupi_spotify_browser
 	sudo -n systemctl stop mupi_spotify_browser.service
 fi
 if [ "${BROWSER}" = "cog" ]; then
-	# (cage ends with its client; the Spotify Chromium is left alone - it is not the kiosk)
-	sudo killall cage cog 2>/dev/null
+	# (cage ends with its client; the Spotify Chromium is left alone - it is not the kiosk. Xorg too: right after the
+	# switch from Chromium the X server still holds the screen, and the Chromium kiosk ends with it)
+	sudo killall labwc cage cog Xorg 2>/dev/null
 	sleep 2
 	/var/lib/dietpi/dietpi-software/installed/./chromium-autostart.sh >/dev/null 2>/dev/null &
 	echo "Cog-Kiosk restartet"
