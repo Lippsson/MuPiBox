@@ -264,6 +264,11 @@ body.cf {
     --mc-size: 316px;
     top: 18px;
     gap: 6px;
+
+    // the same mirror image below as the cover has (.kp-cover), so the two stand level and alike
+    .mc {
+      -webkit-box-reflect: below 2px linear-gradient(transparent 68%, rgba(255, 255, 255, 0.3));
+    }
   }
 
   .kp-radio .kp-ctrl-ext {
